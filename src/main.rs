@@ -20,8 +20,8 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::enumerate;
-use rocksdb::{DBCompactionStyle, DBIterator, Direction, IteratorMode, WriteBatch, DB};
-use serde_json::Value;
+use rocksdb::{DBCompactionStyle, WriteBatch, DB};
+// use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write;
 use std::io::Cursor;
@@ -143,11 +143,11 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn get_bestblockhash() -> String {
-    let data = get("chaininfo.json").text().unwrap();
-    let val: Value = serde_json::from_str(&data).unwrap();
-    val["bestblockhash"].as_str().unwrap().to_string()
-}
+// fn get_bestblockhash() -> String {
+//     let data = get("chaininfo.json").text().unwrap();
+//     let val: Value = serde_json::from_str(&data).unwrap();
+//     val["bestblockhash"].as_str().unwrap().to_string()
+// }
 
 struct Timer {
     durations: HashMap<String, Duration>,
@@ -183,9 +183,13 @@ impl Timer {
 
     pub fn stats(&self) -> String {
         let mut s = String::new();
+        let mut total = 0f64;
         for (k, v) in self.durations.iter() {
-            write!(&mut s, "{}: {}s ", k, v.num_milliseconds() as f64 / 1e3).unwrap();
+            let t = v.num_milliseconds() as f64 / 1e3;
+            total += t;
+            write!(&mut s, "{}: {:.2}s ", k, t).unwrap();
         }
+        write!(&mut s, "total: {:.2}s", total).unwrap();
         return s;
     }
 }
@@ -213,8 +217,8 @@ impl Store {
 
     pub fn persist(&mut self, mut rows: Vec<Row>) {
         self.rows.append(&mut rows);
-        let elapsed: Duration = self.start.to(PreciseTime::now())
-        if elapsed < Duration::seconds(10) && self.rows.len() < 1_000_000 {
+        let elapsed: Duration = self.start.to(PreciseTime::now());
+        if elapsed < Duration::seconds(60) && self.rows.len() < 1_000_000 {
             return;
         }
         let mut batch = WriteBatch::default();
@@ -235,7 +239,8 @@ fn main() {
 
     let mut timer = Timer::new();
 
-    let mut block_size = 0usize;
+    let mut blocks_size = 0usize;
+    let mut rows_size = 0usize;
     let mut num_of_rows = 0usize;
 
     let mut store = Store::open("db/mainnet");
@@ -249,20 +254,24 @@ fn main() {
 
         timer.start("index");
         let rows = index_block(&block, height);
+        for row in &rows {
+            rows_size += row.key.len() + row.value.len();
+        }
         num_of_rows += rows.len();
 
         timer.start("store");
         store.persist(rows);
 
         timer.stop();
-        block_size += buf.len();
+        blocks_size += buf.len();
         assert_eq!(&block.bitcoin_hash().be_hex_string(), blockhash);
         if height % 100 == 0 {
             info!(
-                "{} @ {}: {} MB, {} rows, {}",
+                "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
                 blockhash,
                 height,
-                block_size as f64 / 1e6f64,
+                rows_size as f64 / 1e6_f64,
+                blocks_size as f64 / 1e6_f64,
                 num_of_rows,
                 timer.stats()
             );
