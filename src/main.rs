@@ -6,6 +6,7 @@ extern crate itertools;
 extern crate reqwest;
 extern crate serde_json;
 extern crate simple_logger;
+extern crate time;
 
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::network::encodable::ConsensusDecodable;
@@ -16,6 +17,7 @@ use itertools::enumerate;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::io::Cursor;
+use time::{Duration, PreciseTime};
 
 const HEADER_SIZE: usize = 80;
 
@@ -73,18 +75,68 @@ fn get_bestblockhash() -> String {
     val["bestblockhash"].as_str().unwrap().to_string()
 }
 
+struct Timer {
+    durations: HashMap<String, Duration>,
+    start: Option<PreciseTime>,
+    name: String,
+}
+
+impl Timer {
+    pub fn new() -> Timer {
+        Timer {
+            durations: HashMap::new(),
+            start: None,
+            name: String::from(""),
+        }
+    }
+
+    pub fn start(&mut self, name: &str) {
+        self.start = Some(self.stop());
+        self.name = name.to_string();
+    }
+
+    pub fn stop(&mut self) -> PreciseTime {
+        let now = PreciseTime::now();
+        if let Some(start) = self.start {
+            let duration = self.durations
+                .entry(self.name.to_string())
+                .or_insert(Duration::zero());
+            *duration = *duration + start.to(now);
+        }
+        self.start = None;
+        now
+    }
+
+    pub fn stats(&self) -> String {
+        return format!("{:?}", self.durations);
+    }
+}
+
 fn main() {
     simple_logger::init_with_level(log::Level::Info).unwrap();
     let (headers, blockhash) = get_headers();
     let hashes = enumerate_headers(&headers, &blockhash);
     info!("loading {} blocks", hashes.len());
 
+    let mut timer = Timer::new();
+
+    let mut size = 0usize;
     for &(height, ref blockhash) in &hashes {
+        timer.start("get");
         let buf = get_bin(&format!("block/{}.bin", &blockhash));
+        timer.start("parse");
         let block: Block = deserialize(buf.as_slice()).unwrap();
+        timer.stop();
+        size += buf.len();
         assert_eq!(&block.bitcoin_hash().be_hex_string(), blockhash);
         if height % 100 == 0 {
-            info!("{} @ {}", blockhash, height);
+            info!(
+                "{} @ {}: {} MB, {}",
+                blockhash,
+                height,
+                size as f64 / 1e6f64,
+                timer.stats()
+            );
         }
     }
 }
