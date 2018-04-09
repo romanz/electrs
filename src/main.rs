@@ -20,7 +20,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::enumerate;
-use rocksdb::{DBCompactionStyle, WriteBatch, DB};
+use rocksdb::{DBCompactionStyle, DBCompressionType, WriteBatch, DB};
 // use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write;
@@ -205,9 +205,17 @@ impl Store {
     pub fn open(path: &str) -> Store {
         let mut opts = rocksdb::Options::default();
         opts.create_if_missing(true);
-        opts.set_compaction_style(DBCompactionStyle::Universal);
+        opts.set_compaction_style(DBCompactionStyle::Level);
         opts.set_max_open_files(256);
         opts.set_use_fsync(false);
+        opts.set_compression_type(DBCompressionType::None);
+        opts.set_target_file_size_base(64 << 20);
+        opts.set_write_buffer_size(256 << 20);
+
+        let mut block_opts = rocksdb::BlockBasedOptions::default();
+        block_opts.set_block_size(256 << 10);
+
+        // opts.set_disable_auto_compactions(true); // for initial sync?
         Store {
             db: DB::open(&opts, &path).unwrap(),
             rows: vec![],
@@ -218,7 +226,7 @@ impl Store {
     pub fn persist(&mut self, mut rows: Vec<Row>) {
         self.rows.append(&mut rows);
         let elapsed: Duration = self.start.to(PreciseTime::now());
-        if elapsed < Duration::seconds(60) && self.rows.len() < 1_000_000 {
+        if elapsed < Duration::seconds(60) && self.rows.len() < 10_000_000 {
             return;
         }
         let mut batch = WriteBatch::default();
