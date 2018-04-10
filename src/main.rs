@@ -306,12 +306,13 @@ fn main() {
     let mut rows_size = 0usize;
     let mut num_of_rows = 0usize;
 
-    for &(height, ref blockhash) in &hashes {
+    for (height, blockhash) in hashes {
         timer.start("get");
         let buf = get_bin(&format!("block/{}.bin", &blockhash));
 
         timer.start("parse");
         let block: Block = deserialize(&buf).unwrap();
+        assert_eq!(&block.bitcoin_hash().be_hex_string(), &blockhash);
 
         timer.start("index");
         let rows = index_block(&block, height);
@@ -325,7 +326,6 @@ fn main() {
 
         timer.stop();
         blocks_size += buf.len();
-        assert_eq!(&block.bitcoin_hash().be_hex_string(), blockhash);
         if height % 100 == 0 {
             info!(
                 "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
