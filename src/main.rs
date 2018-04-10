@@ -288,10 +288,7 @@ impl Store {
     }
 }
 
-fn main() {
-    simple_logger::init_with_level(log::Level::Info).unwrap();
-    let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
-
+fn index_blocks(store: &mut Store) {
     let indexed_headers = store.read_headers();
     info!("indexed {} headers", indexed_headers.len());
 
@@ -326,17 +323,25 @@ fn main() {
 
         timer.stop();
         blocks_size += buf.len();
-        if height % 100 == 0 {
-            info!(
-                "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
-                blockhash,
-                height,
-                rows_size as f64 / 1e6_f64,
-                blocks_size as f64 / 1e6_f64,
-                num_of_rows,
-                timer.stats()
-            );
-        }
+
+        debug!(
+            "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
+            blockhash,
+            height,
+            rows_size as f64 / 1e6_f64,
+            blocks_size as f64 / 1e6_f64,
+            num_of_rows,
+            timer.stats()
+        );
     }
     store.flush();
+}
+
+fn main() {
+    simple_logger::init_with_level(log::Level::Info).unwrap();
+    let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
+    index_blocks(&mut store);
+    // info!("starting full compaction");
+    // store.db.compact_range(None, None);
+    // info!("finisged full compaction");
 }
