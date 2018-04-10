@@ -10,6 +10,7 @@ extern crate rocksdb;
 extern crate serde_json;
 extern crate simple_logger;
 extern crate time;
+extern crate zmq;
 
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::network::encodable::ConsensusDecodable;
@@ -33,7 +34,7 @@ const HASH_LEN: usize = 8;
 type HeaderMap = HashMap<String, BlockHeader>;
 type Bytes = Vec<u8>;
 
-fn be_hex(data: &[u8]) -> String {
+fn revhex(data: &[u8]) -> String {
     let mut ret = String::with_capacity(data.len() * 2);
     for item in data.iter().rev() {
         ret.push(std::char::from_digit((*item / 0x10) as u32, 16).unwrap());
@@ -260,11 +261,16 @@ impl Store {
     pub fn read_headers(&mut self) -> HashMap<String, BlockHeader> {
         let mut headers = HashMap::new();
         for row in self.scan(b"B") {
-            let blockhash = be_hex(&row.key);
+            let blockhash = revhex(&row.key);
             let header: BlockHeader = deserialize(&row.value).unwrap();
             headers.insert(blockhash, header);
         }
         headers
+    }
+
+    pub fn has_block(&mut self, blockhash: &[u8]) -> bool {
+        let key: &[u8] = &[b"B", blockhash].concat();
+        self.db.get(key).unwrap().is_some()
     }
 
     // Use generators ???
@@ -337,11 +343,44 @@ fn index_blocks(store: &mut Store) {
     store.flush();
 }
 
+struct Waiter {
+    sock: zmq::Socket,
+}
+
+impl Waiter {
+    pub fn new(endpoint: &str) -> Waiter {
+        let ctx = zmq::Context::new();
+        let sock = ctx.socket(zmq::SocketType::SUB).unwrap();
+        sock.set_subscribe(b"hashblock").unwrap();
+        sock.connect(endpoint).unwrap();
+        Waiter { sock }
+    }
+
+    pub fn wait(&self) -> Bytes {
+        let mut blockhash = self.sock.recv_multipart(0).unwrap().remove(1);
+        blockhash.reverse();
+        blockhash
+    }
+}
+
 fn main() {
     simple_logger::init_with_level(log::Level::Info).unwrap();
+    let waiter = Waiter::new("tcp://localhost:28332");
+    {
+        let mut store = Store::open(
+            "db/mainnet",
+            StoreOptions {
+                auto_compact: false,
+            },
+        );
+        index_blocks(&mut store);
+    }
+
     let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
-    index_blocks(&mut store);
-    // info!("starting full compaction");
-    // store.db.compact_range(None, None);
-    // info!("finisged full compaction");
+    loop {
+        if store.has_block(&waiter.wait()) {
+            continue;
+        }
+        index_blocks(&mut store);
+    }
 }
