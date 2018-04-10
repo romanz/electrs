@@ -274,6 +274,16 @@ impl Store {
         self.db.get(key).unwrap().is_some()
     }
 
+    pub fn compact_if_needed(&mut self) {
+        let key = b"F"; // full compaction
+        if self.db.get(key).unwrap().is_some() {
+            return;
+        }
+        info!("full compaction");
+        self.db.compact_range(None, None); // should take a while
+        self.db.put(key, b"").unwrap();
+    }
+
     // Use generators ???
     fn scan(&mut self, prefix: &[u8]) -> Vec<Row> {
         let mut rows = Vec::new();
@@ -375,6 +385,7 @@ fn main() {
             },
         );
         index_blocks(&mut store);
+        store.compact_if_needed();
     }
 
     let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
