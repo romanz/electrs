@@ -1,12 +1,10 @@
-extern crate itertools;
-extern crate reqwest;
-
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::RawDecoder;
 use bitcoin::util::hash::Sha256dHash;
-use self::itertools::enumerate;
+use itertools::enumerate;
+use reqwest;
 use std::collections::{HashMap, VecDeque};
 use std::io::Cursor;
 

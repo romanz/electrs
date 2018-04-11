@@ -1,4 +1,4 @@
-extern crate zmq;
+use zmq;
 
 use Bytes;
 

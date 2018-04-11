@@ -1,11 +1,15 @@
-#[macro_use]
-extern crate log;
-
 extern crate bitcoin;
 extern crate byteorder;
 extern crate crypto;
+extern crate itertools;
+extern crate reqwest;
+extern crate rocksdb;
 extern crate simple_logger;
 extern crate time;
+extern crate zmq;
+
+#[macro_use]
+extern crate log;
 
 mod daemon;
 mod store;

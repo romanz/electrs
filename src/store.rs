@@ -1,20 +1,14 @@
-extern crate bitcoin;
-extern crate byteorder;
-extern crate crypto;
-extern crate rocksdb;
-extern crate time;
-
-use self::rocksdb::{DBCompactionStyle, DBCompressionType, WriteBatch, WriteOptions, DB};
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
+use rocksdb;
 use std::char::from_digit;
 use std::collections::HashMap;
-use self::time::{Duration, PreciseTime};
+use time::{Duration, PreciseTime};
 
 use Bytes;
 
 pub struct Store {
-    db: DB,
+    db: rocksdb::DB,
     rows: Vec<Row>,
     start: PreciseTime,
 }
@@ -42,10 +36,10 @@ impl Store {
     pub fn open(path: &str, opts: StoreOptions) -> Store {
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
-        db_opts.set_compaction_style(DBCompactionStyle::Level);
+        db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         db_opts.set_max_open_files(256);
         db_opts.set_use_fsync(false);
-        db_opts.set_compression_type(DBCompressionType::Snappy);
+        db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(128 << 20);
         db_opts.set_write_buffer_size(256 << 20);
         // db_opts.set_compaction_readahead_size(2 << 20);
@@ -55,7 +49,7 @@ impl Store {
         block_opts.set_block_size(256 << 10);
         info!("opening {}", path);
         Store {
-            db: DB::open(&db_opts, &path).unwrap(),
+            db: rocksdb::DB::open(&db_opts, &path).unwrap(),
             rows: vec![],
             start: PreciseTime::now(),
         }
@@ -71,11 +65,11 @@ impl Store {
     }
 
     pub fn flush(&mut self) {
-        let mut batch = WriteBatch::default();
+        let mut batch = rocksdb::WriteBatch::default();
         for row in &self.rows {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
-        let mut opts = WriteOptions::new();
+        let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(true);
         self.db.write_opt(batch, &opts).unwrap();
         self.rows.clear();

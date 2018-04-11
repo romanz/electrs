@@ -1,8 +1,6 @@
-extern crate time;
-
 use std::fmt::Write;
 use std::collections::HashMap;
-use self::time::{Duration, PreciseTime};
+use time::{Duration, PreciseTime};
 
 pub struct Timer {
     durations: HashMap<String, Duration>,
