@@ -4,16 +4,14 @@ use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::RawDecoder;
 use itertools::enumerate;
 use reqwest;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::Cursor;
 
 use util;
 
-use Bytes;
+use {Bytes, HeaderMap};
 
 const HEADER_SIZE: usize = 80;
-
-type HeaderMap = HashMap<Bytes, BlockHeader>;
 
 pub struct Daemon {
     url: String,
@@ -39,7 +37,7 @@ impl Daemon {
     }
 
     fn get_headers(&self) -> (HeaderMap, Bytes) {
-        let mut headers = HashMap::new();
+        let mut headers = HeaderMap::new();
         let mut blockhash: Bytes = util::from_hex(
             "6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000",
         ).unwrap(); // genesis block hash

@@ -1,10 +1,10 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
 use rocksdb;
-use std::collections::HashMap;
 use time::{Duration, PreciseTime};
 
 use Bytes;
+use HeaderMap;
 
 pub struct Store {
     db: rocksdb::DB,
@@ -66,8 +66,8 @@ impl Store {
         self.start = PreciseTime::now();
     }
 
-    pub fn read_headers(&self) -> HashMap<Bytes, BlockHeader> {
-        let mut headers = HashMap::new();
+    pub fn read_headers(&self) -> HeaderMap {
+        let mut headers = HeaderMap::new();
         for row in self.scan(b"B") {
             let header: BlockHeader = deserialize(&row.value).unwrap();
             headers.insert(row.key, header);

@@ -8,13 +8,12 @@ use crypto::sha2::Sha256;
 
 use daemon::Daemon;
 use pbr;
-use std::collections::HashMap;
 use store::{Row, Store};
 use time;
 use timer::Timer;
 use util;
 
-use Bytes;
+use {Bytes, HeaderMap};
 
 const HASH_PREFIX_LEN: usize = 8;
 
@@ -79,7 +78,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
 }
 
 fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeader)> {
-    let indexed_headers: HashMap<Bytes, BlockHeader> = store.read_headers();
+    let indexed_headers: HeaderMap = store.read_headers();
     let mut headers: Vec<(usize, BlockHeader)> = daemon.enumerate_headers();
     {
         let best_block_header = &headers.last().unwrap().1;

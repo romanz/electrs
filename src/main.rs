@@ -19,9 +19,12 @@ mod timer;
 mod util;
 mod waiter;
 
+use bitcoin::blockdata::block::BlockHeader;
+use std::collections::HashMap;
 use store::{Store, StoreOptions};
 
 type Bytes = Vec<u8>;
+type HeaderMap = HashMap<Bytes, BlockHeader>;
 
 fn main() {
     simple_logger::init_with_level(log::Level::Info).unwrap();
