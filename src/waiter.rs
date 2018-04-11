@@ -17,7 +17,7 @@ impl Waiter {
 
     pub fn wait(&self) -> Bytes {
         let mut blockhash = self.sock.recv_multipart(0).unwrap().remove(1);
-        blockhash.reverse();
+        blockhash.reverse(); // block hash needs to be LSB-first
         blockhash
     }
 }
