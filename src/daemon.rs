@@ -40,10 +40,9 @@ impl Daemon {
 
     fn get_headers(&self) -> (HeaderMap, Bytes) {
         let mut headers = HashMap::new();
-        let mut blockhash: Bytes = vec![
-            111, 226, 140, 10, 182, 241, 179, 114, 193, 166, 162, 70, 174, 99, 247, 79, 147, 30,
-            131, 101, 225, 90, 8, 156, 104, 214, 25, 0, 0, 0, 0, 0,
-        ]; // genesis block hash
+        let mut blockhash: Bytes = util::from_hex(
+            "6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000",
+        ).unwrap(); // genesis block hash
         loop {
             let data = self.get(&format!("headers/2000/{}.bin", util::revhex(&blockhash)));
             assert!(!data.is_empty());
