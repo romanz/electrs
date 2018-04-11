@@ -2,6 +2,7 @@ extern crate bitcoin;
 extern crate byteorder;
 extern crate crypto;
 extern crate itertools;
+extern crate pbr;
 extern crate reqwest;
 extern crate rocksdb;
 extern crate simple_logger;
@@ -106,14 +107,13 @@ fn index_blocks(store: &mut Store) {
     if hashes.is_empty() {
         return;
     }
-    info!("indexing {} blocks", hashes.len());
-
     let mut timer = Timer::new();
 
     let mut blocks_size = 0usize;
     let mut rows_size = 0usize;
     let mut num_of_rows = 0usize;
 
+    let mut pb = pbr::ProgressBar::new(hashes.len() as u64);
     for (height, blockhash) in hashes {
         timer.start("get");
         let buf: Bytes = daemon::get_bin(&format!("block/{}.bin", &blockhash));
@@ -135,6 +135,7 @@ fn index_blocks(store: &mut Store) {
         timer.stop();
         blocks_size += buf.len();
 
+        pb.inc();
         debug!(
             "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
             blockhash,
@@ -146,6 +147,7 @@ fn index_blocks(store: &mut Store) {
         );
     }
     store.flush();
+    pb.finish();
 }
 
 fn main() {

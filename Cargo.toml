@@ -8,6 +8,7 @@ bitcoin = "0.12"
 byteorder = "1.2.2"
 itertools = "0.7.8"
 log = "0.4"
+pbr = "1.0.0"
 reqwest = "0.8.5"
 rocksdb = "0.10.0"  #{ path = "../../rust-rocksdb" }
 rust-crypto = "^0.2"
