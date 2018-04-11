@@ -2,17 +2,18 @@ use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::RawDecoder;
-use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 use reqwest;
 use std::collections::{HashMap, VecDeque};
 use std::io::Cursor;
 
+use util;
+
 use Bytes;
 
 const HEADER_SIZE: usize = 80;
 
-type HeaderMap = HashMap<String, BlockHeader>;
+type HeaderMap = HashMap<Bytes, BlockHeader>;
 
 pub struct Daemon {
     url: String,
@@ -37,19 +38,22 @@ impl Daemon {
         buf
     }
 
-    fn get_headers(&self) -> (HeaderMap, String) {
+    fn get_headers(&self) -> (HeaderMap, Bytes) {
         let mut headers = HashMap::new();
-        let mut blockhash =
-            String::from("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"); // genesis
+        let mut blockhash: Bytes = vec![
+            111, 226, 140, 10, 182, 241, 179, 114, 193, 166, 162, 70, 174, 99, 247, 79, 147, 30,
+            131, 101, 225, 90, 8, 156, 104, 214, 25, 0, 0, 0, 0, 0,
+        ]; // genesis block hash
         loop {
-            let data = self.get(&format!("headers/2000/{}.bin", blockhash));
+            let data = self.get(&format!("headers/2000/{}.bin", util::revhex(&blockhash)));
+            assert!(!data.is_empty());
             let num_of_headers = data.len() / HEADER_SIZE;
             let mut decoder = RawDecoder::new(Cursor::new(data));
             for _ in 0..num_of_headers {
                 let header: BlockHeader =
                     ConsensusDecodable::consensus_decode(&mut decoder).unwrap();
-                blockhash = header.bitcoin_hash().be_hex_string();
-                headers.insert(blockhash.to_string(), header);
+                blockhash = header.bitcoin_hash()[..].to_vec();
+                headers.insert(blockhash.clone(), header);
             }
             if num_of_headers == 1 {
                 break;
@@ -58,15 +62,15 @@ impl Daemon {
         (headers, blockhash)
     }
 
-    pub fn enumerate_headers(&self) -> Vec<(usize, String)> {
+    pub fn enumerate_headers(&self) -> Vec<(usize, Bytes)> {
         let (headers, mut blockhash) = self.get_headers();
-        let mut hashes = VecDeque::<String>::new();
+        let mut hashes = VecDeque::<Bytes>::new();
 
-        let null_hash = Sha256dHash::default().be_hex_string();
+        let null_hash = [0u8; 32];
         while blockhash != null_hash {
             let header: &BlockHeader = headers.get(&blockhash).unwrap();
             hashes.push_front(blockhash);
-            blockhash = header.prev_blockhash.be_hex_string();
+            blockhash = header.prev_blockhash[..].to_vec();
         }
         enumerate(hashes).collect()
     }

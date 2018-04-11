@@ -10,6 +10,7 @@ use daemon::Daemon;
 use store::{Row, Store};
 use timer::Timer;
 use pbr;
+use util;
 
 use Bytes;
 
@@ -75,9 +76,9 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn get_missing_hashes(store: &Store, daemon: &Daemon) -> Vec<(usize, String)> {
+fn get_missing_hashes(store: &Store, daemon: &Daemon) -> Vec<(usize, Bytes)> {
     let indexed_headers = store.read_headers();
-    let mut hashes: Vec<(usize, String)> = daemon.enumerate_headers();
+    let mut hashes: Vec<(usize, Bytes)> = daemon.enumerate_headers();
     info!(
         "got {} headers (indexed {})",
         hashes.len(),
@@ -102,11 +103,11 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
     let mut pb = pbr::ProgressBar::new(hashes.len() as u64);
     for (height, blockhash) in hashes {
         timer.start("get");
-        let buf: Bytes = daemon.get(&format!("block/{}.bin", &blockhash));
+        let buf: Bytes = daemon.get(&format!("block/{}.bin", util::revhex(&blockhash)));
 
         timer.start("parse");
         let block: Block = deserialize(&buf).unwrap();
-        assert_eq!(&block.bitcoin_hash().be_hex_string(), &blockhash);
+        assert_eq!(&block.bitcoin_hash()[..], blockhash.as_slice());
 
         timer.start("index");
         let rows = index_block(&block, height);
@@ -124,7 +125,7 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
         pb.inc();
         debug!(
             "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
-            blockhash,
+            util::revhex(&blockhash),
             height,
             rows_size as f64 / 1e6_f64,
             blocks_size as f64 / 1e6_f64,

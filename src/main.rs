@@ -12,10 +12,11 @@ extern crate zmq;
 #[macro_use]
 extern crate log;
 
-mod index;
 mod daemon;
+mod index;
 mod store;
 mod timer;
+mod util;
 mod waiter;
 
 use store::{Store, StoreOptions};

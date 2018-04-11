@@ -1,7 +1,6 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
 use rocksdb;
-use std::char::from_digit;
 use std::collections::HashMap;
 use time::{Duration, PreciseTime};
 
@@ -20,15 +19,6 @@ pub struct Row {
 
 pub struct StoreOptions {
     pub auto_compact: bool,
-}
-
-fn revhex(data: &[u8]) -> String {
-    let mut ret = String::with_capacity(data.len() * 2);
-    for item in data.iter().rev() {
-        ret.push(from_digit((*item / 0x10) as u32, 16).unwrap());
-        ret.push(from_digit((*item & 0x0f) as u32, 16).unwrap());
-    }
-    ret
 }
 
 impl Store {
@@ -76,12 +66,11 @@ impl Store {
         self.start = PreciseTime::now();
     }
 
-    pub fn read_headers(&self) -> HashMap<String, BlockHeader> {
+    pub fn read_headers(&self) -> HashMap<Bytes, BlockHeader> {
         let mut headers = HashMap::new();
         for row in self.scan(b"B") {
-            let blockhash = revhex(&row.key);
             let header: BlockHeader = deserialize(&row.value).unwrap();
-            headers.insert(blockhash, header);
+            headers.insert(row.key, header);
         }
         headers
     }
