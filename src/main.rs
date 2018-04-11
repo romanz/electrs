@@ -16,15 +16,15 @@ mod daemon;
 mod index;
 mod store;
 mod timer;
-mod util;
 mod waiter;
 
 use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use store::{Store, StoreOptions};
 
 type Bytes = Vec<u8>;
-type HeaderMap = HashMap<Bytes, BlockHeader>;
+type HeaderMap = HashMap<Sha256dHash, BlockHeader>;
 
 fn main() {
     simple_logger::init_with_level(log::Level::Info).unwrap();

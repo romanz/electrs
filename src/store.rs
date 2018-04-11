@@ -70,7 +70,7 @@ impl Store {
         let mut headers = HeaderMap::new();
         for row in self.scan(b"B") {
             let header: BlockHeader = deserialize(&row.value).unwrap();
-            headers.insert(row.key, header);
+            headers.insert(deserialize(&row.key).unwrap(), header);
         }
         headers
     }

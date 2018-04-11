@@ -11,7 +11,6 @@ use pbr;
 use store::{Row, Store};
 use time;
 use timer::Timer;
-use util;
 
 use {Bytes, HeaderMap};
 
@@ -90,7 +89,7 @@ fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeade
             time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
         );
     }
-    headers.retain(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()[..]));
+    headers.retain(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()));
     headers
 }
 
@@ -109,8 +108,10 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
     let mut pb = pbr::ProgressBar::new(headers.len() as u64);
     for (height, header) in headers {
         let blockhash = header.bitcoin_hash();
+        let blockhash_hex = blockhash.be_hex_string();
+
         timer.start("get");
-        let buf: Bytes = daemon.get(&format!("block/{}.bin", util::revhex(&blockhash[..])));
+        let buf: Bytes = daemon.get(&format!("block/{}.bin", blockhash_hex));
 
         timer.start("parse");
         let block: Block = deserialize(&buf).unwrap();
@@ -132,7 +133,7 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
         pb.inc();
         debug!(
             "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
-            util::revhex(&blockhash[..]),
+            blockhash_hex,
             height,
             rows_size as f64 / 1e6_f64,
             blocks_size as f64 / 1e6_f64,
