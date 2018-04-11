@@ -13,7 +13,7 @@ use pbr;
 
 use Bytes;
 
-const HASH_LEN: usize = 8;
+const HASH_PREFIX_LEN: usize = 8;
 
 fn index_block(block: &Block, height: usize) -> Vec<Row> {
     let null_hash = Sha256dHash::default();
@@ -26,12 +26,12 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
             }
             let mut key = Vec::<u8>::new(); // ???
             key.push(b'I');
-            key.extend_from_slice(&input.prev_hash[..HASH_LEN]);
+            key.extend_from_slice(&input.prev_hash[..HASH_PREFIX_LEN]);
             key.write_u16::<LittleEndian>(input.prev_index as u16)
                 .unwrap();
             rows.push(Row {
                 key: key,
-                value: txid[..HASH_LEN].to_vec(),
+                value: txid[..HASH_PREFIX_LEN].to_vec(),
             });
         }
         for output in &tx.output {
@@ -43,7 +43,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
             let mut key = Vec::<u8>::new(); // ???
             key.push(b'O');
             key.extend_from_slice(&script_hash);
-            key.extend_from_slice(&txid[..HASH_LEN]);
+            key.extend_from_slice(&txid[..HASH_PREFIX_LEN]);
             rows.push(Row {
                 key: key,
                 value: vec![],
