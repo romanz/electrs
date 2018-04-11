@@ -76,7 +76,7 @@ impl Store {
         self.start = PreciseTime::now();
     }
 
-    pub fn read_headers(&mut self) -> HashMap<String, BlockHeader> {
+    pub fn read_headers(&self) -> HashMap<String, BlockHeader> {
         let mut headers = HashMap::new();
         for row in self.scan(b"B") {
             let blockhash = revhex(&row.key);
@@ -86,12 +86,12 @@ impl Store {
         headers
     }
 
-    pub fn has_block(&mut self, blockhash: &[u8]) -> bool {
+    pub fn has_block(&self, blockhash: &[u8]) -> bool {
         let key: &[u8] = &[b"B", blockhash].concat();
         self.db.get(key).unwrap().is_some()
     }
 
-    pub fn compact_if_needed(&mut self) {
+    pub fn compact_if_needed(&self) {
         let key = b"F"; // full compaction
         if self.db.get(key).unwrap().is_some() {
             return;
@@ -102,7 +102,7 @@ impl Store {
     }
 
     // Use generators ???
-    fn scan(&mut self, prefix: &[u8]) -> Vec<Row> {
+    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
         let mut rows = Vec::new();
         let mut iter = self.db.raw_iterator();
         let prefix_len = prefix.len();

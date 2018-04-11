@@ -75,7 +75,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn get_missing_hashes(store: &mut Store, daemon: &Daemon) -> Vec<(usize, String)> {
+fn get_missing_hashes(store: &Store, daemon: &Daemon) -> Vec<(usize, String)> {
     let indexed_headers = store.read_headers();
     let mut hashes: Vec<(usize, String)> = daemon.enumerate_headers();
     info!(
