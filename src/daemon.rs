@@ -61,16 +61,17 @@ impl Daemon {
         (headers, blockhash)
     }
 
-    pub fn enumerate_headers(&self) -> Vec<(usize, Bytes)> {
-        let (headers, mut blockhash) = self.get_headers();
-        let mut hashes = VecDeque::<Bytes>::new();
+    pub fn enumerate_headers(&self) -> Vec<(usize, BlockHeader)> {
+        let (mut header_map, mut blockhash) = self.get_headers();
+        let mut header_list = VecDeque::<BlockHeader>::new();
 
         let null_hash = [0u8; 32];
         while blockhash != null_hash {
-            let header: &BlockHeader = headers.get(&blockhash).unwrap();
-            hashes.push_front(blockhash);
+            let header: BlockHeader = header_map.remove(&blockhash).unwrap();
             blockhash = header.prev_blockhash[..].to_vec();
+            header_list.push_front(header);
         }
-        enumerate(hashes).collect()
+        assert!(header_map.is_empty());
+        enumerate(header_list).collect()
     }
 }

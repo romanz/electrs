@@ -1,4 +1,4 @@
-use bitcoin::blockdata::block::Block;
+use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
@@ -7,9 +7,11 @@ use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
 use daemon::Daemon;
-use store::{Row, Store};
-use timer::Timer;
 use pbr;
+use std::collections::HashMap;
+use store::{Row, Store};
+use time;
+use timer::Timer;
 use util;
 
 use Bytes;
@@ -76,21 +78,26 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn get_missing_hashes(store: &Store, daemon: &Daemon) -> Vec<(usize, Bytes)> {
-    let indexed_headers = store.read_headers();
-    let mut hashes: Vec<(usize, Bytes)> = daemon.enumerate_headers();
-    info!(
-        "got {} headers (indexed {})",
-        hashes.len(),
-        indexed_headers.len(),
-    );
-    hashes.retain(|item| !indexed_headers.contains_key(&item.1));
-    hashes
+fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeader)> {
+    let indexed_headers: HashMap<Bytes, BlockHeader> = store.read_headers();
+    let mut headers: Vec<(usize, BlockHeader)> = daemon.enumerate_headers();
+    {
+        let best_block_header = &headers.last().unwrap().1;
+        info!(
+            "got {} headers (indexed {}), best {} @ {}",
+            headers.len(),
+            indexed_headers.len(),
+            best_block_header.bitcoin_hash(),
+            time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+        );
+    }
+    headers.retain(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()[..]));
+    headers
 }
 
 pub fn update(store: &mut Store, daemon: &Daemon) {
-    let hashes = get_missing_hashes(store, daemon);
-    if hashes.is_empty() {
+    let headers = get_missing_headers(store, daemon);
+    if headers.is_empty() {
         return;
     }
 
@@ -100,14 +107,15 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
     let mut rows_size = 0usize;
     let mut num_of_rows = 0usize;
 
-    let mut pb = pbr::ProgressBar::new(hashes.len() as u64);
-    for (height, blockhash) in hashes {
+    let mut pb = pbr::ProgressBar::new(headers.len() as u64);
+    for (height, header) in headers {
+        let blockhash = header.bitcoin_hash();
         timer.start("get");
-        let buf: Bytes = daemon.get(&format!("block/{}.bin", util::revhex(&blockhash)));
+        let buf: Bytes = daemon.get(&format!("block/{}.bin", util::revhex(&blockhash[..])));
 
         timer.start("parse");
         let block: Block = deserialize(&buf).unwrap();
-        assert_eq!(&block.bitcoin_hash()[..], blockhash.as_slice());
+        assert_eq!(block.bitcoin_hash(), blockhash);
 
         timer.start("index");
         let rows = index_block(&block, height);
@@ -125,7 +133,7 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
         pb.inc();
         debug!(
             "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
-            util::revhex(&blockhash),
+            util::revhex(&blockhash[..]),
             height,
             rows_size as f64 / 1e6_f64,
             blocks_size as f64 / 1e6_f64,
