@@ -75,9 +75,12 @@ impl Store {
         headers
     }
 
-    pub fn has_block(&self, blockhash: &[u8]) -> bool {
+    pub fn read_header(&self, blockhash: &[u8]) -> Option<BlockHeader> {
         let key: &[u8] = &[b"B", blockhash].concat();
-        self.db.get(key).unwrap().is_some()
+        self.db
+            .get(key)
+            .unwrap()
+            .map(|value| deserialize(&value).unwrap())
     }
 
     pub fn compact_if_needed(&self) {

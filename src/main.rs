@@ -40,7 +40,7 @@ fn main() {
 
     let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
     loop {
-        if store.has_block(&waiter.wait()) {
+        if store.read_header(&waiter.wait()).is_some() {
             continue;
         }
         index::update(&mut store, &daemon);
