@@ -45,7 +45,6 @@ pub fn get_headers() -> (HeaderMap, String) {
             break;
         }
     }
-    info!("loaded {} headers till {}", headers.len(), blockhash);
     (headers, blockhash)
 }
 

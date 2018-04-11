@@ -5,6 +5,7 @@ extern crate bitcoin;
 extern crate byteorder;
 extern crate crypto;
 extern crate simple_logger;
+extern crate time;
 
 mod daemon;
 mod store;
@@ -87,11 +88,20 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
 
 fn index_blocks(store: &mut Store) {
     let indexed_headers = store.read_headers();
-    info!("indexed {} headers", indexed_headers.len());
-
     let (headers, blockhash) = daemon::get_headers();
+    let best_block_header = headers.get(&blockhash).unwrap();
+    info!(
+        "got {} headers (indexed {}), best {} @ {}",
+        headers.len(),
+        indexed_headers.len(),
+        best_block_header.bitcoin_hash().be_hex_string(),
+        time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+    );
     let mut hashes: Vec<(usize, String)> = daemon::enumerate_headers(&headers, &blockhash);
     hashes.retain(|item| !indexed_headers.contains_key(&item.1));
+    if hashes.is_empty() {
+        return;
+    }
     info!("indexing {} blocks", hashes.len());
 
     let mut timer = Timer::new();
