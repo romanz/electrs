@@ -198,7 +198,7 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
         timer.stop();
         blocks_size += buf.len();
 
-        if pb.inc() % 100 == 0 {
+        if pb.inc() % 1000 == 0 {
             info!(
                 "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
                 blockhash_hex,
