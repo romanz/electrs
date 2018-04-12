@@ -44,7 +44,7 @@ fn full_hash(hash: &Sha256dHash) -> FullHash {
 #[derive(Serialize, Deserialize)]
 struct TxOutKey {
     code: u8,
-    script_hash: FullHash,
+    script_hash_prefix: HashPrefix,
     txid_prefix: HashPrefix,
 }
 
@@ -65,13 +65,14 @@ struct TxValue {
     confirmed_height: u32,
 }
 
-fn digest(data: &[u8]) -> FullHash {
+fn digest(data: &[u8]) -> HashPrefix {
+    let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
     sha2.input(data);
-
-    let mut hash = [0u8; HASH_LEN];
     sha2.result(&mut hash);
-    hash
+    let mut prefix = HashPrefix::default();
+    prefix.copy_from_slice(&hash[..HASH_PREFIX_LEN]);
+    prefix
 }
 
 fn txin_row(input: &txn::TxIn, txid: &Sha256dHash) -> Row {
@@ -91,7 +92,7 @@ fn txout_row(output: &txn::TxOut, txid: &Sha256dHash) -> Row {
     Row {
         key: bincode::serialize(&TxOutKey {
             code: b'O',
-            script_hash: digest(&output.script_pubkey[..]),
+            script_hash_prefix: digest(&output.script_pubkey[..]),
             txid_prefix: hash_prefix(&txid),
         }).unwrap(),
         value: vec![],
