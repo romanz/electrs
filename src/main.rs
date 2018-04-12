@@ -6,7 +6,7 @@ extern crate pbr;
 extern crate reqwest;
 extern crate rocksdb;
 extern crate serde;
-extern crate simple_logger;
+extern crate simplelog;
 extern crate time;
 extern crate zmq;
 
@@ -31,8 +31,22 @@ use store::{Store, StoreOptions};
 type Bytes = Vec<u8>;
 type HeaderMap = HashMap<Sha256dHash, BlockHeader>;
 
+fn setup_logging() {
+    use simplelog::*;
+    let mut cfg = Config::default();
+    cfg.time_format = Some("%F %H:%M:%S%.3f");
+    CombinedLogger::init(vec![
+        TermLogger::new(LevelFilter::Info, cfg.clone()).unwrap(),
+        WriteLogger::new(
+            LevelFilter::Info,
+            cfg.clone(),
+            std::fs::File::create("indexrs.log").unwrap(),
+        ),
+    ]).unwrap();
+}
+
 fn main() {
-    simple_logger::init_with_level(log::Level::Info).unwrap();
+    setup_logging();
     let waiter = waiter::Waiter::new("tcp://localhost:28332");
     let daemon = daemon::Daemon::new("http://localhost:8332");
     {
