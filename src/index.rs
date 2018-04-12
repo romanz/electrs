@@ -1,8 +1,9 @@
+use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
+use bitcoin::blockdata::transaction as txn;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
-use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
@@ -14,7 +15,111 @@ use timer::Timer;
 
 use {Bytes, HeaderMap};
 
+const HASH_LEN: usize = 32;
 const HASH_PREFIX_LEN: usize = 8;
+
+type FullHash = [u8; HASH_LEN];
+type HashPrefix = [u8; HASH_PREFIX_LEN];
+
+#[derive(Serialize, Deserialize)]
+struct TxInKey {
+    code: u8,
+    prev_hash_prefix: HashPrefix,
+    prev_index: u16,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TxInValue {
+    txid_prefix: HashPrefix,
+}
+
+fn hash_prefix(hash: &Sha256dHash) -> HashPrefix {
+    array_ref![hash, 0, HASH_PREFIX_LEN].clone()
+}
+
+fn full_hash(hash: &Sha256dHash) -> FullHash {
+    array_ref![hash, 0, HASH_LEN].clone()
+}
+
+#[derive(Serialize, Deserialize)]
+struct TxOutKey {
+    code: u8,
+    script_hash: FullHash,
+    txid_prefix: HashPrefix,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TxKey {
+    code: u8,
+    txid: FullHash,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BlockKey {
+    code: u8,
+    hash: FullHash,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TxValue {
+    confirmed_height: u32,
+}
+
+fn digest(data: &[u8]) -> FullHash {
+    let mut sha2 = Sha256::new();
+    sha2.input(data);
+
+    let mut hash = [0u8; HASH_LEN];
+    sha2.result(&mut hash);
+    hash
+}
+
+fn txin_row(input: &txn::TxIn, txid: &Sha256dHash) -> Row {
+    Row {
+        key: bincode::serialize(&TxInKey {
+            code: b'I',
+            prev_hash_prefix: hash_prefix(&input.prev_hash),
+            prev_index: input.prev_index as u16,
+        }).unwrap(),
+        value: bincode::serialize(&TxInValue {
+            txid_prefix: hash_prefix(&txid),
+        }).unwrap(),
+    }
+}
+
+fn txout_row(output: &txn::TxOut, txid: &Sha256dHash) -> Row {
+    Row {
+        key: bincode::serialize(&TxOutKey {
+            code: b'O',
+            script_hash: digest(&output.script_pubkey[..]),
+            txid_prefix: hash_prefix(&txid),
+        }).unwrap(),
+        value: vec![],
+    }
+}
+
+fn tx_row(txid: &Sha256dHash, height: usize) -> Row {
+    Row {
+        key: bincode::serialize(&TxKey {
+            code: b'T',
+            txid: full_hash(&txid),
+        }).unwrap(),
+        value: bincode::serialize(&TxValue {
+            confirmed_height: height as u32,
+        }).unwrap(),
+    }
+}
+
+fn block_row(block: &Block) -> Row {
+    let blockhash = block.bitcoin_hash();
+    Row {
+        key: bincode::serialize(&BlockKey {
+            code: b'B',
+            hash: full_hash(&blockhash),
+        }).unwrap(),
+        value: serialize(&block.header).unwrap(),
+    }
+}
 
 fn index_block(block: &Block, height: usize) -> Vec<Row> {
     let null_hash = Sha256dHash::default();
@@ -25,54 +130,16 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
             if input.prev_hash == null_hash {
                 continue;
             }
-            let mut key = Vec::<u8>::new(); // ???
-            key.push(b'I');
-            key.extend_from_slice(&input.prev_hash[..HASH_PREFIX_LEN]);
-            key.write_u16::<LittleEndian>(input.prev_index as u16)
-                .unwrap();
-            rows.push(Row {
-                key: key,
-                value: txid[..HASH_PREFIX_LEN].to_vec(),
-            });
+            rows.push(txin_row(&input, &txid));
         }
         for output in &tx.output {
-            let mut script_hash = [0u8; 32];
-            let mut sha2 = Sha256::new();
-            sha2.input(&output.script_pubkey[..]);
-            sha2.result(&mut script_hash);
-
-            let mut key = Vec::<u8>::new(); // ???
-            key.push(b'O');
-            key.extend_from_slice(&script_hash);
-            key.extend_from_slice(&txid[..HASH_PREFIX_LEN]);
-            rows.push(Row {
-                key: key,
-                value: vec![],
-            });
+            rows.push(txout_row(&output, &txid))
         }
         // Persist transaction ID and confirmed height
-        {
-            let mut key = Vec::<u8>::new();
-            key.push(b'T');
-            key.extend_from_slice(&txid[..]);
-            let mut value = Vec::<u8>::new();
-            value.write_u32::<LittleEndian>(height as u32).unwrap();
-            rows.push(Row {
-                key: key,
-                value: value,
-            })
-        }
+        rows.push(tx_row(&txid, height))
     }
     // Persist block hash and header
-    {
-        let mut key = Vec::<u8>::new();
-        key.push(b'B');
-        key.extend_from_slice(&block.bitcoin_hash()[..]);
-        rows.push(Row {
-            key: key,
-            value: serialize(&block.header).unwrap(),
-        })
-    }
+    rows.push(block_row(&block));
     rows
 }
 
@@ -130,16 +197,17 @@ pub fn update(store: &mut Store, daemon: &Daemon) {
         timer.stop();
         blocks_size += buf.len();
 
-        pb.inc();
-        debug!(
-            "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
-            blockhash_hex,
-            height,
-            rows_size as f64 / 1e6_f64,
-            blocks_size as f64 / 1e6_f64,
-            num_of_rows,
-            timer.stats()
-        );
+        if pb.inc() % 100 == 0 {
+            info!(
+                "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
+                blockhash_hex,
+                height,
+                rows_size as f64 / 1e6_f64,
+                blocks_size as f64 / 1e6_f64,
+                num_of_rows,
+                timer.stats()
+            );
+        }
     }
     store.flush();
     pb.finish();
