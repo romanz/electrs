@@ -23,12 +23,14 @@ fn setup_logging() {
     ]).unwrap();
 }
 
+const DB_PATH: &str = "db/mainnet";
+
 fn run_server() {
     let waiter = waiter::Waiter::new("tcp://localhost:28332");
     let daemon = daemon::Daemon::new("http://localhost:8332");
     {
         let mut store = store::Store::open(
-            "db/mainnet",
+            DB_PATH,
             store::StoreOptions {
                 auto_compact: false,
             },
@@ -37,7 +39,7 @@ fn run_server() {
         store.compact_if_needed();
     }
 
-    let mut store = store::Store::open("db/mainnet", store::StoreOptions { auto_compact: true });
+    let mut store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
     loop {
         if store.read_header(&waiter.wait()).is_some() {
             continue;
