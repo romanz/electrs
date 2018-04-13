@@ -2,6 +2,7 @@ extern crate simplelog;
 
 extern crate indexrs;
 
+use std::fs::OpenOptions;
 use indexrs::{daemon, index, store, waiter};
 
 fn setup_logging() {
@@ -13,7 +14,11 @@ fn setup_logging() {
         WriteLogger::new(
             LevelFilter::Info,
             cfg.clone(),
-            std::fs::File::create("indexrs.log").unwrap(),
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("indexrs.log")
+                .unwrap(),
         ),
     ]).unwrap();
 }
