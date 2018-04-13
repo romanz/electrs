@@ -1,35 +1,8 @@
-extern crate bincode;
-extern crate bitcoin;
-extern crate crypto;
-extern crate itertools;
-extern crate pbr;
-extern crate reqwest;
-extern crate rocksdb;
-extern crate serde;
 extern crate simplelog;
-extern crate time;
-extern crate zmq;
 
-#[macro_use]
-extern crate arrayref;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate serde_derive;
+extern crate indexrs;
 
-mod daemon;
-mod index;
-mod store;
-mod timer;
-mod waiter;
-
-use bitcoin::blockdata::block::BlockHeader;
-use bitcoin::util::hash::Sha256dHash;
-use std::collections::HashMap;
-use store::{Store, StoreOptions};
-
-type Bytes = Vec<u8>;
-type HeaderMap = HashMap<Sha256dHash, BlockHeader>;
+use indexrs::{daemon, index, store, waiter};
 
 fn setup_logging() {
     use simplelog::*;
@@ -45,14 +18,13 @@ fn setup_logging() {
     ]).unwrap();
 }
 
-fn main() {
-    setup_logging();
+fn run_server() {
     let waiter = waiter::Waiter::new("tcp://localhost:28332");
     let daemon = daemon::Daemon::new("http://localhost:8332");
     {
-        let mut store = Store::open(
+        let mut store = store::Store::open(
             "db/mainnet",
-            StoreOptions {
+            store::StoreOptions {
                 auto_compact: false,
             },
         );
@@ -60,11 +32,16 @@ fn main() {
         store.compact_if_needed();
     }
 
-    let mut store = Store::open("db/mainnet", StoreOptions { auto_compact: true });
+    let mut store = store::Store::open("db/mainnet", store::StoreOptions { auto_compact: true });
     loop {
         if store.read_header(&waiter.wait()).is_some() {
             continue;
         }
         index::update(&mut store, &daemon);
     }
+}
+
+fn main() {
+    setup_logging();
+    run_server()
 }

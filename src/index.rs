@@ -12,8 +12,7 @@ use pbr;
 use store::{Row, Store};
 use time;
 use timer::Timer;
-
-use {Bytes, HeaderMap};
+use types::{Bytes, HeaderMap};
 
 const HASH_LEN: usize = 32;
 const HASH_PREFIX_LEN: usize = 8;

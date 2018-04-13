@@ -7,7 +7,7 @@ use reqwest;
 use std::collections::VecDeque;
 use std::io::Cursor;
 
-use {Bytes, HeaderMap, Sha256dHash};
+use types::{Bytes, HeaderMap, Sha256dHash};
 
 const HEADER_SIZE: usize = 80;
 

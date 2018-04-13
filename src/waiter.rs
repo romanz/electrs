@@ -1,6 +1,6 @@
 use zmq;
 
-use Bytes;
+use types::Bytes;
 
 pub struct Waiter {
     sock: zmq::Socket,

@@ -3,8 +3,7 @@ use bitcoin::network::serialize::deserialize;
 use rocksdb;
 use time::{Duration, PreciseTime};
 
-use Bytes;
-use HeaderMap;
+use types::{Bytes, HeaderMap};
 
 pub struct Store {
     db: rocksdb::DB,
