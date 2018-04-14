@@ -41,10 +41,9 @@ fn run_server() {
 
     let mut store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
     loop {
-        if store.read_header(&waiter.wait()).is_some() {
-            continue;
+        if store.read_header(&waiter.wait()).is_none() {
+            index::update(&mut store, &daemon);
         }
-        index::update(&mut store, &daemon);
     }
 }
 

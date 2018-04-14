@@ -3,7 +3,7 @@ use bitcoin::network::serialize::deserialize;
 use rocksdb;
 use time::{Duration, PreciseTime};
 
-use types::{Bytes, HeaderMap};
+use types::Bytes;
 
 pub struct Store {
     db: rocksdb::DB,
@@ -63,20 +63,8 @@ impl Store {
         self.start = PreciseTime::now();
     }
 
-    pub fn read_headers(&self) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        for row in self.scan(b"B") {
-            let header: BlockHeader = deserialize(&row.value).unwrap();
-            headers.insert(deserialize(&row.key).unwrap(), header);
-        }
-        headers
-    }
-
     pub fn read_header(&self, blockhash: &[u8]) -> Option<BlockHeader> {
-        let key: &[u8] = &[b"B", blockhash].concat();
-        self.db
-            .get(key)
-            .unwrap()
+        self.get(&[b"B", blockhash].concat())
             .map(|value| deserialize(&value).unwrap())
     }
 
@@ -90,8 +78,12 @@ impl Store {
         self.db.put(key, b"").unwrap();
     }
 
+    pub fn get(&self, key: &[u8]) -> Option<rocksdb::DBVector> {
+        self.db.get(key).unwrap()
+    }
+
     // Use generators ???
-    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
+    pub fn scan(&self, prefix: &[u8]) -> Vec<Row> {
         let mut rows = Vec::new();
         let mut iter = self.db.raw_iterator();
         let prefix_len = prefix.len();
@@ -102,7 +94,7 @@ impl Store {
                 break;
             }
             rows.push(Row {
-                key: key[prefix_len..].to_vec(),
+                key: key.to_vec(),
                 value: iter.value().unwrap().to_vec(),
             });
             iter.next();

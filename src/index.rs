@@ -1,11 +1,12 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
-use bitcoin::blockdata::transaction as txn;
+use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use itertools::enumerate;
 
 use daemon::Daemon;
 use pbr;
@@ -20,6 +21,14 @@ const HASH_PREFIX_LEN: usize = 8;
 type FullHash = [u8; HASH_LEN];
 type HashPrefix = [u8; HASH_PREFIX_LEN];
 
+fn hash_prefix(hash: &[u8]) -> HashPrefix {
+    array_ref![hash, 0, HASH_PREFIX_LEN].clone()
+}
+
+fn full_hash(hash: &[u8]) -> FullHash {
+    array_ref![hash, 0, HASH_LEN].clone()
+}
+
 #[derive(Serialize, Deserialize)]
 struct TxInKey {
     code: u8,
@@ -28,22 +37,20 @@ struct TxInKey {
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxInValue {
+struct TxInRow {
+    key: TxInKey,
     txid_prefix: HashPrefix,
-}
-
-fn hash_prefix(hash: &Sha256dHash) -> HashPrefix {
-    array_ref![hash, 0, HASH_PREFIX_LEN].clone()
-}
-
-fn full_hash(hash: &Sha256dHash) -> FullHash {
-    array_ref![hash, 0, HASH_LEN].clone()
 }
 
 #[derive(Serialize, Deserialize)]
 struct TxOutKey {
     code: u8,
     script_hash_prefix: HashPrefix,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TxOutRow {
+    key: TxOutKey,
     txid_prefix: HashPrefix,
 }
 
@@ -59,40 +66,36 @@ struct BlockKey {
     hash: FullHash,
 }
 
-#[derive(Serialize, Deserialize)]
-struct TxValue {
-    confirmed_height: u32,
-}
-
-fn digest(data: &[u8]) -> HashPrefix {
+fn digest(data: &[u8]) -> FullHash {
     let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
     sha2.input(data);
     sha2.result(&mut hash);
-    let mut prefix = HashPrefix::default();
-    prefix.copy_from_slice(&hash[..HASH_PREFIX_LEN]);
-    prefix
+    hash
 }
 
-fn txin_row(input: &txn::TxIn, txid: &Sha256dHash) -> Row {
+fn txin_row(input: &TxIn, txid: &Sha256dHash) -> Row {
     Row {
-        key: bincode::serialize(&TxInKey {
-            code: b'I',
-            prev_hash_prefix: hash_prefix(&input.prev_hash),
-            prev_index: input.prev_index as u16,
+        key: bincode::serialize(&TxInRow {
+            key: TxInKey {
+                code: b'I',
+                prev_hash_prefix: hash_prefix(&input.prev_hash[..]),
+                prev_index: input.prev_index as u16,
+            },
+            txid_prefix: hash_prefix(&txid[..]),
         }).unwrap(),
-        value: bincode::serialize(&TxInValue {
-            txid_prefix: hash_prefix(&txid),
-        }).unwrap(),
+        value: vec![],
     }
 }
 
-fn txout_row(output: &txn::TxOut, txid: &Sha256dHash) -> Row {
+fn txout_row(output: &TxOut, txid: &Sha256dHash) -> Row {
     Row {
-        key: bincode::serialize(&TxOutKey {
-            code: b'O',
-            script_hash_prefix: digest(&output.script_pubkey[..]),
-            txid_prefix: hash_prefix(&txid),
+        key: bincode::serialize(&TxOutRow {
+            key: TxOutKey {
+                code: b'O',
+                script_hash_prefix: hash_prefix(&digest(&output.script_pubkey[..])),
+            },
+            txid_prefix: hash_prefix(&txid[..]),
         }).unwrap(),
         value: vec![],
     }
@@ -102,11 +105,9 @@ fn tx_row(txid: &Sha256dHash, height: usize) -> Row {
     Row {
         key: bincode::serialize(&TxKey {
             code: b'T',
-            txid: full_hash(&txid),
+            txid: full_hash(&txid[..]),
         }).unwrap(),
-        value: bincode::serialize(&TxValue {
-            confirmed_height: height as u32,
-        }).unwrap(),
+        value: bincode::serialize(&(height as u32)).unwrap(),
     }
 }
 
@@ -115,7 +116,7 @@ fn block_row(block: &Block) -> Row {
     Row {
         key: bincode::serialize(&BlockKey {
             code: b'B',
-            hash: full_hash(&blockhash),
+            hash: full_hash(&blockhash[..]),
         }).unwrap(),
         value: serialize(&block.header).unwrap(),
     }
@@ -143,8 +144,18 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
+fn read_headers(store: &Store) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    for row in store.scan(b"B") {
+        let key: BlockKey = bincode::deserialize(&row.key).unwrap();
+        let header: BlockHeader = deserialize(&row.value).unwrap();
+        headers.insert(deserialize(&key.hash).unwrap(), header);
+    }
+    headers
+}
+
 fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeader)> {
-    let indexed_headers: HeaderMap = store.read_headers();
+    let indexed_headers: HeaderMap = read_headers(&store);
     let mut headers: Vec<(usize, BlockHeader)> = daemon.enumerate_headers();
     {
         let best_block_header = &headers.last().unwrap().1;
