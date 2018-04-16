@@ -69,8 +69,8 @@ impl Store {
     }
 
     pub fn compact_if_needed(&self) {
-        let key = b"F"; // full compaction
-        if self.db.get(key).unwrap().is_some() {
+        let key = b"F"; // full compaction marker
+        if self.get(key).is_some() {
             return;
         }
         info!("full compaction");
