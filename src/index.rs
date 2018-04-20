@@ -7,12 +7,12 @@ use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::enumerate;
+use std::io::stderr;
 
 use daemon::Daemon;
 use pbr;
 use store::{Row, Store};
 use time;
-use timer::Timer;
 use types::{Bytes, HeaderMap};
 
 const HASH_LEN: usize = 32;
@@ -171,56 +171,86 @@ fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeade
     headers
 }
 
-pub fn update(store: &mut Store, daemon: &Daemon) {
-    let headers = get_missing_headers(store, daemon);
-    if headers.is_empty() {
-        return;
+struct Indexer<'a> {
+    headers: Vec<(usize, BlockHeader)>,
+    header_index: usize,
+
+    daemon: &'a Daemon,
+
+    blocks_size: usize,
+    rows_size: usize,
+    num_of_rows: usize,
+}
+
+impl<'a> Indexer<'a> {
+    fn new(store: &Store, daemon: &'a Daemon) -> Indexer<'a> {
+        let headers = get_missing_headers(store, daemon);
+        Indexer {
+            headers: headers,
+            header_index: 0,
+
+            daemon: daemon,
+
+            blocks_size: 0,
+            rows_size: 0,
+            num_of_rows: 0,
+        }
     }
 
-    let mut timer = Timer::new();
+    fn num_of_headers(&self) -> usize {
+        self.headers.len()
+    }
+}
 
-    let mut blocks_size = 0usize;
-    let mut rows_size = 0usize;
-    let mut num_of_rows = 0usize;
+impl<'a> Iterator for Indexer<'a> {
+    type Item = Vec<Row>;
 
-    let mut pb = pbr::ProgressBar::new(headers.len() as u64);
-    for (height, header) in headers {
+    fn next(&mut self) -> Option<Vec<Row>> {
+        if self.header_index >= self.num_of_headers() {
+            return None;
+        }
+        let &(height, header) = &self.headers[self.header_index];
+
         let blockhash = header.bitcoin_hash();
         let blockhash_hex = blockhash.be_hex_string();
 
-        timer.start("get");
-        let buf: Bytes = daemon.get(&format!("block/{}.bin", blockhash_hex));
+        let buf: Bytes = self.daemon.get(&format!("block/{}.bin", blockhash_hex));
 
-        timer.start("parse");
         let block: Block = deserialize(&buf).unwrap();
         assert_eq!(block.bitcoin_hash(), blockhash);
 
-        timer.start("index");
         let rows = index_block(&block, height);
+
+        self.blocks_size += buf.len();
         for row in &rows {
-            rows_size += row.key.len() + row.value.len();
+            self.rows_size += row.key.len() + row.value.len();
         }
-        num_of_rows += rows.len();
+        self.num_of_rows += rows.len();
+        self.header_index += 1;
 
-        timer.start("store");
-        store.persist(rows);
-
-        timer.stop();
-        blocks_size += buf.len();
-
-        if pb.inc() % 1000 == 0 {
+        if self.header_index % 1000 == 0 {
             info!(
-                "{} @ {}: {:.3}/{:.3} MB, {} rows, {}",
+                "{} @ {}: {:.3}/{:.3} MB, {} rows",
                 blockhash_hex,
                 height,
-                rows_size as f64 / 1e6_f64,
-                blocks_size as f64 / 1e6_f64,
-                num_of_rows,
-                timer.stats()
+                self.rows_size as f64 / 1e6_f64,
+                self.blocks_size as f64 / 1e6_f64,
+                self.num_of_rows,
             );
         }
+        Some(rows)
     }
-    store.flush();
+}
+
+pub fn update(store: &Store, daemon: &Daemon) {
+    let indexer = Indexer::new(&store, &daemon);
+
+    let mut pb = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
+    for rows in indexer {
+        // TODO: batch and timing
+        store.persist(&rows);
+        pb.inc();
+    }
     pb.finish();
 }
 

@@ -7,6 +7,7 @@ authors = ["Roman Zeyde <me@romanzey.de>"]
 arrayref = "0.3.4"
 bincode = "1.0.0"
 bitcoin = "0.12"
+crossbeam = "0.3.2"
 itertools = "0.7.8"
 log = "0.4"
 pbr = "1.0.0"

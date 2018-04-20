@@ -1,14 +1,11 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
 use rocksdb;
-use time::{Duration, PreciseTime};
 
 use types::Bytes;
 
 pub struct Store {
     db: rocksdb::DB,
-    rows: Vec<Row>,
-    start: PreciseTime,
 }
 
 pub struct Row {
@@ -37,30 +34,17 @@ impl Store {
         info!("opening {}", path);
         Store {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
-            rows: vec![],
-            start: PreciseTime::now(),
         }
     }
 
-    pub fn persist(&mut self, mut rows: Vec<Row>) {
-        self.rows.append(&mut rows);
-        let elapsed: Duration = self.start.to(PreciseTime::now());
-        if elapsed < Duration::seconds(60) && self.rows.len() < 10_000_000 {
-            return;
-        }
-        self.flush();
-    }
-
-    pub fn flush(&mut self) {
+    pub fn persist(&self, rows: &Vec<Row>) {
         let mut batch = rocksdb::WriteBatch::default();
-        for row in &self.rows {
+        for row in rows {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(true);
         self.db.write_opt(batch, &opts).unwrap();
-        self.rows.clear();
-        self.start = PreciseTime::now();
     }
 
     pub fn read_header(&self, blockhash: &[u8]) -> Option<BlockHeader> {

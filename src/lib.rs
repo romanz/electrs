@@ -21,5 +21,4 @@ pub mod index;
 pub mod store;
 pub mod waiter;
 
-mod timer;
 mod types;
