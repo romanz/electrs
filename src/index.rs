@@ -7,12 +7,13 @@ use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::enumerate;
-use std::io::stderr;
+use pbr;
+use std::io::{stderr, Stderr};
+use std::time::{Duration, Instant};
+use time;
 
 use daemon::Daemon;
-use pbr;
 use store::{Row, Store};
-use time;
 use types::{Bytes, HeaderMap};
 
 const HASH_LEN: usize = 32;
@@ -242,16 +243,52 @@ impl<'a> Iterator for Indexer<'a> {
     }
 }
 
+struct BatchIter<'a> {
+    indexer: Indexer<'a>,
+    batch: Vec<Row>,
+    start: Instant,
+    bar: pbr::ProgressBar<Stderr>,
+}
+
+impl<'a> BatchIter<'a> {
+    fn new(indexer: Indexer) -> BatchIter {
+        let bar = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
+        BatchIter {
+            indexer: indexer,
+            batch: vec![],
+            start: Instant::now(),
+            bar: bar,
+        }
+    }
+}
+
+impl<'a> Iterator for BatchIter<'a> {
+    type Item = Vec<Row>;
+
+    fn next(&mut self) -> Option<Vec<Row>> {
+        while let Some(mut rows) = self.indexer.next() {
+            self.bar.inc();
+            self.batch.append(&mut rows);
+            if self.batch.len() > 10_000_000 || self.start.elapsed() > Duration::from_secs(60) {
+                break;
+            }
+        }
+        self.start = Instant::now();
+        if self.batch.is_empty() {
+            self.bar.finish();
+            None
+        } else {
+            Some(self.batch.split_off(0))
+        }
+    }
+}
+
 pub fn update(store: &Store, daemon: &Daemon) {
     let indexer = Indexer::new(&store, &daemon);
-
-    let mut pb = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
-    for rows in indexer {
-        // TODO: batch and timing
+    for rows in BatchIter::new(indexer) {
+        // TODO: add timing
         store.persist(&rows);
-        pb.inc();
     }
-    pb.finish();
 }
 
 pub struct Query<'a> {
