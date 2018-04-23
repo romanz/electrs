@@ -13,6 +13,7 @@ pub struct Row {
     pub value: Bytes,
 }
 
+#[derive(Debug)]
 pub struct StoreOptions {
     pub auto_compact: bool,
 }
@@ -20,6 +21,7 @@ pub struct StoreOptions {
 impl Store {
     /// Opens a new RocksDB at the specified location.
     pub fn open(path: &str, opts: StoreOptions) -> Store {
+        info!("opening {} with {:?}", path, &opts);
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
@@ -31,7 +33,6 @@ impl Store {
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(256 << 10);
-        info!("opening {}", path);
         Store {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
         }
