@@ -7,7 +7,7 @@ extern crate zmq;
 
 use argparse::{ArgumentParser, StoreFalse};
 use std::fs::OpenOptions;
-use indexrs::{daemon, index, store, waiter};
+use indexrs::{daemon, index, rpc, store, waiter};
 
 fn setup_logging() {
     use simplelog::*;
@@ -68,6 +68,7 @@ fn run_server(config: Config) {
     {
         crossbeam::scope(|scope| {
             scope.spawn(|| handle_queries(&store, &daemon));
+            scope.spawn(|| rpc::serve());
             if config.enable_indexing {
                 loop {
                     if store.read_header(&waiter.wait()).is_none() {
