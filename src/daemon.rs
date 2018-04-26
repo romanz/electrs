@@ -1,11 +1,14 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
+use bitcoin::network::serialize::deserialize;
 use bitcoin::network::serialize::RawDecoder;
 use itertools::enumerate;
 use reqwest;
+use serde_json::{from_slice, Value};
 use std::collections::VecDeque;
 use std::io::Cursor;
+use std::iter::FromIterator;
 
 use types::{Bytes, HeaderMap, Sha256dHash};
 
@@ -26,6 +29,14 @@ impl HeaderList {
 
     pub fn headers(&self) -> &[(usize, BlockHeader)] {
         &self.headers
+    }
+
+    pub fn into_map(self) -> HeaderMap {
+        HeaderMap::from_iter(
+            self.headers
+                .into_iter()
+                .map(|item| (item.1.bitcoin_hash(), item.1)),
+        )
     }
 }
 
@@ -48,7 +59,7 @@ impl Daemon {
         buf
     }
 
-    fn get_headers(&self) -> (HeaderMap, Sha256dHash) {
+    fn get_all_headers(&self) -> (HeaderMap, Sha256dHash) {
         let mut headers = HeaderMap::new();
         let mut blockhash = Sha256dHash::from_hex(
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
@@ -71,8 +82,27 @@ impl Daemon {
         (headers, blockhash)
     }
 
-    pub fn enumerate_headers(&self) -> HeaderList {
-        let (mut header_map, mut blockhash) = self.get_headers();
+    fn add_missing_headers(&self, indexed_headers: HeaderList) -> (HeaderMap, Sha256dHash) {
+        let mut header_map = indexed_headers.into_map();
+        let data = self.get("chaininfo.json");
+        let reply: Value = from_slice(&data).unwrap();
+        let bestblockhash_hex = reply.get("bestblockhash").unwrap().as_str().unwrap();
+        let bestblockhash = Sha256dHash::from_hex(bestblockhash_hex).unwrap();
+        let mut blockhash = bestblockhash;
+        while !header_map.contains_key(&blockhash) {
+            let data = self.get(&format!("headers/1/{}.bin", blockhash.be_hex_string()));
+            let header: BlockHeader = deserialize(&data).unwrap();
+            header_map.insert(blockhash, header);
+            blockhash = header.prev_blockhash;
+        }
+        (header_map, bestblockhash)
+    }
+
+    pub fn enumerate_headers(&self, indexed_headers: Option<HeaderList>) -> HeaderList {
+        let (mut header_map, mut blockhash) = match indexed_headers {
+            Some(headers) => self.add_missing_headers(headers),
+            None => self.get_all_headers(),
+        };
         let mut header_list = VecDeque::<BlockHeader>::new();
 
         let null_hash = Sha256dHash::default();

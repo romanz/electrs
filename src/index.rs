@@ -188,7 +188,7 @@ struct Indexer<'a> {
 
 impl<'a> Indexer<'a> {
     fn new(store: &Store, daemon: &'a Daemon) -> Indexer<'a> {
-        let headers = get_missing_headers(store, &daemon.enumerate_headers());
+        let headers = get_missing_headers(store, &daemon.enumerate_headers(None));
         Indexer {
             headers: headers,
             header_index: 0,
