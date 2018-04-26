@@ -12,7 +12,7 @@ use std::io::{stderr, Stderr};
 use std::time::{Duration, Instant};
 use time;
 
-use daemon::Daemon;
+use daemon::{Daemon, HeaderList};
 use store::{Row, Store};
 use types::{Bytes, HeaderMap};
 
@@ -155,21 +155,24 @@ fn read_headers(store: &Store) -> HeaderMap {
     headers
 }
 
-fn get_missing_headers(store: &Store, daemon: &Daemon) -> Vec<(usize, BlockHeader)> {
+fn get_missing_headers(store: &Store, header_list: &HeaderList) -> Vec<(usize, BlockHeader)> {
     let indexed_headers: HeaderMap = read_headers(&store);
-    let mut headers: Vec<(usize, BlockHeader)> = daemon.enumerate_headers();
     {
-        let best_block_header = &headers.last().unwrap().1;
+        let best_block_header: &BlockHeader = header_list.best_header();
         info!(
             "got {} headers (indexed {}), best {} @ {}",
-            headers.len(),
+            header_list.headers().len(),
             indexed_headers.len(),
             best_block_header.bitcoin_hash(),
             time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
         );
     }
-    headers.retain(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()));
-    headers
+    header_list
+        .headers()
+        .iter()
+        .filter(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()))
+        .cloned()
+        .collect()
 }
 
 struct Indexer<'a> {
@@ -185,7 +188,7 @@ struct Indexer<'a> {
 
 impl<'a> Indexer<'a> {
     fn new(store: &Store, daemon: &'a Daemon) -> Indexer<'a> {
-        let headers = get_missing_headers(store, daemon);
+        let headers = get_missing_headers(store, &daemon.enumerate_headers());
         Indexer {
             headers: headers,
             header_index: 0,

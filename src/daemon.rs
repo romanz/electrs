@@ -15,6 +15,20 @@ pub struct Daemon {
     url: String,
 }
 
+pub struct HeaderList {
+    headers: Vec<(usize, BlockHeader)>,
+}
+
+impl HeaderList {
+    pub fn best_header(&self) -> &BlockHeader {
+        &self.headers.last().unwrap().1
+    }
+
+    pub fn headers(&self) -> &[(usize, BlockHeader)] {
+        &self.headers
+    }
+}
+
 impl Daemon {
     pub fn new(url: &str) -> Daemon {
         Daemon {
@@ -57,7 +71,7 @@ impl Daemon {
         (headers, blockhash)
     }
 
-    pub fn enumerate_headers(&self) -> Vec<(usize, BlockHeader)> {
+    pub fn enumerate_headers(&self) -> HeaderList {
         let (mut header_map, mut blockhash) = self.get_headers();
         let mut header_list = VecDeque::<BlockHeader>::new();
 
@@ -68,6 +82,8 @@ impl Daemon {
             header_list.push_front(header);
         }
         assert!(header_map.is_empty());
-        enumerate(header_list).collect()
+        HeaderList {
+            headers: enumerate(header_list).collect(),
+        }
     }
 }
