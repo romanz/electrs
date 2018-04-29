@@ -50,9 +50,10 @@ fn handle_queries(store: &store::Store, daemon: &daemon::Daemon) {
 }
 
 fn run_server(config: Config) {
+    let mut index = index::Index::new();
     let waiter = waiter::Waiter::new("tcp://localhost:28332");
     let daemon = daemon::Daemon::new("http://localhost:8332");
-    if config.enable_indexing {
+    {
         let store = store::Store::open(
             DB_PATH,
             store::StoreOptions {
@@ -60,24 +61,24 @@ fn run_server(config: Config) {
                 auto_compact: false,
             },
         );
-        index::update(&store, &daemon);
-        store.compact_if_needed();
+        if config.enable_indexing {
+            index.update(&store, &daemon);
+            store.compact_if_needed();
+        }
     }
 
     let store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
-    {
-        crossbeam::scope(|scope| {
-            scope.spawn(|| handle_queries(&store, &daemon));
-            scope.spawn(|| rpc::serve());
+
+    crossbeam::scope(|scope| {
+        scope.spawn(|| handle_queries(&store, &daemon));
+        scope.spawn(|| rpc::serve());
+        loop {
+            waiter.wait();
             if config.enable_indexing {
-                loop {
-                    if store.read_header(&waiter.wait()).is_none() {
-                        index::update(&store, &daemon);
-                    }
-                }
+                index.update(&store, &daemon);
             }
-        });
-    }
+        }
+    });
 }
 
 fn main() {

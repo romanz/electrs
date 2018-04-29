@@ -12,7 +12,7 @@ use std::io::{stderr, Stderr};
 use std::time::{Duration, Instant};
 use time;
 
-use daemon::{Daemon, HeaderList};
+use daemon::{Daemon, HeaderEntry, HeaderList};
 use store::{Row, Store};
 use types::{Bytes, HeaderMap};
 
@@ -145,7 +145,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn read_headers(store: &Store) -> HeaderMap {
+fn read_indexed_headers(store: &Store) -> HeaderMap {
     let mut headers = HeaderMap::new();
     for row in store.scan(b"B") {
         let key: BlockKey = bincode::deserialize(&row.key).unwrap();
@@ -155,28 +155,8 @@ fn read_headers(store: &Store) -> HeaderMap {
     headers
 }
 
-fn get_missing_headers(store: &Store, header_list: &HeaderList) -> Vec<(usize, BlockHeader)> {
-    let indexed_headers: HeaderMap = read_headers(&store);
-    {
-        let best_block_header: &BlockHeader = header_list.best_header();
-        info!(
-            "got {} headers (indexed {}), best {} @ {}",
-            header_list.headers().len(),
-            indexed_headers.len(),
-            best_block_header.bitcoin_hash(),
-            time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
-        );
-    }
-    header_list
-        .headers()
-        .iter()
-        .filter(|item| !indexed_headers.contains_key(&item.1.bitcoin_hash()))
-        .cloned()
-        .collect()
-}
-
 struct Indexer<'a> {
-    headers: Vec<(usize, BlockHeader)>,
+    headers: Vec<&'a HeaderEntry>,
     header_index: usize,
 
     daemon: &'a Daemon,
@@ -187,8 +167,7 @@ struct Indexer<'a> {
 }
 
 impl<'a> Indexer<'a> {
-    fn new(store: &Store, daemon: &'a Daemon) -> Indexer<'a> {
-        let headers = get_missing_headers(store, &daemon.enumerate_headers(None));
+    fn new(headers: Vec<&'a HeaderEntry>, daemon: &'a Daemon) -> Indexer<'a> {
         Indexer {
             headers: headers,
             header_index: 0,
@@ -213,9 +192,9 @@ impl<'a> Iterator for Indexer<'a> {
         if self.header_index >= self.num_of_headers() {
             return None;
         }
-        let &(height, header) = &self.headers[self.header_index];
+        let &entry = &self.headers[self.header_index];
 
-        let blockhash = header.bitcoin_hash();
+        let &blockhash = entry.hash();
         let blockhash_hex = blockhash.be_hex_string();
 
         let buf: Bytes = self.daemon.get(&format!("block/{}.bin", blockhash_hex));
@@ -223,7 +202,7 @@ impl<'a> Iterator for Indexer<'a> {
         let block: Block = deserialize(&buf).unwrap();
         assert_eq!(block.bitcoin_hash(), blockhash);
 
-        let rows = index_block(&block, height);
+        let rows = index_block(&block, entry.height());
 
         self.blocks_size += buf.len();
         for row in &rows {
@@ -236,7 +215,7 @@ impl<'a> Iterator for Indexer<'a> {
             info!(
                 "{} @ {}: {:.3}/{:.3} MB, {} rows",
                 blockhash_hex,
-                height,
+                entry.height(),
                 self.rows_size as f64 / 1e6_f64,
                 self.blocks_size as f64 / 1e6_f64,
                 self.num_of_rows,
@@ -254,7 +233,7 @@ struct BatchIter<'a> {
 }
 
 impl<'a> BatchIter<'a> {
-    fn new(indexer: Indexer) -> BatchIter {
+    fn new(indexer: Indexer<'a>) -> BatchIter<'a> {
         let bar = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
         BatchIter {
             indexer: indexer,
@@ -286,11 +265,54 @@ impl<'a> Iterator for BatchIter<'a> {
     }
 }
 
-pub fn update(store: &Store, daemon: &Daemon) {
-    let indexer = Indexer::new(&store, &daemon);
-    for rows in BatchIter::new(indexer) {
-        // TODO: add timing
-        store.persist(&rows);
+pub struct Index {
+    headers: Option<HeaderList>,
+}
+
+impl Index {
+    pub fn new() -> Index {
+        Index { headers: None }
+    }
+
+    fn get_missing_headers<'a>(
+        &self,
+        store: &Store,
+        current_headers: &'a HeaderList,
+    ) -> Vec<&'a HeaderEntry> {
+        if let Some(ref indexed_headers) = self.headers {
+            if current_headers.best_header() == indexed_headers.best_header() {
+                return Vec::new(); // everything was indexed already.
+            }
+        }
+
+        let indexed_headers: HeaderMap = read_indexed_headers(&store);
+        {
+            let best_block_header: &BlockHeader = current_headers.best_header();
+            info!(
+                "got {} headers (indexed {}), best {} @ {}",
+                current_headers.headers().len(),
+                indexed_headers.len(),
+                best_block_header.bitcoin_hash(),
+                time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+            );
+        }
+        current_headers
+            .headers()
+            .iter()
+            .filter(|entry| !indexed_headers.contains_key(&entry.hash()))
+            .collect()
+    }
+
+    pub fn update(&mut self, store: &Store, daemon: &Daemon) {
+        let current_headers = daemon.enumerate_headers(&self.headers);
+        {
+            let missing_headers = self.get_missing_headers(&store, &current_headers);
+            for rows in BatchIter::new(Indexer::new(missing_headers, &daemon)) {
+                // TODO: add timing
+                store.persist(&rows);
+            }
+        }
+        self.headers = Some(current_headers)
     }
 }
 

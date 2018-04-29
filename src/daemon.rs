@@ -3,7 +3,6 @@ use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::network::serialize::RawDecoder;
-use itertools::enumerate;
 use reqwest;
 use serde_json::{from_slice, Value};
 use std::collections::VecDeque;
@@ -18,25 +17,41 @@ pub struct Daemon {
     url: String,
 }
 
+pub struct HeaderEntry {
+    height: usize,
+    hash: Sha256dHash,
+    header: BlockHeader,
+}
+
+impl HeaderEntry {
+    pub fn hash(&self) -> &Sha256dHash {
+        &self.hash
+    }
+
+    pub fn header(&self) -> &BlockHeader {
+        &self.header
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+}
+
 pub struct HeaderList {
-    headers: Vec<(usize, BlockHeader)>,
+    headers: Vec<HeaderEntry>,
 }
 
 impl HeaderList {
     pub fn best_header(&self) -> &BlockHeader {
-        &self.headers.last().unwrap().1
+        &self.headers.last().unwrap().header
     }
 
-    pub fn headers(&self) -> &[(usize, BlockHeader)] {
+    pub fn headers(&self) -> &[HeaderEntry] {
         &self.headers
     }
 
-    pub fn into_map(self) -> HeaderMap {
-        HeaderMap::from_iter(
-            self.headers
-                .into_iter()
-                .map(|item| (item.1.bitcoin_hash(), item.1)),
-        )
+    pub fn as_map(&self) -> HeaderMap {
+        HeaderMap::from_iter(self.headers.iter().map(|entry| (entry.hash, entry.header)))
     }
 }
 
@@ -59,7 +74,7 @@ impl Daemon {
         buf
     }
 
-    fn get_all_headers(&self) -> (HeaderMap, Sha256dHash) {
+    fn get_all_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         let mut blockhash = Sha256dHash::from_hex(
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
@@ -79,15 +94,16 @@ impl Daemon {
                 break;
             }
         }
-        (headers, blockhash)
+        headers
     }
 
-    fn add_missing_headers(&self, indexed_headers: HeaderList) -> (HeaderMap, Sha256dHash) {
-        let mut header_map = indexed_headers.into_map();
+    fn add_missing_headers(&self, header_map: &mut HeaderMap) -> Sha256dHash {
+        // Get current best blockhash (using REST API)
         let data = self.get("chaininfo.json");
         let reply: Value = from_slice(&data).unwrap();
         let bestblockhash_hex = reply.get("bestblockhash").unwrap().as_str().unwrap();
         let bestblockhash = Sha256dHash::from_hex(bestblockhash_hex).unwrap();
+        // Iterate back over headers until known blockash is found:
         let mut blockhash = bestblockhash;
         while !header_map.contains_key(&blockhash) {
             let data = self.get(&format!("headers/1/{}.bin", blockhash.be_hex_string()));
@@ -95,25 +111,39 @@ impl Daemon {
             header_map.insert(blockhash, header);
             blockhash = header.prev_blockhash;
         }
-        (header_map, bestblockhash)
+        bestblockhash
     }
 
-    pub fn enumerate_headers(&self, indexed_headers: Option<HeaderList>) -> HeaderList {
-        let (mut header_map, mut blockhash) = match indexed_headers {
-            Some(headers) => self.add_missing_headers(headers),
-            None => self.get_all_headers(),
+    pub fn enumerate_headers(&self, indexed_headers: &Option<HeaderList>) -> HeaderList {
+        let mut header_map = match indexed_headers {
+            &Some(ref headers) => headers.as_map(),
+            &None => self.get_all_headers(),
         };
-        let mut header_list = VecDeque::<BlockHeader>::new();
+        let mut blockhash = self.add_missing_headers(&mut header_map);
 
         let null_hash = Sha256dHash::default();
+
+        struct HashedHeader {
+            blockhash: Sha256dHash,
+            header: BlockHeader,
+        }
+        let mut hashed_headers = VecDeque::<HashedHeader>::new();
         while blockhash != null_hash {
             let header: BlockHeader = header_map.remove(&blockhash).unwrap();
+            hashed_headers.push_front(HashedHeader { blockhash, header });
             blockhash = header.prev_blockhash;
-            header_list.push_front(header);
         }
         assert!(header_map.is_empty());
         HeaderList {
-            headers: enumerate(header_list).collect(),
+            headers: hashed_headers
+                .into_iter()
+                .enumerate()
+                .map(|(height, hashed_header)| HeaderEntry {
+                    height: height,
+                    hash: hashed_header.blockhash,
+                    header: hashed_header.header,
+                })
+                .collect(),
         }
     }
 }
