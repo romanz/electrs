@@ -6,7 +6,7 @@ extern crate indexrs;
 
 use argparse::{ArgumentParser, StoreFalse};
 use std::fs::OpenOptions;
-use indexrs::{daemon, index, rpc, store, waiter};
+use indexrs::{daemon, index, query, rpc, store, waiter};
 
 fn setup_logging() {
     use simplelog::*;
@@ -51,7 +51,7 @@ fn run_server(config: Config) {
     }
 
     let store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
-    let query = index::Query::new(&store, &daemon);
+    let query = query::Query::new(&store, &daemon);
 
     crossbeam::scope(|scope| {
         scope.spawn(|| rpc::serve("localhost:50001", &query));

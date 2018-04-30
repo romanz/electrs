@@ -24,6 +24,7 @@ extern crate serde_json;
 
 pub mod daemon;
 pub mod index;
+pub mod query;
 pub mod rpc;
 pub mod store;
 pub mod waiter;

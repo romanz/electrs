@@ -3,12 +3,12 @@ use serde_json::{from_str, Number, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
-use index;
+use query::Query;
 
 error_chain!{}
 
 struct Handler<'a> {
-    query: &'a index::Query<'a>,
+    query: &'a Query<'a>,
 }
 
 impl<'a> Handler<'a> {
@@ -129,7 +129,7 @@ impl<'a> Handler<'a> {
     }
 }
 
-pub fn serve(addr: &str, query: &index::Query) {
+pub fn serve(addr: &str, query: &Query) {
     let listener = TcpListener::bind(addr).unwrap();
     info!("RPC server running on {}", addr);
     loop {

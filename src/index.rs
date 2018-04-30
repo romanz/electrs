@@ -1,12 +1,11 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
-use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
+use bitcoin::blockdata::transaction::{TxIn, TxOut};
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use itertools::enumerate;
 use pbr;
 use std::io::{stderr, Stderr};
 use std::time::{Duration, Instant};
@@ -17,12 +16,12 @@ use store::{Row, Store};
 use types::{Bytes, HeaderMap};
 
 const HASH_LEN: usize = 32;
-const HASH_PREFIX_LEN: usize = 8;
+pub const HASH_PREFIX_LEN: usize = 8;
 
 type FullHash = [u8; HASH_LEN];
-type HashPrefix = [u8; HASH_PREFIX_LEN];
+pub type HashPrefix = [u8; HASH_PREFIX_LEN];
 
-fn hash_prefix(hash: &[u8]) -> HashPrefix {
+pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
     array_ref![hash, 0, HASH_PREFIX_LEN].clone()
 }
 
@@ -31,43 +30,43 @@ fn full_hash(hash: &[u8]) -> FullHash {
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxInKey {
-    code: u8,
-    prev_hash_prefix: HashPrefix,
-    prev_index: u16,
+pub struct TxInKey {
+    pub code: u8,
+    pub prev_hash_prefix: HashPrefix,
+    pub prev_index: u16,
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxInRow {
+pub struct TxInRow {
     key: TxInKey,
-    txid_prefix: HashPrefix,
+    pub txid_prefix: HashPrefix,
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxOutKey {
+pub struct TxOutKey {
     code: u8,
     script_hash_prefix: HashPrefix,
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxOutRow {
+pub struct TxOutRow {
     key: TxOutKey,
-    txid_prefix: HashPrefix,
+    pub txid_prefix: HashPrefix,
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxKey {
+pub struct TxKey {
     code: u8,
-    txid: FullHash,
+    pub txid: FullHash,
 }
 
 #[derive(Serialize, Deserialize)]
-struct BlockKey {
+pub struct BlockKey {
     code: u8,
     hash: FullHash,
 }
 
-fn digest(data: &[u8]) -> FullHash {
+pub fn compute_script_hash(data: &[u8]) -> FullHash {
     let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
     sha2.input(data);
@@ -94,7 +93,7 @@ fn txout_row(output: &TxOut, txid: &Sha256dHash) -> Row {
         key: bincode::serialize(&TxOutRow {
             key: TxOutKey {
                 code: b'O',
-                script_hash_prefix: hash_prefix(&digest(&output.script_pubkey[..])),
+                script_hash_prefix: hash_prefix(&compute_script_hash(&output.script_pubkey[..])),
             },
             txid_prefix: hash_prefix(&txid[..]),
         }).unwrap(),
@@ -313,93 +312,5 @@ impl Index {
             }
         }
         self.headers = Some(current_headers)
-    }
-}
-
-pub struct Query<'a> {
-    store: &'a Store,
-    daemon: &'a Daemon,
-}
-
-impl<'a> Query<'a> {
-    pub fn new(store: &'a Store, daemon: &'a Daemon) -> Query<'a> {
-        Query { store, daemon }
-    }
-
-    fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<Transaction> {
-        let mut txns = Vec::new();
-        for txid_prefix in prefixes {
-            for row in self.store.scan(&[b"T", &txid_prefix[..]].concat()) {
-                let key: TxKey = bincode::deserialize(&row.key).unwrap();
-                let txid: Sha256dHash = deserialize(&key.txid).unwrap();
-                let txn_bytes = self.daemon.get(&format!("tx/{}.bin", txid.be_hex_string()));
-                let txn: Transaction = deserialize(&txn_bytes).unwrap();
-                txns.push(txn)
-            }
-        }
-        txns
-    }
-
-    fn find_spending_txn(&self, txid: &Sha256dHash, output_index: u32) -> Option<Transaction> {
-        let spend_key = bincode::serialize(&TxInKey {
-            code: b'I',
-            prev_hash_prefix: hash_prefix(&txid[..]),
-            prev_index: output_index as u16,
-        }).unwrap();
-        let mut spending: Vec<Transaction> = self.load_txns(
-            self.store
-                .scan(&spend_key)
-                .iter()
-                .map(|row| {
-                    bincode::deserialize::<TxInRow>(&row.key)
-                        .unwrap()
-                        .txid_prefix
-                })
-                .collect(),
-        );
-        spending.retain(|item| {
-            item.input
-                .iter()
-                .any(|input| input.prev_hash == *txid && input.prev_index == output_index)
-        });
-        assert!(spending.len() <= 1);
-        if spending.len() == 1 {
-            Some(spending.remove(0))
-        } else {
-            None
-        }
-    }
-
-    pub fn balance(&self, script_hash: &[u8]) -> f64 {
-        let mut funding: Vec<Transaction> = self.load_txns(
-            self.store
-                .scan(&[b"O", &script_hash[..HASH_PREFIX_LEN]].concat())
-                .iter()
-                .map(|row| {
-                    bincode::deserialize::<TxOutRow>(&row.key)
-                        .unwrap()
-                        .txid_prefix
-                })
-                .collect(),
-        );
-        funding.retain(|item| {
-            item.output
-                .iter()
-                .any(|output| digest(&output.script_pubkey[..]) == script_hash)
-        });
-
-        let mut balance = 0u64;
-        let mut spending = Vec::<Transaction>::new();
-        for txn in &funding {
-            let txid = txn.txid();
-            for (index, output) in enumerate(&txn.output) {
-                if let Some(spent) = self.find_spending_txn(&txid, index as u32) {
-                    spending.push(spent); // TODO: may contain duplicate TXNs
-                } else {
-                    balance += output.value;
-                }
-            }
-        }
-        balance as f64 / 100_000_000f64
     }
 }
