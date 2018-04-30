@@ -3,6 +3,7 @@
 extern crate bincode;
 extern crate bitcoin;
 extern crate crypto;
+extern crate extfmt;
 extern crate itertools;
 extern crate pbr;
 extern crate reqwest;
@@ -28,5 +29,6 @@ pub mod query;
 pub mod rpc;
 pub mod store;
 pub mod waiter;
+pub mod util;
 
 mod types;

@@ -8,6 +8,7 @@ use daemon::Daemon;
 use index::{compute_script_hash, hash_prefix, HashPrefix, TxInKey, TxInRow, TxKey, TxOutRow,
             HASH_PREFIX_LEN};
 use store::Store;
+use types::Bytes;
 
 pub struct Query<'a> {
     store: &'a Store,
@@ -94,5 +95,10 @@ impl<'a> Query<'a> {
             }
         }
         balance as f64 / 100_000_000f64
+    }
+
+    pub fn get_tx(&self, tx_hash: Sha256dHash) -> Bytes {
+        self.daemon
+            .get(&format!("tx/{}.bin", tx_hash.be_hex_string()))
     }
 }

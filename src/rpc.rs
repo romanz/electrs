@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
 use query::Query;
+use util;
 
 error_chain!{}
 
@@ -45,7 +46,7 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[&str]) -> Result<Value> {
-        let script_hash_hex = params.get(0).chain_err(|| "missing parameter")?;
+        let script_hash_hex = params.get(0).chain_err(|| "missing scripthash")?;
         let script_hash =
             Sha256dHash::from_hex(script_hash_hex).chain_err(|| "invalid scripthash")?;
         let confirmed = self.query.balance(&script_hash[..]);
@@ -56,8 +57,11 @@ impl<'a> Handler<'a> {
         Ok(json!([])) // TODO: list of {tx_hash: "ABC", height: 123}
     }
 
-    fn blockchain_transaction_get(&self, _params: &[&str]) -> Result<Value> {
-        Ok(json!("HEX_TX")) // TODO: list of {tx_hash: "ABC", height: 123}
+    fn blockchain_transaction_get(&self, params: &[&str]) -> Result<Value> {
+        let tx_hash_hex = params.get(0).chain_err(|| "missing tx_hash")?;
+        let tx_hash = Sha256dHash::from_hex(tx_hash_hex).chain_err(|| "invalid tx_hash")?;
+        let tx_hex = util::hexlify(&self.query.get_tx(tx_hash));
+        Ok(json!(tx_hex))
     }
 
     fn blockchain_transaction_get_merkle(&self, _params: &[&str]) -> Result<Value> {
