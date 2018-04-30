@@ -3,7 +3,6 @@ extern crate simplelog;
 extern crate argparse;
 extern crate crossbeam;
 extern crate indexrs;
-extern crate zmq;
 
 use argparse::{ArgumentParser, StoreFalse};
 use std::fs::OpenOptions;
@@ -28,25 +27,9 @@ fn setup_logging() {
 }
 
 const DB_PATH: &str = "./db/mainnet";
-const RPC_ADDRESS: &str = "ipc:///tmp/indexrs.rpc";
 
 struct Config {
     enable_indexing: bool,
-}
-
-fn handle_queries(store: &store::Store, daemon: &daemon::Daemon) {
-    let query = index::Query::new(&store, &daemon);
-
-    let ctx = zmq::Context::new();
-    let sock = ctx.socket(zmq::SocketType::REP).unwrap();
-    sock.bind(RPC_ADDRESS).unwrap();
-
-    loop {
-        let script_hash = sock.recv_bytes(0).unwrap();
-        let balance = query.balance(&script_hash);
-        let reply = format!("{}", balance);
-        sock.send(&reply.into_bytes(), 0).unwrap();
-    }
 }
 
 fn run_server(config: Config) {
@@ -68,10 +51,10 @@ fn run_server(config: Config) {
     }
 
     let store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
+    let query = index::Query::new(&store, &daemon);
 
     crossbeam::scope(|scope| {
-        scope.spawn(|| handle_queries(&store, &daemon));
-        scope.spawn(|| rpc::serve());
+        scope.spawn(|| rpc::serve("localhost:50001", &query));
         loop {
             waiter.wait();
             if config.enable_indexing {
