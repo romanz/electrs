@@ -43,6 +43,10 @@ pub struct HeaderList {
 }
 
 impl HeaderList {
+    pub fn empty() -> HeaderList {
+        HeaderList { headers: vec![] }
+    }
+
     pub fn equals(&self, other: &HeaderList) -> bool {
         self.headers.last() == other.headers.last()
     }
@@ -116,10 +120,11 @@ impl Daemon {
         bestblockhash
     }
 
-    pub fn enumerate_headers(&self, indexed_headers: &Option<HeaderList>) -> HeaderList {
-        let mut header_map = match indexed_headers {
-            &Some(ref headers) => headers.as_map(),
-            &None => self.get_all_headers(),
+    pub fn enumerate_headers(&self, indexed_headers: &HeaderList) -> HeaderList {
+        let mut header_map = if indexed_headers.headers.is_empty() {
+            self.get_all_headers()
+        } else {
+            indexed_headers.as_map()
         };
         let mut blockhash = self.add_missing_headers(&mut header_map);
 

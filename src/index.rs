@@ -268,12 +268,14 @@ impl<'a> Iterator for BatchIter<'a> {
 pub struct Index {
     // TODO: store also a &HeaderMap.
     // TODO: store also latest snapshot.
-    headers: Option<HeaderList>,
+    headers: HeaderList,
 }
 
 impl Index {
     pub fn new() -> Index {
-        Index { headers: None }
+        Index {
+            headers: HeaderList::empty(),
+        }
     }
 
     fn get_missing_headers<'a>(
@@ -281,10 +283,8 @@ impl Index {
         store: &Store,
         current_headers: &'a HeaderList,
     ) -> Vec<&'a HeaderEntry> {
-        if let Some(ref indexed_headers) = self.headers {
-            if current_headers.equals(indexed_headers) {
-                return Vec::new(); // everything was indexed already.
-            }
+        if current_headers.equals(&self.headers) {
+            return Vec::new(); // everything was indexed already.
         }
 
         let indexed_headers: HeaderMap = read_indexed_headers(&store);
@@ -315,6 +315,6 @@ impl Index {
                 store.persist(&rows);
             }
         }
-        self.headers = Some(current_headers)
+        self.headers = current_headers
     }
 }
