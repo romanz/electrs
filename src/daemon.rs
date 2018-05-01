@@ -17,6 +17,7 @@ pub struct Daemon {
     url: String,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct HeaderEntry {
     height: usize,
     hash: Sha256dHash,
@@ -42,8 +43,8 @@ pub struct HeaderList {
 }
 
 impl HeaderList {
-    pub fn best_header(&self) -> &BlockHeader {
-        &self.headers.last().unwrap().header
+    pub fn equals(&self, other: &HeaderList) -> bool {
+        self.headers.last() == other.headers.last()
     }
 
     pub fn headers(&self) -> &[HeaderEntry] {

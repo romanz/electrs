@@ -282,14 +282,15 @@ impl Index {
         current_headers: &'a HeaderList,
     ) -> Vec<&'a HeaderEntry> {
         if let Some(ref indexed_headers) = self.headers {
-            if current_headers.best_header() == indexed_headers.best_header() {
+            if current_headers.equals(indexed_headers) {
                 return Vec::new(); // everything was indexed already.
             }
         }
 
         let indexed_headers: HeaderMap = read_indexed_headers(&store);
         {
-            let best_block_header: &BlockHeader = current_headers.best_header();
+            let best_block_header: &BlockHeader =
+                current_headers.headers().last().unwrap().header();
             info!(
                 "got {} headers (indexed {}), best {} @ {}",
                 current_headers.headers().len(),
