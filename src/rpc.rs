@@ -58,6 +58,7 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_transaction_get(&self, params: &[&str]) -> Result<Value> {
+        // TODO: handle 'verbose' param
         let tx_hash_hex = params.get(0).chain_err(|| "missing tx_hash")?;
         let tx_hash = Sha256dHash::from_hex(tx_hash_hex).chain_err(|| "invalid tx_hash")?;
         let tx_hex = util::hexlify(&self.query.get_tx(tx_hash));

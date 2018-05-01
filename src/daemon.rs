@@ -62,9 +62,10 @@ impl Daemon {
         }
     }
 
+    // TODO: use error_chain for errors here.
     fn request(&self, resource: &str) -> reqwest::Response {
         let url = format!("{}/rest/{}", self.url, resource);
-        reqwest::get(&url).unwrap()
+        reqwest::get(&url).unwrap().error_for_status().unwrap()
     }
 
     pub fn get(&self, resource: &str) -> Bytes {

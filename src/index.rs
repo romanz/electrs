@@ -15,6 +15,7 @@ use daemon::{Daemon, HeaderEntry, HeaderList};
 use store::{Row, Store};
 use types::{Bytes, HeaderMap};
 
+// TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;
 pub const HASH_PREFIX_LEN: usize = 8;
 
@@ -265,6 +266,8 @@ impl<'a> Iterator for BatchIter<'a> {
 }
 
 pub struct Index {
+    // TODO: store also a &HeaderMap.
+    // TODO: store also latest snapshot.
     headers: Option<HeaderList>,
 }
 
