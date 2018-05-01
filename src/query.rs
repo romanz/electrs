@@ -1,23 +1,29 @@
 use bincode;
+use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::deserialize;
+use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
 use daemon::Daemon;
-use index::{compute_script_hash, hash_prefix, HashPrefix, TxInKey, TxInRow, TxKey, TxOutRow,
-            HASH_PREFIX_LEN};
+use index::{compute_script_hash, hash_prefix, HashPrefix, Index, TxInKey, TxInRow, TxKey,
+            TxOutRow, HASH_PREFIX_LEN};
 use store::Store;
 use types::Bytes;
 
 pub struct Query<'a> {
     store: &'a Store,
     daemon: &'a Daemon,
+    index: &'a Index,
 }
 
 impl<'a> Query<'a> {
-    pub fn new(store: &'a Store, daemon: &'a Daemon) -> Query<'a> {
-        Query { store, daemon }
+    pub fn new(store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
+        Query {
+            store,
+            daemon,
+            index,
+        }
     }
 
     fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<Transaction> {
@@ -97,8 +103,19 @@ impl<'a> Query<'a> {
         balance as f64 / 100_000_000f64
     }
 
-    pub fn get_tx(&self, tx_hash: Sha256dHash) -> Bytes {
+    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Bytes {
         self.daemon
             .get(&format!("tx/{}.bin", tx_hash.be_hex_string()))
+    }
+
+    pub fn get_headers(&self, heights: &[usize]) -> Vec<Bytes> {
+        let headers_list = self.index.headers_list();
+        let headers = headers_list.headers();
+        let mut result = Vec::new();
+        for h in heights {
+            let header: &BlockHeader = headers[*h].header();
+            result.push(serialize(header).unwrap());
+        }
+        result
     }
 }

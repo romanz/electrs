@@ -8,6 +8,7 @@ use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use pbr;
 use std::io::{stderr, Stderr};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use time;
 
@@ -268,14 +269,18 @@ impl<'a> Iterator for BatchIter<'a> {
 pub struct Index {
     // TODO: store also a &HeaderMap.
     // TODO: store also latest snapshot.
-    headers: HeaderList,
+    headers: RwLock<Arc<HeaderList>>,
 }
 
 impl Index {
     pub fn new() -> Index {
         Index {
-            headers: HeaderList::empty(),
+            headers: RwLock::new(Arc::new(HeaderList::empty())),
         }
+    }
+
+    pub fn headers_list(&self) -> Arc<HeaderList> {
+        self.headers.read().unwrap().clone()
     }
 
     fn get_missing_headers<'a>(
@@ -283,10 +288,6 @@ impl Index {
         store: &Store,
         current_headers: &'a HeaderList,
     ) -> Vec<&'a HeaderEntry> {
-        if current_headers.equals(&self.headers) {
-            return Vec::new(); // everything was indexed already.
-        }
-
         let indexed_headers: HeaderMap = read_indexed_headers(&store);
         {
             let best_block_header: &BlockHeader =
@@ -306,15 +307,19 @@ impl Index {
             .collect()
     }
 
-    pub fn update(&mut self, store: &Store, daemon: &Daemon) {
-        let current_headers = daemon.enumerate_headers(&self.headers);
+    pub fn update(&self, store: &Store, daemon: &Daemon) {
+        let indexed_headers: Arc<HeaderList> = self.headers_list();
+        let current_headers = daemon.enumerate_headers(&*indexed_headers);
         {
+            if indexed_headers.equals(&current_headers) {
+                return; // everything was indexed already.
+            }
             let missing_headers = self.get_missing_headers(&store, &current_headers);
             for rows in BatchIter::new(Indexer::new(missing_headers, &daemon)) {
                 // TODO: add timing
                 store.persist(&rows);
             }
         }
-        self.headers = current_headers
+        *self.headers.write().unwrap() = Arc::new(current_headers);
     }
 }

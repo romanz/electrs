@@ -1,4 +1,5 @@
 use bitcoin::util::hash::Sha256dHash;
+use itertools;
 use serde_json::{from_str, Number, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -37,47 +38,50 @@ impl<'a> Handler<'a> {
         Ok(json!([])) // TODO: consult with actual mempool
     }
 
-    fn blockchain_estimatefee(&self, _params: &[&str]) -> Result<Value> {
+    fn blockchain_block_get_chunk(&self, params: &[Value]) -> Result<Value> {
+        const CHUNK_SIZE: usize = 2016;
+        let index = params.get(0).chain_err(|| "missing index")?;
+        let index = index.as_u64().chain_err(|| "non-number index")? as usize;
+        let heights: Vec<usize> = (0..CHUNK_SIZE).map(|h| index * CHUNK_SIZE + h).collect();
+        let headers = self.query.get_headers(&heights);
+        let result = itertools::join(headers.into_iter().map(|x| util::hexlify(&x)), "");
+        Ok(json!(result))
+    }
+
+    fn blockchain_estimatefee(&self, _params: &[Value]) -> Result<Value> {
         Ok(json!(1e-5)) // TODO: consult with actual mempool
     }
 
-    fn blockchain_scripthash_subscribe(&self, _params: &[&str]) -> Result<Value> {
+    fn blockchain_scripthash_subscribe(&self, _params: &[Value]) -> Result<Value> {
         Ok(json!("HEX_STATUS"))
     }
 
-    fn blockchain_scripthash_get_balance(&self, params: &[&str]) -> Result<Value> {
-        let script_hash_hex = params.get(0).chain_err(|| "missing scripthash")?;
-        let script_hash =
-            Sha256dHash::from_hex(script_hash_hex).chain_err(|| "invalid scripthash")?;
+    fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
+        let script_hash = params.get(0).chain_err(|| "missing scripthash")?;
+        let script_hash = script_hash.as_str().chain_err(|| "non-string scripthash")?;
+        let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex scripthash")?;
         let confirmed = self.query.balance(&script_hash[..]);
         Ok(json!({ "confirmed": confirmed })) // TODO: "unconfirmed"
     }
 
-    fn blockchain_scripthash_get_history(&self, _params: &[&str]) -> Result<Value> {
+    fn blockchain_scripthash_get_history(&self, _params: &[Value]) -> Result<Value> {
         Ok(json!([])) // TODO: list of {tx_hash: "ABC", height: 123}
     }
 
-    fn blockchain_transaction_get(&self, params: &[&str]) -> Result<Value> {
+    fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
-        let tx_hash_hex = params.get(0).chain_err(|| "missing tx_hash")?;
-        let tx_hash = Sha256dHash::from_hex(tx_hash_hex).chain_err(|| "invalid tx_hash")?;
-        let tx_hex = util::hexlify(&self.query.get_tx(tx_hash));
+        let tx_hash = params.get(0).chain_err(|| "missing tx_hash")?;
+        let tx_hash = tx_hash.as_str().chain_err(|| "non-string tx_hash")?;
+        let tx_hash = Sha256dHash::from_hex(tx_hash).chain_err(|| "non-hex tx_hash")?;
+        let tx_hex = util::hexlify(&self.query.get_tx(&tx_hash));
         Ok(json!(tx_hex))
     }
 
-    fn blockchain_transaction_get_merkle(&self, _params: &[&str]) -> Result<Value> {
+    fn blockchain_transaction_get_merkle(&self, _params: &[Value]) -> Result<Value> {
         Ok(json!({"block_height": 123, "merkle": ["A", "B", "C"], "pos": 45}))
     }
 
-    fn handle_command(&self, method: &str, params_values: &[Value], id: &Number) -> Result<Value> {
-        let mut params = Vec::<&str>::new();
-        for value in params_values {
-            if let Some(s) = value.as_str() {
-                params.push(s);
-            } else {
-                bail!("invalid param: {:?}", value);
-            }
-        }
+    fn handle_command(&self, method: &str, params: &[Value], id: &Number) -> Result<Value> {
         let result = match method {
             "blockchain.headers.subscribe" => self.blockchain_headers_subscribe(),
             "server.version" => self.server_version(),
@@ -85,6 +89,7 @@ impl<'a> Handler<'a> {
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
+            "blockchain.block.get_chunk" => self.blockchain_block_get_chunk(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),
             "blockchain.scripthash.get_balance" => self.blockchain_scripthash_get_balance(&params),

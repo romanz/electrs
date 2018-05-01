@@ -33,7 +33,7 @@ struct Config {
 }
 
 fn run_server(config: Config) {
-    let mut index = index::Index::new();
+    let index = index::Index::new();
     let waiter = waiter::Waiter::new("tcp://localhost:28332");
     let daemon = daemon::Daemon::new("http://localhost:8332");
     {
@@ -51,7 +51,7 @@ fn run_server(config: Config) {
     }
 
     let store = store::Store::open(DB_PATH, store::StoreOptions { auto_compact: true });
-    let query = query::Query::new(&store, &daemon);
+    let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
         scope.spawn(|| rpc::serve("localhost:50001", &query));
