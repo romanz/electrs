@@ -161,8 +161,21 @@ impl<'a> Handler<'a> {
         Ok(json!(tx_hex))
     }
 
-    fn blockchain_transaction_get_merkle(&self, _params: &[Value]) -> Result<Value> {
-        Ok(json!({"block_height": 123, "merkle": ["A", "B", "C"], "pos": 45}))
+    fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
+        let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
+        let height = params.get(1).chain_err(|| "missing height")?;
+        let height = height.as_u64().chain_err(|| "non-number height")? as usize;
+        let (merkle, pos) = self.query
+            .get_merkle_proof(&tx_hash, height)
+            .chain_err(|| "cannot create merkle proof")?;
+        let merkle: Vec<String> = merkle
+            .into_iter()
+            .map(|txid| txid.be_hex_string())
+            .collect();
+        Ok(json!({
+                "block_height": height,
+                "merkle": merkle,
+                "pos": pos}))
     }
 
     fn handle_command(&self, method: &str, params: &[Value], id: &Number) -> Result<Value> {

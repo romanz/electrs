@@ -1,5 +1,5 @@
 use bincode;
-use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
@@ -39,6 +39,11 @@ pub struct Status {
 struct TxnHeight {
     txn: Transaction,
     height: u32,
+}
+
+fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
+    let data = [&left[..], &right[..]].concat();
+    Sha256dHash::from_data(&data)
 }
 
 impl<'a> Query<'a> {
@@ -167,5 +172,36 @@ impl<'a> Query<'a> {
     pub fn get_best_header(&self) -> Option<HeaderEntry> {
         let header_list = self.index.headers_list();
         Some(header_list.headers().last()?.clone())
+    }
+
+    // TODO: add error-handling logic
+    pub fn get_merkle_proof(
+        &self,
+        tx_hash: &Sha256dHash,
+        height: usize,
+    ) -> Option<(Vec<Sha256dHash>, usize)> {
+        let header_list = self.index.headers_list();
+        let blockhash = header_list.headers().get(height)?.hash();
+        let buf = self.daemon
+            .get(&format!("block/{}.bin", blockhash.be_hex_string()));
+        let block: Block = deserialize(&buf).unwrap();
+        let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
+        let pos = txids.iter().position(|txid| txid == tx_hash)?;
+        let mut merkle = Vec::new();
+        let mut index = pos;
+        while txids.len() > 1 {
+            if txids.len() % 2 != 0 {
+                let last = txids.last().unwrap().clone();
+                txids.push(last);
+            }
+            index = if index % 2 == 0 { index + 1 } else { index - 1 };
+            merkle.push(txids[index]);
+            index = index / 2;
+            txids = txids
+                .chunks(2)
+                .map(|pair| merklize(pair[0], pair[1]))
+                .collect()
+        }
+        Some((merkle, pos))
     }
 }
