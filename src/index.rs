@@ -293,11 +293,11 @@ impl Index {
             let best_block_header: &BlockHeader =
                 current_headers.headers().last().unwrap().header();
             info!(
-                "got {} headers (indexed {}), best {} @ {}",
-                current_headers.headers().len(),
-                indexed_headers.len(),
+                "height {}, best {} @ {} ({} left to index)",
+                current_headers.headers().len() - 1,
                 best_block_header.bitcoin_hash(),
                 time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+                current_headers.headers().len() - indexed_headers.len(),
             );
         }
         current_headers
