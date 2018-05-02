@@ -185,15 +185,21 @@ fn tx_row(txid: &Sha256dHash, height: usize) -> Row {
     }
 }
 
-fn block_row(block: &Block) -> Row {
+fn block_rows(block: &Block) -> Vec<Row> {
     let blockhash = block.bitcoin_hash();
-    Row {
-        key: bincode::serialize(&BlockKey {
-            code: b'B',
-            hash: full_hash(&blockhash[..]),
-        }).unwrap(),
-        value: serialize(&block.header).unwrap(),
-    }
+    vec![
+        Row {
+            key: bincode::serialize(&BlockKey {
+                code: b'B',
+                hash: full_hash(&blockhash[..]),
+            }).unwrap(),
+            value: serialize(&block.header).unwrap(),
+        },
+        Row {
+            key: b"L".to_vec(),
+            value: serialize(&blockhash).unwrap(),
+        },
+    ]
 }
 
 fn index_block(block: &Block, height: usize) -> Vec<Row> {
@@ -214,7 +220,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
         rows.push(tx_row(&txid, height))
     }
     // Persist block hash and header
-    rows.push(block_row(&block));
+    rows.extend(block_rows(&block));
     rows
 }
 
@@ -226,6 +232,12 @@ fn read_indexed_headers(store: &Store) -> HeaderMap {
         headers.insert(deserialize(&key.hash).unwrap(), header);
     }
     headers
+}
+
+fn read_last_indexed_blockhash(store: &Store) -> Option<Sha256dHash> {
+    let row = store.get(b"L")?;
+    let blockhash: Sha256dHash = deserialize(&row).unwrap();
+    Some(blockhash)
 }
 
 struct Indexer<'a> {
@@ -362,40 +374,42 @@ impl Index {
 
     fn get_missing_headers<'a>(
         &self,
-        store: &Store,
+        indexed_headers: &HeaderMap,
         current_headers: &'a HeaderList,
     ) -> Vec<&'a HeaderEntry> {
-        let indexed_headers: HeaderMap = read_indexed_headers(&store);
-        {
-            let best_block_header: &BlockHeader =
-                current_headers.headers().last().unwrap().header();
-            info!(
-                "height {}, best {} @ {} ({} left to index)",
-                current_headers.headers().len() - 1,
-                best_block_header.bitcoin_hash(),
-                time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
-                current_headers.headers().len() - indexed_headers.len(),
-            );
-        }
-        current_headers
+        let best_block_header: &BlockHeader = current_headers.headers().last().unwrap().header();
+        let missing_headers: Vec<&'a HeaderEntry> = current_headers
             .headers()
             .iter()
             .filter(|entry| !indexed_headers.contains_key(&entry.hash()))
-            .collect()
+            .collect();
+        info!(
+            "height {}, best {} @ {} ({} left to index)",
+            current_headers.headers().len() - 1,
+            best_block_header.bitcoin_hash(),
+            time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+            missing_headers.len(),
+        );
+        missing_headers
     }
 
     pub fn update(&self, store: &Store, daemon: &Daemon) {
-        let indexed_headers: Arc<HeaderList> = self.headers_list();
+        let mut indexed_headers: Arc<HeaderList> = self.headers_list();
+        if indexed_headers.headers().is_empty() {
+            if let Some(last_blockhash) = read_last_indexed_blockhash(&store) {
+                indexed_headers = Arc::new(HeaderList::build(
+                    read_indexed_headers(&store),
+                    last_blockhash,
+                ));
+            }
+        }
         let current_headers = daemon.enumerate_headers(&*indexed_headers).unwrap();
-        {
-            if indexed_headers.equals(&current_headers) {
-                return; // everything was indexed already.
-            }
-            let missing_headers = self.get_missing_headers(&store, &current_headers);
-            for rows in BatchIter::new(Indexer::new(missing_headers, &daemon)) {
-                // TODO: add timing
-                store.persist(&rows);
-            }
+        for rows in BatchIter::new(Indexer::new(
+            self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
+            &daemon,
+        )) {
+            // TODO: add timing
+            store.persist(&rows);
         }
         *self.headers.write().unwrap() = Arc::new(current_headers);
     }
