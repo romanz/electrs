@@ -1,3 +1,5 @@
+use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::network::serialize::serialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools;
 use serde_json::{from_str, Number, Value};
@@ -55,21 +57,24 @@ fn hash_from_status(status: &Status) -> Option<FullHash> {
     Some(hash)
 }
 
+fn format_header(header: &BlockHeader, height: usize) -> Value {
+    json!({
+        "block_height": height,
+        "version": header.version,
+        "prev_block_hash": header.prev_blockhash.be_hex_string(),
+        "merkle_root": header.merkle_root.be_hex_string(),
+        "timestamp": header.time,
+        "bits": header.bits,
+        "nonce": header.nonce
+    })
+}
+
 impl<'a> Handler<'a> {
     fn blockchain_headers_subscribe(&self) -> Result<Value> {
         let entry = self.query
             .get_best_header()
             .chain_err(|| "no headers found")?;
-        let header = entry.header();
-        Ok(json!({
-            "block_height": entry.height(),
-            "version": header.version,
-            "prev_block_hash": header.prev_blockhash.be_hex_string(),
-            "merkle_root": header.merkle_root.be_hex_string(),
-            "timestamp": header.time,
-            "bits": header.bits,
-            "nonce": header.nonce
-        }))
+        Ok(format_header(entry.header(), entry.height()))
     }
 
     fn server_version(&self) -> Result<Value> {
@@ -98,8 +103,20 @@ impl<'a> Handler<'a> {
         let index = index.as_u64().chain_err(|| "non-number index")? as usize;
         let heights: Vec<usize> = (0..CHUNK_SIZE).map(|h| index * CHUNK_SIZE + h).collect();
         let headers = self.query.get_headers(&heights);
-        let result = itertools::join(headers.into_iter().map(|x| util::hexlify(&x)), "");
+        let result = itertools::join(
+            headers
+                .into_iter()
+                .map(|x| util::hexlify(&serialize(&x).unwrap())),
+            "",
+        );
         Ok(json!(result))
+    }
+
+    fn blockchain_block_get_header(&self, params: &[Value]) -> Result<Value> {
+        let height = params.get(0).chain_err(|| "missing height")?;
+        let height = height.as_u64().chain_err(|| "non-number height")? as usize;
+        let headers = self.query.get_headers(&vec![height]);
+        Ok(json!(format_header(&headers[0], height)))
     }
 
     fn blockchain_estimatefee(&self, _params: &[Value]) -> Result<Value> {
@@ -157,6 +174,7 @@ impl<'a> Handler<'a> {
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
             "blockchain.block.get_chunk" => self.blockchain_block_get_chunk(&params),
+            "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.relayfee" => self.blockchain_relayfee(),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),

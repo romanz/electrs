@@ -1,7 +1,7 @@
 use bincode;
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::{deserialize, serialize};
+use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
@@ -150,13 +150,13 @@ impl<'a> Query<'a> {
             .get(&format!("tx/{}.bin", tx_hash.be_hex_string()))
     }
 
-    pub fn get_headers(&self, heights: &[usize]) -> Vec<Bytes> {
+    pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
         let headers_list = self.index.headers_list();
         let headers = headers_list.headers();
         let mut result = Vec::new();
         for h in heights {
             let header: &BlockHeader = headers[*h].header();
-            result.push(serialize(header).unwrap());
+            result.push(*header);
         }
         result
     }
