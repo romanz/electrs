@@ -270,7 +270,9 @@ impl<'a> Iterator for Indexer<'a> {
         let &blockhash = entry.hash();
         let blockhash_hex = blockhash.be_hex_string();
 
-        let buf: Bytes = self.daemon.get(&format!("block/{}.bin", blockhash_hex));
+        let buf: Bytes = self.daemon
+            .get(&format!("block/{}.bin", blockhash_hex))
+            .unwrap();
 
         let block: Block = deserialize(&buf).unwrap();
         assert_eq!(block.bitcoin_hash(), blockhash);
@@ -384,7 +386,7 @@ impl Index {
 
     pub fn update(&self, store: &Store, daemon: &Daemon) {
         let indexed_headers: Arc<HeaderList> = self.headers_list();
-        let current_headers = daemon.enumerate_headers(&*indexed_headers);
+        let current_headers = daemon.enumerate_headers(&*indexed_headers).unwrap();
         {
             if indexed_headers.equals(&current_headers) {
                 return; // everything was indexed already.
