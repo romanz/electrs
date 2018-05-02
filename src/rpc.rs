@@ -20,8 +20,8 @@ struct Handler<'a> {
 }
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
-fn hash_from_params(params: &[Value]) -> Result<Sha256dHash> {
-    let script_hash = params.get(0).chain_err(|| "missing hash")?;
+fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
+    let script_hash = val.chain_err(|| "missing hash")?;
     let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
     let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
     Ok(script_hash)
@@ -128,7 +128,7 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_scripthash_subscribe(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
 
         Ok(match hash_from_status(&status) {
@@ -138,13 +138,13 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
         Ok(json!({ "confirmed": status.balance })) // TODO: "unconfirmed"
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
         Ok(json!(Value::Array(
             history_from_status(&status)
@@ -156,7 +156,7 @@ impl<'a> Handler<'a> {
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
-        let tx_hash = hash_from_params(params).chain_err(|| "bad tx_hash")?;
+        let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
         let tx_hex = util::hexlify(&self.query.get_tx(&tx_hash));
         Ok(json!(tx_hex))
     }
