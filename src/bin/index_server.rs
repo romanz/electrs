@@ -15,7 +15,7 @@ fn setup_logging() {
     CombinedLogger::init(vec![
         TermLogger::new(LevelFilter::Info, cfg.clone()).unwrap(),
         WriteLogger::new(
-            LevelFilter::Info,
+            LevelFilter::Debug,
             cfg.clone(),
             OpenOptions::new()
                 .create(true)
