@@ -215,8 +215,7 @@ impl<'a> Handler<'a> {
             };
 
             debug!("[{}] {} -> {}", addr, cmd, reply);
-            let mut line = reply.to_string();
-            line.push_str("\n");
+            let line = reply.to_string() + "\n";
             stream
                 .write_all(line.as_bytes())
                 .chain_err(|| "failed to send response")?;
