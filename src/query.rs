@@ -5,9 +5,9 @@ use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
-use daemon::{Daemon, HeaderEntry};
-use index::{compute_script_hash, hash_prefix, HashPrefix, Index, TxInKey, TxInRow, TxKey,
-            TxOutRow, HASH_PREFIX_LEN};
+use daemon::Daemon;
+use index::{compute_script_hash, hash_prefix, HashPrefix, HeaderEntry, Index, TxInKey, TxInRow,
+            TxKey, TxOutRow, HASH_PREFIX_LEN};
 use store::Store;
 use types::Bytes;
 

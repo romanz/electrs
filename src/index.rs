@@ -7,14 +7,16 @@ use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use pbr;
+use std::collections::VecDeque;
 use std::io::{stderr, Stderr};
+use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use time;
 
-use daemon::{Daemon, HeaderEntry, HeaderList};
 use store::{Row, Store};
 use types::{Bytes, HeaderMap};
+use daemon::Daemon;
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;
@@ -29,6 +31,76 @@ pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
 
 fn full_hash(hash: &[u8]) -> FullHash {
     array_ref![hash, 0, HASH_LEN].clone()
+}
+
+#[derive(Eq, PartialEq, Clone)]
+pub struct HeaderEntry {
+    height: usize,
+    hash: Sha256dHash,
+    header: BlockHeader,
+}
+
+impl HeaderEntry {
+    pub fn hash(&self) -> &Sha256dHash {
+        &self.hash
+    }
+
+    pub fn header(&self) -> &BlockHeader {
+        &self.header
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+}
+
+pub struct HeaderList {
+    headers: Vec<HeaderEntry>,
+}
+
+impl HeaderList {
+    pub fn build(mut header_map: HeaderMap, mut blockhash: Sha256dHash) -> HeaderList {
+        let null_hash = Sha256dHash::default();
+
+        struct HashedHeader {
+            blockhash: Sha256dHash,
+            header: BlockHeader,
+        }
+        let mut hashed_headers = VecDeque::<HashedHeader>::new();
+        while blockhash != null_hash {
+            let header: BlockHeader = header_map.remove(&blockhash).unwrap();
+            hashed_headers.push_front(HashedHeader { blockhash, header });
+            blockhash = header.prev_blockhash;
+        }
+        assert!(header_map.is_empty());
+        HeaderList {
+            headers: hashed_headers
+                .into_iter()
+                .enumerate()
+                .map(|(height, hashed_header)| HeaderEntry {
+                    height: height,
+                    hash: hashed_header.blockhash,
+                    header: hashed_header.header,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn empty() -> HeaderList {
+        HeaderList { headers: vec![] }
+    }
+
+    pub fn equals(&self, other: &HeaderList) -> bool {
+        self.headers.last() == other.headers.last()
+    }
+
+    pub fn headers(&self) -> &[HeaderEntry] {
+        &self.headers
+    }
+
+    pub fn as_map(&self) -> HeaderMap {
+        HeaderMap::from_iter(self.headers.iter().map(|entry| (entry.hash, entry.header)))
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -249,10 +321,13 @@ impl<'a> Iterator for BatchIter<'a> {
     type Item = Vec<Row>;
 
     fn next(&mut self) -> Option<Vec<Row>> {
+        const MAX_ELAPSED: Duration = Duration::from_secs(60);
+        const MAX_BATCH_LEN: usize = 10_000_000;
+
         while let Some(mut rows) = self.indexer.next() {
             self.bar.inc();
             self.batch.append(&mut rows);
-            if self.batch.len() > 10_000_000 || self.start.elapsed() > Duration::from_secs(60) {
+            if self.batch.len() > MAX_BATCH_LEN || self.start.elapsed() > MAX_ELAPSED {
                 break;
             }
         }
