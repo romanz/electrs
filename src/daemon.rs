@@ -17,7 +17,7 @@ pub struct Daemon {
     url: String,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
     height: usize,
     hash: Sha256dHash,

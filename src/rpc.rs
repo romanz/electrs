@@ -1,11 +1,15 @@
 use bitcoin::util::hash::Sha256dHash;
 use itertools;
 use serde_json::{from_str, Number, Value};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
-use query::Query;
+use query::{Query, Status};
+use index::FullHash;
 use util;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 
 error_chain!{}
 
@@ -13,9 +17,59 @@ struct Handler<'a> {
     query: &'a Query<'a>,
 }
 
+// TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
+fn hash_from_params(params: &[Value]) -> Result<Sha256dHash> {
+    let script_hash = params.get(0).chain_err(|| "missing hash")?;
+    let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
+    let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
+    Ok(script_hash)
+}
+
+fn history_from_status(status: &Status) -> Vec<(u32, Sha256dHash)> {
+    let mut txns_map = HashMap::<Sha256dHash, u32>::new();
+    for f in &status.funding {
+        txns_map.insert(f.txn_id, f.height);
+    }
+    for s in &status.spending {
+        txns_map.insert(s.txn_id, s.height);
+    }
+    let mut txns: Vec<(u32, Sha256dHash)> =
+        txns_map.into_iter().map(|item| (item.1, item.0)).collect();
+    txns.sort();
+    txns
+}
+
+fn hash_from_status(status: &Status) -> Option<FullHash> {
+    let txns = history_from_status(status);
+    if txns.is_empty() {
+        return None;
+    }
+
+    let mut hash = FullHash::default();
+    let mut sha2 = Sha256::new();
+    for (height, txn_id) in txns {
+        let part = format!("{}:{}:", txn_id.be_hex_string(), height);
+        sha2.input(part.as_bytes());
+    }
+    sha2.result(&mut hash);
+    Some(hash)
+}
+
 impl<'a> Handler<'a> {
     fn blockchain_headers_subscribe(&self) -> Result<Value> {
-        Ok(json!({}))
+        let entry = self.query
+            .get_best_header()
+            .chain_err(|| "no headers found")?;
+        let header = entry.header();
+        Ok(json!({
+            "block_height": entry.height(),
+            "version": header.version,
+            "prev_block_hash": header.prev_blockhash.be_hex_string(),
+            "merkle_root": header.merkle_root.be_hex_string(),
+            "timestamp": header.time,
+            "bits": header.bits,
+            "nonce": header.nonce
+        }))
     }
 
     fn server_version(&self) -> Result<Value> {
@@ -52,27 +106,40 @@ impl<'a> Handler<'a> {
         Ok(json!(1e-5)) // TODO: consult with actual mempool
     }
 
-    fn blockchain_scripthash_subscribe(&self, _params: &[Value]) -> Result<Value> {
-        Ok(json!("HEX_STATUS"))
+    fn blockchain_relayfee(&self) -> Result<Value> {
+        Ok(json!(1e-5)) // TODO: consult with actual node
+    }
+
+    fn blockchain_scripthash_subscribe(&self, params: &[Value]) -> Result<Value> {
+        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let status = self.query.status(&script_hash[..]);
+
+        Ok(match hash_from_status(&status) {
+            Some(hash) => Value::String(util::hexlify(&hash)),
+            None => Value::Null,
+        })
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = params.get(0).chain_err(|| "missing scripthash")?;
-        let script_hash = script_hash.as_str().chain_err(|| "non-string scripthash")?;
-        let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex scripthash")?;
-        let confirmed = self.query.balance(&script_hash[..]);
-        Ok(json!({ "confirmed": confirmed })) // TODO: "unconfirmed"
+        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let status = self.query.status(&script_hash[..]);
+        Ok(json!({ "confirmed": status.balance })) // TODO: "unconfirmed"
     }
 
-    fn blockchain_scripthash_get_history(&self, _params: &[Value]) -> Result<Value> {
-        Ok(json!([])) // TODO: list of {tx_hash: "ABC", height: 123}
+    fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
+        let script_hash = hash_from_params(&params).chain_err(|| "bad script_hash")?;
+        let status = self.query.status(&script_hash[..]);
+        Ok(json!(Value::Array(
+            history_from_status(&status)
+                .into_iter()
+                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
+                .collect()
+        )))
     }
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
-        let tx_hash = params.get(0).chain_err(|| "missing tx_hash")?;
-        let tx_hash = tx_hash.as_str().chain_err(|| "non-string tx_hash")?;
-        let tx_hash = Sha256dHash::from_hex(tx_hash).chain_err(|| "non-hex tx_hash")?;
+        let tx_hash = hash_from_params(params).chain_err(|| "bad tx_hash")?;
         let tx_hex = util::hexlify(&self.query.get_tx(&tx_hash));
         Ok(json!(tx_hex))
     }
@@ -91,6 +158,7 @@ impl<'a> Handler<'a> {
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
             "blockchain.block.get_chunk" => self.blockchain_block_get_chunk(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
+            "blockchain.relayfee" => self.blockchain_relayfee(),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),
             "blockchain.scripthash.get_balance" => self.blockchain_scripthash_get_balance(&params),
             "blockchain.scripthash.get_history" => self.blockchain_scripthash_get_history(&params),

@@ -5,7 +5,7 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
-use daemon::Daemon;
+use daemon::{Daemon, HeaderEntry};
 use index::{compute_script_hash, hash_prefix, HashPrefix, Index, TxInKey, TxInRow, TxKey,
             TxOutRow, HASH_PREFIX_LEN};
 use store::Store;
@@ -17,6 +17,30 @@ pub struct Query<'a> {
     index: &'a Index,
 }
 
+pub struct FundingOutput {
+    pub txn_id: Sha256dHash,
+    pub height: u32,
+    pub output_index: usize,
+    pub value: u64,
+}
+
+pub struct SpendingInput {
+    pub txn_id: Sha256dHash,
+    pub height: u32,
+    pub input_index: usize,
+}
+
+pub struct Status {
+    pub balance: u64,
+    pub funding: Vec<FundingOutput>,
+    pub spending: Vec<SpendingInput>,
+}
+
+struct TxnHeight {
+    txn: Transaction,
+    height: u32,
+}
+
 impl<'a> Query<'a> {
     pub fn new(store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
         Query {
@@ -26,7 +50,7 @@ impl<'a> Query<'a> {
         }
     }
 
-    fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<Transaction> {
+    fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
             for row in self.store.scan(&[b"T", &txid_prefix[..]].concat()) {
@@ -34,19 +58,20 @@ impl<'a> Query<'a> {
                 let txid: Sha256dHash = deserialize(&key.txid).unwrap();
                 let txn_bytes = self.daemon.get(&format!("tx/{}.bin", txid.be_hex_string()));
                 let txn: Transaction = deserialize(&txn_bytes).unwrap();
-                txns.push(txn)
+                let height: u32 = bincode::deserialize(&row.value).unwrap();
+                txns.push(TxnHeight { txn, height })
             }
         }
         txns
     }
 
-    fn find_spending_txn(&self, txid: &Sha256dHash, output_index: u32) -> Option<Transaction> {
+    fn find_spending_input(&self, funding: &FundingOutput) -> Option<SpendingInput> {
         let spend_key = bincode::serialize(&TxInKey {
             code: b'I',
-            prev_hash_prefix: hash_prefix(&txid[..]),
-            prev_index: output_index as u16,
+            prev_hash_prefix: hash_prefix(&funding.txn_id[..]),
+            prev_index: funding.output_index as u16,
         }).unwrap();
-        let mut spending: Vec<Transaction> = self.load_txns(
+        let spending_txns: Vec<TxnHeight> = self.load_txns(
             self.store
                 .scan(&spend_key)
                 .iter()
@@ -57,21 +82,36 @@ impl<'a> Query<'a> {
                 })
                 .collect(),
         );
-        spending.retain(|item| {
-            item.input
-                .iter()
-                .any(|input| input.prev_hash == *txid && input.prev_index == output_index)
-        });
-        assert!(spending.len() <= 1);
-        if spending.len() == 1 {
-            Some(spending.remove(0))
+        let mut spending_inputs = Vec::new();
+        for t in &spending_txns {
+            for (index, input) in enumerate(&t.txn.input) {
+                if input.prev_hash == funding.txn_id
+                    && input.prev_index == funding.output_index as u32
+                {
+                    spending_inputs.push(SpendingInput {
+                        txn_id: t.txn.txid(),
+                        height: t.height,
+                        input_index: index,
+                    })
+                }
+            }
+        }
+        assert!(spending_inputs.len() <= 1);
+        if spending_inputs.len() == 1 {
+            Some(spending_inputs.remove(0))
         } else {
             None
         }
     }
 
-    pub fn balance(&self, script_hash: &[u8]) -> f64 {
-        let mut funding: Vec<Transaction> = self.load_txns(
+    pub fn status(&self, script_hash: &[u8]) -> Status {
+        let mut status = Status {
+            balance: 0,
+            funding: vec![],
+            spending: vec![],
+        };
+
+        let funding_txns = self.load_txns(
             self.store
                 .scan(&[b"O", &script_hash[..HASH_PREFIX_LEN]].concat())
                 .iter()
@@ -82,25 +122,27 @@ impl<'a> Query<'a> {
                 })
                 .collect(),
         );
-        funding.retain(|item| {
-            item.output
-                .iter()
-                .any(|output| compute_script_hash(&output.script_pubkey[..]) == script_hash)
-        });
-
-        let mut balance = 0u64;
-        let mut spending = Vec::<Transaction>::new();
-        for txn in &funding {
-            let txid = txn.txid();
-            for (index, output) in enumerate(&txn.output) {
-                if let Some(spent) = self.find_spending_txn(&txid, index as u32) {
-                    spending.push(spent); // TODO: may contain duplicate TXNs
-                } else {
-                    balance += output.value;
+        for t in funding_txns {
+            let txn_id = t.txn.txid();
+            for (index, output) in enumerate(&t.txn.output) {
+                if compute_script_hash(&output.script_pubkey[..]) == script_hash {
+                    status.funding.push(FundingOutput {
+                        txn_id: txn_id,
+                        height: t.height,
+                        output_index: index,
+                        value: output.value,
+                    })
                 }
             }
         }
-        balance as f64 / 100_000_000f64
+        for funding_output in &status.funding {
+            if let Some(spent) = self.find_spending_input(&funding_output) {
+                status.spending.push(spent);
+            } else {
+                status.balance += funding_output.value;
+            }
+        }
+        status
     }
 
     pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Bytes {
@@ -117,5 +159,10 @@ impl<'a> Query<'a> {
             result.push(serialize(header).unwrap());
         }
         result
+    }
+
+    pub fn get_best_header(&self) -> Option<HeaderEntry> {
+        let header_list = self.index.headers_list();
+        Some(header_list.headers().last()?.clone())
     }
 }

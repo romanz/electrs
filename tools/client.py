@@ -14,11 +14,25 @@ script_for_address = BitcoinMainnet.ui.script_for_address
 
 log = Logger(__name__)
 
+class Connection:
+    def __init__(self, addr):
+        self.s = socket.create_connection(addr)
+        self.f = self.s.makefile('r')
+        self.id = 0
+
+    def call(self, method, *args):
+        req = {
+            'id': self.id,
+            'method': method,
+            'params': list(args),
+        }
+        msg = json.dumps(req) + '\n'
+        self.s.sendall(msg.encode('ascii'))
+        return json.loads(self.f.readline())
+
 
 def main():
-    s = socket.create_connection(('localhost', 50001))
-    f = s.makefile('r')
-
+    conn = Connection(('localhost', 50001))
     xpub, = sys.argv[1:]
     total = 0
     k = pycoin.ui.key_from_text.key_from_text(xpub)
@@ -28,23 +42,20 @@ def main():
             address = k.subkey(change).subkey(n).address()
             script = script_for_address(address)
             script_hash = hashlib.sha256(script).digest()
-            req = {
-                'id': 1,
-                'method': 'blockchain.scripthash.get_balance',
-                'params': [script_hash[::-1].hex()]
-            }
-            msg = json.dumps(req) + '\n'
-            s.sendall(msg.encode('ascii'))
-            res = json.loads(f.readline())['result']
-            total += res['confirmed']
-            if res['confirmed']:
+            reply = conn.call('blockchain.scripthash.get_balance',
+                              script_hash[::-1].hex())
+            res = reply['result']
+            confirmed = res['confirmed'] / 1e8
+            total += confirmed
+            if confirmed:
                 log.info('{}/{} => {} has {:11.8f} BTC',
-                         change, n, address, res['confirmed'])
+                         change, n, address, confirmed)
                 empty = 0
             else:
                 empty += 1
                 if empty >= 10:
                     break
+            log.info('{}', conn.call('blockchain.scripthash.get_history', script_hash[::-1].hex()))
     log.info('total balance: {} BTC', total)
 
 if __name__ == '__main__':

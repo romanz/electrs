@@ -20,7 +20,7 @@ use types::{Bytes, HeaderMap};
 const HASH_LEN: usize = 32;
 pub const HASH_PREFIX_LEN: usize = 8;
 
-type FullHash = [u8; HASH_LEN];
+pub type FullHash = [u8; HASH_LEN];
 pub type HashPrefix = [u8; HASH_PREFIX_LEN];
 
 pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
