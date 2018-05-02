@@ -154,8 +154,11 @@ impl<'a> Query<'a> {
         let headers_list = self.index.headers_list();
         let headers = headers_list.headers();
         let mut result = Vec::new();
-        for h in heights {
-            let header: &BlockHeader = headers[*h].header();
+        for height in heights {
+            let header: &BlockHeader = match headers.get(*height) {
+                Some(header) => header.header(),
+                None => break,
+            };
             result.push(*header);
         }
         result
