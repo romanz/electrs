@@ -312,17 +312,17 @@ impl<'a> Iterator for Indexer<'a> {
     }
 }
 
-struct BatchIter<'a> {
+struct Batching<'a> {
     indexer: Indexer<'a>,
     batch: Vec<Row>,
     start: Instant,
     bar: pbr::ProgressBar<Stderr>,
 }
 
-impl<'a> BatchIter<'a> {
-    fn new(indexer: Indexer<'a>) -> BatchIter<'a> {
+impl<'a> Batching<'a> {
+    fn new(indexer: Indexer<'a>) -> Batching<'a> {
         let bar = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
-        BatchIter {
+        Batching {
             indexer: indexer,
             batch: vec![],
             start: Instant::now(),
@@ -331,7 +331,7 @@ impl<'a> BatchIter<'a> {
     }
 }
 
-impl<'a> Iterator for BatchIter<'a> {
+impl<'a> Iterator for Batching<'a> {
     type Item = Vec<Row>;
 
     fn next(&mut self) -> Option<Vec<Row>> {
@@ -404,7 +404,7 @@ impl Index {
             }
         }
         let current_headers = daemon.enumerate_headers(&*indexed_headers).unwrap();
-        for rows in BatchIter::new(Indexer::new(
+        for rows in Batching::new(Indexer::new(
             self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
             &daemon,
         )) {
