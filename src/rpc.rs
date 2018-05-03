@@ -227,7 +227,8 @@ impl<'a> Handler<'a> {
                 _ => bail!("invalid command: {}", cmd),
             };
 
-            debug!("[{}] {} -> {}", addr, cmd, reply);
+            info!("[{}] {}", addr, cmd);
+            debug!("reply: {}", reply);
             let line = reply.to_string() + "\n";
             stream
                 .write_all(line.as_bytes())
