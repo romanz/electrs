@@ -33,6 +33,7 @@ fn full_hash(hash: &[u8]) -> FullHash {
     array_ref![hash, 0, HASH_LEN].clone()
 }
 
+// TODO: move to a separate file (to break index<->daemon dependency)
 #[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
     height: usize,
