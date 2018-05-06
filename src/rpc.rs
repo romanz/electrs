@@ -1,23 +1,21 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::serialize;
 use bitcoin::util::hash::Sha256dHash;
+use crossbeam;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use itertools;
 use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 use query::{Query, Status};
 use index::FullHash;
 use util;
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
 
 error_chain!{}
-
-struct Handler<'a> {
-    query: &'a Query<'a>,
-}
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
@@ -67,6 +65,10 @@ fn format_header(header: &BlockHeader, height: usize) -> Value {
         "bits": header.bits,
         "nonce": header.nonce
     })
+}
+
+struct Handler<'a> {
+    query: &'a Query<'a>,
 }
 
 impl<'a> Handler<'a> {
@@ -201,51 +203,92 @@ impl<'a> Handler<'a> {
         Ok(reply)
     }
 
-    pub fn run(self, mut stream: TcpStream, addr: SocketAddr) -> Result<()> {
+    pub fn run(self, mut stream: TcpStream, addr: SocketAddr, chan: &Channel) -> Result<()> {
         let mut reader = BufReader::new(stream
             .try_clone()
             .chain_err(|| "failed to clone TcpStream")?);
-        let mut line = String::new();
+        let tx = chan.sender();
+        crossbeam::scope(|scope| {
+            scope.spawn(|| loop {
+                let mut line = String::new();
+                line.clear();
+                reader
+                    .read_line(&mut line)
+                    .expect("failed to read a request");
+                if line.is_empty() {
+                    tx.send(Message::Done).expect("channel closed");
+                    break;
+                } else {
+                    tx.send(Message::Request(line)).expect("channel closed");
+                }
+            });
 
-        loop {
-            line.clear();
-            reader
-                .read_line(&mut line)
-                .chain_err(|| "failed to read a request")?;
-            if line.is_empty() {
-                break;
+            let rx = chan.receiver();
+            loop {
+                let msg = rx.recv().chain_err(|| "channel closed")?;
+                match msg {
+                    Message::Request(line) => {
+                        let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
+
+                        let reply = match (cmd.get("method"), cmd.get("params"), cmd.get("id")) {
+                            (
+                                Some(&Value::String(ref method)),
+                                Some(&Value::Array(ref params)),
+                                Some(&Value::Number(ref id)),
+                            ) => self.handle_command(method, params, id)?,
+                            _ => bail!("invalid command: {}", cmd),
+                        };
+
+                        info!("[{}] {}", addr, cmd);
+                        debug!("reply: {}", reply);
+                        let line = reply.to_string() + "\n";
+                        stream
+                            .write_all(line.as_bytes())
+                            .chain_err(|| "failed to send response")?;
+                    }
+                    Message::Block(blockhash) => info!("block {} found", blockhash),
+                    Message::Done => break,
+                }
             }
-            let line = line.trim_right();
-            let cmd: Value = from_str(line).chain_err(|| "invalid JSON format")?;
-
-            let reply = match (cmd.get("method"), cmd.get("params"), cmd.get("id")) {
-                (
-                    Some(&Value::String(ref method)),
-                    Some(&Value::Array(ref params)),
-                    Some(&Value::Number(ref id)),
-                ) => self.handle_command(method, params, id)?,
-                _ => bail!("invalid command: {}", cmd),
-            };
-
-            info!("[{}] {}", addr, cmd);
-            debug!("reply: {}", reply);
-            let line = reply.to_string() + "\n";
-            stream
-                .write_all(line.as_bytes())
-                .chain_err(|| "failed to send response")?;
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
-pub fn serve(addr: &str, query: &Query) {
+pub enum Message {
+    Request(String),
+    Block(Sha256dHash),
+    Done,
+}
+
+pub struct Channel {
+    tx: SyncSender<Message>,
+    rx: Receiver<Message>,
+}
+
+impl Channel {
+    pub fn new() -> Channel {
+        let (tx, rx) = sync_channel(0);
+        Channel { tx, rx }
+    }
+
+    pub fn sender(&self) -> SyncSender<Message> {
+        self.tx.clone()
+    }
+
+    pub fn receiver(&self) -> &Receiver<Message> {
+        &self.rx
+    }
+}
+
+pub fn serve(addr: &str, query: &Query, mut chan: Channel) {
     let listener = TcpListener::bind(addr).unwrap();
     info!("RPC server running on {}", addr);
     loop {
         let (stream, addr) = listener.accept().unwrap();
         info!("[{}] connected peer", addr);
         let handler = Handler { query };
-        match handler.run(stream, addr) {
+        match handler.run(stream, addr, &mut chan) {
             Ok(()) => info!("[{}] disconnected peer", addr),
             Err(ref e) => {
                 error!("[{}] {}", addr, e);

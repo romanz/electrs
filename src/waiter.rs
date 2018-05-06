@@ -1,6 +1,6 @@
+use bitcoin::network::serialize::deserialize;
+use bitcoin::util::hash::Sha256dHash;
 use zmq;
-
-use types::Bytes;
 
 pub struct Waiter {
     sock: zmq::Socket,
@@ -15,9 +15,9 @@ impl Waiter {
         Waiter { sock }
     }
 
-    pub fn wait(&self) -> Bytes {
+    pub fn wait(&self) -> Sha256dHash {
         let mut blockhash = self.sock.recv_multipart(0).unwrap().remove(1);
         blockhash.reverse(); // block hash needs to be LSB-first
-        blockhash
+        deserialize(&blockhash).unwrap()
     }
 }

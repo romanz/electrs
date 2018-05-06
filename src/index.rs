@@ -6,6 +6,7 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use log::Level;
 use pbr;
 use std::collections::VecDeque;
 use std::io::{stderr, Stderr};
@@ -384,7 +385,12 @@ impl Index {
             .iter()
             .filter(|entry| !indexed_headers.contains_key(&entry.hash()))
             .collect();
-        info!(
+        log!(
+            if missing_headers.is_empty() {
+                Level::Debug
+            } else {
+                Level::Info
+            },
             "height {}, best {} @ {} ({} left to index)",
             current_headers.headers().len() - 1,
             best_block_header.bitcoin_hash(),

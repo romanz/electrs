@@ -54,9 +54,12 @@ fn run_server(config: Config) {
     let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
-        scope.spawn(|| rpc::serve("localhost:50001", &query));
+        let chan = rpc::Channel::new();
+        let tx = chan.sender();
+        scope.spawn(|| rpc::serve("localhost:50001", &query, chan));
         loop {
-            waiter.wait();
+            let blockhash = waiter.wait();
+            tx.send(rpc::Message::Block(blockhash)).unwrap();
             if config.enable_indexing {
                 index.update(&store, &daemon);
             }
