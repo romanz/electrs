@@ -59,10 +59,10 @@ fn run_server(config: Config) {
         scope.spawn(|| rpc::serve("localhost:50001", &query, chan));
         loop {
             let blockhash = waiter.wait();
-            tx.send(rpc::Message::Block(blockhash)).unwrap();
             if config.enable_indexing {
                 index.update(&store, &daemon);
             }
+            tx.send(rpc::Message::Block(blockhash)).unwrap();
         }
     });
 }
