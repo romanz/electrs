@@ -1,13 +1,16 @@
-extern crate simplelog;
-
 extern crate argparse;
 extern crate crossbeam;
 extern crate indexrs;
+extern crate simplelog;
+
+#[macro_use]
+extern crate log;
 
 use argparse::{ArgumentParser, StoreFalse, StoreTrue};
 use std::fs::OpenOptions;
 use indexrs::{daemon, index, query, rpc, store, waiter};
 
+#[derive(Debug)]
 struct Config {
     log_file: String,
     enable_indexing: bool,
@@ -96,7 +99,9 @@ fn run_server(config: &Config) {
             if config.enable_indexing {
                 index.update(&store, &daemon);
             }
-            tx.send(rpc::Message::Block(blockhash)).unwrap();
+            if let Err(e) = tx.try_send(rpc::Message::Block(blockhash)) {
+                debug!("failed to send update for {}: {:?}", blockhash, e)
+            }
         }
     });
 }
@@ -117,6 +122,7 @@ fn setup_logging(config: &Config) {
                 .unwrap(),
         ),
     ]).unwrap();
+    info!("config: {:?}", config);
 }
 
 fn main() {
