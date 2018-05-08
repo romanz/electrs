@@ -91,11 +91,11 @@ impl<'a> Handler<'a> {
     }
 
     fn server_version(&self) -> Result<Value> {
-        Ok(json!(["LES 0.1.0", "1.2"]))
+        Ok(json!(["RustElectrum 0.1.0", "1.2"]))
     }
 
     fn server_banner(&self) -> Result<Value> {
-        Ok(json!("Welcome to Local Electrum Server!\n"))
+        Ok(json!("Welcome to RustElectrum Server!\n"))
     }
 
     fn server_donation_address(&self) -> Result<Value> {
@@ -250,7 +250,7 @@ impl<'a> Handler<'a> {
                 let mut line = String::new();
                 line.clear();
                 reader
-                    .read_line(&mut line)
+                    .read_line(&mut line)  // TODO: use .lines() iterator
                     .expect("failed to read a request");
                 if line.is_empty() {
                     tx.send(Message::Done).expect("channel closed");

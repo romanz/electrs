@@ -6,6 +6,7 @@ authors = ["Roman Zeyde <me@romanzey.de>"]
 [dependencies]
 argparse = "0.2.1"
 arrayref = "0.3.4"
+base64 = "0.9.0"
 bincode = "1.0.0"
 bitcoin = "0.12"
 crossbeam = "0.3.2"

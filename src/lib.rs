@@ -1,5 +1,6 @@
 #![recursion_limit = "1024"]
 
+extern crate base64;
 extern crate bincode;
 extern crate bitcoin;
 extern crate crossbeam;

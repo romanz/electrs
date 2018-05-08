@@ -1,27 +1,40 @@
+use base64;
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::network::serialize::RawDecoder;
 use reqwest;
-use serde_json::{from_slice, Value};
-use std::io::Cursor;
+use serde_json::{from_str, Value};
+use std::env::home_dir;
+use std::io::{BufRead, BufReader, Cursor, Write};
+use std::net::TcpStream;
 
 use index::HeaderList;
 use types::{Bytes, HeaderMap, Sha256dHash};
+use util::read_contents;
 
 error_chain!{}
 
 const HEADER_SIZE: usize = 80;
 
+fn read_cookie() -> Vec<u8> {
+    let mut path = home_dir().unwrap();
+    path.push(".bitcoin");
+    path.push(".cookie");
+    read_contents(&path).unwrap()
+}
+
 pub struct Daemon {
     url: String,
+    cookie_b64: String,
 }
 
 impl Daemon {
     pub fn new(url: &str) -> Daemon {
         Daemon {
             url: url.to_string(),
+            cookie_b64: base64::encode(&read_cookie()),
         }
     }
 
@@ -40,6 +53,38 @@ impl Daemon {
         resp.copy_to(&mut buf)
             .chain_err(|| "failed to read response")?;
         Ok(buf)
+    }
+
+    pub fn call(&self, method: &str, params: Value) -> Result<Value> {
+        let mut conn = TcpStream::connect("127.0.0.1:8332").chain_err(|| "failed to connect")?;
+        let request = json!({"method": method, "params": params}).to_string();
+        let msg = format!(
+            "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
+            self.cookie_b64,
+            request.len(),
+            request,
+        );
+        conn.write_all(msg.as_bytes())
+            .chain_err(|| "failed to send request")?;
+
+        let mut in_header = true;
+        let mut contents: Option<String> = None;
+        for line in BufReader::new(conn).lines() {
+            let line = line.chain_err(|| "failed to read")?;
+            if line.is_empty() {
+                in_header = false;
+            } else if !in_header {
+                contents = Some(line);
+                break;
+            }
+        }
+        let contents = contents.chain_err(|| "no reply")?;
+        let mut reply: Value = from_str(&contents).chain_err(|| "invalid JSON")?;
+        let err = reply["error"].take();
+        if !err.is_null() {
+            bail!("called failed: {}", err);
+        }
+        Ok(reply["result"].take())
     }
 
     fn get_all_headers(&self) -> Result<HeaderMap> {
@@ -67,15 +112,11 @@ impl Daemon {
     }
 
     fn add_missing_headers(&self, mut header_map: HeaderMap) -> Result<(HeaderMap, Sha256dHash)> {
-        // Get current best blockhash (using REST API)
-        let data = self.get("chaininfo.json")?;
-        let reply: Value = from_slice(&data).chain_err(|| "failed to parse /chaininfo.json")?;
-        let bestblockhash_hex = reply
-            .get("bestblockhash")
-            .chain_err(|| "missing bestblockhash")?
-            .as_str()
-            .chain_err(|| "non-string bestblockhash")?;
-        let bestblockhash = Sha256dHash::from_hex(bestblockhash_hex).unwrap();
+        // Get current best blockhash (using JSONRPC API)
+        let reply = self.call("getbestblockhash", json!([]))?;
+        let bestblockhash =
+            Sha256dHash::from_hex(reply.as_str().chain_err(|| "non-string bestblockhash")?)
+                .chain_err(|| "non-hex bestblockhash")?;
         // Iterate back over headers until known blockash is found:
         let mut blockhash = bestblockhash;
         while !header_map.contains_key(&blockhash) {
