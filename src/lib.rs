@@ -5,7 +5,7 @@ extern crate bincode;
 extern crate bitcoin;
 extern crate crossbeam;
 extern crate crypto;
-extern crate extfmt;
+extern crate hex;
 extern crate itertools;
 extern crate pbr;
 extern crate reqwest;

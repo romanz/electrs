@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use time;
 
 use store::{Row, Store};
-use types::{Bytes, HeaderMap};
+use types::HeaderMap;
 use daemon::Daemon;
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
@@ -281,29 +281,22 @@ impl<'a> Iterator for Indexer<'a> {
         }
         let &entry = &self.headers[self.header_index];
 
-        let &blockhash = entry.hash();
-        let blockhash_hex = blockhash.be_hex_string();
-
-        let buf: Bytes = self.daemon
-            .get(&format!("block/{}.bin", blockhash_hex))
-            .unwrap();
-
-        let block: Block = deserialize(&buf).unwrap();
-        assert_eq!(block.bitcoin_hash(), blockhash);
+        let blockhash = entry.hash();
+        let block = self.daemon.getblock(&blockhash).unwrap();
+        assert_eq!(block.bitcoin_hash(), *blockhash);
+        self.blocks_size += serialize(&block).unwrap().len();
 
         let rows = index_block(&block, entry.height());
-
-        self.blocks_size += buf.len();
+        self.num_of_rows += rows.len();
         for row in &rows {
             self.rows_size += row.key.len() + row.value.len();
         }
-        self.num_of_rows += rows.len();
-        self.header_index += 1;
 
+        self.header_index += 1;
         if self.header_index % 1000 == 0 {
             info!(
                 "{} @ {}: {:.3}/{:.3} MB, {} rows",
-                blockhash_hex,
+                blockhash,
                 entry.height(),
                 self.rows_size as f64 / 1e6_f64,
                 self.blocks_size as f64 / 1e6_f64,

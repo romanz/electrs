@@ -9,7 +9,6 @@ use daemon::Daemon;
 use index::{compute_script_hash, hash_prefix, HashPrefix, HeaderEntry, Index, TxInKey, TxInRow,
             TxKey, TxOutRow, HASH_PREFIX_LEN};
 use store::Store;
-use types::Bytes;
 
 pub struct Query<'a> {
     store: &'a Store,
@@ -46,6 +45,7 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
+// TODO: return errors instead of panics
 impl<'a> Query<'a> {
     pub fn new(store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
         Query {
@@ -61,10 +61,7 @@ impl<'a> Query<'a> {
             for row in self.store.scan(&[b"T", &txid_prefix[..]].concat()) {
                 let key: TxKey = bincode::deserialize(&row.key).unwrap();
                 let txid: Sha256dHash = deserialize(&key.txid).unwrap();
-                let txn_bytes = self.daemon
-                    .get(&format!("tx/{}.bin", txid.be_hex_string()))
-                    .unwrap();
-                let txn: Transaction = deserialize(&txn_bytes).unwrap();
+                let txn: Transaction = self.get_tx(&txid);
                 let height: u32 = bincode::deserialize(&row.value).unwrap();
                 txns.push(TxnHeight { txn, height })
             }
@@ -152,10 +149,10 @@ impl<'a> Query<'a> {
         status
     }
 
-    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Bytes {
+    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Transaction {
         self.daemon
-            .get(&format!("tx/{}.bin", tx_hash.be_hex_string()))
-            .unwrap()
+            .gettransaction(tx_hash)
+            .expect(&format!("failed to load tx {}", tx_hash))
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
@@ -185,10 +182,7 @@ impl<'a> Query<'a> {
     ) -> Option<(Vec<Sha256dHash>, usize)> {
         let header_list = self.index.headers_list();
         let blockhash = header_list.headers().get(height)?.hash();
-        let buf = self.daemon
-            .get(&format!("block/{}.bin", blockhash.be_hex_string()))
-            .unwrap();
-        let block: Block = deserialize(&buf).unwrap();
+        let block: Block = self.daemon.getblock(&blockhash).unwrap();
         let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
         let pos = txids.iter().position(|txid| txid == tx_hash)?;
         let mut merkle = Vec::new();

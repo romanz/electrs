@@ -4,6 +4,7 @@ use bitcoin::util::hash::Sha256dHash;
 use crossbeam;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use hex;
 use itertools;
 use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
@@ -13,7 +14,6 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 use query::{Query, Status};
 use index::FullHash;
-use util;
 
 error_chain!{}
 
@@ -52,7 +52,7 @@ fn hash_from_status(status: &Status) -> Value {
         sha2.input(part.as_bytes());
     }
     sha2.result(&mut hash);
-    Value::String(util::hexlify(&hash))
+    Value::String(hex::encode(&hash))
 }
 
 fn jsonify_header(header: &BlockHeader, height: usize) -> Value {
@@ -119,7 +119,7 @@ impl<'a> Handler<'a> {
         let result = itertools::join(
             headers
                 .into_iter()
-                .map(|x| util::hexlify(&serialize(&x).unwrap())),
+                .map(|x| hex::encode(&serialize(&x).unwrap())),
             "",
         );
         Ok(json!(result))
@@ -168,8 +168,8 @@ impl<'a> Handler<'a> {
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        let tx_hex = util::hexlify(&self.query.get_tx(&tx_hash));
-        Ok(json!(tx_hex))
+        let tx = self.query.get_tx(&tx_hash);
+        Ok(json!(hex::encode(&serialize(&tx).unwrap())))
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
