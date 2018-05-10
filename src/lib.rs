@@ -8,7 +8,6 @@ extern crate crypto;
 extern crate hex;
 extern crate itertools;
 extern crate pbr;
-extern crate reqwest;
 extern crate rocksdb;
 extern crate serde;
 extern crate time;

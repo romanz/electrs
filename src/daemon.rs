@@ -1,65 +1,43 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::encodable::ConsensusDecodable;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::deserialize;
-use bitcoin::network::serialize::RawDecoder;
 use hex;
-use reqwest;
 use serde_json::{from_str, Value};
 use std::env::home_dir;
-use std::io::{BufRead, BufReader, Cursor, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
 use index::HeaderList;
-use types::{Bytes, HeaderMap, Sha256dHash};
+use types::{HeaderMap, Sha256dHash};
 use util::read_contents;
 
 error_chain!{}
 
-const HEADER_SIZE: usize = 80;
-
 fn read_cookie() -> Vec<u8> {
     let mut path = home_dir().unwrap();
     path.push(".bitcoin");
-    path.push("testnet3");
     path.push(".cookie");
     read_contents(&path).expect("failed to read cookie")
 }
 
 pub struct Daemon {
-    url: String,
+    addr: String,
     cookie_b64: String,
 }
 
 impl Daemon {
-    pub fn new(url: &str) -> Daemon {
+    pub fn new(addr: &str) -> Daemon {
         Daemon {
-            url: url.to_string(),
+            addr: addr.to_string(),
             cookie_b64: base64::encode(&read_cookie()),
         }
     }
 
-    // TODO: use error_chain for errors here.
-    fn call_http(&self, resource: &str) -> Result<reqwest::Response> {
-        let url = format!("{}/rest/{}", self.url, resource);
-        Ok(reqwest::get(&url)
-            .chain_err(|| format!("failed to get {}", url))?
-            .error_for_status()
-            .chain_err(|| "invalid status")?)
-    }
-
-    pub fn get(&self, resource: &str) -> Result<Bytes> {
-        let mut buf = Bytes::new();
-        let mut resp = self.call_http(resource)?;
-        resp.copy_to(&mut buf)
-            .chain_err(|| "failed to read response")?;
-        Ok(buf)
-    }
-
     fn call_jsonrpc(&self, request: &Value) -> Result<Value> {
-        let mut conn = TcpStream::connect("127.0.0.1:18332").chain_err(|| "failed to connect")?;
+        let mut conn = TcpStream::connect(&self.addr)
+            .chain_err(|| format!("failed to connect to {}", self.addr))?;
         let request = request.to_string();
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
@@ -127,6 +105,29 @@ impl Daemon {
         )
     }
 
+    pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
+        let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
+        let hashes: Vec<Value> = self.requests("getblockhash", &heights)?
+            .into_iter()
+            .map(|hash| json!([hash, /*verbose=*/ false]))
+            .collect();
+        let headers: Vec<Value> = self.requests("getblockheader", &hashes)?;
+
+        fn header_from_value(value: Value) -> Result<BlockHeader> {
+            let header_hex = value
+                .as_str()
+                .chain_err(|| format!("non-string header: {}", value))?;
+            let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
+            Ok(deserialize(&header_bytes)
+                .chain_err(|| format!("failed to parse blockheader {}", header_hex))?)
+        }
+        let mut result = Vec::new();
+        for h in headers {
+            result.push(header_from_value(h)?);
+        }
+        Ok(result)
+    }
+
     pub fn getblockheader(&self, blockhash: &Sha256dHash) -> Result<BlockHeader> {
         let header_hex: Value = self.request(
             "getblockheader",
@@ -161,29 +162,34 @@ impl Daemon {
         )
     }
 
-    fn get_all_headers(&self) -> Result<HeaderMap> {
-        let mut headers = HeaderMap::new();
-        let genesis_blockhash = self.request("getblockhash", json!([0]))?;
-        let mut blockhash = Sha256dHash::from_hex(
-            genesis_blockhash.as_str().expect("non-string blockhash"),
-        ).expect("non-hex blockhash");
-        loop {
-            let data = self.get(&format!("headers/2000/{}.bin", blockhash.be_hex_string()))
-                .chain_err(|| "failed to get headers")?;
-            assert!(!data.is_empty());
-            let num_of_headers = data.len() / HEADER_SIZE;
-            let mut decoder = RawDecoder::new(Cursor::new(data));
-            for _ in 0..num_of_headers {
-                let header: BlockHeader = ConsensusDecodable::consensus_decode(&mut decoder)
-                    .chain_err(|| format!("failed to parse blockheader {}", blockhash))?;
+    pub fn get_all_headers(&self) -> Result<HeaderMap> {
+        let info: Value = self.request("getblockchaininfo", json!([]))?;
+        let max_height = info.get("blocks")
+            .expect("missing `blocks` attribute")
+            .as_u64()
+            .expect("`blocks` should be number") as usize;
+        let all_heights: Vec<usize> = (0..max_height).collect();
+        let chunk_size = 10_000;
+        let mut result = HeaderMap::new();
+
+        let null_hash = Sha256dHash::default();
+        let mut blockhash = null_hash;
+        for heights in all_heights.chunks(chunk_size) {
+            let headers = self.getblockheaders(&heights)?;
+            assert!(headers.len() == heights.len());
+            for header in headers {
                 blockhash = header.bitcoin_hash();
-                headers.insert(blockhash, header);
-            }
-            if num_of_headers == 1 {
-                break;
+                result.insert(blockhash, header);
             }
         }
-        Ok(headers)
+
+        while blockhash != null_hash {
+            blockhash = result
+                .get(&blockhash)
+                .chain_err(|| format!("missing block header {}", blockhash))?
+                .prev_blockhash;
+        }
+        Ok(result)
     }
 
     fn add_missing_headers(&self, mut header_map: HeaderMap) -> Result<(HeaderMap, Sha256dHash)> {
@@ -191,8 +197,7 @@ impl Daemon {
         let bestblockhash = self.getbestblockhash()?;
         // Iterate back over headers until known blockash is found:
         let mut blockhash = bestblockhash;
-        let nullhash = Sha256dHash::default();
-        while !header_map.contains_key(&blockhash) && blockhash != nullhash {
+        while !header_map.contains_key(&blockhash) {
             let header = self.getblockheader(&blockhash)
                 .chain_err(|| "failed to get missing headers")?;
             header_map.insert(blockhash, header);
@@ -202,17 +207,14 @@ impl Daemon {
     }
 
     pub fn enumerate_headers(&self, indexed_headers: &HeaderList) -> Result<HeaderList> {
-        info!("loading headers");
         let header_map = if indexed_headers.headers().is_empty() {
             self.get_all_headers()
                 .chain_err(|| "failed to download all headers")?
         } else {
             indexed_headers.as_map()
         };
-        info!("loaded headers");
         let (header_map, blockhash) = self.add_missing_headers(header_map)
             .chain_err(|| "failed to add missing headers")?;
-        info!("added missing headers");
         Ok(HeaderList::build(header_map, blockhash))
     }
 }

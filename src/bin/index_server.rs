@@ -57,10 +57,11 @@ impl Config {
         }
     }
 
-    pub fn daemon_url(&self) -> &'static str {
+    pub fn daemon_addr(&self) -> &'static str {
+        // bitcoind JSONRPC endpoint
         match self.testnet {
-            false => "http://localhost:8332",
-            true => "http://localhost:18332",
+            false => "localhost:8332",
+            true => "localhost:18332",
         }
     }
 
@@ -72,7 +73,7 @@ impl Config {
 fn run_server(config: &Config) {
     let index = index::Index::new();
     let waiter = waiter::Waiter::new(config.zmq_endpoint());
-    let daemon = daemon::Daemon::new(config.daemon_url());
+    let daemon = daemon::Daemon::new(config.daemon_addr());
     {
         let store = store::Store::open(
             config.db_path(),
