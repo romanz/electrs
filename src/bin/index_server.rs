@@ -96,13 +96,19 @@ fn run_server(config: &Config) {
         let tx = chan.sender();
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
         loop {
-            let blockhash = waiter.wait();
-            if config.enable_indexing {
-                index.update(&store, &daemon);
-            }
-            if let Err(e) = tx.try_send(rpc::Message::Block(blockhash)) {
-                debug!("failed to send update for {}: {:?}", blockhash, e)
-            }
+            match waiter.wait() {
+                waiter::Topic::HashBlock(blockhash) => {
+                    if config.enable_indexing {
+                        index.update(&store, &daemon);
+                    }
+                    if let Err(e) = tx.try_send(rpc::Message::Block(blockhash)) {
+                        debug!("failed to update RPC server {}: {:?}", blockhash, e)
+                    }
+                }
+                waiter::Topic::HashTx(txhash) => {
+                    debug!("got tx {}", txhash);
+                }
+            } // match
         }
     });
 }
