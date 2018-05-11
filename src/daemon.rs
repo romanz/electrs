@@ -6,12 +6,12 @@ use bitcoin::network::serialize::deserialize;
 use hex;
 use serde_json::{from_str, Value};
 use std::env::home_dir;
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
 use index::HeaderList;
 use types::{HeaderMap, Sha256dHash};
-use util::read_contents;
 
 error_chain!{}
 
@@ -19,7 +19,14 @@ fn read_cookie() -> Vec<u8> {
     let mut path = home_dir().unwrap();
     path.push(".bitcoin");
     path.push(".cookie");
-    read_contents(&path).expect("failed to read cookie")
+    fs::read(&path).expect("failed to read cookie")
+}
+
+fn parse_hash(value: &Value) -> Result<Sha256dHash> {
+    Ok(
+        Sha256dHash::from_hex(value.as_str().chain_err(|| "non-string value")?)
+            .chain_err(|| "non-hex value")?,
+    )
 }
 
 pub struct Daemon {
@@ -98,11 +105,7 @@ impl Daemon {
     // bitcoind JSONRPC API:
 
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
-        let reply = self.request("getbestblockhash", json!([]))?;
-        Ok(
-            Sha256dHash::from_hex(reply.as_str().chain_err(|| "non-string bestblockhash")?)
-                .chain_err(|| "non-hex bestblockhash")?,
-        )
+        parse_hash(&self.request("getbestblockhash", json!([]))?).chain_err(|| "invalid blockhash")
     }
 
     pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {

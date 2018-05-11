@@ -15,9 +15,9 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use time;
 
+use daemon::Daemon;
 use store::{Row, Store};
 use types::HeaderMap;
-use daemon::Daemon;
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;

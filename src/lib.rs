@@ -29,7 +29,7 @@ pub mod index;
 pub mod query;
 pub mod rpc;
 pub mod store;
-pub mod waiter;
 pub mod util;
+pub mod waiter;
 
 mod types;

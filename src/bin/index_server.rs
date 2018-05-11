@@ -7,8 +7,8 @@ extern crate simplelog;
 extern crate log;
 
 use argparse::{ArgumentParser, StoreFalse, StoreTrue};
-use std::fs::OpenOptions;
 use indexrs::{daemon, index, query, rpc, store, waiter};
+use std::fs::OpenOptions;
 
 #[derive(Debug)]
 struct Config {
