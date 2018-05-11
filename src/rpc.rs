@@ -315,7 +315,7 @@ pub struct Channel {
 
 impl Channel {
     pub fn new() -> Channel {
-        let (tx, rx) = sync_channel(0);
+        let (tx, rx) = sync_channel(10);
         Channel { tx, rx }
     }
 
