@@ -7,7 +7,7 @@ extern crate simplelog;
 extern crate log;
 
 use argparse::{ArgumentParser, StoreFalse, StoreTrue};
-use indexrs::{daemon, index, query, rpc, store, waiter};
+use indexrs::{daemon, index, notification, query, rpc, store};
 use std::fs::OpenOptions;
 
 #[derive(Debug)]
@@ -72,7 +72,7 @@ impl Config {
 
 fn run_server(config: &Config) {
     let index = index::Index::new();
-    let waiter = waiter::Waiter::new(config.zmq_endpoint());
+    let waiter = notification::Waiter::new(config.zmq_endpoint());
     let daemon = daemon::Daemon::new(config.daemon_addr());
     {
         let store = store::Store::open(
@@ -96,8 +96,9 @@ fn run_server(config: &Config) {
         let tx = chan.sender();
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
         loop {
+            use notification::Topic;
             match waiter.wait() {
-                waiter::Topic::HashBlock(blockhash) => {
+                Topic::HashBlock(blockhash) => {
                     if config.enable_indexing {
                         index.update(&store, &daemon);
                     }
@@ -105,7 +106,7 @@ fn run_server(config: &Config) {
                         debug!("failed to update RPC server {}: {:?}", blockhash, e)
                     }
                 }
-                waiter::Topic::HashTx(txhash) => {
+                Topic::HashTx(txhash) => {
                     debug!("got tx {}", txhash);
                 }
             } // match
