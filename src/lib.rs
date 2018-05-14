@@ -11,7 +11,6 @@ extern crate pbr;
 extern crate rocksdb;
 extern crate serde;
 extern crate time;
-extern crate zmq;
 
 #[macro_use]
 extern crate arrayref;
