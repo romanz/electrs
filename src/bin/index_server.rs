@@ -7,8 +7,10 @@ extern crate simplelog;
 extern crate log;
 
 use argparse::{ArgumentParser, StoreFalse, StoreTrue};
-use indexrs::{daemon, index, notification, query, rpc, store};
+use indexrs::{daemon, index, query, rpc, store, types};
 use std::fs::OpenOptions;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug)]
 struct Config {
@@ -64,16 +66,12 @@ impl Config {
             true => "localhost:18332",
         }
     }
-
-    pub fn zmq_endpoint(&self) -> &'static str {
-        "tcp://localhost:28332"
-    }
 }
 
 fn run_server(config: &Config) {
     let index = index::Index::new();
-    let waiter = notification::Waiter::new(config.zmq_endpoint());
     let daemon = daemon::Daemon::new(config.daemon_addr());
+    let mut tip = types::Sha256dHash::default();
     {
         let store = store::Store::open(
             config.db_path(),
@@ -83,7 +81,7 @@ fn run_server(config: &Config) {
             },
         );
         if config.enable_indexing {
-            index.update(&store, &daemon);
+            tip = index.update(&store, &daemon);
             store.compact_if_needed();
         }
     }
@@ -92,24 +90,27 @@ fn run_server(config: &Config) {
     let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
+        let poll_delay = Duration::from_secs(1);
         let chan = rpc::Channel::new();
         let tx = chan.sender();
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
         loop {
-            use notification::Topic;
-            match waiter.wait() {
-                Topic::HashBlock(blockhash) => {
-                    if config.enable_indexing {
-                        index.update(&store, &daemon);
-                    }
-                    if let Err(e) = tx.try_send(rpc::Message::Block(blockhash)) {
-                        debug!("failed to update RPC server {}: {:?}", blockhash, e)
-                    }
-                }
-                Topic::HashTx(txhash) => {
-                    debug!("got tx {}", txhash);
-                }
-            } // match
+            let latest = daemon
+                .getbestblockhash()
+                .expect("failed to get latest blockhash");
+            if latest == tip {
+                thread::sleep(poll_delay);
+                continue;
+            }
+            tip = if config.enable_indexing {
+                index.update(&store, &daemon)
+            } else {
+                latest
+            };
+
+            if let Err(e) = tx.try_send(rpc::Message::Block(tip)) {
+                debug!("failed to update RPC server {}: {:?}", tip, e)
+            }
         }
     });
 }

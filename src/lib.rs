@@ -26,10 +26,8 @@ extern crate serde_json;
 
 pub mod daemon;
 pub mod index;
-pub mod notification;
 pub mod query;
 pub mod rpc;
 pub mod store;
+pub mod types;
 pub mod util;
-
-mod types;

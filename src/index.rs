@@ -393,7 +393,7 @@ impl Index {
         missing_headers
     }
 
-    pub fn update(&self, store: &Store, daemon: &Daemon) {
+    pub fn update(&self, store: &Store, daemon: &Daemon) -> Sha256dHash {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
         if indexed_headers.headers().is_empty() {
             if let Some(last_blockhash) = read_last_indexed_blockhash(&store) {
@@ -411,6 +411,12 @@ impl Index {
             // TODO: add timing
             store.persist(&rows);
         }
-        *self.headers.write().unwrap() = Arc::new(current_headers);
+        let tip: Sha256dHash = *(current_headers
+            .headers()
+            .last()
+            .expect("no blocks indexed")
+            .hash());
+        *(self.headers.write().unwrap()) = Arc::new(current_headers);
+        tip
     }
 }
