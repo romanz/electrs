@@ -12,8 +12,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
-use index::FullHash;
 use query::{Query, Status};
+use types::FullHash;
 
 error_chain!{}
 

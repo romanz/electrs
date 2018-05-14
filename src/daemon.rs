@@ -34,6 +34,17 @@ pub struct Daemon {
     cookie_b64: String,
 }
 
+pub struct MempoolEntry {
+    fee: u64,  // in satoshis
+    size: u32, // in bytes
+}
+
+impl MempoolEntry {
+    pub fn fee_per_byte(&self) -> f32 {
+        self.fee as f32 / self.size as f32
+    }
+}
+
 impl Daemon {
     pub fn new(addr: &str) -> Daemon {
         Daemon {
@@ -163,6 +174,35 @@ impl Daemon {
                 .chain_err(|| "non-hex tx")?)
                 .chain_err(|| format!("failed to parse tx {}", txhash))?,
         )
+    }
+
+    pub fn getmempooltxids(&self) -> Result<Vec<Sha256dHash>> {
+        let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
+        let mut result = Vec::new();
+        for value in txids.as_array().chain_err(|| "non-array result")? {
+            result.push(parse_hash(&value).chain_err(|| "invalid txid")?);
+        }
+        Ok(result)
+    }
+
+    pub fn getmempoolentry(&self, txid: &Sha256dHash) -> Result<MempoolEntry> {
+        let entry = self.request("getmempoolentry", json!([txid.be_hex_string()]))?;
+        let fees = entry
+            .get("fees")
+            .chain_err(|| "missing fees section")?
+            .as_object()
+            .chain_err(|| "non-object fees")?;
+        Ok(MempoolEntry {
+            fee: (fees.get("base")
+                .chain_err(|| "missing base fee")?
+                .as_f64()
+                .chain_err(|| "non-float fee")? * 100_000_000f64) as u64,
+            size: entry
+                .get("size")
+                .chain_err(|| "missing size")?
+                .as_u64()
+                .chain_err(|| "non-integer size")? as u32,
+        })
     }
 
     pub fn get_all_headers(&self) -> Result<HeaderMap> {

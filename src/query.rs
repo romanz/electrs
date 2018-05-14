@@ -6,9 +6,9 @@ use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
 use daemon::Daemon;
-use index::{compute_script_hash, hash_prefix, HashPrefix, HeaderEntry, Index, TxInKey, TxInRow,
-            TxKey, TxOutRow, HASH_PREFIX_LEN};
+use index::{compute_script_hash, HeaderEntry, Index, TxInKey, TxInRow, TxKey, TxOutRow};
 use store::Store;
+use types::{hash_prefix, HashPrefix, HASH_PREFIX_LEN};
 
 pub struct Query<'a> {
     store: &'a Store,
