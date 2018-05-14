@@ -1,4 +1,5 @@
 extern crate argparse;
+extern crate bitcoin;
 extern crate crossbeam;
 extern crate indexrs;
 extern crate simplelog;
@@ -7,7 +8,8 @@ extern crate simplelog;
 extern crate log;
 
 use argparse::{ArgumentParser, StoreFalse, StoreTrue};
-use indexrs::{daemon, index, query, rpc, store, types};
+use bitcoin::util::hash::Sha256dHash;
+use indexrs::{daemon, index, query, rpc, store};
 use std::fs::OpenOptions;
 use std::thread;
 use std::time::Duration;
@@ -71,7 +73,7 @@ impl Config {
 fn run_server(config: &Config) {
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.daemon_addr());
-    let mut tip = types::Sha256dHash::default();
+    let mut tip = Sha256dHash::default();
     {
         let store = store::Store::open(
             config.db_path(),
@@ -95,21 +97,16 @@ fn run_server(config: &Config) {
         let tx = chan.sender();
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
         loop {
-            let latest = daemon
+            thread::sleep(poll_delay);
+            let current_tip = daemon
                 .getbestblockhash()
                 .expect("failed to get latest blockhash");
-            if latest == tip {
-                thread::sleep(poll_delay);
+            if tip == current_tip || !config.enable_indexing {
                 continue;
             }
-            tip = if config.enable_indexing {
-                index.update(&store, &daemon)
-            } else {
-                latest
-            };
-
+            tip = index.update(&store, &daemon);
             if let Err(e) = tx.try_send(rpc::Message::Block(tip)) {
-                debug!("failed to update RPC server {}: {:?}", tip, e)
+                debug!("failed to update RPC server {}: {:?}", tip, e);
             }
         }
     });

@@ -3,6 +3,7 @@ use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::deserialize;
+use bitcoin::util::hash::Sha256dHash;
 use hex;
 use serde_json::{from_str, Value};
 use std::env::home_dir;
@@ -11,7 +12,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
 use index::HeaderList;
-use types::{HeaderMap, Sha256dHash};
+use types::HeaderMap;
 
 error_chain!{}
 
