@@ -17,7 +17,7 @@ use time;
 
 use daemon::Daemon;
 use store::{Row, Store};
-use types::{full_hash, hash_prefix, FullHash, HashPrefix, HeaderMap};
+use types::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderMap, HASH_PREFIX_LEN};
 
 // TODO: move to a separate file (to break index<->daemon dependency)
 #[derive(Eq, PartialEq, Clone)]
@@ -103,6 +103,38 @@ pub struct TxInRow {
     pub txid_prefix: HashPrefix,
 }
 
+impl TxInRow {
+    pub fn new(txid: &Sha256dHash, input: &TxIn) -> TxInRow {
+        TxInRow {
+            key: TxInKey {
+                code: b'I',
+                prev_hash_prefix: hash_prefix(&input.prev_hash[..]),
+                prev_index: input.prev_index as u16,
+            },
+            txid_prefix: hash_prefix(&txid[..]),
+        }
+    }
+
+    pub fn filter(txid: &Sha256dHash, output_index: usize) -> Bytes {
+        bincode::serialize(&TxInKey {
+            code: b'I',
+            prev_hash_prefix: hash_prefix(&txid[..]),
+            prev_index: output_index as u16,
+        }).unwrap()
+    }
+
+    pub fn to_row(&self) -> Row {
+        Row {
+            key: bincode::serialize(&self).unwrap(),
+            value: vec![],
+        }
+    }
+
+    pub fn from_row(row: &Row) -> TxInRow {
+        bincode::deserialize(&row.key).expect("failed to parse TxInRow")
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct TxOutKey {
     code: u8,
@@ -115,10 +147,75 @@ pub struct TxOutRow {
     pub txid_prefix: HashPrefix,
 }
 
+impl TxOutRow {
+    pub fn new(txid: &Sha256dHash, output: &TxOut) -> TxOutRow {
+        TxOutRow {
+            key: TxOutKey {
+                code: b'O',
+                script_hash_prefix: hash_prefix(&compute_script_hash(&output.script_pubkey[..])),
+            },
+            txid_prefix: hash_prefix(&txid[..]),
+        }
+    }
+
+    pub fn filter(script_hash: &[u8]) -> Bytes {
+        bincode::serialize(&TxOutKey {
+            code: b'O',
+            script_hash_prefix: hash_prefix(&script_hash[..HASH_PREFIX_LEN]),
+        }).unwrap()
+    }
+
+    pub fn to_row(&self) -> Row {
+        Row {
+            key: bincode::serialize(&self).unwrap(),
+            value: vec![],
+        }
+    }
+
+    pub fn from_row(row: &Row) -> TxOutRow {
+        bincode::deserialize(&row.key).expect("failed to parse TxOutRow")
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct TxKey {
     code: u8,
     pub txid: FullHash,
+}
+
+pub struct TxRow {
+    pub key: TxKey,
+    pub height: u32, // value
+}
+
+impl TxRow {
+    pub fn new(txid: &Sha256dHash, height: u32) -> TxRow {
+        TxRow {
+            key: TxKey {
+                code: b'T',
+                txid: full_hash(&txid[..]),
+            },
+            height: height,
+        }
+    }
+
+    pub fn filter(txid_prefix: &HashPrefix) -> Bytes {
+        [b"T", &txid_prefix[..]].concat()
+    }
+
+    pub fn to_row(&self) -> Row {
+        Row {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: bincode::serialize(&self.height).unwrap(),
+        }
+    }
+
+    pub fn from_row(row: &Row) -> TxRow {
+        TxRow {
+            key: bincode::deserialize(&row.key).expect("failed to parse TxKey"),
+            height: bincode::deserialize(&row.value).expect("failed to parse height"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -133,43 +230,6 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     sha2.input(data);
     sha2.result(&mut hash);
     hash
-}
-
-fn txin_row(input: &TxIn, txid: &Sha256dHash) -> Row {
-    Row {
-        key: bincode::serialize(&TxInRow {
-            key: TxInKey {
-                code: b'I',
-                prev_hash_prefix: hash_prefix(&input.prev_hash[..]),
-                prev_index: input.prev_index as u16,
-            },
-            txid_prefix: hash_prefix(&txid[..]),
-        }).unwrap(),
-        value: vec![],
-    }
-}
-
-fn txout_row(output: &TxOut, txid: &Sha256dHash) -> Row {
-    Row {
-        key: bincode::serialize(&TxOutRow {
-            key: TxOutKey {
-                code: b'O',
-                script_hash_prefix: hash_prefix(&compute_script_hash(&output.script_pubkey[..])),
-            },
-            txid_prefix: hash_prefix(&txid[..]),
-        }).unwrap(),
-        value: vec![],
-    }
-}
-
-fn tx_row(txid: &Sha256dHash, height: usize) -> Row {
-    Row {
-        key: bincode::serialize(&TxKey {
-            code: b'T',
-            txid: full_hash(&txid[..]),
-        }).unwrap(),
-        value: bincode::serialize(&(height as u32)).unwrap(),
-    }
 }
 
 fn block_rows(block: &Block) -> Vec<Row> {
@@ -198,13 +258,13 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
             if input.prev_hash == null_hash {
                 continue;
             }
-            rows.push(txin_row(&input, &txid));
+            rows.push(TxInRow::new(&txid, &input).to_row());
         }
         for output in &tx.output {
-            rows.push(txout_row(&output, &txid))
+            rows.push(TxOutRow::new(&txid, &output).to_row());
         }
         // Persist transaction ID and confirmed height
-        rows.push(tx_row(&txid, height))
+        rows.push(TxRow::new(&txid, height as u32).to_row());
     }
     // Persist block hash and header
     rows.extend(block_rows(&block));

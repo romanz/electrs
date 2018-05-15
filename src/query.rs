@@ -1,4 +1,3 @@
-use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::deserialize;
@@ -6,9 +5,9 @@ use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
 
 use daemon::Daemon;
-use index::{compute_script_hash, HeaderEntry, Index, TxInKey, TxInRow, TxKey, TxOutRow};
+use index::{compute_script_hash, HeaderEntry, Index, TxInRow, TxOutRow, TxRow};
 use store::Store;
-use types::{hash_prefix, HashPrefix, HASH_PREFIX_LEN};
+use types::HashPrefix;
 
 pub struct Query<'a> {
     store: &'a Store,
@@ -58,14 +57,17 @@ impl<'a> Query<'a> {
     fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
-            for row in self.store.scan(&[b"T", &txid_prefix[..]].concat()) {
-                let key: TxKey = bincode::deserialize(&row.key).unwrap();
-                let txid: Sha256dHash = deserialize(&key.txid).unwrap();
+            let tx_rows: Vec<TxRow> = self.store
+                .scan(&TxRow::filter(&txid_prefix))
+                .iter()
+                .map(|row| TxRow::from_row(row))
+                .collect();
+            for tx_row in tx_rows {
+                let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
                 let txn: Transaction = self.get_tx(&txid);
-                let height: u32 = bincode::deserialize(&row.value).unwrap();
                 txns.push(TxnHeight {
                     txn,
-                    height: height as i32,
+                    height: tx_row.height as i32,
                 })
             }
         }
@@ -73,20 +75,11 @@ impl<'a> Query<'a> {
     }
 
     fn find_spending_input(&self, funding: &FundingOutput) -> Option<SpendingInput> {
-        let spend_key = bincode::serialize(&TxInKey {
-            code: b'I',
-            prev_hash_prefix: hash_prefix(&funding.txn_id[..]),
-            prev_index: funding.output_index as u16,
-        }).unwrap();
         let spending_txns: Vec<TxnHeight> = self.load_txns(
             self.store
-                .scan(&spend_key)
+                .scan(&TxInRow::filter(&funding.txn_id, funding.output_index))
                 .iter()
-                .map(|row| {
-                    bincode::deserialize::<TxInRow>(&row.key)
-                        .unwrap()
-                        .txid_prefix
-                })
+                .map(|row| TxInRow::from_row(row).txid_prefix)
                 .collect(),
         );
         let mut spending_inputs = Vec::new();
@@ -120,13 +113,9 @@ impl<'a> Query<'a> {
 
         let funding_txns = self.load_txns(
             self.store
-                .scan(&[b"O", &script_hash[..HASH_PREFIX_LEN]].concat())
+                .scan(&TxOutRow::filter(script_hash))
                 .iter()
-                .map(|row| {
-                    bincode::deserialize::<TxOutRow>(&row.key)
-                        .unwrap()
-                        .txid_prefix
-                })
+                .map(|row| TxOutRow::from_row(row).txid_prefix)
                 .collect(),
         );
         for t in funding_txns {
