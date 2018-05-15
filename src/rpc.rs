@@ -25,15 +25,15 @@ fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     Ok(script_hash)
 }
 
-fn history_from_status(status: &Status) -> Vec<(u32, Sha256dHash)> {
-    let mut txns_map = HashMap::<Sha256dHash, u32>::new();
+fn history_from_status(status: &Status) -> Vec<(i32, Sha256dHash)> {
+    let mut txns_map = HashMap::<Sha256dHash, i32>::new();
     for f in &status.funding {
         txns_map.insert(f.txn_id, f.height);
     }
     for s in &status.spending {
         txns_map.insert(s.txn_id, s.height);
     }
-    let mut txns: Vec<(u32, Sha256dHash)> =
+    let mut txns: Vec<(i32, Sha256dHash)> =
         txns_map.into_iter().map(|item| (item.1, item.0)).collect();
     txns.sort();
     txns

@@ -18,14 +18,14 @@ pub struct Query<'a> {
 
 pub struct FundingOutput {
     pub txn_id: Sha256dHash,
-    pub height: u32,
+    pub height: i32,
     pub output_index: usize,
     pub value: u64,
 }
 
 pub struct SpendingInput {
     pub txn_id: Sha256dHash,
-    pub height: u32,
+    pub height: i32,
     pub input_index: usize,
 }
 
@@ -37,7 +37,7 @@ pub struct Status {
 
 struct TxnHeight {
     txn: Transaction,
-    height: u32,
+    height: i32,
 }
 
 fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
@@ -63,7 +63,10 @@ impl<'a> Query<'a> {
                 let txid: Sha256dHash = deserialize(&key.txid).unwrap();
                 let txn: Transaction = self.get_tx(&txid);
                 let height: u32 = bincode::deserialize(&row.value).unwrap();
-                txns.push(TxnHeight { txn, height })
+                txns.push(TxnHeight {
+                    txn,
+                    height: height as i32,
+                })
             }
         }
         txns
