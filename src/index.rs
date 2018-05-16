@@ -19,6 +19,8 @@ use daemon::Daemon;
 use store::{Row, Store};
 use types::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderMap, HASH_PREFIX_LEN};
 
+type ProgressBar = pbr::ProgressBar<Stderr>;
+
 // TODO: move to a separate file (to break index<->daemon dependency)
 #[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
@@ -296,10 +298,20 @@ struct Indexer<'a> {
     blocks_size: usize,
     rows_size: usize,
     num_of_rows: usize,
+    bar: Option<ProgressBar>,
 }
 
 impl<'a> Indexer<'a> {
-    fn new(headers: Vec<&'a HeaderEntry>, daemon: &'a Daemon) -> Indexer<'a> {
+    fn new(
+        headers: Vec<&'a HeaderEntry>,
+        daemon: &'a Daemon,
+        use_progress_bar: bool,
+    ) -> Indexer<'a> {
+        let bar = if use_progress_bar {
+            Some(ProgressBar::on(stderr(), headers.len() as u64))
+        } else {
+            None
+        };
         Indexer {
             headers: headers,
             header_index: 0,
@@ -309,6 +321,7 @@ impl<'a> Indexer<'a> {
             blocks_size: 0,
             rows_size: 0,
             num_of_rows: 0,
+            bar: bar,
         }
     }
 
@@ -322,6 +335,7 @@ impl<'a> Iterator for Indexer<'a> {
 
     fn next(&mut self) -> Option<Vec<Row>> {
         if self.header_index >= self.num_of_headers() {
+            self.bar.as_mut().map(|b| b.finish());
             return None;
         }
         let &entry = &self.headers[self.header_index];
@@ -348,6 +362,7 @@ impl<'a> Iterator for Indexer<'a> {
                 self.num_of_rows,
             );
         }
+        self.bar.as_mut().map(|b| b.inc());
         Some(rows)
     }
 }
@@ -356,17 +371,14 @@ struct Batching<'a> {
     indexer: Indexer<'a>,
     batch: Vec<Row>,
     start: Instant,
-    bar: pbr::ProgressBar<Stderr>,
 }
 
 impl<'a> Batching<'a> {
     fn new(indexer: Indexer<'a>) -> Batching<'a> {
-        let bar = pbr::ProgressBar::on(stderr(), indexer.num_of_headers() as u64);
         Batching {
             indexer: indexer,
             batch: vec![],
             start: Instant::now(),
-            bar: bar,
         }
     }
 }
@@ -379,7 +391,6 @@ impl<'a> Iterator for Batching<'a> {
         const MAX_BATCH_LEN: usize = 10_000_000;
 
         while let Some(mut rows) = self.indexer.next() {
-            self.bar.inc();
             self.batch.append(&mut rows);
             if self.batch.len() > MAX_BATCH_LEN || self.start.elapsed() > MAX_ELAPSED {
                 break;
@@ -387,7 +398,6 @@ impl<'a> Iterator for Batching<'a> {
         }
         self.start = Instant::now();
         if self.batch.is_empty() {
-            self.bar.finish();
             None
         } else {
             Some(self.batch.split_off(0))
@@ -440,7 +450,8 @@ impl Index {
 
     pub fn update(&self, store: &Store, daemon: &Daemon) -> Sha256dHash {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
-        if indexed_headers.headers().is_empty() {
+        let first_invocation = indexed_headers.headers().is_empty();
+        if first_invocation {
             if let Some(last_blockhash) = read_last_indexed_blockhash(&store) {
                 indexed_headers = Arc::new(HeaderList::build(
                     read_indexed_headers(&store),
@@ -452,6 +463,7 @@ impl Index {
         for rows in Batching::new(Indexer::new(
             self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
             &daemon,
+            /*use_progress_bar=*/ first_invocation,
         )) {
             // TODO: add timing
             store.persist(&rows);
