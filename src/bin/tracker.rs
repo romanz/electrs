@@ -25,6 +25,7 @@ fn main() {
             "update took {:.3} ms",
             (dt.as_secs() as f64 + 1e-9f64 * dt.subsec_nanos() as f64) * 1e3
         );
+        info!("histogram: {:?}", tracker.fee_histogram());
         thread::sleep(Duration::from_secs(1));
     }
 }

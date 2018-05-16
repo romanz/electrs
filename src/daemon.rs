@@ -44,6 +44,14 @@ impl MempoolEntry {
     pub fn fee_per_vbyte(&self) -> f32 {
         self.fee as f32 / self.vsize as f32
     }
+
+    pub fn fee(&self) -> u64 {
+        self.fee
+    }
+
+    pub fn vsize(&self) -> u32 {
+        self.vsize
+    }
 }
 
 impl Daemon {
