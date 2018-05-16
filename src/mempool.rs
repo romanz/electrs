@@ -44,6 +44,7 @@ impl<'a> Tracker<'a> {
                 cumulative_vsize = 0;
             }
         }
+        histogram.push((0.0, cumulative_vsize));
         histogram
     }
 
