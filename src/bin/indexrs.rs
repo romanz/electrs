@@ -63,6 +63,7 @@ impl Config {
 }
 
 fn run_server(config: &Config) {
+    // TODO: handle SIGINT gracefully (https://www.reddit.com/r/rust/comments/6swidb/how_to_properly_catch_sigint_in_a_threaded_program/)
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.daemon_addr());
 
@@ -90,6 +91,7 @@ fn run_server(config: &Config) {
             let current_tip = daemon
                 .getbestblockhash()
                 .expect("failed to get latest blockhash");
+
             if tip == current_tip {
                 continue;
             }
