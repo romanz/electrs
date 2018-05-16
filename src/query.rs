@@ -104,6 +104,22 @@ impl<'a> Query<'a> {
         }
     }
 
+    fn find_funding_outputs(&self, t: &TxnHeight, script_hash: &[u8]) -> Vec<FundingOutput> {
+        let mut result = Vec::new();
+        let txn_id = t.txn.txid();
+        for (index, output) in enumerate(&t.txn.output) {
+            if compute_script_hash(&output.script_pubkey[..]) == script_hash {
+                result.push(FundingOutput {
+                    txn_id: txn_id,
+                    height: t.height,
+                    output_index: index,
+                    value: output.value,
+                })
+            }
+        }
+        result
+    }
+
     pub fn status(&self, script_hash: &[u8]) -> Status {
         let mut status = Status {
             balance: 0,
@@ -119,17 +135,9 @@ impl<'a> Query<'a> {
                 .collect(),
         );
         for t in funding_txns {
-            let txn_id = t.txn.txid();
-            for (index, output) in enumerate(&t.txn.output) {
-                if compute_script_hash(&output.script_pubkey[..]) == script_hash {
-                    status.funding.push(FundingOutput {
-                        txn_id: txn_id,
-                        height: t.height,
-                        output_index: index,
-                        value: output.value,
-                    })
-                }
-            }
+            status
+                .funding
+                .extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &status.funding {
             if let Some(spent) = self.find_spending_input(&funding_output) {
