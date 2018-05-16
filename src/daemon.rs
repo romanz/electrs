@@ -36,13 +36,13 @@ pub struct Daemon {
 }
 
 pub struct MempoolEntry {
-    fee: u64,  // in satoshis
-    size: u32, // in bytes
+    fee: u64,   // in satoshis
+    vsize: u32, // in virtual bytes (= weight/4)
 }
 
 impl MempoolEntry {
-    pub fn fee_per_byte(&self) -> f32 {
-        self.fee as f32 / self.size as f32
+    pub fn fee_per_vbyte(&self) -> f32 {
+        self.fee as f32 / self.vsize as f32
     }
 }
 
@@ -198,7 +198,7 @@ impl Daemon {
                 .chain_err(|| "missing base fee")?
                 .as_f64()
                 .chain_err(|| "non-float fee")? * 100_000_000f64) as u64,
-            size: entry
+            vsize: entry
                 .get("size")
                 .chain_err(|| "missing size")?
                 .as_u64()

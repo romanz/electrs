@@ -49,7 +49,7 @@ impl<'a> Tracker<'a> {
                         continue;
                     }
                 };
-                debug!("new mempool tx: {}, {:.3}", txid, entry.fee_per_byte());
+                debug!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
                 map_entry.insert(Stats { tx, entry });
             }
         }
