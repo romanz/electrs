@@ -11,6 +11,8 @@ use mempool::Tracker;
 use store::Store;
 use types::HashPrefix;
 
+error_chain!{}
+
 pub struct FundingOutput {
     pub txn_id: Sha256dHash,
     pub height: i32,
@@ -207,11 +209,11 @@ impl<'a> Query<'a> {
         Some((merkle, pos))
     }
 
-    pub fn update_mempool(&self) {
+    pub fn update_mempool(&self) -> Result<()> {
         self.tracker
             .write()
             .unwrap()
             .update(self.daemon)
-            .expect("failed to update mempool")
+            .chain_err(|| "failed to update mempool")
     }
 }

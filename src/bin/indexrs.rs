@@ -89,12 +89,8 @@ fn run_server(config: &Config) {
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
         loop {
             thread::sleep(poll_delay);
-            query.update_mempool();
-            let current_tip = daemon
-                .getbestblockhash()
-                .expect("failed to get latest blockhash");
-
-            if tip == current_tip {
+            query.update_mempool().unwrap();
+            if tip == daemon.getbestblockhash().unwrap() {
                 continue;
             }
             tip = index.update(&store, &daemon);
