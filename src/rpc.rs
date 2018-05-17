@@ -99,7 +99,7 @@ impl<'a> Handler<'a> {
     }
 
     fn server_donation_address(&self) -> Result<Value> {
-        Ok(json!("No, thanks :)\n"))
+        Ok(Value::Null)
     }
 
     fn server_peers_subscribe(&self) -> Result<Value> {
