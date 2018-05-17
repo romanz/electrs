@@ -45,12 +45,13 @@ impl HeaderEntry {
 
 pub struct HeaderList {
     headers: Vec<HeaderEntry>,
+    tip: Sha256dHash,
 }
 
 impl HeaderList {
     pub fn build(mut header_map: HeaderMap, mut blockhash: Sha256dHash) -> HeaderList {
         let null_hash = Sha256dHash::default();
-
+        let tip = blockhash;
         struct HashedHeader {
             blockhash: Sha256dHash,
             header: BlockHeader,
@@ -72,11 +73,15 @@ impl HeaderList {
                     header: hashed_header.header,
                 })
                 .collect(),
+            tip: tip,
         }
     }
 
     pub fn empty() -> HeaderList {
-        HeaderList { headers: vec![] }
+        HeaderList {
+            headers: vec![],
+            tip: Sha256dHash::default(),
+        }
     }
 
     pub fn equals(&self, other: &HeaderList) -> bool {
@@ -85,6 +90,10 @@ impl HeaderList {
 
     pub fn headers(&self) -> &[HeaderEntry] {
         &self.headers
+    }
+
+    pub fn tip(&self) -> Sha256dHash {
+        self.tip
     }
 
     pub fn as_map(&self) -> HeaderMap {
@@ -468,11 +477,7 @@ impl Index {
             // TODO: add timing
             store.persist(&rows);
         }
-        let tip: Sha256dHash = *(current_headers
-            .headers()
-            .last()
-            .expect("no blocks indexed")
-            .hash());
+        let tip = current_headers.tip();
         *(self.headers.write().unwrap()) = Arc::new(current_headers);
         tip
     }
