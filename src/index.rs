@@ -9,6 +9,7 @@ use crypto::sha2::Sha256;
 use log::Level;
 use pbr;
 use std::collections::VecDeque;
+use std::fmt;
 use std::io::{stderr, Stderr};
 use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
@@ -96,8 +97,30 @@ impl HeaderList {
         self.tip
     }
 
+    pub fn height(&self) -> usize {
+        self.headers.len() - 1
+    }
+
     pub fn as_map(&self) -> HeaderMap {
         HeaderMap::from_iter(self.headers.iter().map(|entry| (entry.hash, entry.header)))
+    }
+}
+
+impl fmt::Debug for HeaderList {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let last_block_time = self.headers.last().map_or("N/A".to_string(), |h| {
+            time::at_utc(time::Timespec::new(h.header.time as i64, 0))
+                .rfc3339()
+                .to_string()
+        });
+
+        write!(
+            f,
+            "height {}, best {} @ {}",
+            self.height(),
+            self.tip(),
+            last_block_time,
+        )
     }
 }
 
@@ -436,7 +459,6 @@ impl Index {
         indexed_headers: &HeaderMap,
         current_headers: &'a HeaderList,
     ) -> Vec<&'a HeaderEntry> {
-        let best_block_header: &BlockHeader = current_headers.headers().last().unwrap().header();
         let missing_headers: Vec<&'a HeaderEntry> = current_headers
             .headers()
             .iter()
@@ -448,10 +470,8 @@ impl Index {
             } else {
                 Level::Info
             },
-            "height {}, best {} @ {} ({} left to index)",
-            current_headers.headers().len() - 1,
-            best_block_header.bitcoin_hash(),
-            time::at_utc(time::Timespec::new(best_block_header.time as i64, 0)).rfc3339(),
+            "{:?} ({} left to index)",
+            current_headers,
             missing_headers.len(),
         );
         missing_headers
