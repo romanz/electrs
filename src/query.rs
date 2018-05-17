@@ -3,17 +3,13 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::enumerate;
+use std::sync::RwLock;
 
 use daemon::Daemon;
 use index::{compute_script_hash, HeaderEntry, Index, TxInRow, TxOutRow, TxRow};
+use mempool::Tracker;
 use store::Store;
 use types::HashPrefix;
-
-pub struct Query<'a> {
-    store: &'a Store,
-    daemon: &'a Daemon,
-    index: &'a Index,
-}
 
 pub struct FundingOutput {
     pub txn_id: Sha256dHash,
@@ -44,6 +40,13 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
+pub struct Query<'a> {
+    store: &'a Store,
+    daemon: &'a Daemon,
+    index: &'a Index,
+    tracker: RwLock<Tracker>,
+}
+
 // TODO: return errors instead of panics
 impl<'a> Query<'a> {
     pub fn new(store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
@@ -51,6 +54,7 @@ impl<'a> Query<'a> {
             store,
             daemon,
             index,
+            tracker: RwLock::new(Tracker::new()),
         }
     }
 
@@ -201,5 +205,13 @@ impl<'a> Query<'a> {
                 .collect()
         }
         Some((merkle, pos))
+    }
+
+    pub fn update_mempool(&self) {
+        self.tracker
+            .write()
+            .unwrap()
+            .update(self.daemon)
+            .expect("failed to update mempool")
     }
 }
