@@ -73,7 +73,7 @@ impl Tracker {
                     continue;
                 }
             };
-            debug!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
+            trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
             to_add.push((txid, Stats::new(tx, entry)));
         }
         self.stats.extend(to_add);
