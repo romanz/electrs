@@ -1,8 +1,10 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::util::hash::Sha256dHash;
 use daemon::{Daemon, MempoolEntry};
+
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::time::{Duration, Instant};
 
 error_chain!{}
 
@@ -21,6 +23,16 @@ impl Stats {
 
 pub struct Tracker {
     stats: HashMap<Sha256dHash, Stats>,
+}
+
+trait InSeconds {
+    fn in_seconds(&self) -> f64;
+}
+
+impl InSeconds for Duration {
+    fn in_seconds(&self) -> f64 {
+        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9f64
+    }
 }
 
 impl Tracker {
@@ -56,31 +68,36 @@ impl Tracker {
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?);
         let old_txids = HashSet::from_iter(self.stats.keys().cloned());
-
-        let mut to_add = Vec::new();
+        let t = Instant::now();
         for &txid in new_txids.difference(&old_txids) {
-            let tx = match daemon.gettransaction(&txid) {
-                Ok(tx) => tx,
-                Err(err) => {
-                    warn!("missing tx {}: {}", txid, err);
-                    continue;
-                }
-            };
             let entry = match daemon.getmempoolentry(&txid) {
                 Ok(entry) => entry,
                 Err(err) => {
+                    // e.g. new block or RBF
                     warn!("no mempool entry {}: {}", txid, err);
                     continue;
                 }
             };
+            let tx = match daemon.gettransaction(&txid) {
+                Ok(tx) => tx,
+                Err(err) => {
+                    // e.g. new block or RBF
+                    warn!("missing tx {}: {}", txid, err);
+                    continue;
+                }
+            };
             trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
-            to_add.push((txid, Stats::new(tx, entry)));
+            self.stats.insert(txid, Stats::new(tx, entry));
         }
-        self.stats.extend(to_add);
         for txid in old_txids.difference(&new_txids) {
             self.stats.remove(txid);
         }
-        assert_eq!(new_txids, HashSet::from_iter(self.stats.keys().cloned()));
+        let dt = t.elapsed();
+        debug!(
+            "mempool update took {:.1} ms ({} txns)",
+            dt.in_seconds() * 1e3,
+            self.stats.len()
+        );
         Ok(())
     }
 }

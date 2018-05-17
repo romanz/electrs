@@ -107,7 +107,7 @@ impl<'a> Handler<'a> {
     }
 
     fn mempool_get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!([])) // TODO: consult with actual mempool
+        Ok(json!(self.query.get_fee_histogram()))
     }
 
     fn blockchain_block_get_chunk(&self, params: &[Value]) -> Result<Value> {

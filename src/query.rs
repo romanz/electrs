@@ -216,4 +216,8 @@ impl<'a> Query<'a> {
             .update(self.daemon)
             .chain_err(|| "failed to update mempool")
     }
+
+    pub fn get_fee_histogram(&self) -> Vec<(f32, u32)> {
+        self.tracker.read().unwrap().fee_histogram()
+    }
 }
