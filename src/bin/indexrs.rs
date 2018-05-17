@@ -8,6 +8,7 @@ extern crate simplelog;
 extern crate log;
 
 use argparse::{ArgumentParser, StoreTrue};
+use indexrs::daemon::Network;
 use indexrs::{daemon, index, query, rpc, store};
 use std::fs::OpenOptions;
 use std::thread;
@@ -40,24 +41,24 @@ impl Config {
 
     pub fn rpc_addr(&self) -> &'static str {
         // for serving Electrum clients
-        match self.testnet {
-            false => "localhost:50001",
-            true => "localhost:60001",
+        match self.network_type() {
+            Network::Mainnet => "localhost:50001",
+            Network::Testnet => "localhost:60001",
         }
     }
 
     pub fn db_path(&self) -> &'static str {
-        match self.testnet {
-            false => "./db/mainnet",
-            true => "./db/testnet",
+        match self.network_type() {
+            Network::Mainnet => "./db/mainnet",
+            Network::Testnet => "./db/testnet",
         }
     }
 
-    pub fn daemon_addr(&self) -> &'static str {
+    pub fn network_type(&self) -> Network {
         // bitcoind JSONRPC endpoint
         match self.testnet {
-            false => "localhost:8332",
-            true => "localhost:18332",
+            false => Network::Mainnet,
+            true => Network::Testnet,
         }
     }
 }
@@ -65,7 +66,7 @@ impl Config {
 fn run_server(config: &Config) {
     // TODO: handle SIGINT gracefully (https://www.reddit.com/r/rust/comments/6swidb/how_to_properly_catch_sigint_in_a_threaded_program/)
     let index = index::Index::new();
-    let daemon = daemon::Daemon::new(config.daemon_addr());
+    let daemon = daemon::Daemon::new(config.network_type());
 
     let store = store::Store::open(
         config.db_path(),

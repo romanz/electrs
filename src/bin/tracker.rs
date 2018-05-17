@@ -15,7 +15,7 @@ fn main() {
         TermLogger::new(LevelFilter::Debug, cfg.clone()).unwrap(),
     ]).unwrap();
 
-    let daemon = daemon::Daemon::new("localhost:8332");
+    let daemon = daemon::Daemon::new(daemon::Network::Mainnet);
     let mut tracker = mempool::Tracker::new();
     loop {
         tracker.update(&daemon).unwrap();

@@ -16,9 +16,17 @@ use types::HeaderMap;
 
 error_chain!{}
 
-fn read_cookie() -> Vec<u8> {
+pub enum Network {
+    Mainnet,
+    Testnet,
+}
+
+fn read_cookie(network: Network) -> Vec<u8> {
     let mut path = home_dir().unwrap();
     path.push(".bitcoin");
+    if let Network::Testnet = network {
+        path.push("testnet3");
+    }
     path.push(".cookie");
     fs::read(&path).expect("failed to read cookie")
 }
@@ -64,10 +72,13 @@ impl MempoolEntry {
 }
 
 impl Daemon {
-    pub fn new(addr: &str) -> Daemon {
+    pub fn new(network: Network) -> Daemon {
         Daemon {
-            addr: addr.to_string(),
-            cookie_b64: base64::encode(&read_cookie()),
+            addr: match network {
+                Network::Mainnet => "localhost:8332",
+                Network::Testnet => "localhost:18332",
+            }.to_string(),
+            cookie_b64: base64::encode(&read_cookie(network)),
         }
     }
 
