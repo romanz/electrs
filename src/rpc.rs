@@ -133,7 +133,7 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_estimatefee(&self, _params: &[Value]) -> Result<Value> {
-        Ok(json!(1e-5)) // TODO: consult with actual mempool
+        Ok(json!(-1)) // see mempool_get_fee_histogram() instead.
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
