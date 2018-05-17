@@ -137,7 +137,7 @@ impl<'a> Handler<'a> {
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
-        Ok(json!(1e-5)) // TODO: consult with actual node
+        Ok(json!(0.0)) // allow sending transactions with any fee.
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
