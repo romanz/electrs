@@ -16,10 +16,10 @@ fn main() {
     ]).unwrap();
 
     let daemon = daemon::Daemon::new("localhost:8332");
-    let mut tracker = mempool::Tracker::new(&daemon);
+    let mut tracker = mempool::Tracker::new();
     loop {
         let t = Instant::now();
-        tracker.update_from_daemon().unwrap();
+        tracker.update(&daemon).unwrap();
         let dt = t.elapsed();
         info!(
             "update took {:.3} ms",

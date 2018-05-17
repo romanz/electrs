@@ -38,11 +38,20 @@ pub struct Daemon {
 pub struct MempoolEntry {
     fee: u64,   // in satoshis
     vsize: u32, // in virtual bytes (= weight/4)
+    fee_per_vbyte: f32,
 }
 
 impl MempoolEntry {
+    fn new(fee: u64, vsize: u32) -> MempoolEntry {
+        MempoolEntry {
+            fee,
+            vsize,
+            fee_per_vbyte: fee as f32 / vsize as f32,
+        }
+    }
+
     pub fn fee_per_vbyte(&self) -> f32 {
-        self.fee as f32 / self.vsize as f32
+        self.fee_per_vbyte
     }
 
     pub fn fee(&self) -> u64 {
@@ -201,17 +210,16 @@ impl Daemon {
             .chain_err(|| "missing fees section")?
             .as_object()
             .chain_err(|| "non-object fees")?;
-        Ok(MempoolEntry {
-            fee: (fees.get("base")
-                .chain_err(|| "missing base fee")?
-                .as_f64()
-                .chain_err(|| "non-float fee")? * 100_000_000f64) as u64,
-            vsize: entry
-                .get("size")
-                .chain_err(|| "missing size")?
-                .as_u64()
-                .chain_err(|| "non-integer size")? as u32,
-        })
+        let fee = (fees.get("base")
+            .chain_err(|| "missing base fee")?
+            .as_f64()
+            .chain_err(|| "non-float fee")? * 100_000_000f64) as u64;
+        let vsize = entry
+            .get("size")
+            .chain_err(|| "missing size")?
+            .as_u64()
+            .chain_err(|| "non-integer size")? as u32;
+        Ok(MempoolEntry::new(fee, vsize))
     }
 
     pub fn get_all_headers(&self) -> Result<HeaderMap> {

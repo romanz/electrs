@@ -1,7 +1,6 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::util::hash::Sha256dHash;
 use daemon::{Daemon, MempoolEntry};
-use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 
@@ -14,16 +13,20 @@ pub struct Stats {
     entry: MempoolEntry,
 }
 
-pub struct Tracker<'a> {
-    txids: HashMap<Sha256dHash, Stats>,
-    daemon: &'a Daemon,
+impl Stats {
+    pub fn new(tx: Transaction, entry: MempoolEntry) -> Stats {
+        Stats { tx, entry }
+    }
 }
 
-impl<'a> Tracker<'a> {
-    pub fn new(daemon: &Daemon) -> Tracker {
+pub struct Tracker {
+    stats: HashMap<Sha256dHash, Stats>,
+}
+
+impl Tracker {
+    pub fn new() -> Tracker {
         Tracker {
-            txids: HashMap::new(),
-            daemon: daemon,
+            stats: HashMap::new(),
         }
     }
 
@@ -31,7 +34,7 @@ impl<'a> Tracker<'a> {
     /// cumulative virtual size of mempool transaction with fee in the interval [fee_{n-1}, fee_n].
     /// Note: fee_0 is implied to be infinity.
     pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
-        let mut entries: Vec<&MempoolEntry> = self.txids.values().map(|stat| &stat.entry).collect();
+        let mut entries: Vec<&MempoolEntry> = self.stats.values().map(|stat| &stat.entry).collect();
         entries.sort_unstable_by(|e1, e2| {
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
@@ -48,31 +51,36 @@ impl<'a> Tracker<'a> {
         histogram
     }
 
-    pub fn update_from_daemon(&mut self) -> Result<()> {
-        let new_txids = HashSet::<Sha256dHash>::from_iter(self.daemon
+    pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
+        let new_txids = HashSet::<Sha256dHash>::from_iter(daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?);
-        self.txids.retain(|txid, _| new_txids.contains(txid)); // remove old TXNs
-        for txid in new_txids {
-            if let Entry::Vacant(map_entry) = self.txids.entry(txid) {
-                let tx = match self.daemon.gettransaction(&txid) {
-                    Ok(tx) => tx,
-                    Err(err) => {
-                        warn!("missing tx {}: {}", txid, err);
-                        continue;
-                    }
-                };
-                let entry = match self.daemon.getmempoolentry(&txid) {
-                    Ok(entry) => entry,
-                    Err(err) => {
-                        warn!("no mempool entry {}: {}", txid, err);
-                        continue;
-                    }
-                };
-                debug!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
-                map_entry.insert(Stats { tx, entry });
-            }
+        let old_txids = HashSet::from_iter(self.stats.keys().cloned());
+
+        let mut to_add = Vec::new();
+        for &txid in new_txids.difference(&old_txids) {
+            let tx = match daemon.gettransaction(&txid) {
+                Ok(tx) => tx,
+                Err(err) => {
+                    warn!("missing tx {}: {}", txid, err);
+                    continue;
+                }
+            };
+            let entry = match daemon.getmempoolentry(&txid) {
+                Ok(entry) => entry,
+                Err(err) => {
+                    warn!("no mempool entry {}: {}", txid, err);
+                    continue;
+                }
+            };
+            debug!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
+            to_add.push((txid, Stats::new(tx, entry)));
         }
+        self.stats.extend(to_add);
+        for txid in old_txids.difference(&new_txids) {
+            self.stats.remove(txid);
+        }
+        assert_eq!(new_txids, HashSet::from_iter(self.stats.keys().cloned()));
         Ok(())
     }
 }
