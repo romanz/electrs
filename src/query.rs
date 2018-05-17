@@ -87,6 +87,10 @@ impl<'a> Query<'a> {
         }
     }
 
+    pub fn daemon(&self) -> &Daemon {
+        self.daemon
+    }
+
     fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {

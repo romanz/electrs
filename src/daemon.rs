@@ -2,7 +2,7 @@ use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::BitcoinHash;
-use bitcoin::network::serialize::deserialize;
+use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use hex;
 use serde_json::{from_str, Value};
@@ -231,6 +231,15 @@ impl Daemon {
             .as_u64()
             .chain_err(|| "non-integer size")? as u32;
         Ok(MempoolEntry::new(fee, vsize))
+    }
+
+    pub fn broadcast(&self, tx: &Transaction) -> Result<Sha256dHash> {
+        let tx = hex::encode(serialize(tx).unwrap());
+        let txid = self.request("sendrawtransaction", json!([tx]))?;
+        Ok(
+            Sha256dHash::from_hex(txid.as_str().chain_err(|| "non-string txid")?)
+                .chain_err(|| "failed to parse txid")?,
+        )
     }
 
     pub fn get_all_headers(&self) -> Result<HeaderMap> {
