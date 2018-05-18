@@ -31,7 +31,7 @@ trait InSeconds {
 
 impl InSeconds for Duration {
     fn in_seconds(&self) -> f64 {
-        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9f64
+        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9
     }
 }
 
