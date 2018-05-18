@@ -226,6 +226,7 @@ impl<'a> Connection<'a> {
             "blockchain.transaction.get_merkle" => self.blockchain_transaction_get_merkle(&params),
             &_ => bail!("unknown method {} {:?}", method, params),
         }?;
+        // TODO: return application errors should be sent to the client
         Ok(json!({"jsonrpc": "2.0", "id": id, "result": result}))
     }
 
