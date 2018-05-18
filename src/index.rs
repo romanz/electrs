@@ -376,9 +376,9 @@ impl Index {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
         let no_indexed_headers = indexed_headers.headers().is_empty();
         if no_indexed_headers {
-            if let Some(last_blockhash) = read_last_indexed_blockhash(&store) {
+            if let Some(last_blockhash) = read_last_indexed_blockhash(store) {
                 indexed_headers = Arc::new(HeaderList::build(
-                    read_indexed_headers(&store),
+                    read_indexed_headers(store),
                     last_blockhash,
                 ));
             }
@@ -390,7 +390,7 @@ impl Index {
             /*use_progress_bar=*/ no_indexed_headers,
         )) {
             // TODO: add timing
-            store.persist(&rows);
+            store.persist(rows);
         }
         let tip = current_headers.tip();
         *(self.headers.write().unwrap()) = Arc::new(current_headers);

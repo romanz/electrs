@@ -4,13 +4,25 @@ use rocksdb;
 
 use util::Bytes;
 
-pub struct Store {
-    db: rocksdb::DB,
-}
-
 pub struct Row {
     pub key: Bytes,
     pub value: Bytes,
+}
+
+impl Row {
+    fn into_pair(self) -> (Bytes, Bytes) {
+        (self.key, self.value)
+    }
+}
+
+pub trait Store: Sync {
+    fn get(&self, key: &[u8]) -> Option<Bytes>;
+    fn scan(&self, prefix: &[u8]) -> Vec<Row>;
+    fn persist(&self, rows: Vec<Row>);
+}
+
+pub struct DBStore {
+    db: rocksdb::DB,
 }
 
 #[derive(Debug)]
@@ -18,9 +30,9 @@ pub struct StoreOptions {
     pub auto_compact: bool,
 }
 
-impl Store {
+impl DBStore {
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &str, opts: StoreOptions) -> Store {
+    pub fn open(path: &str, opts: StoreOptions) -> DBStore {
         info!("opening {} with {:?}", path, &opts);
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
@@ -33,19 +45,9 @@ impl Store {
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(256 << 10);
-        Store {
+        DBStore {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
         }
-    }
-
-    pub fn persist(&self, rows: &Vec<Row>) {
-        let mut batch = rocksdb::WriteBatch::default();
-        for row in rows {
-            batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
-        }
-        let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(true);
-        self.db.write_opt(batch, &opts).unwrap();
     }
 
     pub fn read_header(&self, blockhash: &[u8]) -> Option<BlockHeader> {
@@ -62,20 +64,21 @@ impl Store {
         self.db.compact_range(None, None); // should take a while
         self.db.put(key, b"").unwrap();
     }
+}
 
-    pub fn get(&self, key: &[u8]) -> Option<rocksdb::DBVector> {
-        self.db.get(key).unwrap()
+impl Store for DBStore {
+    fn get(&self, key: &[u8]) -> Option<Bytes> {
+        self.db.get(key).unwrap().map(|v| v.to_vec())
     }
 
-    // Use generators ???
-    pub fn scan(&self, prefix: &[u8]) -> Vec<Row> {
+    // TODO: use generators
+    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
         let mut rows = Vec::new();
         let mut iter = self.db.raw_iterator();
-        let prefix_len = prefix.len();
         iter.seek(prefix);
         while iter.valid() {
             let key = &iter.key().unwrap();
-            if &key[..prefix_len] != prefix {
+            if !key.starts_with(prefix) {
                 break;
             }
             rows.push(Row {
@@ -85,5 +88,15 @@ impl Store {
             iter.next();
         }
         rows
+    }
+
+    fn persist(&self, rows: Vec<Row>) {
+        let mut batch = rocksdb::WriteBatch::default();
+        for row in rows {
+            batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
+        }
+        let mut opts = rocksdb::WriteOptions::new();
+        opts.set_sync(true);
+        self.db.write_opt(batch, &opts).unwrap();
     }
 }

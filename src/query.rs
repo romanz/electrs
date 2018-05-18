@@ -78,31 +78,32 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
-impl Store {
-    fn txrows_by_prefix(&self, txid_prefix: &HashPrefix) -> Vec<TxRow> {
-        self.scan(&TxRow::filter(&txid_prefix))
-            .iter()
-            .map(|row| TxRow::from_row(row))
-            .collect()
-    }
+fn txrows_by_prefix(store: &Store, txid_prefix: &HashPrefix) -> Vec<TxRow> {
+    store
+        .scan(&TxRow::filter(&txid_prefix))
+        .iter()
+        .map(|row| TxRow::from_row(row))
+        .collect()
+}
 
-    fn txids_by_script_hash(&self, script_hash: &[u8]) -> Vec<HashPrefix> {
-        self.scan(&TxOutRow::filter(script_hash))
-            .iter()
-            .map(|row| TxOutRow::from_row(row).txid_prefix)
-            .collect()
-    }
+fn txids_by_script_hash(store: &Store, script_hash: &[u8]) -> Vec<HashPrefix> {
+    store
+        .scan(&TxOutRow::filter(script_hash))
+        .iter()
+        .map(|row| TxOutRow::from_row(row).txid_prefix)
+        .collect()
+}
 
-    fn txids_by_funding_output(
-        &self,
-        txn_id: &Sha256dHash,
-        output_index: usize,
-    ) -> Vec<HashPrefix> {
-        self.scan(&TxInRow::filter(&txn_id, output_index))
-            .iter()
-            .map(|row| TxInRow::from_row(row).txid_prefix)
-            .collect()
-    }
+fn txids_by_funding_output(
+    store: &Store,
+    txn_id: &Sha256dHash,
+    output_index: usize,
+) -> Vec<HashPrefix> {
+    store
+        .scan(&TxInRow::filter(&txn_id, output_index))
+        .iter()
+        .map(|row| TxInRow::from_row(row).txid_prefix)
+        .collect()
 }
 
 pub struct Query<'a> {
@@ -130,7 +131,7 @@ impl<'a> Query<'a> {
     fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
-            for tx_row in self.store.txrows_by_prefix(&txid_prefix) {
+            for tx_row in txrows_by_prefix(self.store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
                 let txn: Transaction = self.get_tx(&txid);
                 txns.push(TxnHeight {
@@ -143,10 +144,11 @@ impl<'a> Query<'a> {
     }
 
     fn find_spending_input(&self, funding: &FundingOutput) -> Option<SpendingInput> {
-        let spending_txns: Vec<TxnHeight> = self.load_txns(
-            self.store
-                .txids_by_funding_output(&funding.txn_id, funding.output_index),
-        );
+        let spending_txns: Vec<TxnHeight> = self.load_txns(txids_by_funding_output(
+            self.store,
+            &funding.txn_id,
+            funding.output_index,
+        ));
         let mut spending_inputs = Vec::new();
         for t in &spending_txns {
             for (index, input) in enumerate(&t.txn.input) {
@@ -192,7 +194,7 @@ impl<'a> Query<'a> {
             spending: vec![],
         };
 
-        for t in self.load_txns(self.store.txids_by_script_hash(script_hash)) {
+        for t in self.load_txns(txids_by_script_hash(self.store, script_hash)) {
             status
                 .funding
                 .extend(self.find_funding_outputs(&t, script_hash));

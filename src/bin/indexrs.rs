@@ -68,7 +68,7 @@ fn run_server(config: &Config) {
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.network_type());
 
-    let store = store::Store::open(
+    let store = store::DBStore::open(
         config.db_path(),
         store::StoreOptions {
             // compact manually after the first run has finished successfully
@@ -80,7 +80,7 @@ fn run_server(config: &Config) {
     drop(store); // to be re-opened soon
 
     info!("{:?} indexed successfully", index.headers_list());
-    let store = store::Store::open(config.db_path(), store::StoreOptions { auto_compact: true });
+    let store = store::DBStore::open(config.db_path(), store::StoreOptions { auto_compact: true });
     let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
