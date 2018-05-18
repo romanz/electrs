@@ -374,8 +374,8 @@ impl Index {
 
     pub fn update(&self, store: &Store, daemon: &Daemon) -> Sha256dHash {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
-        let first_invocation = indexed_headers.headers().is_empty();
-        if first_invocation {
+        let no_indexed_headers = indexed_headers.headers().is_empty();
+        if no_indexed_headers {
             if let Some(last_blockhash) = read_last_indexed_blockhash(&store) {
                 indexed_headers = Arc::new(HeaderList::build(
                     read_indexed_headers(&store),
@@ -387,7 +387,7 @@ impl Index {
         for rows in Batching::new(Indexer::new(
             self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
             &daemon,
-            /*use_progress_bar=*/ first_invocation,
+            /*use_progress_bar=*/ no_indexed_headers,
         )) {
             // TODO: add timing
             store.persist(&rows);
