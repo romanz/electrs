@@ -2,14 +2,17 @@ use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use itertools::enumerate;
+use std::collections::HashMap;
 use std::sync::RwLock;
 
 use daemon::Daemon;
 use index::{compute_script_hash, Index, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
 use store::Store;
-use util::{HashPrefix, HeaderEntry};
+use util::{FullHash, HashPrefix, HeaderEntry};
 
 error_chain!{}
 
@@ -27,9 +30,42 @@ pub struct SpendingInput {
 }
 
 pub struct Status {
+    // TODO: make private
     pub balance: u64,
     pub funding: Vec<FundingOutput>,
     pub spending: Vec<SpendingInput>,
+}
+
+impl Status {
+    pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
+        let mut txns_map = HashMap::<Sha256dHash, i32>::new();
+        for f in &self.funding {
+            txns_map.insert(f.txn_id, f.height);
+        }
+        for s in &self.spending {
+            txns_map.insert(s.txn_id, s.height);
+        }
+        let mut txns: Vec<(i32, Sha256dHash)> =
+            txns_map.into_iter().map(|item| (item.1, item.0)).collect();
+        txns.sort();
+        txns
+    }
+
+    pub fn hash(&self) -> Option<FullHash> {
+        let txns = self.history();
+        if txns.is_empty() {
+            None
+        } else {
+            let mut hash = FullHash::default();
+            let mut sha2 = Sha256::new();
+            for (height, txn_id) in txns {
+                let part = format!("{}:{}:", txn_id.be_hex_string(), height);
+                sha2.input(part.as_bytes());
+            }
+            sha2.result(&mut hash);
+            Some(hash)
+        }
+    }
 }
 
 struct TxnHeight {

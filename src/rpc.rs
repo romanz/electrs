@@ -3,8 +3,6 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crossbeam;
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
 use hex;
 use itertools;
 use serde_json::{from_str, Number, Value};
@@ -13,8 +11,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
-use query::{Query, Status};
-use util::FullHash;
+use query::Query;
 
 error_chain!{}
 
@@ -24,36 +21,6 @@ fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
     let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
     Ok(script_hash)
-}
-
-fn history_from_status(status: &Status) -> Vec<(i32, Sha256dHash)> {
-    let mut txns_map = HashMap::<Sha256dHash, i32>::new();
-    for f in &status.funding {
-        txns_map.insert(f.txn_id, f.height);
-    }
-    for s in &status.spending {
-        txns_map.insert(s.txn_id, s.height);
-    }
-    let mut txns: Vec<(i32, Sha256dHash)> =
-        txns_map.into_iter().map(|item| (item.1, item.0)).collect();
-    txns.sort();
-    txns
-}
-
-fn hash_from_status(status: &Status) -> Value {
-    let txns = history_from_status(status);
-    if txns.is_empty() {
-        return Value::Null;
-    }
-
-    let mut hash = FullHash::default();
-    let mut sha2 = Sha256::new();
-    for (height, txn_id) in txns {
-        let part = format!("{}:{}:", txn_id.be_hex_string(), height);
-        sha2.input(part.as_bytes());
-    }
-    sha2.result(&mut hash);
-    Value::String(hex::encode(&hash))
 }
 
 fn jsonify_header(header: &BlockHeader, height: usize) -> Value {
@@ -148,7 +115,7 @@ impl<'a> Connection<'a> {
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
-        let result = hash_from_status(&status);
+        let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
     }
@@ -163,7 +130,8 @@ impl<'a> Connection<'a> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
         Ok(json!(Value::Array(
-            history_from_status(&status)
+            status
+                .history()
                 .into_iter()
                 .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
                 .collect()
@@ -244,7 +212,7 @@ impl<'a> Connection<'a> {
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let status = self.query.status(&script_hash[..]);
-            let new_status_hash = hash_from_status(&status);
+            let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
             if new_status_hash == *status_hash {
                 continue;
             }
