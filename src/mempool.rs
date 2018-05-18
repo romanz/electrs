@@ -77,10 +77,10 @@ impl Tracker {
                 }
             };
             trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
-            self.stats.insert(*txid, Stats::new(tx, entry));
+            self.add(txid, Stats::new(tx, entry));
         }
         for txid in old_txids.difference(&new_txids) {
-            self.stats.remove(txid);
+            self.remove(txid);
         }
         let dt = t.elapsed();
         debug!(
@@ -89,6 +89,14 @@ impl Tracker {
             self.stats.len()
         );
         Ok(())
+    }
+
+    fn add(&mut self, txid: &Sha256dHash, stats: Stats) {
+        self.stats.insert(*txid, stats);
+    }
+
+    fn remove(&mut self, txid: &Sha256dHash) {
+        self.stats.remove(txid);
     }
 }
 
