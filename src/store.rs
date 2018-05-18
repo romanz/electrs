@@ -1,6 +1,9 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
 use rocksdb;
+use std::collections::BTreeMap;
+use std::ops::Bound;
+use std::sync::RwLock;
 
 use util::Bytes;
 
@@ -98,5 +101,37 @@ impl Store for DBStore {
         let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(true);
         self.db.write_opt(batch, &opts).unwrap();
+    }
+}
+
+pub struct MemStore {
+    map: RwLock<BTreeMap<Bytes, Bytes>>,
+}
+
+impl Store for MemStore {
+    fn get(&self, key: &[u8]) -> Option<Bytes> {
+        self.map.read().unwrap().get(key).map(|v| v.to_vec())
+    }
+    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
+        let map = self.map.read().unwrap();
+        let range = map.range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
+        let mut rows = Vec::new();
+        for (key, value) in range {
+            if !key.starts_with(prefix) {
+                break;
+            }
+            rows.push(Row {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
+        }
+        rows
+    }
+    fn persist(&self, rows: Vec<Row>) {
+        let mut map = self.map.write().unwrap();
+        for row in rows {
+            let (key, value) = row.into_pair();
+            map.insert(key, value);
+        }
     }
 }
