@@ -63,7 +63,9 @@ impl HeaderList {
             hashed_headers.push_front(HashedHeader { blockhash, header });
             blockhash = header.prev_blockhash;
         }
-        assert!(header_map.is_empty());
+        if !header_map.is_empty() {
+            warn!("orphaned blocks: {:?}", header_map);
+        }
         HeaderList {
             headers: hashed_headers
                 .into_iter()
