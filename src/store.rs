@@ -2,7 +2,7 @@ use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::deserialize;
 use rocksdb;
 
-use types::Bytes;
+use util::Bytes;
 
 pub struct Store {
     db: rocksdb::DB,

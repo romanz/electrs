@@ -6,10 +6,10 @@ use itertools::enumerate;
 use std::sync::RwLock;
 
 use daemon::Daemon;
-use index::{compute_script_hash, HeaderEntry, Index, TxInRow, TxOutRow, TxRow};
+use index::{compute_script_hash, Index, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
 use store::Store;
-use types::HashPrefix;
+use util::{HashPrefix, HeaderEntry};
 
 error_chain!{}
 

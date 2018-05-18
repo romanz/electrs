@@ -11,8 +11,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
-use index::HeaderList;
-use types::HeaderMap;
+use util::{HeaderList, HeaderMap};
 
 error_chain!{}
 

@@ -14,7 +14,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 use query::{Query, Status};
-use types::FullHash;
+use util::FullHash;
 
 error_chain!{}
 
