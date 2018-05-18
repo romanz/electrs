@@ -118,7 +118,7 @@ impl fmt::Debug for HeaderList {
 
         write!(
             f,
-            "height {}, best {} @ {}",
+            "best={} height={} @ {}",
             self.height(),
             self.tip(),
             last_block_time,
