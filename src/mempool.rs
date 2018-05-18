@@ -25,16 +25,6 @@ pub struct Tracker {
     stats: HashMap<Sha256dHash, Stats>,
 }
 
-trait InSeconds {
-    fn in_seconds(&self) -> f64;
-}
-
-impl InSeconds for Duration {
-    fn in_seconds(&self) -> f64 {
-        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9
-    }
-}
-
 impl Tracker {
     pub fn new() -> Tracker {
         Tracker {
@@ -69,8 +59,8 @@ impl Tracker {
             .chain_err(|| "failed to update mempool from daemon")?);
         let old_txids = HashSet::from_iter(self.stats.keys().cloned());
         let t = Instant::now();
-        for &txid in new_txids.difference(&old_txids) {
-            let entry = match daemon.getmempoolentry(&txid) {
+        for txid in new_txids.difference(&old_txids) {
+            let entry = match daemon.getmempoolentry(txid) {
                 Ok(entry) => entry,
                 Err(err) => {
                     // e.g. new block or RBF
@@ -78,7 +68,7 @@ impl Tracker {
                     continue;
                 }
             };
-            let tx = match daemon.gettransaction(&txid) {
+            let tx = match daemon.gettransaction(txid) {
                 Ok(tx) => tx,
                 Err(err) => {
                     // e.g. new block or RBF
@@ -87,7 +77,7 @@ impl Tracker {
                 }
             };
             trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
-            self.stats.insert(txid, Stats::new(tx, entry));
+            self.stats.insert(*txid, Stats::new(tx, entry));
         }
         for txid in old_txids.difference(&new_txids) {
             self.stats.remove(txid);
@@ -99,5 +89,15 @@ impl Tracker {
             self.stats.len()
         );
         Ok(())
+    }
+}
+
+trait InSeconds {
+    fn in_seconds(&self) -> f64;
+}
+
+impl InSeconds for Duration {
+    fn in_seconds(&self) -> f64 {
+        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9
     }
 }
