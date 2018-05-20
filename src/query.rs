@@ -16,27 +16,31 @@ use util::{FullHash, HashPrefix, HeaderEntry};
 
 error_chain!{}
 
-pub struct FundingOutput {
-    pub txn_id: Sha256dHash,
-    pub height: i32,
-    pub output_index: usize,
-    pub value: u64,
+struct FundingOutput {
+    txn_id: Sha256dHash,
+    height: i32,
+    output_index: usize,
+    value: u64,
 }
 
-pub struct SpendingInput {
-    pub txn_id: Sha256dHash,
-    pub height: i32,
-    pub input_index: usize,
+struct SpendingInput {
+    txn_id: Sha256dHash,
+    height: i32,
+    input_index: usize,
 }
 
 pub struct Status {
     // TODO: make private
-    pub balance: u64,
-    pub funding: Vec<FundingOutput>,
-    pub spending: Vec<SpendingInput>,
+    balance: u64,
+    funding: Vec<FundingOutput>,
+    spending: Vec<SpendingInput>,
 }
 
 impl Status {
+    pub fn balance(&self) -> u64 {
+        self.balance
+    }
+
     pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
         let mut txns_map = HashMap::<Sha256dHash, i32>::new();
         for f in &self.funding {
