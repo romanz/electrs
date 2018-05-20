@@ -1,0 +1,6 @@
+Handle bitcoind connection failures - instead of crashing
+Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
+Don't require -txindex by using `getrawtransaction "txid" verbose "blockhash"` RPC
+Measure first-time query latency
+Support "blockchain.estimatefee" RPC
+Use futures for electrum RPC serving and cancellation
