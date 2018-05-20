@@ -108,6 +108,19 @@ pub struct MemStore {
     map: RwLock<BTreeMap<Bytes, Bytes>>,
 }
 
+impl MemStore {
+    pub fn new() -> MemStore {
+        MemStore {
+            map: RwLock::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn remove(&self, key: &Bytes) -> Option<Bytes> {
+        let mut map = self.map.write().unwrap();
+        map.remove(key)
+    }
+}
+
 impl Store for MemStore {
     fn get(&self, key: &[u8]) -> Option<Bytes> {
         self.map.read().unwrap().get(key).map(|v| v.to_vec())
