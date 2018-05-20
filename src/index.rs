@@ -1,6 +1,6 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
-use bitcoin::blockdata::transaction::{TxIn, TxOut};
+use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
@@ -161,42 +161,41 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     hash
 }
 
-fn block_rows(block: &Block) -> Vec<Row> {
-    let blockhash = block.bitcoin_hash();
-    vec![
-        Row {
-            key: bincode::serialize(&BlockKey {
-                code: b'B',
-                hash: full_hash(&blockhash[..]),
-            }).unwrap(),
-            value: serialize(&block.header).unwrap(),
-        },
-        Row {
-            key: b"L".to_vec(),
-            value: serialize(&blockhash).unwrap(),
-        },
-    ]
+pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) {
+    let null_hash = Sha256dHash::default();
+    let txid: Sha256dHash = txn.txid();
+    for input in &txn.input {
+        if input.prev_hash == null_hash {
+            continue;
+        }
+        rows.push(TxInRow::new(&txid, &input).to_row());
+    }
+    for output in &txn.output {
+        rows.push(TxOutRow::new(&txid, &output).to_row());
+    }
+    // Persist transaction ID and confirmed height
+    rows.push(TxRow::new(&txid, height as u32).to_row());
 }
 
 fn index_block(block: &Block, height: usize) -> Vec<Row> {
-    let null_hash = Sha256dHash::default();
     let mut rows = Vec::new();
-    for tx in &block.txdata {
-        let txid: Sha256dHash = tx.txid();
-        for input in &tx.input {
-            if input.prev_hash == null_hash {
-                continue;
-            }
-            rows.push(TxInRow::new(&txid, &input).to_row());
-        }
-        for output in &tx.output {
-            rows.push(TxOutRow::new(&txid, &output).to_row());
-        }
-        // Persist transaction ID and confirmed height
-        rows.push(TxRow::new(&txid, height as u32).to_row());
+    for txn in &block.txdata {
+        index_transaction(&txn, height, &mut rows);
     }
+    let blockhash = block.bitcoin_hash();
     // Persist block hash and header
-    rows.extend(block_rows(&block));
+    rows.push(Row {
+        key: bincode::serialize(&BlockKey {
+            code: b'B',
+            hash: full_hash(&blockhash[..]),
+        }).unwrap(),
+        value: serialize(&block.header).unwrap(),
+    });
+    // Store last indexed block (i.e. all previous blocks were indexed)
+    rows.push(Row {
+        key: b"L".to_vec(),
+        value: serialize(&blockhash).unwrap(),
+    });
     rows
 }
 
