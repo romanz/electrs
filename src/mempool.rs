@@ -1,14 +1,60 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::util::hash::Sha256dHash;
-use daemon::{Daemon, MempoolEntry};
-
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::ops::Bound;
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+use daemon::{Daemon, MempoolEntry};
+use index::index_transaction;
+use store::{Row, Store};
+use util::Bytes;
 
 error_chain!{}
 
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
+
+struct MempoolStore {
+    map: RwLock<BTreeMap<Bytes, Bytes>>,
+}
+
+impl MempoolStore {
+    pub fn new() -> MempoolStore {
+        MempoolStore {
+            map: RwLock::new(BTreeMap::new()),
+        }
+    }
+}
+
+impl Store for MempoolStore {
+    fn get(&self, key: &[u8]) -> Option<Bytes> {
+        self.map.read().unwrap().get(key).map(|v| v.to_vec())
+    }
+    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
+        let map = self.map.read().unwrap();
+        let range = map.range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
+        let mut rows = Vec::new();
+        for (key, value) in range {
+            if !key.starts_with(prefix) {
+                break;
+            }
+            rows.push(Row {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
+        }
+        rows
+    }
+    fn persist(&self, rows: Vec<Row>) {
+        let mut map = self.map.write().unwrap();
+        for row in rows {
+            let (key, value) = row.into_pair();
+            map.insert(key, value);
+        }
+    }
+}
 
 pub struct Stats {
     tx: Transaction,
@@ -77,7 +123,7 @@ impl Tracker {
                 }
             };
             trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte(),);
-            self.add(txid, Stats::new(tx, entry));
+            self.add(txid, tx, entry);
         }
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
@@ -90,12 +136,22 @@ impl Tracker {
         Ok(())
     }
 
-    fn add(&mut self, txid: &Sha256dHash, stats: Stats) {
-        self.stats.insert(*txid, stats);
+    fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {
+        self.stats.insert(*txid, Stats { tx, entry });
     }
 
     fn remove(&mut self, txid: &Sha256dHash) {
         self.stats.remove(txid);
+    }
+
+    pub fn build_index(&self) -> Box<Store> {
+        let mut rows = Vec::new();
+        for stats in self.stats.values() {
+            index_transaction(&stats.tx, 0, &mut rows)
+        }
+        let store = MempoolStore::new();
+        store.persist(rows);
+        Box::new(store)
     }
 }
 
