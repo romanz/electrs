@@ -146,9 +146,9 @@ impl<'a> Query<'a> {
         txns
     }
 
-    fn find_spending_input(&self, funding: &FundingOutput) -> Option<SpendingInput> {
+    fn find_spending_input(&self, store: &Store, funding: &FundingOutput) -> Option<SpendingInput> {
         let spending_txns: Vec<TxnHeight> = self.load_txns(txids_by_funding_output(
-            self.store,
+            store,
             &funding.txn_id,
             funding.output_index,
         ));
@@ -190,25 +190,56 @@ impl<'a> Query<'a> {
         result
     }
 
-    pub fn status(&self, script_hash: &[u8]) -> Status {
+    fn confirmed_status(&self, script_hash: &[u8]) -> Status {
         let mut status = Status {
             balance: 0,
             funding: vec![],
             spending: vec![],
         };
-
         for t in self.load_txns(txids_by_script_hash(self.store, script_hash)) {
             status
                 .funding
                 .extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &status.funding {
-            if let Some(spent) = self.find_spending_input(&funding_output) {
+            if let Some(spent) = self.find_spending_input(self.store, &funding_output) {
                 status.spending.push(spent);
             } else {
                 status.balance += funding_output.value;
             }
         }
+        status
+    }
+
+    fn mempool_status(&self, script_hash: &[u8], confirmed_status: &Status) -> Status {
+        let mut status = Status {
+            balance: 0,
+            funding: vec![],
+            spending: vec![],
+        };
+        let mempool_store = self.tracker.read().unwrap().build_index();
+        for t in self.load_txns(txids_by_script_hash(&*mempool_store, script_hash)) {
+            status
+                .funding
+                .extend(self.find_funding_outputs(&t, script_hash));
+        }
+        // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
+        for funding_output in status.funding.iter().chain(confirmed_status.funding.iter()) {
+            if let Some(spent) = self.find_spending_input(&*mempool_store, &funding_output) {
+                status.spending.push(spent);
+            } else {
+                status.balance += funding_output.value;
+            }
+        }
+        status
+    }
+
+    pub fn status(&self, script_hash: &[u8]) -> Status {
+        let mut status = self.confirmed_status(script_hash);
+        let mempool_status = self.mempool_status(script_hash, &status);
+        status.balance += mempool_status.balance;
+        status.funding.extend(mempool_status.funding);
+        status.spending.extend(mempool_status.spending);
         status
     }
 
