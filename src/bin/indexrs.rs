@@ -85,9 +85,7 @@ fn run_server(config: &Config) {
 
     crossbeam::scope(|scope| {
         let poll_delay = Duration::from_secs(1);
-        let chan = rpc::Channel::new();
-        let tx = chan.sender();
-        scope.spawn(|| rpc::serve(config.rpc_addr(), &query, chan));
+        scope.spawn(|| rpc::serve(config.rpc_addr(), &query));
         loop {
             thread::sleep(poll_delay);
             query.update_mempool().unwrap();
@@ -95,9 +93,6 @@ fn run_server(config: &Config) {
                 continue;
             }
             tip = index.update(&store, &daemon);
-            if let Err(e) = tx.try_send(rpc::Message::Block(tip)) {
-                debug!("failed to update RPC server {}: {:?}", tip, e);
-            }
         }
     });
 }

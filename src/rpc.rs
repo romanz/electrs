@@ -8,7 +8,8 @@ use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
+use std::time::Duration;
 
 use query::Query;
 
@@ -231,9 +232,14 @@ impl<'a> Connection<'a> {
     }
 
     fn handle_replies(&mut self, chan: &Channel) -> Result<()> {
+        let poll_duration = Duration::from_secs(5);
         let rx = chan.receiver();
         loop {
-            let msg = rx.recv().chain_err(|| "channel closed")?;
+            let msg = match rx.recv_timeout(poll_duration) {
+                Ok(msg) => msg,
+                Err(RecvTimeoutError::Timeout) => Message::PeriodicUpdate,
+                Err(RecvTimeoutError::Disconnected) => bail!("channel closed"),
+            };
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
@@ -248,10 +254,9 @@ impl<'a> Connection<'a> {
                     };
                     self.send_value(reply)?
                 }
-                Message::Block(blockhash) => {
-                    debug!("blockhash found: {}", blockhash);
+                Message::PeriodicUpdate => {
                     for update in self.update_subscriptions()
-                        .chain_err(|| "failed to get updates")?
+                        .chain_err(|| "failed to update subscriptions")?
                     {
                         self.send_value(update)?
                     }
@@ -280,20 +285,21 @@ impl<'a> Connection<'a> {
         }
     }
 
-    pub fn run(mut self, chan: &Channel) {
+    pub fn run(mut self) {
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         // TODO: figure out graceful shutting down and error logging.
         crossbeam::scope(|scope| {
+            let chan = Channel::new();
             let tx = chan.sender();
             scope.spawn(|| Connection::handle_requests(reader, tx));
-            self.handle_replies(chan).unwrap();
+            self.handle_replies(&chan).unwrap();
         });
     }
 }
 
 pub enum Message {
     Request(String),
-    Block(Sha256dHash),
+    PeriodicUpdate,
     Done,
 }
 
@@ -317,13 +323,13 @@ impl Channel {
     }
 }
 
-pub fn serve(addr: &str, query: &Query, chan: Channel) {
+pub fn serve(addr: &str, query: &Query) {
     let listener = TcpListener::bind(addr).unwrap();
     info!("RPC server running on {}", addr);
     loop {
         let (stream, addr) = listener.accept().unwrap();
         info!("[{}] connected peer", addr);
-        Connection::new(query, stream, addr).run(&chan);
+        Connection::new(query, stream, addr).run();
         info!("[{}] disconnected peer", addr);
     }
 }
