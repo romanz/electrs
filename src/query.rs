@@ -4,7 +4,6 @@ use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use itertools::enumerate;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
@@ -155,7 +154,7 @@ impl<'a> Query<'a> {
         ));
         let mut spending_inputs = Vec::new();
         for t in &spending_txns {
-            for (index, input) in enumerate(&t.txn.input) {
+            for (index, input) in t.txn.input.iter().enumerate() {
                 if input.prev_hash == funding.txn_id
                     && input.prev_index == funding.output_index as u32
                 {
@@ -178,7 +177,7 @@ impl<'a> Query<'a> {
     fn find_funding_outputs(&self, t: &TxnHeight, script_hash: &[u8]) -> Vec<FundingOutput> {
         let mut result = Vec::new();
         let txn_id = t.txn.txid();
-        for (index, output) in enumerate(&t.txn.output) {
+        for (index, output) in t.txn.output.iter().enumerate() {
             if compute_script_hash(&output.script_pubkey[..]) == script_hash {
                 result.push(FundingOutput {
                     txn_id: txn_id,

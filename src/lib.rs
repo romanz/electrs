@@ -6,7 +6,6 @@ extern crate bitcoin;
 extern crate crossbeam;
 extern crate crypto;
 extern crate hex;
-extern crate itertools;
 extern crate pbr;
 extern crate rocksdb;
 extern crate serde;

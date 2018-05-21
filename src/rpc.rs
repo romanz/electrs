@@ -4,7 +4,6 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crossbeam;
 use hex;
-use itertools;
 use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -87,14 +86,12 @@ impl<'a> Connection<'a> {
         let index = params.get(0).chain_err(|| "missing index")?;
         let index = index.as_u64().chain_err(|| "non-number index")? as usize;
         let heights: Vec<usize> = (0..CHUNK_SIZE).map(|h| index * CHUNK_SIZE + h).collect();
-        let headers = self.query.get_headers(&heights);
-        let result = itertools::join(
-            headers
-                .into_iter()
-                .map(|x| hex::encode(&serialize(&x).unwrap())),
-            "",
-        );
-        Ok(json!(result))
+        let headers: Vec<String> = self.query
+            .get_headers(&heights)
+            .into_iter()
+            .map(|x| hex::encode(&serialize(&x).unwrap()))
+            .collect();
+        Ok(json!(headers.join("")))
     }
 
     fn blockchain_block_get_header(&self, params: &[Value]) -> Result<Value> {
