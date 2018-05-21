@@ -29,7 +29,6 @@ struct SpendingInput {
 }
 
 pub struct Status {
-    // TODO: make private
     balance: u64,
     funding: Vec<FundingOutput>,
     spending: Vec<SpendingInput>,
@@ -231,6 +230,8 @@ impl<'a> Query<'a> {
                 status.balance += funding_output.value;
             }
         }
+        // TODO: update height to -1 for txns with any unconfirmed input
+        // (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
         status
     }
 
