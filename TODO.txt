@@ -1,3 +1,4 @@
+Snapshot DB after successful indexing - and run queries on this snapshot
 Handle bitcoind connection failures - instead of crashing
 Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
 Don't require -txindex by using `getrawtransaction "txid" verbose "blockhash"` RPC

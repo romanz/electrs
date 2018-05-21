@@ -25,18 +25,22 @@ struct FundingOutput {
 struct SpendingInput {
     txn_id: Sha256dHash,
     height: u32,
-    input_index: usize,
+    value: u64,
 }
 
 pub struct Status {
-    balance: u64,
     funding: Vec<FundingOutput>,
     spending: Vec<SpendingInput>,
 }
 
 impl Status {
     pub fn balance(&self) -> u64 {
-        self.balance
+        let total = self.funding
+            .iter()
+            .fold(0, |acc, output| acc + output.value);
+        self.spending
+            .iter()
+            .fold(total, |acc, input| acc - input.value)
     }
 
     pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
@@ -109,19 +113,19 @@ fn txids_by_funding_output(
 }
 
 pub struct Query<'a> {
-    store: &'a Store,
     daemon: &'a Daemon,
     index: &'a Index,
+    index_store: &'a Store, // TODO: should be a part of index
     tracker: RwLock<Tracker>,
 }
 
 // TODO: return errors instead of panics
 impl<'a> Query<'a> {
-    pub fn new(store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
+    pub fn new(index_store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
         Query {
-            store,
             daemon,
             index,
+            index_store,
             tracker: RwLock::new(Tracker::new()),
         }
     }
@@ -130,10 +134,10 @@ impl<'a> Query<'a> {
         self.daemon
     }
 
-    fn load_txns(&self, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
+    fn load_txns(&self, store: &Store, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
-            for tx_row in txrows_by_prefix(self.store, &txid_prefix) {
+            for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
                 let txn: Transaction = self.get_tx(&txid);
                 txns.push(TxnHeight {
@@ -146,21 +150,20 @@ impl<'a> Query<'a> {
     }
 
     fn find_spending_input(&self, store: &Store, funding: &FundingOutput) -> Option<SpendingInput> {
-        let spending_txns: Vec<TxnHeight> = self.load_txns(txids_by_funding_output(
+        let spending_txns: Vec<TxnHeight> = self.load_txns(
             store,
-            &funding.txn_id,
-            funding.output_index,
-        ));
+            txids_by_funding_output(store, &funding.txn_id, funding.output_index),
+        );
         let mut spending_inputs = Vec::new();
         for t in &spending_txns {
-            for (index, input) in t.txn.input.iter().enumerate() {
+            for input in t.txn.input.iter() {
                 if input.prev_hash == funding.txn_id
                     && input.prev_index == funding.output_index as u32
                 {
                     spending_inputs.push(SpendingInput {
                         txn_id: t.txn.txid(),
                         height: t.height,
-                        input_index: index,
+                        value: funding.value,
                     })
                 }
             }
@@ -190,55 +193,46 @@ impl<'a> Query<'a> {
     }
 
     fn confirmed_status(&self, script_hash: &[u8]) -> Status {
-        let mut status = Status {
-            balance: 0,
-            funding: vec![],
-            spending: vec![],
-        };
-        for t in self.load_txns(txids_by_script_hash(self.store, script_hash)) {
-            status
-                .funding
-                .extend(self.find_funding_outputs(&t, script_hash));
+        let mut funding = vec![];
+        let mut spending = vec![];
+        for t in self.load_txns(
+            self.index_store,
+            txids_by_script_hash(self.index_store, script_hash),
+        ) {
+            funding.extend(self.find_funding_outputs(&t, script_hash));
         }
-        for funding_output in &status.funding {
-            if let Some(spent) = self.find_spending_input(self.store, &funding_output) {
-                status.spending.push(spent);
-            } else {
-                status.balance += funding_output.value;
+        for funding_output in &funding {
+            if let Some(spent) = self.find_spending_input(self.index_store, &funding_output) {
+                spending.push(spent);
             }
         }
-        status
+        Status { funding, spending }
     }
 
     fn mempool_status(&self, script_hash: &[u8], confirmed_status: &Status) -> Status {
-        let mut status = Status {
-            balance: 0,
-            funding: vec![],
-            spending: vec![],
-        };
+        let mut funding = vec![];
+        let mut spending = vec![];
         let mempool_store = self.tracker.read().unwrap().build_index();
-        for t in self.load_txns(txids_by_script_hash(&*mempool_store, script_hash)) {
-            status
-                .funding
-                .extend(self.find_funding_outputs(&t, script_hash));
+        for t in self.load_txns(
+            &*mempool_store,
+            txids_by_script_hash(&*mempool_store, script_hash),
+        ) {
+            funding.extend(self.find_funding_outputs(&t, script_hash));
         }
-        // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
-        for funding_output in status.funding.iter().chain(confirmed_status.funding.iter()) {
+        // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
+        for funding_output in funding.iter().chain(confirmed_status.funding.iter()) {
             if let Some(spent) = self.find_spending_input(&*mempool_store, &funding_output) {
-                status.spending.push(spent);
-            } else {
-                status.balance += funding_output.value;
+                spending.push(spent);
             }
         }
         // TODO: update height to -1 for txns with any unconfirmed input
         // (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
-        status
+        Status { funding, spending }
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Status {
         let mut status = self.confirmed_status(script_hash);
         let mempool_status = self.mempool_status(script_hash, &status);
-        status.balance += mempool_status.balance;
         status.funding.extend(mempool_status.funding);
         status.spending.extend(mempool_status.spending);
         status
