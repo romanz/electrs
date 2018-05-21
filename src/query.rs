@@ -17,14 +17,14 @@ error_chain!{}
 
 struct FundingOutput {
     txn_id: Sha256dHash,
-    height: i32,
+    height: u32,
     output_index: usize,
     value: u64,
 }
 
 struct SpendingInput {
     txn_id: Sha256dHash,
-    height: i32,
+    height: u32,
     input_index: usize,
 }
 
@@ -43,10 +43,10 @@ impl Status {
     pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
         let mut txns_map = HashMap::<Sha256dHash, i32>::new();
         for f in &self.funding {
-            txns_map.insert(f.txn_id, f.height);
+            txns_map.insert(f.txn_id, f.height as i32);
         }
         for s in &self.spending {
-            txns_map.insert(s.txn_id, s.height);
+            txns_map.insert(s.txn_id, s.height as i32);
         }
         let mut txns: Vec<(i32, Sha256dHash)> =
             txns_map.into_iter().map(|item| (item.1, item.0)).collect();
@@ -73,7 +73,7 @@ impl Status {
 
 struct TxnHeight {
     txn: Transaction,
-    height: i32,
+    height: u32,
 }
 
 fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
@@ -139,7 +139,7 @@ impl<'a> Query<'a> {
                 let txn: Transaction = self.get_tx(&txid);
                 txns.push(TxnHeight {
                     txn,
-                    height: tx_row.height as i32,
+                    height: tx_row.height,
                 })
             }
         }
