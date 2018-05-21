@@ -12,6 +12,7 @@ use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::time::Duration;
 
 use query::Query;
+use util::HeaderEntry;
 
 error_chain!{}
 
@@ -37,7 +38,7 @@ fn jsonify_header(header: &BlockHeader, height: usize) -> Value {
 
 struct Connection<'a> {
     query: &'a Query<'a>,
-    headers_subscribe: bool,
+    last_header_entry: Option<HeaderEntry>,
     status_hashes: HashMap<Sha256dHash, Value>, // ScriptHash -> StatusHash
     stream: TcpStream,
     addr: SocketAddr,
@@ -47,7 +48,7 @@ impl<'a> Connection<'a> {
     pub fn new(query: &'a Query, stream: TcpStream, addr: SocketAddr) -> Connection<'a> {
         Connection {
             query: query,
-            headers_subscribe: false,
+            last_header_entry: None, // disable header subscription for now
             status_hashes: HashMap::new(),
             stream,
             addr,
@@ -58,7 +59,7 @@ impl<'a> Connection<'a> {
         let entry = self.query
             .get_best_header()
             .chain_err(|| "no headers found")?;
-        self.headers_subscribe = true;
+        self.last_header_entry = Some(entry.clone());
         Ok(jsonify_header(entry.header(), entry.height()))
     }
 
@@ -198,15 +199,18 @@ impl<'a> Connection<'a> {
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
         let mut result = vec![];
-        if self.headers_subscribe {
+        if let Some(ref mut last_entry) = self.last_header_entry {
             let entry = self.query
                 .get_best_header()
                 .chain_err(|| "no headers found")?;
-            let header = jsonify_header(entry.header(), entry.height());
-            result.push(json!({
-                "jsonrpc": "2.0",
-                "method": "blockchain.headers.subscribe",
-                "params": [header]}));
+            if *last_entry != entry {
+                *last_entry = entry;
+                let header = jsonify_header(last_entry.header(), last_entry.height());
+                result.push(json!({
+                    "jsonrpc": "2.0",
+                    "method": "blockchain.headers.subscribe",
+                    "params": [header]}));
+            }
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let status = self.query.status(&script_hash[..]);
