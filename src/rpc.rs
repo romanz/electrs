@@ -125,7 +125,9 @@ impl<'a> Connection<'a> {
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..]);
-        Ok(json!({ "confirmed": status.balance() })) // TODO: "unconfirmed"
+        Ok(
+            json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
+        )
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {

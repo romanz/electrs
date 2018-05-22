@@ -29,26 +29,38 @@ struct SpendingInput {
 }
 
 pub struct Status {
-    funding: Vec<FundingOutput>,
-    spending: Vec<SpendingInput>,
+    confirmed: (Vec<FundingOutput>, Vec<SpendingInput>),
+    mempool: (Vec<FundingOutput>, Vec<SpendingInput>),
+}
+
+fn calc_balance((funding, spending): &(Vec<FundingOutput>, Vec<SpendingInput>)) -> u64 {
+    let total = funding.iter().fold(0, |acc, output| acc + output.value);
+    spending.iter().fold(total, |acc, input| acc - input.value)
 }
 
 impl Status {
-    pub fn balance(&self) -> u64 {
-        let total = self.funding
-            .iter()
-            .fold(0, |acc, output| acc + output.value);
-        self.spending
-            .iter()
-            .fold(total, |acc, input| acc - input.value)
+    fn funding(&self) -> impl Iterator<Item = &FundingOutput> {
+        self.confirmed.0.iter().chain(self.mempool.0.iter())
+    }
+
+    fn spending(&self) -> impl Iterator<Item = &SpendingInput> {
+        self.confirmed.1.iter().chain(self.mempool.1.iter())
+    }
+
+    pub fn confirmed_balance(&self) -> u64 {
+        calc_balance(&self.confirmed)
+    }
+
+    pub fn mempool_balance(&self) -> u64 {
+        calc_balance(&self.mempool)
     }
 
     pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
         let mut txns_map = HashMap::<Sha256dHash, i32>::new();
-        for f in &self.funding {
+        for f in self.funding() {
             txns_map.insert(f.txn_id, f.height as i32);
         }
-        for s in &self.spending {
+        for s in self.spending() {
             txns_map.insert(s.txn_id, s.height as i32);
         }
         let mut txns: Vec<(i32, Sha256dHash)> =
@@ -197,7 +209,7 @@ impl<'a> Query<'a> {
         result
     }
 
-    fn confirmed_status(&self, script_hash: &[u8]) -> Status {
+    fn confirmed_status(&self, script_hash: &[u8]) -> (Vec<FundingOutput>, Vec<SpendingInput>) {
         let mut funding = vec![];
         let mut spending = vec![];
         for t in self.load_txns(
@@ -211,10 +223,14 @@ impl<'a> Query<'a> {
                 spending.push(spent);
             }
         }
-        Status { funding, spending }
+        (funding, spending)
     }
 
-    fn mempool_status(&self, script_hash: &[u8], confirmed_status: &Status) -> Status {
+    fn mempool_status(
+        &self,
+        script_hash: &[u8],
+        confirmed_funding: &[FundingOutput],
+    ) -> (Vec<FundingOutput>, Vec<SpendingInput>) {
         let mut funding = vec![];
         let mut spending = vec![];
         let tracker = self.tracker.read().unwrap();
@@ -225,22 +241,20 @@ impl<'a> Query<'a> {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
-        for funding_output in funding.iter().chain(confirmed_status.funding.iter()) {
+        for funding_output in funding.iter().chain(confirmed_funding.iter()) {
             if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output) {
                 spending.push(spent);
             }
         }
         // TODO: update height to -1 for txns with any unconfirmed input
         // (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
-        Status { funding, spending }
+        (funding, spending)
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Status {
-        let mut status = self.confirmed_status(script_hash);
-        let mempool_status = self.mempool_status(script_hash, &status);
-        status.funding.extend(mempool_status.funding);
-        status.spending.extend(mempool_status.spending);
-        status
+        let confirmed = self.confirmed_status(script_hash);
+        let mempool = self.mempool_status(script_hash, &confirmed.0);
+        Status { confirmed, mempool }
     }
 
     pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Transaction {
