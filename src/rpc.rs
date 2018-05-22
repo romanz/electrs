@@ -103,8 +103,11 @@ impl<'a> Connection<'a> {
         Ok(json!(jsonify_header(&headers[0], height)))
     }
 
-    fn blockchain_estimatefee(&self, _params: &[Value]) -> Result<Value> {
-        Ok(json!(-1)) // see mempool_get_fee_histogram() instead.
+    fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
+        let blocks = params.get(0).chain_err(|| "missing blocks")?;
+        let blocks = blocks.as_u64().chain_err(|| "non-number blocks")? as usize;
+        let fee_rate = self.query.estimate_fee(blocks); // in BTC/kB
+        Ok(json!(fee_rate))
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
