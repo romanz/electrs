@@ -21,10 +21,14 @@ struct MempoolStore {
 }
 
 impl MempoolStore {
-    pub fn new() -> MempoolStore {
+    fn new() -> MempoolStore {
         MempoolStore {
             map: RwLock::new(BTreeMap::new()),
         }
+    }
+
+    fn clear(&self) {
+        self.map.write().unwrap().clear()
     }
 }
 
@@ -69,12 +73,14 @@ impl Stats {
 
 pub struct Tracker {
     stats: HashMap<Sha256dHash, Stats>,
+    index: MempoolStore,
 }
 
 impl Tracker {
     pub fn new() -> Tracker {
         Tracker {
             stats: HashMap::new(),
+            index: MempoolStore::new(),
         }
     }
 
@@ -128,6 +134,14 @@ impl Tracker {
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
+
+        let mut rows = Vec::new();
+        for stats in self.stats.values() {
+            index_transaction(&stats.tx, 0, &mut rows)
+        }
+        self.index.clear();
+        self.index.persist(rows);
+
         debug!(
             "mempool update took {:.1} ms ({} txns)",
             t.elapsed().in_seconds() * 1e3,
@@ -144,14 +158,8 @@ impl Tracker {
         self.stats.remove(txid);
     }
 
-    pub fn build_index(&self) -> Box<Store> {
-        let mut rows = Vec::new();
-        for stats in self.stats.values() {
-            index_transaction(&stats.tx, 0, &mut rows)
-        }
-        let store = MempoolStore::new();
-        store.persist(rows);
-        Box::new(store)
+    pub fn index(&self) -> &Store {
+        &self.index
     }
 }
 

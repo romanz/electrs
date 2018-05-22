@@ -83,15 +83,14 @@ fn run_server(config: &Config) {
     let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
-        let poll_delay = Duration::from_secs(1);
+        let poll_delay = Duration::from_secs(5);
         scope.spawn(|| rpc::serve(config.rpc_addr(), &query));
         loop {
             thread::sleep(poll_delay);
             query.update_mempool().unwrap();
-            if tip == daemon.getbestblockhash().unwrap() {
-                continue;
+            if tip != daemon.getbestblockhash().unwrap() {
+                tip = index.update(&store, &daemon);
             }
-            tip = index.update(&store, &daemon);
         }
     });
 }

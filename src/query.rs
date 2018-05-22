@@ -213,17 +213,16 @@ impl<'a> Query<'a> {
     fn mempool_status(&self, script_hash: &[u8], confirmed_status: &Status) -> Status {
         let mut funding = vec![];
         let mut spending = vec![];
-        // TODO: build index once per Tracker::update()
-        let mempool_store = self.tracker.read().unwrap().build_index();
+        let tracker = self.tracker.read().unwrap();
         for t in self.load_txns(
-            &*mempool_store,
-            txids_by_script_hash(&*mempool_store, script_hash),
+            tracker.index(),
+            txids_by_script_hash(tracker.index(), script_hash),
         ) {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
         for funding_output in funding.iter().chain(confirmed_status.funding.iter()) {
-            if let Some(spent) = self.find_spending_input(&*mempool_store, &funding_output) {
+            if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output) {
                 spending.push(spent);
             }
         }
