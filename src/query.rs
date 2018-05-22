@@ -84,6 +84,7 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
+// TODO: the 3 functions below can be part of Store.
 fn txrows_by_prefix(store: &Store, txid_prefix: &HashPrefix) -> Vec<TxRow> {
     store
         .scan(&TxRow::filter(&txid_prefix))
@@ -212,6 +213,7 @@ impl<'a> Query<'a> {
     fn mempool_status(&self, script_hash: &[u8], confirmed_status: &Status) -> Status {
         let mut funding = vec![];
         let mut spending = vec![];
+        // TODO: build index once per Tracker::update()
         let mempool_store = self.tracker.read().unwrap().build_index();
         for t in self.load_txns(
             &*mempool_store,
