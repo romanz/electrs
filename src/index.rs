@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use daemon::Daemon;
-use store::{Row, Store};
+use store::{DBStore, ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
            HeaderMap, HASH_PREFIX_LEN};
 
@@ -198,7 +198,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn read_indexed_headers(store: &Store) -> HeaderMap {
+fn read_indexed_headers(store: &ReadStore) -> HeaderMap {
     let mut headers = HeaderMap::new();
     for row in store.scan(b"B") {
         let key: BlockKey = bincode::deserialize(&row.key).unwrap();
@@ -208,7 +208,7 @@ fn read_indexed_headers(store: &Store) -> HeaderMap {
     headers
 }
 
-fn read_last_indexed_blockhash(store: &Store) -> Option<Sha256dHash> {
+fn read_last_indexed_blockhash(store: &ReadStore) -> Option<Sha256dHash> {
     let row = store.get(b"L")?;
     let blockhash: Sha256dHash = deserialize(&row).unwrap();
     Some(blockhash)
@@ -365,7 +365,7 @@ impl Index {
         missing_headers
     }
 
-    pub fn update(&self, store: &Store, daemon: &Daemon) -> Sha256dHash {
+    pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Sha256dHash {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
         let no_indexed_headers = indexed_headers.headers().is_empty();
         if no_indexed_headers {
@@ -383,7 +383,7 @@ impl Index {
             /*use_progress_bar=*/ no_indexed_headers,
         )) {
             // TODO: add timing
-            store.persist(rows);
+            store.write(rows);
         }
         let tip = current_headers.tip();
         *(self.headers.write().unwrap()) = Arc::new(current_headers);

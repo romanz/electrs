@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
-use store::{Row, Store};
+use store::{ReadStore, Row};
 use util::Bytes;
 
 error_chain!{}
@@ -21,18 +21,19 @@ struct MempoolStore {
 }
 
 impl MempoolStore {
-    fn new() -> MempoolStore {
-        MempoolStore {
-            map: RwLock::new(BTreeMap::new()),
+    fn new(rows: Vec<Row>) -> MempoolStore {
+        let mut map = BTreeMap::new();
+        for row in rows {
+            let (key, value) = row.into_pair();
+            map.insert(key, value);
         }
-    }
-
-    fn clear(&self) {
-        self.map.write().unwrap().clear()
+        MempoolStore {
+            map: RwLock::new(map),
+        }
     }
 }
 
-impl Store for MempoolStore {
+impl ReadStore for MempoolStore {
     fn get(&self, key: &[u8]) -> Option<Bytes> {
         self.map.read().unwrap().get(key).map(|v| v.to_vec())
     }
@@ -50,13 +51,6 @@ impl Store for MempoolStore {
             });
         }
         rows
-    }
-    fn persist(&self, rows: Vec<Row>) {
-        let mut map = self.map.write().unwrap();
-        for row in rows {
-            let (key, value) = row.into_pair();
-            map.insert(key, value);
-        }
     }
 }
 
@@ -80,7 +74,7 @@ impl Tracker {
     pub fn new() -> Tracker {
         Tracker {
             stats: HashMap::new(),
-            index: MempoolStore::new(),
+            index: MempoolStore::new(vec![]),
         }
     }
 
@@ -134,14 +128,11 @@ impl Tracker {
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
-
         let mut rows = Vec::new();
         for stats in self.stats.values() {
             index_transaction(&stats.tx, 0, &mut rows)
         }
-        self.index.clear();
-        self.index.persist(rows);
-
+        self.index = MempoolStore::new(rows);
         debug!(
             "mempool update took {:.1} ms ({} txns)",
             t.elapsed().in_seconds() * 1e3,
@@ -158,7 +149,7 @@ impl Tracker {
         self.stats.remove(txid);
     }
 
-    pub fn index(&self) -> &Store {
+    pub fn index(&self) -> &ReadStore {
         &self.index
     }
 }

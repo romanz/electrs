@@ -10,7 +10,7 @@ use std::sync::RwLock;
 use daemon::Daemon;
 use index::{compute_script_hash, Index, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
-use store::Store;
+use store::ReadStore;
 use util::{FullHash, HashPrefix, HeaderEntry};
 
 error_chain!{}
@@ -84,8 +84,8 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
-// TODO: the 3 functions below can be part of Store.
-fn txrows_by_prefix(store: &Store, txid_prefix: &HashPrefix) -> Vec<TxRow> {
+// TODO: the 3 functions below can be part of ReadStore.
+fn txrows_by_prefix(store: &ReadStore, txid_prefix: &HashPrefix) -> Vec<TxRow> {
     store
         .scan(&TxRow::filter(&txid_prefix))
         .iter()
@@ -93,7 +93,7 @@ fn txrows_by_prefix(store: &Store, txid_prefix: &HashPrefix) -> Vec<TxRow> {
         .collect()
 }
 
-fn txids_by_script_hash(store: &Store, script_hash: &[u8]) -> Vec<HashPrefix> {
+fn txids_by_script_hash(store: &ReadStore, script_hash: &[u8]) -> Vec<HashPrefix> {
     store
         .scan(&TxOutRow::filter(script_hash))
         .iter()
@@ -102,7 +102,7 @@ fn txids_by_script_hash(store: &Store, script_hash: &[u8]) -> Vec<HashPrefix> {
 }
 
 fn txids_by_funding_output(
-    store: &Store,
+    store: &ReadStore,
     txn_id: &Sha256dHash,
     output_index: usize,
 ) -> Vec<HashPrefix> {
@@ -116,13 +116,13 @@ fn txids_by_funding_output(
 pub struct Query<'a> {
     daemon: &'a Daemon,
     index: &'a Index,
-    index_store: &'a Store, // TODO: should be a part of index
+    index_store: &'a ReadStore, // TODO: should be a part of index
     tracker: RwLock<Tracker>,
 }
 
 // TODO: return errors instead of panics
 impl<'a> Query<'a> {
-    pub fn new(index_store: &'a Store, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
+    pub fn new(index_store: &'a ReadStore, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
         Query {
             daemon,
             index,
@@ -135,7 +135,7 @@ impl<'a> Query<'a> {
         self.daemon
     }
 
-    fn load_txns(&self, store: &Store, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
+    fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
@@ -150,7 +150,11 @@ impl<'a> Query<'a> {
         txns
     }
 
-    fn find_spending_input(&self, store: &Store, funding: &FundingOutput) -> Option<SpendingInput> {
+    fn find_spending_input(
+        &self,
+        store: &ReadStore,
+        funding: &FundingOutput,
+    ) -> Option<SpendingInput> {
         let spending_txns: Vec<TxnHeight> = self.load_txns(
             store,
             txids_by_funding_output(store, &funding.txn_id, funding.output_index),

@@ -15,10 +15,13 @@ impl Row {
     }
 }
 
-pub trait Store: Sync {
+pub trait ReadStore: Sync {
     fn get(&self, key: &[u8]) -> Option<Bytes>;
     fn scan(&self, prefix: &[u8]) -> Vec<Row>;
-    fn persist(&self, rows: Vec<Row>);
+}
+
+pub trait WriteStore: Sync {
+    fn write(&self, rows: Vec<Row>);
 }
 
 pub struct DBStore {
@@ -66,7 +69,7 @@ impl DBStore {
     }
 }
 
-impl Store for DBStore {
+impl ReadStore for DBStore {
     fn get(&self, key: &[u8]) -> Option<Bytes> {
         self.db.get(key).unwrap().map(|v| v.to_vec())
     }
@@ -89,8 +92,10 @@ impl Store for DBStore {
         }
         rows
     }
+}
 
-    fn persist(&self, rows: Vec<Row>) {
+impl WriteStore for DBStore {
+    fn write(&self, rows: Vec<Row>) {
         let mut batch = rocksdb::WriteBatch::default();
         for row in rows {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
