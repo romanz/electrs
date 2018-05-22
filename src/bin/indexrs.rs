@@ -79,7 +79,6 @@ fn run_server(config: &Config) {
     store.compact_if_needed();
     drop(store); // to be re-opened soon
 
-    info!("{:?} indexed successfully", index.headers_list());
     let store = store::DBStore::open(config.db_path(), store::StoreOptions { auto_compact: true });
     let query = query::Query::new(&store, &daemon, &index);
 
