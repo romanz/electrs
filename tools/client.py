@@ -42,10 +42,12 @@ def main():
             address = k.subkey(change).subkey(n).address()
             script = script_for_address(address)
             script_hash = hashlib.sha256(script).digest()
+            log.debug('{}', conn.call('blockchain.scripthash.get_history',
+                                      script_hash[::-1].hex()))
             reply = conn.call('blockchain.scripthash.get_balance',
                               script_hash[::-1].hex())
-            res = reply['result']
-            confirmed = res['confirmed'] / 1e8
+            result = reply['result']
+            confirmed = result['confirmed'] / 1e8
             total += confirmed
             if confirmed:
                 log.info('{}/{} => {} has {:11.8f} BTC',
@@ -55,8 +57,8 @@ def main():
                 empty += 1
                 if empty >= 10:
                     break
-            log.info('{}', conn.call('blockchain.scripthash.get_history', script_hash[::-1].hex()))
     log.info('total balance: {} BTC', total)
+
 
 if __name__ == '__main__':
     with StreamHandler(sys.stderr, level='INFO').applicationbound():
