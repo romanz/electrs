@@ -5,3 +5,5 @@ Don't require -txindex by using `getrawtransaction "txid" verbose "blockhash"` R
 Measure first-time query latency
 Support "blockchain.estimatefee" RPC
 Use futures for electrum RPC serving and cancellation
+Handle multiple RPC client in parallel
+Lookup confirmed transactions only at their blocks (using `blockhash` parameter of `getrawtransaction` RPC)
