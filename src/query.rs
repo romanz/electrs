@@ -305,7 +305,10 @@ impl<'a> Query<'a> {
             .chain_err(|| "failed to update mempool")
     }
 
+    /// Returns [vsize, fee_rate] pairs (measured in vbytes and satoshis).
     pub fn get_fee_histogram(&self) -> Vec<(f32, u32)> {
-        self.tracker.read().unwrap().fee_histogram()
+        self.tracker.read().unwrap().fee_histogram().clone()
+    }
+
     }
 }

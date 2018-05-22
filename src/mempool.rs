@@ -68,6 +68,7 @@ impl Stats {
 pub struct Tracker {
     stats: HashMap<Sha256dHash, Stats>,
     index: MempoolStore,
+    histogram: Vec<(f32, u32)>,
 }
 
 impl Tracker {
@@ -75,28 +76,19 @@ impl Tracker {
         Tracker {
             stats: HashMap::new(),
             index: MempoolStore::new(vec![]),
+            histogram: vec![],
         }
     }
 
     /// Returns vector of (fee_rate, vsize) pairs, where fee_{n-1} > fee_n and vsize_n is the
-    /// cumulative virtual size of mempool transaction with fee in the interval [fee_{n-1}, fee_n].
-    /// Note: fee_0 is implied to be infinity.
-    pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
-        let mut entries: Vec<&MempoolEntry> = self.stats.values().map(|stat| &stat.entry).collect();
-        entries.sort_unstable_by(|e1, e2| {
-            e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
-        });
-        let mut histogram = Vec::new();
-        let mut cumulative_vsize = 0;
-        for e in entries {
-            cumulative_vsize += e.vsize();
-            if cumulative_vsize > VSIZE_BIN_WIDTH {
-                histogram.push((e.fee_per_vbyte(), cumulative_vsize));
-                cumulative_vsize = 0;
-            }
-        }
-        histogram.push((0.0, cumulative_vsize));
-        histogram
+    /// total virtual size of mempool transactions with fee in the bin [fee_{n-1}, fee_n].
+    /// Note: fee_{-1} is implied to be infinite.
+    pub fn fee_histogram(&self) -> &Vec<(f32, u32)> {
+        &self.histogram
+    }
+
+    pub fn index(&self) -> &ReadStore {
+        &self.index
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
@@ -128,11 +120,8 @@ impl Tracker {
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
-        let mut rows = Vec::new();
-        for stats in self.stats.values() {
-            index_transaction(&stats.tx, 0, &mut rows)
-        }
-        self.index = MempoolStore::new(rows);
+        self.update_tx_index();
+        self.update_fee_histogram();
         debug!(
             "mempool update took {:.1} ms ({} txns)",
             t.elapsed().in_seconds() * 1e3,
@@ -149,8 +138,34 @@ impl Tracker {
         self.stats.remove(txid);
     }
 
-    pub fn index(&self) -> &ReadStore {
-        &self.index
+    fn update_tx_index(&mut self) {
+        let mut rows = Vec::new();
+        for stats in self.stats.values() {
+            index_transaction(&stats.tx, 0, &mut rows)
+        }
+        self.index = MempoolStore::new(rows);
+    }
+
+    fn update_fee_histogram(&mut self) {
+        let mut entries: Vec<&MempoolEntry> = self.stats.values().map(|stat| &stat.entry).collect();
+        entries.sort_unstable_by(|e1, e2| {
+            e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
+        });
+        let mut histogram = Vec::new();
+        let mut bin_size = 0;
+        let mut last_fee_rate = None;
+        for e in entries {
+            last_fee_rate = Some(e.fee_per_vbyte());
+            bin_size += e.vsize();
+            if bin_size > VSIZE_BIN_WIDTH {
+                histogram.push((e.fee_per_vbyte(), bin_size));
+                bin_size = 0;
+            }
+        }
+        if let Some(fee_rate) = last_fee_rate {
+            histogram.push((fee_rate, bin_size));
+        }
+        self.histogram = histogram;
     }
 }
 
