@@ -59,12 +59,6 @@ pub struct Stats {
     entry: MempoolEntry,
 }
 
-impl Stats {
-    pub fn new(tx: Transaction, entry: MempoolEntry) -> Stats {
-        Stats { tx, entry }
-    }
-}
-
 pub struct Tracker {
     stats: HashMap<Sha256dHash, Stats>,
     index: MempoolStore,
