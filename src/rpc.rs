@@ -296,7 +296,6 @@ impl<'a> Connection<'a> {
 
     pub fn run(mut self) {
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
-        // TODO: figure out graceful shutting down and error logging.
         crossbeam::scope(|scope| {
             let chan = Channel::new();
             let tx = chan.sender();

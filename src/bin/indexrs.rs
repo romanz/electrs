@@ -64,7 +64,6 @@ impl Config {
 }
 
 fn run_server(config: &Config) {
-    // TODO: handle SIGINT gracefully (https://www.reddit.com/r/rust/comments/6swidb/how_to_properly_catch_sigint_in_a_threaded_program/)
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.network_type());
 

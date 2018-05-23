@@ -132,7 +132,6 @@ pub struct Query<'a> {
     tracker: RwLock<Tracker>,
 }
 
-// TODO: return errors instead of panics
 impl<'a> Query<'a> {
     pub fn new(index_store: &'a ReadStore, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
         Query {
@@ -246,8 +245,6 @@ impl<'a> Query<'a> {
                 spending.push(spent);
             }
         }
-        // TODO: update height to -1 for txns with any unconfirmed input
-        // (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
         (funding, spending)
     }
 
@@ -282,7 +279,6 @@ impl<'a> Query<'a> {
         Some(header_list.headers().last()?.clone())
     }
 
-    // TODO: add error-handling logic
     pub fn get_merkle_proof(
         &self,
         tx_hash: &Sha256dHash,

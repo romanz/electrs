@@ -382,7 +382,6 @@ impl Index {
             &daemon,
             /*use_progress_bar=*/ no_indexed_headers,
         )) {
-            // TODO: add timing
             store.write(rows);
         }
         let tip = current_headers.tip();

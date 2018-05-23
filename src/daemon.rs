@@ -203,7 +203,6 @@ impl Daemon {
                 .chain_err(|| format!("failed to parse tx {}", txhash))?,
         )
     }
-    // TODO: add getrawtransactions() API.
 
     pub fn getmempooltxids(&self) -> Result<Vec<Sha256dHash>> {
         let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;

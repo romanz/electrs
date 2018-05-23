@@ -1,9 +1,21 @@
+= Electrum
+Update height to -1 for txns with any unconfirmed input (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
 Snapshot DB after successful indexing - and run queries on this snapshot
-Handle bitcoind connection failures - instead of crashing
-Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
-Don't require -txindex by using `getrawtransaction "txid" verbose "blockhash"` RPC
-Measure first-time query latency
-Support "blockchain.estimatefee" RPC
 Use futures for electrum RPC serving and cancellation
 Handle multiple RPC client in parallel
-Lookup confirmed transactions only at their blocks (using `blockhash` parameter of `getrawtransaction` RPC)
+Figure out graceful shutting down and error logging for RPC server
+
+= Bitcoind
+Handle bitcoind connection failures - instead of crashing
+Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
+Lookup confirmed transactions only at their blocks (using `blockhash` parameter of `getrawtransaction` RPC), so -txindex won't be needed
+Add getrawtransactions() API (for RPC batching)
+
+= Performance
+Add timing/profiler helpers (for indexing/DB/RPC operations)
+Measure first-time query latency
+
+= Rust
+Handle SIGINT gracefully (https://www.reddit.com/r/rust/comments/6swidb/how_to_properly_catch_sigint_in_a_threaded_program/)
+Return errors instead of panics
+Use generators instead of vectors
