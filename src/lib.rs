@@ -5,11 +5,13 @@ extern crate bincode;
 extern crate bitcoin;
 extern crate crossbeam;
 extern crate crypto;
+extern crate futures;
 extern crate hex;
 extern crate pbr;
 extern crate rocksdb;
 extern crate serde;
 extern crate time;
+extern crate tokio;
 
 #[macro_use]
 extern crate arrayref;
