@@ -331,7 +331,7 @@ impl Channel {
     }
 }
 
-pub fn serve(addr: &str, query: &Query) {
+pub fn serve(addr: &SocketAddr, query: &Query) {
     let listener = TcpListener::bind(addr).unwrap();
     info!("RPC server running on {}", addr);
     loop {

@@ -15,6 +15,7 @@ use util::{HeaderList, HeaderMap};
 
 error_chain!{}
 
+#[derive(Debug, Copy, Clone)]
 pub enum Network {
     Mainnet,
     Testnet,

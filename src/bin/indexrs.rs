@@ -11,64 +11,57 @@ use argparse::{ArgumentParser, StoreTrue};
 use indexrs::daemon::Network;
 use indexrs::{daemon, index, query, rpc, store};
 use std::fs::OpenOptions;
+use std::net::SocketAddr;
 use std::thread;
 use std::time::Duration;
 
 #[derive(Debug)]
 struct Config {
     log_file: String,
-    testnet: bool,
+    network_type: Network, // bitcoind JSONRPC endpoint
+    db_path: &'static str, // RocksDB directory path
+    rpc_addr: SocketAddr,  // for serving Electrum clients
 }
 
 impl Config {
     pub fn from_args() -> Config {
-        let mut config = Config {
-            log_file: "indexrs.log".to_string(),
-            testnet: false,
-        };
+        let mut testnet = false;
         {
             let mut parser = ArgumentParser::new();
             parser.set_description("Bitcoin indexing server.");
-            parser.refer(&mut config.testnet).add_option(
+            parser.refer(&mut testnet).add_option(
                 &["--testnet"],
                 StoreTrue,
                 "Connect to a testnet bitcoind instance",
             );
             parser.parse_args_or_exit();
         }
-        config
-    }
-
-    pub fn rpc_addr(&self) -> &'static str {
-        // for serving Electrum clients
-        match self.network_type() {
-            Network::Mainnet => "localhost:50001",
-            Network::Testnet => "localhost:60001",
-        }
-    }
-
-    pub fn db_path(&self) -> &'static str {
-        match self.network_type() {
-            Network::Mainnet => "./db/mainnet",
-            Network::Testnet => "./db/testnet",
-        }
-    }
-
-    pub fn network_type(&self) -> Network {
-        // bitcoind JSONRPC endpoint
-        match self.testnet {
+        let network_type = match testnet {
             false => Network::Mainnet,
             true => Network::Testnet,
+        };
+        Config {
+            log_file: "indexrs.log".to_string(),
+            network_type: network_type,
+            db_path: match network_type {
+                Network::Mainnet => "./db/mainnet",
+                Network::Testnet => "./db/testnet",
+            },
+            rpc_addr: match network_type {
+                Network::Mainnet => "127.0.0.1:50001",
+                Network::Testnet => "127.0.0.1:60001",
+            }.parse()
+                .unwrap(),
         }
     }
 }
 
 fn run_server(config: &Config) {
     let index = index::Index::new();
-    let daemon = daemon::Daemon::new(config.network_type());
+    let daemon = daemon::Daemon::new(config.network_type);
 
     let store = store::DBStore::open(
-        config.db_path(),
+        config.db_path,
         store::StoreOptions {
             // compact manually after the first run has finished successfully
             auto_compact: false,
@@ -78,12 +71,12 @@ fn run_server(config: &Config) {
     store.compact_if_needed();
     drop(store); // to be re-opened soon
 
-    let store = store::DBStore::open(config.db_path(), store::StoreOptions { auto_compact: true });
+    let store = store::DBStore::open(config.db_path, store::StoreOptions { auto_compact: true });
     let query = query::Query::new(&store, &daemon, &index);
 
     crossbeam::scope(|scope| {
         let poll_delay = Duration::from_secs(5);
-        scope.spawn(|| rpc::serve(config.rpc_addr(), &query));
+        scope.spawn(|| rpc::serve(&config.rpc_addr, &query));
         loop {
             thread::sleep(poll_delay);
             query.update_mempool().unwrap();
