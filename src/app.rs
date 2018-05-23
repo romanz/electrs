@@ -1,7 +1,9 @@
 use argparse::{ArgumentParser, StoreTrue};
+use bitcoin::util::hash::Sha256dHash;
 use crossbeam;
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -49,6 +51,30 @@ impl Config {
     }
 }
 
+pub struct App {
+    store: store::DBStore,
+    index: index::Index,
+    daemon: daemon::Daemon,
+}
+
+impl App {
+    pub fn store(&self) -> &store::DBStore {
+        &self.store
+    }
+    pub fn index(&self) -> &index::Index {
+        &self.index
+    }
+    pub fn daemon(&self) -> &daemon::Daemon {
+        &self.daemon
+    }
+    fn update_index(&self, mut tip: Sha256dHash) -> Sha256dHash {
+        if tip != self.daemon.getbestblockhash().unwrap() {
+            tip = self.index.update(&self.store, &self.daemon);
+        }
+        tip
+    }
+}
+
 fn run_server(config: &Config) {
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.network_type);
@@ -65,17 +91,20 @@ fn run_server(config: &Config) {
     drop(store); // to be re-opened soon
 
     let store = store::DBStore::open(config.db_path, store::StoreOptions { auto_compact: true });
-    let query = query::Query::new(&store, &daemon, &index);
+    let app = Arc::new(App {
+        store,
+        index,
+        daemon,
+    });
 
+    let query = Arc::new(query::Query::new(app.clone()));
     crossbeam::scope(|scope| {
         let poll_delay = Duration::from_secs(5);
-        scope.spawn(|| rpc::serve(&config.rpc_addr, &query));
+        scope.spawn(|| rpc::serve(&config.rpc_addr, query.clone()));
         loop {
             thread::sleep(poll_delay);
             query.update_mempool().unwrap();
-            if tip != daemon.getbestblockhash().unwrap() {
-                tip = index.update(&store, &daemon);
-            }
+            tip = app.update_index(tip);
         }
     });
 }

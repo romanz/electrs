@@ -5,10 +5,10 @@ use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
-use daemon::Daemon;
-use index::{compute_script_hash, Index, TxInRow, TxOutRow, TxRow};
+use app::App;
+use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
 use store::ReadStore;
 use util::{FullHash, HashPrefix, HeaderEntry};
@@ -125,25 +125,17 @@ fn txids_by_funding_output(
         .collect()
 }
 
-pub struct Query<'a> {
-    daemon: &'a Daemon,
-    index: &'a Index,
-    index_store: &'a ReadStore, // TODO: should be a part of index
+pub struct Query {
+    app: Arc<App>,
     tracker: RwLock<Tracker>,
 }
 
-impl<'a> Query<'a> {
-    pub fn new(index_store: &'a ReadStore, daemon: &'a Daemon, index: &'a Index) -> Query<'a> {
+impl Query {
+    pub fn new(app: Arc<App>) -> Query {
         Query {
-            daemon,
-            index,
-            index_store,
+            app,
             tracker: RwLock::new(Tracker::new()),
         }
-    }
-
-    pub fn daemon(&self) -> &Daemon {
-        self.daemon
     }
 
     fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
@@ -212,13 +204,13 @@ impl<'a> Query<'a> {
         let mut funding = vec![];
         let mut spending = vec![];
         for t in self.load_txns(
-            self.index_store,
-            txids_by_script_hash(self.index_store, script_hash),
+            self.app.store(),
+            txids_by_script_hash(self.app.store(), script_hash),
         ) {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &funding {
-            if let Some(spent) = self.find_spending_input(self.index_store, &funding_output) {
+            if let Some(spent) = self.find_spending_input(self.app.store(), &funding_output) {
                 spending.push(spent);
             }
         }
@@ -255,13 +247,14 @@ impl<'a> Query<'a> {
     }
 
     pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Transaction {
-        self.daemon
+        self.app
+            .daemon()
             .gettransaction(tx_hash)
             .expect(&format!("failed to load tx {}", tx_hash))
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
-        let headers_list = self.index.headers_list();
+        let headers_list = self.app.index().headers_list();
         let headers = headers_list.headers();
         let mut result = Vec::new();
         for height in heights {
@@ -275,7 +268,7 @@ impl<'a> Query<'a> {
     }
 
     pub fn get_best_header(&self) -> Option<HeaderEntry> {
-        let header_list = self.index.headers_list();
+        let header_list = self.app.index().headers_list();
         Some(header_list.headers().last()?.clone())
     }
 
@@ -284,9 +277,9 @@ impl<'a> Query<'a> {
         tx_hash: &Sha256dHash,
         height: usize,
     ) -> Option<(Vec<Sha256dHash>, usize)> {
-        let header_list = self.index.headers_list();
+        let header_list = self.app.index().headers_list();
         let blockhash = header_list.headers().get(height)?.hash();
-        let block: Block = self.daemon.getblock(&blockhash).unwrap();
+        let block: Block = self.app.daemon().getblock(&blockhash).unwrap();
         let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
         let pos = txids.iter().position(|txid| txid == tx_hash)?;
         let mut merkle = Vec::new();
@@ -307,11 +300,18 @@ impl<'a> Query<'a> {
         Some((merkle, pos))
     }
 
+    pub fn broadcast(&self, txn: &Transaction) -> Result<Sha256dHash> {
+        self.app
+            .daemon()
+            .broadcast(txn)
+            .chain_err(|| "broadcast failed")
+    }
+
     pub fn update_mempool(&self) -> Result<()> {
         self.tracker
             .write()
             .unwrap()
-            .update(self.daemon)
+            .update(self.app.daemon())
             .chain_err(|| "failed to update mempool")
     }
 

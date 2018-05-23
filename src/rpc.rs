@@ -8,6 +8,7 @@ use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::time::Duration;
 
@@ -36,16 +37,16 @@ fn jsonify_header(header: &BlockHeader, height: usize) -> Value {
     })
 }
 
-struct Connection<'a> {
-    query: &'a Query<'a>,
+struct Connection {
+    query: Arc<Query>,
     last_header_entry: Option<HeaderEntry>,
     status_hashes: HashMap<Sha256dHash, Value>, // ScriptHash -> StatusHash
     stream: TcpStream,
     addr: SocketAddr,
 }
 
-impl<'a> Connection<'a> {
-    pub fn new(query: &'a Query, stream: TcpStream, addr: SocketAddr) -> Connection<'a> {
+impl Connection {
+    pub fn new(query: Arc<Query>, stream: TcpStream, addr: SocketAddr) -> Connection {
         Connection {
             query: query,
             last_header_entry: None, // disable header subscription for now
@@ -147,10 +148,7 @@ impl<'a> Connection<'a> {
         let tx = tx.as_str().chain_err(|| "non-string tx")?;
         let tx = hex::decode(&tx).chain_err(|| "non-hex tx")?;
         let tx: Transaction = deserialize(&tx).chain_err(|| "failed to parse tx")?;
-        let txid = self.query
-            .daemon()
-            .broadcast(&tx)
-            .chain_err(|| "broadcast failed")?;
+        let txid = self.query.broadcast(&tx).chain_err(|| "broadcast failed")?;
         Ok(json!(txid.be_hex_string()))
     }
 
@@ -331,13 +329,13 @@ impl Channel {
     }
 }
 
-pub fn serve(addr: &SocketAddr, query: &Query) {
+pub fn serve(addr: &SocketAddr, query: Arc<Query>) {
     let listener = TcpListener::bind(addr).unwrap();
     info!("RPC server running on {}", addr);
     loop {
         let (stream, addr) = listener.accept().unwrap();
         info!("[{}] connected peer", addr);
-        Connection::new(query, stream, addr).run();
+        Connection::new(query.clone(), stream, addr).run();
         info!("[{}] disconnected peer", addr);
     }
 }
