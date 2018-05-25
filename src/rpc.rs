@@ -149,7 +149,7 @@ impl Connection {
         let tx = tx.as_str().chain_err(|| "non-string tx")?;
         let tx = hex::decode(&tx).chain_err(|| "non-hex tx")?;
         let tx: Transaction = deserialize(&tx).chain_err(|| "failed to parse tx")?;
-        let txid = self.query.broadcast(&tx).chain_err(|| "broadcast failed")?;
+        let txid = self.query.broadcast(&tx)?;
         Ok(json!(txid.be_hex_string()))
     }
 
@@ -196,9 +196,15 @@ impl Connection {
             "blockchain.transaction.get" => self.blockchain_transaction_get(&params),
             "blockchain.transaction.get_merkle" => self.blockchain_transaction_get_merkle(&params),
             &_ => bail!("unknown method {} {:?}", method, params),
-        }?;
+        };
         // TODO: return application errors should be sent to the client
-        Ok(json!({"jsonrpc": "2.0", "id": id, "result": result}))
+        Ok(match result {
+            Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
+            Err(e) => {
+                warn!("rpc #{} {} {:?} failed: {}", id, method, params, e.display_chain());
+                json!({"jsonrpc": "2.0", "id": id, "error": format!("{}", e)})
+            }
+        })
     }
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {

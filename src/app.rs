@@ -145,6 +145,6 @@ pub fn main() {
     let config = Config::from_args();
     setup_logging(&config);
     if let Err(e) = run_server(&config) {
-        error!("{}", e.display_chain().to_string());
+        error!("{}", e.display_chain());
     }
 }
