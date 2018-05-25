@@ -118,7 +118,7 @@ impl Connection {
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let status = self.query.status(&script_hash[..]);
+        let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
@@ -126,7 +126,7 @@ impl Connection {
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let status = self.query.status(&script_hash[..]);
+        let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
         )
@@ -134,7 +134,7 @@ impl Connection {
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let status = self.query.status(&script_hash[..]);
+        let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
             status
                 .history()
@@ -156,7 +156,7 @@ impl Connection {
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        let tx = self.query.get_tx(&tx_hash);
+        let tx = self.query.get_tx(&tx_hash)?;
         Ok(json!(hex::encode(&serialize(&tx).unwrap())))
     }
 
@@ -217,7 +217,7 @@ impl Connection {
             }
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
-            let status = self.query.status(&script_hash[..]);
+            let status = self.query.status(&script_hash[..])?;
             let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
             if new_status_hash == *status_hash {
                 continue;

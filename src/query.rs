@@ -138,30 +138,30 @@ impl Query {
         }
     }
 
-    fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Vec<TxnHeight> {
+    fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Result<Vec<TxnHeight>> {
         let mut txns = Vec::new();
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn: Transaction = self.get_tx(&txid);
+                let txn: Transaction = self.get_tx(&txid)?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
                 })
             }
         }
-        txns
+        Ok(txns)
     }
 
     fn find_spending_input(
         &self,
         store: &ReadStore,
         funding: &FundingOutput,
-    ) -> Option<SpendingInput> {
+    ) -> Result<Option<SpendingInput>> {
         let spending_txns: Vec<TxnHeight> = self.load_txns(
             store,
             txids_by_funding_output(store, &funding.txn_id, funding.output_index),
-        );
+        )?;
         let mut spending_inputs = Vec::new();
         for t in &spending_txns {
             for input in t.txn.input.iter() {
@@ -177,11 +177,11 @@ impl Query {
             }
         }
         assert!(spending_inputs.len() <= 1);
-        if spending_inputs.len() == 1 {
+        Ok(if spending_inputs.len() == 1 {
             Some(spending_inputs.remove(0))
         } else {
             None
-        }
+        })
     }
 
     fn find_funding_outputs(&self, t: &TxnHeight, script_hash: &[u8]) -> Vec<FundingOutput> {
@@ -200,57 +200,57 @@ impl Query {
         result
     }
 
-    fn confirmed_status(&self, script_hash: &[u8]) -> (Vec<FundingOutput>, Vec<SpendingInput>) {
+    fn confirmed_status(
+        &self,
+        script_hash: &[u8],
+    ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
         let mut funding = vec![];
         let mut spending = vec![];
         for t in self.load_txns(
             self.app.store(),
             txids_by_script_hash(self.app.store(), script_hash),
-        ) {
+        )? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &funding {
-            if let Some(spent) = self.find_spending_input(self.app.store(), &funding_output) {
+            if let Some(spent) = self.find_spending_input(self.app.store(), &funding_output)? {
                 spending.push(spent);
             }
         }
-        (funding, spending)
+        Ok((funding, spending))
     }
 
     fn mempool_status(
         &self,
         script_hash: &[u8],
         confirmed_funding: &[FundingOutput],
-    ) -> (Vec<FundingOutput>, Vec<SpendingInput>) {
+    ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
         let mut funding = vec![];
         let mut spending = vec![];
         let tracker = self.tracker.read().unwrap();
         for t in self.load_txns(
             tracker.index(),
             txids_by_script_hash(tracker.index(), script_hash),
-        ) {
+        )? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
         for funding_output in funding.iter().chain(confirmed_funding.iter()) {
-            if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output) {
+            if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output)? {
                 spending.push(spent);
             }
         }
-        (funding, spending)
+        Ok((funding, spending))
     }
 
-    pub fn status(&self, script_hash: &[u8]) -> Status {
-        let confirmed = self.confirmed_status(script_hash);
-        let mempool = self.mempool_status(script_hash, &confirmed.0);
-        Status { confirmed, mempool }
+    pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
+        let confirmed = self.confirmed_status(script_hash)?;
+        let mempool = self.mempool_status(script_hash, &confirmed.0)?;
+        Ok(Status { confirmed, mempool })
     }
 
-    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Transaction {
-        self.app
-            .daemon()
-            .gettransaction(tx_hash)
-            .expect(&format!("failed to load tx {}", tx_hash))
+    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Result<Transaction> {
+        self.app.daemon().gettransaction(tx_hash)
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
@@ -276,12 +276,19 @@ impl Query {
         &self,
         tx_hash: &Sha256dHash,
         height: usize,
-    ) -> Option<(Vec<Sha256dHash>, usize)> {
+    ) -> Result<(Vec<Sha256dHash>, usize)> {
         let header_list = self.app.index().headers_list();
-        let blockhash = header_list.headers().get(height)?.hash();
+        let blockhash = header_list
+            .headers()
+            .get(height)
+            .chain_err(|| format!("missing block #{}", height))?
+            .hash();
         let block: Block = self.app.daemon().getblock(&blockhash).unwrap();
         let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
-        let pos = txids.iter().position(|txid| txid == tx_hash)?;
+        let pos = txids
+            .iter()
+            .position(|txid| txid == tx_hash)
+            .chain_err(|| format!("missing txid {}", tx_hash))?;
         let mut merkle = Vec::new();
         let mut index = pos;
         while txids.len() > 1 {
@@ -297,14 +304,11 @@ impl Query {
                 .map(|pair| merklize(pair[0], pair[1]))
                 .collect()
         }
-        Some((merkle, pos))
+        Ok((merkle, pos))
     }
 
     pub fn broadcast(&self, txn: &Transaction) -> Result<Sha256dHash> {
-        self.app
-            .daemon()
-            .broadcast(txn)
-            .chain_err(|| "broadcast failed")
+        self.app.daemon().broadcast(txn)
     }
 
     pub fn update_mempool(&self) -> Result<()> {
