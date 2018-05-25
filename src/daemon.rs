@@ -13,7 +13,7 @@ use std::net::TcpStream;
 
 use util::{HeaderList, HeaderMap};
 
-error_chain!{}
+use errors::*;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Network {

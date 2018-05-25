@@ -16,7 +16,7 @@ use std::time::Duration;
 use query::Query;
 use util::HeaderEntry;
 
-error_chain!{}
+use errors::*;
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {

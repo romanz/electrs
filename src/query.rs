@@ -13,7 +13,7 @@ use mempool::Tracker;
 use store::ReadStore;
 use util::{FullHash, HashPrefix, HeaderEntry};
 
-error_chain!{}
+use errors::*;
 
 struct FundingOutput {
     txn_id: Sha256dHash,
@@ -308,11 +308,7 @@ impl Query {
     }
 
     pub fn update_mempool(&self) -> Result<()> {
-        self.tracker
-            .write()
-            .unwrap()
-            .update(self.app.daemon())
-            .chain_err(|| "failed to update mempool")
+        self.tracker.write().unwrap().update(self.app.daemon())
     }
 
     /// Returns [vsize, fee_rate] pairs (measured in vbytes and satoshis).

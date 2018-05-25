@@ -27,6 +27,7 @@ extern crate serde_json;
 
 pub mod app;
 mod daemon;
+mod errors;
 mod index;
 mod mempool;
 mod query;

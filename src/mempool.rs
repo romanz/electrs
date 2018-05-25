@@ -12,7 +12,7 @@ use index::index_transaction;
 use store::{ReadStore, Row};
 use util::Bytes;
 
-error_chain!{}
+use errors::*;
 
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
 

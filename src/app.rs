@@ -11,7 +11,7 @@ use std::time::Duration;
 use daemon::Network;
 use {daemon, index, query, rpc, store};
 
-error_chain!{}
+use errors::*;
 
 #[derive(Debug)]
 struct Config {
@@ -83,7 +83,7 @@ impl App {
         &self.daemon
     }
     fn update_index(&self, mut tip: Sha256dHash) -> Result<Sha256dHash> {
-        if tip != self.daemon.getbestblockhash().chain_err(|| "daemon error")? {
+        if tip != self.daemon.getbestblockhash()? {
             tip = self.index.update(&self.store, &self.daemon);
         }
         Ok(tip)
@@ -92,7 +92,7 @@ impl App {
 
 fn run_server(config: &Config) -> Result<()> {
     let index = index::Index::new();
-    let daemon = daemon::Daemon::new(config.network_type).chain_err(|| "cannot connect to daemon")?;
+    let daemon = daemon::Daemon::new(config.network_type)?;
 
     let store = store::DBStore::open(
         config.db_path,
@@ -117,9 +117,7 @@ fn run_server(config: &Config) -> Result<()> {
     rpc::start(&config.rpc_addr, query.clone());
     loop {
         thread::sleep(poll_delay);
-        query
-            .update_mempool()
-            .chain_err(|| "mempool update failed")?;
+        query.update_mempool()?;
         tip = app.update_index(tip)?;
     }
 }
