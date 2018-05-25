@@ -2,14 +2,15 @@ use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
-use crossbeam;
+use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
+use std::thread;
 use std::time::Duration;
 
 use query::Query;
@@ -294,12 +295,20 @@ impl Connection {
 
     pub fn run(mut self) {
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
-        crossbeam::scope(|scope| {
-            let chan = Channel::new();
-            let tx = chan.sender();
-            scope.spawn(|| Connection::handle_requests(reader, tx));
-            self.handle_replies(&chan).unwrap();
-        });
+        let chan = Channel::new();
+        let tx = chan.sender();
+        let child = thread::spawn(|| Connection::handle_requests(reader, tx));
+        if let Err(e) = self.handle_replies(&chan) {
+            error!(
+                "[{}] connection handling failed: {}",
+                self.addr,
+                e.display_chain().to_string()
+            );
+        }
+        let _ = self.stream.shutdown(Shutdown::Both);
+        if child.join().is_err() {
+            error!("[{}] receiver panicked", self.addr);
+        }
     }
 }
 
@@ -329,13 +338,13 @@ impl Channel {
     }
 }
 
-pub fn serve(addr: &SocketAddr, query: Arc<Query>) {
-    let listener = TcpListener::bind(addr).unwrap();
+pub fn start(addr: &SocketAddr, query: Arc<Query>) -> thread::JoinHandle<()> {
+    let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
     info!("RPC server running on {}", addr);
-    loop {
-        let (stream, addr) = listener.accept().unwrap();
+    thread::spawn(move || loop {
+        let (stream, addr) = listener.accept().expect("accept failed");
         info!("[{}] connected peer", addr);
         Connection::new(query.clone(), stream, addr).run();
         info!("[{}] disconnected peer", addr);
-    }
+    })
 }

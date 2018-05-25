@@ -1,6 +1,5 @@
 use argparse::{ArgumentParser, StoreTrue};
 use bitcoin::util::hash::Sha256dHash;
-use crossbeam;
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -98,15 +97,13 @@ fn run_server(config: &Config) {
     });
 
     let query = Arc::new(query::Query::new(app.clone()));
-    crossbeam::scope(|scope| {
-        let poll_delay = Duration::from_secs(5);
-        scope.spawn(|| rpc::serve(&config.rpc_addr, query.clone()));
-        loop {
-            thread::sleep(poll_delay);
-            query.update_mempool().unwrap();
-            tip = app.update_index(tip);
-        }
-    });
+    let poll_delay = Duration::from_secs(5);
+    rpc::start(&config.rpc_addr, query.clone());
+    loop {
+        thread::sleep(poll_delay);
+        query.update_mempool().unwrap();
+        tip = app.update_index(tip);
+    }
 }
 
 fn setup_logging(config: &Config) {

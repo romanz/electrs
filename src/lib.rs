@@ -4,7 +4,6 @@ extern crate argparse;
 extern crate base64;
 extern crate bincode;
 extern crate bitcoin;
-extern crate crossbeam;
 extern crate crypto;
 extern crate futures;
 extern crate hex;
