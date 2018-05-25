@@ -1,5 +1,6 @@
 use argparse::{ArgumentParser, StoreTrue};
 use bitcoin::util::hash::Sha256dHash;
+use simplelog::LevelFilter;
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use {daemon, index, query, rpc, store};
 #[derive(Debug)]
 struct Config {
     log_file: String,
+    log_level: LevelFilter,
     network_type: Network, // bitcoind JSONRPC endpoint
     db_path: &'static str, // RocksDB directory path
     rpc_addr: SocketAddr,  // for serving Electrum clients
@@ -20,6 +22,7 @@ struct Config {
 impl Config {
     pub fn from_args() -> Config {
         let mut testnet = false;
+        let mut verbose = false;
         {
             let mut parser = ArgumentParser::new();
             parser.set_description("Bitcoin indexing server.");
@@ -27,6 +30,11 @@ impl Config {
                 &["--testnet"],
                 StoreTrue,
                 "Connect to a testnet bitcoind instance",
+            );
+            parser.refer(&mut verbose).add_option(
+                &["-v", "--verbose"],
+                StoreTrue,
+                "More verbose logging to stderr",
             );
             parser.parse_args_or_exit();
         }
@@ -36,6 +44,11 @@ impl Config {
         };
         Config {
             log_file: "indexrs.log".to_string(),
+            log_level: if verbose {
+                LevelFilter::Debug
+            } else {
+                LevelFilter::Info
+            },
             network_type: network_type,
             db_path: match network_type {
                 Network::Mainnet => "./db/mainnet",
@@ -111,7 +124,7 @@ fn setup_logging(config: &Config) {
     let mut cfg = Config::default();
     cfg.time_format = Some("%F %H:%M:%S%.3f");
     CombinedLogger::init(vec![
-        TermLogger::new(LevelFilter::Info, cfg.clone()).unwrap(),
+        TermLogger::new(config.log_level, cfg.clone()).unwrap(),
         WriteLogger::new(
             LevelFilter::Debug,
             cfg.clone(),
