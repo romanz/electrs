@@ -21,14 +21,14 @@ pub enum Network {
     Testnet,
 }
 
-fn read_cookie(network: Network) -> Vec<u8> {
+fn read_cookie(network: Network) -> Result<Vec<u8>> {
     let mut path = home_dir().unwrap();
     path.push(".bitcoin");
     if let Network::Testnet = network {
         path.push("testnet3");
     }
     path.push(".cookie");
-    fs::read(&path).expect("failed to read cookie")
+    fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
@@ -72,14 +72,14 @@ impl MempoolEntry {
 }
 
 impl Daemon {
-    pub fn new(network: Network) -> Daemon {
-        Daemon {
+    pub fn new(network: Network) -> Result<Daemon> {
+        Ok(Daemon {
             addr: match network {
                 Network::Mainnet => "localhost:8332",
                 Network::Testnet => "localhost:18332",
             }.to_string(),
-            cookie_b64: base64::encode(&read_cookie(network)),
-        }
+            cookie_b64: base64::encode(&read_cookie(network)?),
+        })
     }
 
     fn call_jsonrpc(&self, request: &Value) -> Result<Value> {

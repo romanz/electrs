@@ -1,5 +1,6 @@
 use argparse::{ArgumentParser, StoreTrue};
 use bitcoin::util::hash::Sha256dHash;
+use error_chain::ChainedError;
 use simplelog::LevelFilter;
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
@@ -9,6 +10,8 @@ use std::time::Duration;
 
 use daemon::Network;
 use {daemon, index, query, rpc, store};
+
+error_chain!{}
 
 #[derive(Debug)]
 struct Config {
@@ -79,17 +82,17 @@ impl App {
     pub fn daemon(&self) -> &daemon::Daemon {
         &self.daemon
     }
-    fn update_index(&self, mut tip: Sha256dHash) -> Sha256dHash {
-        if tip != self.daemon.getbestblockhash().unwrap() {
+    fn update_index(&self, mut tip: Sha256dHash) -> Result<Sha256dHash> {
+        if tip != self.daemon.getbestblockhash().chain_err(|| "daemon error")? {
             tip = self.index.update(&self.store, &self.daemon);
         }
-        tip
+        Ok(tip)
     }
 }
 
-fn run_server(config: &Config) {
+fn run_server(config: &Config) -> Result<()> {
     let index = index::Index::new();
-    let daemon = daemon::Daemon::new(config.network_type);
+    let daemon = daemon::Daemon::new(config.network_type).chain_err(|| "cannot connect to daemon")?;
 
     let store = store::DBStore::open(
         config.db_path,
@@ -114,8 +117,10 @@ fn run_server(config: &Config) {
     rpc::start(&config.rpc_addr, query.clone());
     loop {
         thread::sleep(poll_delay);
-        query.update_mempool().unwrap();
-        tip = app.update_index(tip);
+        query
+            .update_mempool()
+            .chain_err(|| "mempool update failed")?;
+        tip = app.update_index(tip)?;
     }
 }
 
@@ -141,5 +146,7 @@ fn setup_logging(config: &Config) {
 pub fn main() {
     let config = Config::from_args();
     setup_logging(&config);
-    run_server(&config)
+    if let Err(e) = run_server(&config) {
+        error!("{}", e.display_chain().to_string());
+    }
 }
