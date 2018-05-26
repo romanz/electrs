@@ -199,7 +199,13 @@ impl Connection {
         Ok(match result {
             Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
             Err(e) => {
-                warn!("rpc #{} {} {:?} failed: {}", id, method, params, e.display_chain());
+                warn!(
+                    "rpc #{} {} {:?} failed: {}",
+                    id,
+                    method,
+                    params,
+                    e.display_chain()
+                );
                 json!({"jsonrpc": "2.0", "id": id, "error": format!("{}", e)})
             }
         })
