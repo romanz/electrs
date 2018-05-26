@@ -101,6 +101,7 @@ impl App {
 fn run_server(config: &Config) -> Result<()> {
     let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.network_type)?;
+    debug!("{:?}", daemon.getblockchaininfo()?);
 
     let store = store::DBStore::open(
         config.db_path,

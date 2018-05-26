@@ -5,7 +5,7 @@ use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use hex;
-use serde_json::{from_str, Value};
+use serde_json::{from_str, from_value, Value};
 use std::env::home_dir;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -47,6 +47,16 @@ pub struct MempoolEntry {
     fee: u64,   // in satoshis
     vsize: u32, // in virtual bytes (= weight/4)
     fee_per_vbyte: f32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BlockchainInfo {
+    chain: String,
+    blocks: usize,
+    headers: usize,
+    bestblockhash: String,
+    size_on_disk: usize,
+    pruned: bool,
 }
 
 impl MempoolEntry {
@@ -143,6 +153,11 @@ impl Daemon {
     }
 
     // bitcoind JSONRPC API:
+
+    pub fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
+        let info: Value = self.request("getblockchaininfo", json!([]))?;
+        Ok(from_value(info).chain_err(|| "invalid blockchain info")?)
+    }
 
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
         parse_hash(&self.request("getbestblockhash", json!([]))?).chain_err(|| "invalid blockhash")
