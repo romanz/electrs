@@ -17,6 +17,7 @@ use errors::*;
 struct Config {
     log_file: String,
     log_level: LevelFilter,
+    restart: bool,
     network_type: Network, // bitcoind JSONRPC endpoint
     db_path: &'static str, // RocksDB directory path
     rpc_addr: SocketAddr,  // for serving Electrum clients
@@ -26,6 +27,7 @@ impl Config {
     pub fn from_args() -> Config {
         let mut testnet = false;
         let mut verbose = false;
+        let mut restart = false;
         {
             let mut parser = ArgumentParser::new();
             parser.set_description("Bitcoin indexing server.");
@@ -38,6 +40,11 @@ impl Config {
                 &["-v", "--verbose"],
                 StoreTrue,
                 "More verbose logging to stderr",
+            );
+            parser.refer(&mut restart).add_option(
+                &["--restart"],
+                StoreTrue,
+                "Restart the server in case of a recoverable error",
             );
             parser.parse_args_or_exit();
         }
@@ -52,6 +59,7 @@ impl Config {
             } else {
                 LevelFilter::Info
             },
+            restart: restart,
             network_type: network_type,
             db_path: match network_type {
                 Network::Mainnet => "./db/mainnet",
@@ -141,10 +149,44 @@ fn setup_logging(config: &Config) {
     info!("config: {:?}", config);
 }
 
+struct Repeat {
+    do_restart: bool,
+    iter_count: usize,
+}
+
+impl Repeat {
+    fn new(config: &Config) -> Repeat {
+        Repeat {
+            do_restart: config.restart,
+            iter_count: 0,
+        }
+    }
+}
+
+impl Iterator for Repeat {
+    type Item = ();
+
+    fn next(&mut self) -> Option<()> {
+        self.iter_count += 1;
+        if self.iter_count == 1 {
+            return Some(()); // don't sleep before 1st iteration
+        }
+        thread::sleep(Duration::from_secs(1));
+        if self.do_restart {
+            Some(())
+        } else {
+            None
+        }
+    }
+}
+
 pub fn main() {
     let config = Config::from_args();
     setup_logging(&config);
-    if let Err(e) = run_server(&config) {
-        error!("{}", e.display_chain());
+    for _ in Repeat::new(&config) {
+        match run_server(&config) {
+            Ok(_) => break,
+            Err(e) => error!("{}", e.display_chain()),
+        }
     }
 }
