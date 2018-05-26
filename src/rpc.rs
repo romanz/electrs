@@ -239,12 +239,15 @@ impl Connection {
         Ok(result)
     }
 
-    fn send_value(&mut self, v: Value) -> Result<()> {
-        debug!("[{}] <- {}", self.addr, v);
-        let line = v.to_string() + "\n";
-        self.stream
-            .write_all(line.as_bytes())
-            .chain_err(|| format!("failed to send {}", v))
+    fn send_values(&mut self, values: &[Value]) -> Result<()> {
+        for value in values {
+            debug!("[{}] <- {}", self.addr, value);
+            let line = value.to_string() + "\n";
+            self.stream
+                .write_all(line.as_bytes())
+                .chain_err(|| format!("failed to send {}", value))?;
+        }
+        Ok(())
     }
 
     fn handle_replies(&mut self, chan: &Channel) -> Result<()> {
@@ -268,14 +271,12 @@ impl Connection {
                         ) => self.handle_command(method, params, id)?,
                         _ => bail!("invalid command: {}", cmd),
                     };
-                    self.send_value(reply)?
+                    self.send_values(&[reply])?
                 }
                 Message::PeriodicUpdate => {
-                    for update in self.update_subscriptions()
-                        .chain_err(|| "failed to update subscriptions")?
-                    {
-                        self.send_value(update)?
-                    }
+                    let values = self.update_subscriptions()
+                        .chain_err(|| "failed to update subscriptions")?;
+                    self.send_values(&values)?
                 }
                 Message::Done => {
                     debug!("done");
