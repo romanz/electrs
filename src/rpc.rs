@@ -58,9 +58,7 @@ impl Connection {
     }
 
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
-        let entry = self.query
-            .get_best_header()
-            .chain_err(|| "no headers found")?;
+        let entry = self.query.get_best_header()?;
         self.last_header_entry = Some(entry.clone());
         Ok(jsonify_header(entry.header(), entry.height()))
     }
@@ -210,9 +208,7 @@ impl Connection {
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
         let mut result = vec![];
         if let Some(ref mut last_entry) = self.last_header_entry {
-            let entry = self.query
-                .get_best_header()
-                .chain_err(|| "no headers found")?;
+            let entry = self.query.get_best_header()?;
             if *last_entry != entry {
                 *last_entry = entry;
                 let header = jsonify_header(last_entry.header(), last_entry.height());

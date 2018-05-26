@@ -267,9 +267,10 @@ impl Query {
         result
     }
 
-    pub fn get_best_header(&self) -> Option<HeaderEntry> {
+    pub fn get_best_header(&self) -> Result<HeaderEntry> {
         let header_list = self.app.index().headers_list();
-        Some(header_list.headers().last()?.clone())
+        let last_header = header_list.headers().last();
+        Ok(last_header.chain_err(|| "no headers indexed")?.clone())
     }
 
     pub fn get_merkle_proof(
