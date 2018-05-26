@@ -16,6 +16,8 @@ use store::{DBStore, ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
            HeaderMap, HASH_PREFIX_LEN};
 
+use errors::*;
+
 type ProgressBar = pbr::ProgressBar<Stderr>;
 
 #[derive(Serialize, Deserialize)]
@@ -365,7 +367,7 @@ impl Index {
         missing_headers
     }
 
-    pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Sha256dHash {
+    pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Result<Sha256dHash> {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
         let no_indexed_headers = indexed_headers.headers().is_empty();
         if no_indexed_headers {
@@ -376,7 +378,7 @@ impl Index {
                 ));
             }
         }
-        let current_headers = daemon.enumerate_headers(&*indexed_headers).unwrap();
+        let current_headers = daemon.enumerate_headers(&*indexed_headers)?;
         for rows in Batching::new(Indexer::new(
             self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
             &daemon,
@@ -386,6 +388,6 @@ impl Index {
         }
         let tip = current_headers.tip();
         *(self.headers.write().unwrap()) = Arc::new(current_headers);
-        tip
+        Ok(tip)
     }
 }

@@ -92,7 +92,7 @@ impl App {
     }
     fn update_index(&self, mut tip: Sha256dHash) -> Result<Sha256dHash> {
         if tip != self.daemon.getbestblockhash()? {
-            tip = self.index.update(&self.store, &self.daemon);
+            tip = self.index.update(&self.store, &self.daemon)?;
         }
         Ok(tip)
     }
@@ -109,7 +109,7 @@ fn run_server(config: &Config) -> Result<()> {
             auto_compact: false,
         },
     );
-    let mut tip = index.update(&store, &daemon);
+    let mut tip = index.update(&store, &daemon)?;
     store.compact_if_needed();
     drop(store); // to be re-opened soon
 
