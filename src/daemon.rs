@@ -127,7 +127,7 @@ impl Daemon {
             .iter()
             .map(|params| json!({"method": method, "params": params}))
             .collect();
-        let mut result = Vec::new();
+        let mut result = vec![];
         for reply in self.call_jsonrpc(&reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?
             .as_array_mut()
@@ -164,7 +164,7 @@ impl Daemon {
             Ok(deserialize(&header_bytes)
                 .chain_err(|| format!("failed to parse blockheader {}", header_hex))?)
         }
-        let mut result = Vec::new();
+        let mut result = vec![];
         for h in headers {
             result.push(header_from_value(h)?);
         }
@@ -207,7 +207,7 @@ impl Daemon {
 
     pub fn getmempooltxids(&self) -> Result<Vec<Sha256dHash>> {
         let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
-        let mut result = Vec::new();
+        let mut result = vec![];
         for value in txids.as_array().chain_err(|| "non-array result")? {
             result.push(parse_hash(&value).chain_err(|| "invalid txid")?);
         }

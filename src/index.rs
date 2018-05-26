@@ -177,7 +177,7 @@ pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) 
 }
 
 fn index_block(block: &Block, height: usize) -> Vec<Row> {
-    let mut rows = Vec::new();
+    let mut rows = vec![];
     for txn in &block.txdata {
         index_transaction(&txn, height, &mut rows);
     }

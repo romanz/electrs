@@ -139,7 +139,7 @@ impl Query {
     }
 
     fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Result<Vec<TxnHeight>> {
-        let mut txns = Vec::new();
+        let mut txns = vec![];
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
@@ -162,7 +162,7 @@ impl Query {
             store,
             txids_by_funding_output(store, &funding.txn_id, funding.output_index),
         )?;
-        let mut spending_inputs = Vec::new();
+        let mut spending_inputs = vec![];
         for t in &spending_txns {
             for input in t.txn.input.iter() {
                 if input.prev_hash == funding.txn_id
@@ -185,7 +185,7 @@ impl Query {
     }
 
     fn find_funding_outputs(&self, t: &TxnHeight, script_hash: &[u8]) -> Vec<FundingOutput> {
-        let mut result = Vec::new();
+        let mut result = vec![];
         let txn_id = t.txn.txid();
         for (index, output) in t.txn.output.iter().enumerate() {
             if compute_script_hash(&output.script_pubkey[..]) == script_hash {
@@ -256,7 +256,7 @@ impl Query {
     pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
         let headers_list = self.app.index().headers_list();
         let headers = headers_list.headers();
-        let mut result = Vec::new();
+        let mut result = vec![];
         for height in heights {
             let header: &BlockHeader = match headers.get(*height) {
                 Some(header) => header.header(),
@@ -290,7 +290,7 @@ impl Query {
             .iter()
             .position(|txid| txid == tx_hash)
             .chain_err(|| format!("missing txid {}", tx_hash))?;
-        let mut merkle = Vec::new();
+        let mut merkle = vec![];
         let mut index = pos;
         while txids.len() > 1 {
             if txids.len() % 2 != 0 {

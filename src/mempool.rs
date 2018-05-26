@@ -40,7 +40,7 @@ impl ReadStore for MempoolStore {
     fn scan(&self, prefix: &[u8]) -> Vec<Row> {
         let map = self.map.read().unwrap();
         let range = map.range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
-        let mut rows = Vec::new();
+        let mut rows = vec![];
         for (key, value) in range {
             if !key.starts_with(prefix) {
                 break;
@@ -133,7 +133,7 @@ impl Tracker {
     }
 
     fn update_tx_index(&mut self) {
-        let mut rows = Vec::new();
+        let mut rows = vec![];
         for stats in self.stats.values() {
             index_transaction(&stats.tx, 0, &mut rows)
         }
@@ -145,7 +145,7 @@ impl Tracker {
         entries.sort_unstable_by(|e1, e2| {
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
-        let mut histogram = Vec::new();
+        let mut histogram = vec![];
         let mut bin_size = 0;
         let mut last_fee_rate = None;
         for e in entries {

@@ -76,7 +76,7 @@ impl ReadStore for DBStore {
 
     // TODO: use generators
     fn scan(&self, prefix: &[u8]) -> Vec<Row> {
-        let mut rows = Vec::new();
+        let mut rows = vec![];
         let mut iter = self.db.raw_iterator();
         iter.seek(prefix);
         while iter.valid() {
