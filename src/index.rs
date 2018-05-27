@@ -207,6 +207,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderMap {
         let header: BlockHeader = deserialize(&row.value).unwrap();
         headers.insert(deserialize(&key.hash).unwrap(), header);
     }
+    debug!("read {} block headers from DB", headers.len());
     headers
 }
 

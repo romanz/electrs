@@ -264,7 +264,7 @@ impl Daemon {
             .as_u64()
             .expect("`blocks` should be number") as usize;
         let all_heights: Vec<usize> = (0..max_height).collect();
-        let chunk_size = 10_000;
+        let chunk_size = 100_000;
         let mut result = HeaderMap::new();
 
         let null_hash = Sha256dHash::default();
@@ -272,6 +272,7 @@ impl Daemon {
         for heights in all_heights.chunks(chunk_size) {
             let headers = self.getblockheaders(&heights)?;
             assert!(headers.len() == heights.len());
+            debug!("downloaded {} headers", headers.len());
             for header in headers {
                 blockhash = header.bitcoin_hash();
                 result.insert(blockhash, header);
@@ -294,7 +295,8 @@ impl Daemon {
         let mut blockhash = bestblockhash;
         while !header_map.contains_key(&blockhash) {
             let header = self.getblockheader(&blockhash)
-                .chain_err(|| "failed to get missing headers")?;
+                .chain_err(|| format!("failed to get missing header for {}", blockhash))?;
+            debug!("downloaded {} block header", blockhash);
             header_map.insert(blockhash, header);
             blockhash = header.prev_blockhash;
         }
