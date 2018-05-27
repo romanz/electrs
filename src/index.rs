@@ -210,10 +210,11 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderMap {
     headers
 }
 
-fn read_last_indexed_blockhash(store: &ReadStore) -> Option<Sha256dHash> {
-    let row = store.get(b"L")?;
-    let blockhash: Sha256dHash = deserialize(&row).unwrap();
-    Some(blockhash)
+fn read_last_indexed_blockhash(store: &ReadStore) -> Sha256dHash {
+    match store.get(b"L") {
+        Some(row) => deserialize(&row).unwrap(),
+        None => Sha256dHash::default(),
+    }
 }
 
 struct Indexer<'a> {
@@ -349,38 +350,18 @@ impl Index {
         self.headers.read().unwrap().clone()
     }
 
-    fn get_missing_headers<'a>(
-        &self,
-        indexed_headers: &HeaderMap,
-        current_headers: &'a HeaderList,
-    ) -> Vec<&'a HeaderEntry> {
-        let missing_headers: Vec<&'a HeaderEntry> = current_headers
-            .headers()
-            .iter()
-            .filter(|entry| !indexed_headers.contains_key(&entry.hash()))
-            .collect();
-        info!(
-            "{:?} ({} left to index)",
-            current_headers,
-            missing_headers.len(),
-        );
-        missing_headers
-    }
-
     pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Result<Sha256dHash> {
         let mut indexed_headers: Arc<HeaderList> = self.headers_list();
         let no_indexed_headers = indexed_headers.headers().is_empty();
         if no_indexed_headers {
-            if let Some(last_blockhash) = read_last_indexed_blockhash(store) {
-                indexed_headers = Arc::new(HeaderList::build(
-                    read_indexed_headers(store),
-                    last_blockhash,
-                ));
-            }
+            indexed_headers = Arc::new(HeaderList::build(
+                read_indexed_headers(store),
+                read_last_indexed_blockhash(store),
+            ));
         }
         let current_headers = daemon.enumerate_headers(&*indexed_headers)?;
         for rows in Batching::new(Indexer::new(
-            self.get_missing_headers(&indexed_headers.as_map(), &current_headers),
+            current_headers.get_missing_headers(&indexed_headers.as_map()),
             &daemon,
             /*use_progress_bar=*/ no_indexed_headers,
         )) {

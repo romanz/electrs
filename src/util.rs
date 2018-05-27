@@ -107,6 +107,15 @@ impl HeaderList {
     pub fn as_map(&self) -> HeaderMap {
         HeaderMap::from_iter(self.headers.iter().map(|entry| (entry.hash, entry.header)))
     }
+
+    pub fn get_missing_headers(&self, existing_headers_map: &HeaderMap) -> Vec<&HeaderEntry> {
+        let missing: Vec<&HeaderEntry> = self.headers()
+            .iter()
+            .filter(|entry| !existing_headers_map.contains_key(&entry.hash()))
+            .collect();
+        info!("{:?} ({} left to index)", self, missing.len());
+        missing
+    }
 }
 
 impl fmt::Debug for HeaderList {
