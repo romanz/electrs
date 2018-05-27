@@ -36,7 +36,7 @@ pub struct StoreOptions {
 impl DBStore {
     /// Opens a new RocksDB at the specified location.
     pub fn open(path: &str, opts: StoreOptions) -> DBStore {
-        info!("opening {} with {:?}", path, &opts);
+        debug!("opening {} with {:?}", path, &opts);
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
@@ -63,9 +63,10 @@ impl DBStore {
         if self.get(key).is_some() {
             return;
         }
-        info!("full compaction");
+        info!("starting full compaction");
         self.db.compact_range(None, None); // should take a while
         self.db.put(key, b"").unwrap();
+        info!("finished full compaction");
     }
 }
 
