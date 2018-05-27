@@ -65,7 +65,7 @@ impl HeaderList {
             blockhash = header.prev_blockhash;
         }
         if !header_map.is_empty() {
-            warn!("orphaned blocks: {:?}", header_map);
+            warn!("{} orphaned blocks: {:?}", header_map.len(), header_map);
         }
         HeaderList {
             headers: hashed_headers

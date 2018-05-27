@@ -288,30 +288,24 @@ impl Daemon {
         Ok(result)
     }
 
-    fn add_missing_headers(&self, mut header_map: HeaderMap) -> Result<(HeaderMap, Sha256dHash)> {
+    pub fn get_latest_headers(&self, indexed_headers: &HeaderList) -> Result<HeaderList> {
+        let mut header_map = if indexed_headers.headers().is_empty() {
+            self.get_all_headers()
+                .chain_err(|| "failed to download all headers")?
+        } else {
+            indexed_headers.as_map()
+        };
         // Get current best blockhash (using JSONRPC API)
         let bestblockhash = self.getbestblockhash()?;
         // Iterate back over headers until known blockash is found:
         let mut blockhash = bestblockhash;
         while !header_map.contains_key(&blockhash) {
             let header = self.getblockheader(&blockhash)
-                .chain_err(|| format!("failed to get missing header for {}", blockhash))?;
+                .chain_err(|| format!("failed to get {} header", blockhash))?;
             debug!("downloaded {} block header", blockhash);
             header_map.insert(blockhash, header);
             blockhash = header.prev_blockhash;
         }
-        Ok((header_map, bestblockhash))
-    }
-
-    pub fn enumerate_headers(&self, indexed_headers: &HeaderList) -> Result<HeaderList> {
-        let header_map = if indexed_headers.headers().is_empty() {
-            self.get_all_headers()
-                .chain_err(|| "failed to download all headers")?
-        } else {
-            indexed_headers.as_map()
-        };
-        let (header_map, blockhash) = self.add_missing_headers(header_map)
-            .chain_err(|| "failed to add missing headers")?;
-        Ok(HeaderList::build(header_map, blockhash))
+        Ok(HeaderList::build(header_map, bestblockhash))
     }
 }

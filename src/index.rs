@@ -360,16 +360,16 @@ impl Index {
                 read_last_indexed_blockhash(store),
             ));
         }
-        let current_headers = daemon.enumerate_headers(&*indexed_headers)?;
+        let latest_headers = daemon.get_latest_headers(&*indexed_headers)?;
         for rows in Batching::new(Indexer::new(
-            current_headers.get_missing_headers(&indexed_headers.as_map()),
+            latest_headers.get_missing_headers(&indexed_headers.as_map()),
             &daemon,
             /*use_progress_bar=*/ no_indexed_headers,
         )) {
             store.write(rows);
         }
-        let tip = current_headers.tip();
-        *(self.headers.write().unwrap()) = Arc::new(current_headers);
+        let tip = latest_headers.tip();
+        *(self.headers.write().unwrap()) = Arc::new(latest_headers);
         Ok(tip)
     }
 }
