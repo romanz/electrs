@@ -1,7 +1,6 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use hex;
@@ -11,7 +10,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
-use util::{HeaderList, HeaderMap};
+use util::{HeaderEntry, HeaderList};
 
 use errors::*;
 
@@ -132,26 +131,6 @@ impl Daemon {
         Ok(reply["result"].take())
     }
 
-    fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
-        let reqs = params_list
-            .iter()
-            .map(|params| json!({"method": method, "params": params}))
-            .collect();
-        let mut result = vec![];
-        for reply in self.call_jsonrpc(&reqs)
-            .chain_err(|| format!("RPC failed: {}", reqs))?
-            .as_array_mut()
-            .chain_err(|| "non-array response")?
-        {
-            let err = reply["error"].take();
-            if !err.is_null() {
-                bail!("{} RPC error: {}", method, err);
-            }
-            result.push(reply["result"].take())
-        }
-        Ok(result)
-    }
-
     // bitcoind JSONRPC API:
 
     pub fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
@@ -161,29 +140,6 @@ impl Daemon {
 
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
         parse_hash(&self.request("getbestblockhash", json!([]))?).chain_err(|| "invalid blockhash")
-    }
-
-    pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
-        let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
-        let hashes: Vec<Value> = self.requests("getblockhash", &heights)?
-            .into_iter()
-            .map(|hash| json!([hash, /*verbose=*/ false]))
-            .collect();
-        let headers: Vec<Value> = self.requests("getblockheader", &hashes)?;
-
-        fn header_from_value(value: Value) -> Result<BlockHeader> {
-            let header_hex = value
-                .as_str()
-                .chain_err(|| format!("non-string header: {}", value))?;
-            let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
-            Ok(deserialize(&header_bytes)
-                .chain_err(|| format!("failed to parse blockheader {}", header_hex))?)
-        }
-        let mut result = vec![];
-        for h in headers {
-            result.push(header_from_value(h)?);
-        }
-        Ok(result)
     }
 
     pub fn getblockheader(&self, blockhash: &Sha256dHash) -> Result<BlockHeader> {
@@ -257,55 +213,26 @@ impl Daemon {
         )
     }
 
-    pub fn get_all_headers(&self) -> Result<HeaderMap> {
-        let info: Value = self.request("getblockchaininfo", json!([]))?;
-        let max_height = info.get("blocks")
-            .expect("missing `blocks` attribute")
-            .as_u64()
-            .expect("`blocks` should be number") as usize;
-        let all_heights: Vec<usize> = (0..max_height).collect();
-        let chunk_size = 100_000;
-        let mut result = HeaderMap::new();
-
-        let null_hash = Sha256dHash::default();
-        let mut blockhash = null_hash;
-        for heights in all_heights.chunks(chunk_size) {
-            let headers = self.getblockheaders(&heights)?;
-            assert!(headers.len() == heights.len());
-            debug!("downloaded {} headers", headers.len());
-            for header in headers {
-                blockhash = header.bitcoin_hash();
-                result.insert(blockhash, header);
-            }
-        }
-
-        while blockhash != null_hash {
-            blockhash = result
-                .get(&blockhash)
-                .chain_err(|| format!("missing block header {}", blockhash))?
-                .prev_blockhash;
-        }
-        Ok(result)
-    }
-
-    pub fn get_latest_headers(&self, indexed_headers: &HeaderList) -> Result<HeaderList> {
-        let mut header_map = if indexed_headers.headers().is_empty() {
-            self.get_all_headers()
-                .chain_err(|| "failed to download all headers")?
-        } else {
-            indexed_headers.as_map()
-        };
-        // Get current best blockhash (using JSONRPC API)
-        let bestblockhash = self.getbestblockhash()?;
+    pub fn get_new_headers(
+        &self,
+        indexed_headers: &HeaderList,
+        bestblockhash: &Sha256dHash,
+    ) -> Result<Vec<HeaderEntry>> {
         // Iterate back over headers until known blockash is found:
-        let mut blockhash = bestblockhash;
-        while !header_map.contains_key(&blockhash) {
+        let null_hash = Sha256dHash::default();
+        let mut blockhash = *bestblockhash;
+        let mut new_headers = Vec::<BlockHeader>::new();
+        while blockhash != null_hash {
+            if indexed_headers.header_by_blockhash(&blockhash).is_some() {
+                break;
+            }
             let header = self.getblockheader(&blockhash)
                 .chain_err(|| format!("failed to get {} header", blockhash))?;
-            debug!("downloaded {} block header", blockhash);
-            header_map.insert(blockhash, header);
+            trace!("downloaded {} block header", blockhash);
+            new_headers.push(header);
             blockhash = header.prev_blockhash;
         }
-        Ok(HeaderList::build(header_map, bestblockhash))
+        new_headers.reverse(); // so the tip is the last vector entry
+        Ok(indexed_headers.order(new_headers))
     }
 }
