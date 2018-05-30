@@ -355,7 +355,6 @@ impl<'a> Iterator for Batching<'a> {
 }
 
 pub struct Index {
-    // TODO: store also a &HeaderMap.
     // TODO: store also latest snapshot.
     headers: RwLock<HeaderList>,
 }
