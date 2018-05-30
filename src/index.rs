@@ -12,7 +12,7 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use daemon::Daemon;
-use store::{DBStore, ReadStore, Row, WriteStore};
+use store::{ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
            HeaderMap, HASH_PREFIX_LEN};
 
@@ -379,7 +379,7 @@ impl Index {
             .cloned()
     }
 
-    pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Result<Sha256dHash> {
+    pub fn update(&self, store: &WriteStore, daemon: &Daemon) -> Result<Sha256dHash> {
         let tip = daemon.getbestblockhash()?;
         let new_headers = daemon.get_new_headers(&self.headers.read().unwrap(), &tip)?;
         new_headers.last().map(|tip| {
