@@ -1,4 +1,3 @@
-use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
@@ -26,9 +25,10 @@ fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     Ok(script_hash)
 }
 
-fn jsonify_header(header: &BlockHeader, height: usize) -> Value {
+fn jsonify_header(entry: &HeaderEntry) -> Value {
+    let header = entry.header();
     json!({
-        "block_height": height,
+        "block_height": entry.height(),
         "version": header.version,
         "prev_block_hash": header.prev_blockhash.be_hex_string(),
         "merkle_root": header.merkle_root.be_hex_string(),
@@ -60,7 +60,7 @@ impl Connection {
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
         let entry = self.query.get_best_header()?;
         self.last_header_entry = Some(entry.clone());
-        Ok(jsonify_header(entry.header(), entry.height()))
+        Ok(jsonify_header(&entry))
     }
 
     fn server_version(&self) -> Result<Value> {
@@ -91,7 +91,7 @@ impl Connection {
         let headers: Vec<String> = self.query
             .get_headers(&heights)
             .into_iter()
-            .map(|x| hex::encode(&serialize(&x).unwrap()))
+            .map(|entry| hex::encode(&serialize(entry.header()).unwrap()))
             .collect();
         Ok(json!(headers.join("")))
     }
@@ -221,7 +221,7 @@ impl Connection {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
                 *last_entry = entry;
-                let header = jsonify_header(last_entry.header(), last_entry.height());
+                let header = jsonify_header(last_entry);
                 result.push(json!({
                     "jsonrpc": "2.0",
                     "method": "blockchain.headers.subscribe",
@@ -318,6 +318,7 @@ impl Connection {
                 e.display_chain().to_string()
             );
         }
+        info!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
         if child.join().is_err() {
             error!("[{}] receiver panicked", self.addr);
