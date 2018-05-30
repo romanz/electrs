@@ -99,8 +99,12 @@ impl Connection {
     fn blockchain_block_get_header(&self, params: &[Value]) -> Result<Value> {
         let height = params.get(0).chain_err(|| "missing height")?;
         let height = height.as_u64().chain_err(|| "non-number height")? as usize;
-        let headers = self.query.get_headers(&[height]);
-        Ok(json!(jsonify_header(&headers[0], height)))
+        let mut entries = self.query.get_headers(&[height]);
+        let entry = entries
+            .pop()
+            .chain_err(|| format!("missing header #{}", height))?;
+        assert_eq!(entries.len(), 0);
+        Ok(json!(jsonify_header(&entry)))
     }
 
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {

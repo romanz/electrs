@@ -1,4 +1,4 @@
-use bitcoin::blockdata::block::{Block, BlockHeader};
+use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
@@ -253,23 +253,16 @@ impl Query {
         self.app.daemon().gettransaction(tx_hash)
     }
 
-    pub fn get_headers(&self, heights: &[usize]) -> Vec<BlockHeader> {
-        let headers_list = self.app.index().headers_list();
-        let headers = headers_list.headers();
-        let mut result = vec![];
-        for height in heights {
-            let header: &BlockHeader = match headers.get(*height) {
-                Some(header) => header.header(),
-                None => break,
-            };
-            result.push(*header);
-        }
-        result
+    pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
+        let index = self.app.index();
+        heights
+            .iter()
+            .filter_map(|height| index.get_header(*height))
+            .collect()
     }
 
     pub fn get_best_header(&self) -> Result<HeaderEntry> {
-        let header_list = self.app.index().headers_list();
-        let last_header = header_list.headers().last();
+        let last_header = self.app.index().best_header();
         Ok(last_header.chain_err(|| "no headers indexed")?.clone())
     }
 
@@ -278,13 +271,11 @@ impl Query {
         tx_hash: &Sha256dHash,
         height: usize,
     ) -> Result<(Vec<Sha256dHash>, usize)> {
-        let header_list = self.app.index().headers_list();
-        let blockhash = header_list
-            .headers()
-            .get(height)
-            .chain_err(|| format!("missing block #{}", height))?
-            .hash();
-        let block: Block = self.app.daemon().getblock(&blockhash).unwrap();
+        let header_entry = self.app
+            .index()
+            .get_header(height)
+            .chain_err(|| format!("missing block #{}", height))?;
+        let block: Block = self.app.daemon().getblock(&header_entry.hash())?;
         let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
         let pos = txids
             .iter()
