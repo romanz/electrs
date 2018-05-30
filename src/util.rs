@@ -45,6 +45,21 @@ impl HeaderEntry {
     }
 }
 
+impl fmt::Debug for HeaderEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let last_block_time = time::at_utc(time::Timespec::new(self.header().time as i64, 0))
+            .rfc3339()
+            .to_string();
+        write!(
+            f,
+            "best={} height={} @ {}",
+            self.hash(),
+            self.height(),
+            last_block_time,
+        )
+    }
+}
+
 pub struct HeaderList {
     headers: Vec<HeaderEntry>,
     tip: Sha256dHash,
@@ -115,23 +130,5 @@ impl HeaderList {
             .collect();
         info!("{:?} ({} left to index)", self, missing.len());
         missing
-    }
-}
-
-impl fmt::Debug for HeaderList {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_block_time = self.headers.last().map_or("N/A".to_string(), |h| {
-            time::at_utc(time::Timespec::new(h.header.time as i64, 0))
-                .rfc3339()
-                .to_string()
-        });
-
-        write!(
-            f,
-            "best={} height={} @ {}",
-            self.height(),
-            self.tip(),
-            last_block_time,
-        )
     }
 }
