@@ -112,6 +112,13 @@ impl HeaderList {
     }
 
     pub fn tip(&self) -> Sha256dHash {
+        assert_eq!(
+            self.tip,
+            self.headers
+                .last()
+                .map(|h| *h.hash())
+                .unwrap_or(Sha256dHash::default())
+        );
         self.tip
     }
 
