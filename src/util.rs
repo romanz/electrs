@@ -2,7 +2,6 @@ use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FromIterator;
 use time;
@@ -68,36 +67,6 @@ pub struct HeaderList {
 }
 
 impl HeaderList {
-    pub fn build(mut header_map: HeaderMap, mut blockhash: Sha256dHash) -> HeaderList {
-        let null_hash = Sha256dHash::default();
-        let tip = blockhash;
-        struct HashedHeader {
-            blockhash: Sha256dHash,
-            header: BlockHeader,
-        }
-        let mut hashed_headers = VecDeque::<HashedHeader>::new();
-        while blockhash != null_hash {
-            let header: BlockHeader = header_map.remove(&blockhash).unwrap();
-            hashed_headers.push_front(HashedHeader { blockhash, header });
-            blockhash = header.prev_blockhash;
-        }
-        if !header_map.is_empty() {
-            warn!("{} orphaned blocks: {:?}", header_map.len(), header_map);
-        }
-        HeaderList {
-            headers: hashed_headers
-                .into_iter()
-                .enumerate()
-                .map(|(height, hashed_header)| HeaderEntry {
-                    height: height,
-                    hash: hashed_header.blockhash,
-                    header: hashed_header.header,
-                })
-                .collect(),
-            tip: tip,
-        }
-    }
-
     pub fn empty() -> HeaderList {
         HeaderList {
             headers: vec![],
@@ -210,18 +179,5 @@ impl HeaderList {
     // The index of last block header at self.headers vector.
     pub fn height(&self) -> usize {
         self.headers.len() - 1
-    }
-
-    pub fn as_map(&self) -> HeaderMap {
-        HeaderMap::from_iter(self.headers.iter().map(|entry| (entry.hash, entry.header)))
-    }
-
-    pub fn get_missing_headers(&self, existing_headers_map: &HeaderMap) -> Vec<&HeaderEntry> {
-        let missing: Vec<&HeaderEntry> = self.headers()
-            .iter()
-            .filter(|entry| !existing_headers_map.contains_key(&entry.hash()))
-            .collect();
-        info!("{:?} ({} left to index)", self, missing.len());
-        missing
     }
 }
