@@ -99,7 +99,6 @@ impl App {
 }
 
 fn run_server(config: &Config) -> Result<()> {
-    let index = index::Index::new();
     let daemon = daemon::Daemon::new(config.network_type)?;
     debug!("{:?}", daemon.getblockchaininfo()?);
 
@@ -110,6 +109,7 @@ fn run_server(config: &Config) -> Result<()> {
             auto_compact: false,
         },
     );
+    let index = index::Index::load(&store);
     let mut tip = index.update(&store, &daemon)?;
     store.compact_if_needed();
     drop(store); // to be re-opened soon
