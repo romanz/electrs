@@ -185,12 +185,15 @@ impl HeaderList {
         }
     }
 
-    pub fn equals(&self, other: &HeaderList) -> bool {
-        self.headers.last() == other.headers.last()
+    pub fn header_by_height(&self, height: usize) -> Option<&HeaderEntry> {
+        self.headers.get(height).map(|entry| {
+            assert_eq!(entry.height(), height);
+            entry
+        })
     }
 
-    pub fn headers(&self) -> &[HeaderEntry] {
-        &self.headers
+    pub fn equals(&self, other: &HeaderList) -> bool {
+        self.headers.last() == other.headers.last()
     }
 
     pub fn tip(&self) -> &Sha256dHash {

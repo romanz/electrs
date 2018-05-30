@@ -373,9 +373,11 @@ impl Index {
     }
 
     pub fn get_header(&self, height: usize) -> Option<HeaderEntry> {
-        let entry = self.headers.read().unwrap().headers().get(height)?.clone();
-        assert_eq!(entry.height(), height);
-        Some(entry)
+        self.headers
+            .read()
+            .unwrap()
+            .header_by_height(height)
+            .cloned()
     }
 
     pub fn update(&self, store: &DBStore, daemon: &Daemon) -> Result<Sha256dHash> {
