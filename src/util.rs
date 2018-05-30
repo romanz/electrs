@@ -1,4 +1,5 @@
 use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -62,6 +63,7 @@ impl fmt::Debug for HeaderEntry {
 
 pub struct HeaderList {
     headers: Vec<HeaderEntry>,
+    heights: HashMap<Sha256dHash, usize>,
     tip: Sha256dHash,
 }
 
@@ -99,7 +101,87 @@ impl HeaderList {
     pub fn empty() -> HeaderList {
         HeaderList {
             headers: vec![],
+            heights: HashMap::new(),
             tip: Sha256dHash::default(),
+        }
+    }
+
+    pub fn order(&self, new_headers: Vec<BlockHeader>) -> Vec<HeaderEntry> {
+        // header[i] -> header[i-1] (i.e. header.last() is the tip)
+        struct HashedHeader {
+            blockhash: Sha256dHash,
+            header: BlockHeader,
+        }
+        let hashed_headers =
+            Vec::<HashedHeader>::from_iter(new_headers.into_iter().map(|header| HashedHeader {
+                blockhash: header.bitcoin_hash(),
+                header,
+            }));
+        for i in 1..hashed_headers.len() {
+            assert_eq!(
+                hashed_headers[i].header.prev_blockhash,
+                hashed_headers[i - 1].blockhash
+            );
+        }
+        let prev_blockhash = match hashed_headers.first() {
+            Some(h) => h.header.prev_blockhash,
+            None => return vec![], // hashed_headers is empty
+        };
+        let null_hash = Sha256dHash::default();
+        let new_height: usize = if prev_blockhash == null_hash {
+            0
+        } else {
+            let prev_height = self.heights
+                .get(&prev_blockhash)
+                .expect(&format!("{} is not part of the blockchain", prev_blockhash));
+            prev_height + 1
+        };
+        (new_height..)
+            .zip(hashed_headers.into_iter())
+            .map(|(height, hashed_header)| HeaderEntry {
+                height: height,
+                hash: hashed_header.blockhash,
+                header: hashed_header.header,
+            })
+            .collect()
+    }
+
+    pub fn apply(&mut self, new_headers: Vec<HeaderEntry>) {
+        // new_headers[i] -> new_headers[i - 1] (i.e. new_headers.last() is the tip)
+        for i in 1..new_headers.len() {
+            assert_eq!(new_headers[i - 1].height() + 1, new_headers[i].height());
+            assert_eq!(
+                *new_headers[i - 1].hash(),
+                new_headers[i].header().prev_blockhash
+            );
+        }
+        let new_height = match new_headers.first() {
+            // TODO: make sure that the connection to the existing chain is correct.
+            Some(entry) => entry.height(),
+            None => return,
+        };
+        debug!(
+            "applying {} new headers from height {}",
+            new_headers.len(),
+            new_height
+        );
+        self.headers.split_off(new_height); // keep [0..new_height) entries
+        for new_header in new_headers {
+            let height = new_header.height();
+            assert_eq!(height, self.headers.len());
+            self.tip = *new_header.hash();
+            self.headers.push(new_header);
+            self.heights.insert(self.tip, height);
+        }
+    }
+
+    pub fn header_by_blockhash(&self, blockhash: &Sha256dHash) -> Option<&HeaderEntry> {
+        let height = self.heights.get(blockhash)?;
+        let header = self.headers.get(*height)?;
+        if *blockhash == *header.hash() {
+            Some(header)
+        } else {
+            None
         }
     }
 
@@ -111,7 +193,7 @@ impl HeaderList {
         &self.headers
     }
 
-    pub fn tip(&self) -> Sha256dHash {
+    pub fn tip(&self) -> &Sha256dHash {
         assert_eq!(
             self.tip,
             self.headers
@@ -119,9 +201,10 @@ impl HeaderList {
                 .map(|h| *h.hash())
                 .unwrap_or(Sha256dHash::default())
         );
-        self.tip
+        &self.tip
     }
 
+    // The index of last block header at self.headers vector.
     pub fn height(&self) -> usize {
         self.headers.len() - 1
     }
