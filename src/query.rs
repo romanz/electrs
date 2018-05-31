@@ -34,8 +34,9 @@ pub struct Status {
 }
 
 fn calc_balance((funding, spending): &(Vec<FundingOutput>, Vec<SpendingInput>)) -> u64 {
-    let total = funding.iter().fold(0, |acc, output| acc + output.value);
-    spending.iter().fold(total, |acc, input| acc - input.value)
+    let funded_values = funding.iter().map(|output| output.value);
+    let spent_values = spending.iter().map(|input| input.value);
+    funded_values.sum::<u64>() - spent_values.sum::<u64>()
 }
 
 impl Status {
