@@ -1,5 +1,5 @@
 [package]
-name = "indexrs"
+name = "electrs"
 version = "0.1.0"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 

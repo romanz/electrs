@@ -1,6 +1,6 @@
-extern crate indexrs;
+extern crate electrs;
 
-use indexrs::app;
+use electrs::app;
 
 fn main() {
     app::main()
