@@ -1,4 +1,4 @@
-use argparse::{ArgumentParser, StoreTrue};
+use argparse::{ArgumentParser, Store, StoreTrue};
 use error_chain::ChainedError;
 use simplelog::LevelFilter;
 use std::fs::OpenOptions;
@@ -27,6 +27,7 @@ impl Config {
         let mut testnet = false;
         let mut verbose = false;
         let mut restart = false;
+        let mut log_file = "".to_string();
         {
             let mut parser = ArgumentParser::new();
             parser.set_description("Bitcoin indexing server.");
@@ -45,6 +46,11 @@ impl Config {
                 StoreTrue,
                 "Restart the server in case of a recoverable error",
             );
+            parser.refer(&mut log_file).add_option(
+                &["-l", "--log-file"],
+                Store,
+                "Write the log into specified file",
+            );
             parser.parse_args_or_exit();
         }
         let network_type = match testnet {
@@ -52,14 +58,14 @@ impl Config {
             true => Network::Testnet,
         };
         Config {
-            log_file: "indexrs.log".to_string(),
+            log_file,
             log_level: if verbose {
                 LevelFilter::Debug
             } else {
                 LevelFilter::Info
             },
-            restart: restart,
-            network_type: network_type,
+            restart,
+            network_type,
             db_path: match network_type {
                 Network::Mainnet => "./db/mainnet",
                 Network::Testnet => "./db/testnet",
@@ -131,9 +137,10 @@ fn setup_logging(config: &Config) {
     use simplelog::*;
     let mut cfg = Config::default();
     cfg.time_format = Some("%F %H:%M:%S%.3f");
-    CombinedLogger::init(vec![
-        TermLogger::new(config.log_level, cfg.clone()).unwrap(),
-        WriteLogger::new(
+    let mut loggers = Vec::<Box<SharedLogger>>::new();
+    loggers.push(TermLogger::new(config.log_level, cfg.clone()).unwrap());
+    if !config.log_file.is_empty() {
+        loggers.push(WriteLogger::new(
             LevelFilter::Debug,
             cfg.clone(),
             OpenOptions::new()
@@ -141,8 +148,9 @@ fn setup_logging(config: &Config) {
                 .append(true)
                 .open(&config.log_file)
                 .unwrap(),
-        ),
-    ]).unwrap();
+        ));
+    }
+    CombinedLogger::init(loggers).unwrap();
     info!("config: {:?}", config);
 }
 
