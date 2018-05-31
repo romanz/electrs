@@ -100,10 +100,9 @@ impl HeaderList {
         let new_height: usize = if prev_blockhash == null_hash {
             0
         } else {
-            let prev_height = self.heights
-                .get(&prev_blockhash)
-                .expect(&format!("{} is not part of the blockchain", prev_blockhash));
-            prev_height + 1
+            self.header_by_blockhash(&prev_blockhash)
+                .expect(&format!("{} is not part of the blockchain", prev_blockhash))
+                .height() + 1
         };
         (new_height..)
             .zip(hashed_headers.into_iter())
