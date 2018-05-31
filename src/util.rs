@@ -124,8 +124,16 @@ impl HeaderList {
             );
         }
         let new_height = match new_headers.first() {
-            // TODO: make sure that the connection to the existing chain is correct.
-            Some(entry) => entry.height(),
+            Some(entry) => {
+                let height = entry.height();
+                let expected_prev_blockhash = if height > 0 {
+                    *self.headers[height - 1].hash()
+                } else {
+                    Sha256dHash::default()
+                };
+                assert_eq!(entry.header().prev_blockhash, expected_prev_blockhash);
+                height
+            }
             None => return,
         };
         debug!(
