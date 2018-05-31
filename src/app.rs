@@ -1,5 +1,4 @@
 use argparse::{ArgumentParser, StoreTrue};
-use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
 use simplelog::LevelFilter;
 use std::fs::OpenOptions;
@@ -90,12 +89,6 @@ impl App {
     pub fn daemon(&self) -> &daemon::Daemon {
         &self.daemon
     }
-    fn update_index(&self, mut tip: Sha256dHash) -> Result<Sha256dHash> {
-        if tip != self.daemon.getbestblockhash()? {
-            tip = self.index.update(&self.store, &self.daemon)?;
-        }
-        Ok(tip)
-    }
 }
 
 fn run_server(config: &Config) -> Result<()> {
@@ -127,7 +120,10 @@ fn run_server(config: &Config) -> Result<()> {
     loop {
         thread::sleep(poll_delay);
         query.update_mempool()?;
-        tip = app.update_index(tip)?;
+        if tip == app.daemon().getbestblockhash()? {
+            continue;
+        }
+        tip = app.index().update(app.store(), app.daemon())?;
     }
 }
 
