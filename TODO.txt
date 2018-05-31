@@ -2,7 +2,7 @@
 Update height to -1 for txns with any unconfirmed input (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
 Snapshot DB after successful indexing - and run queries on this snapshot
 Handle multiple RPC client in parallel
-Figure out graceful shutting down and error logging for RPC server
+Figure out graceful shutting down RPC server
 
 = Bitcoind
 Handle bitcoind connection failures - instead of crashing
@@ -13,6 +13,7 @@ Add getrawtransactions() API (for RPC batching)
 = Performance
 Add timing/profiler helpers (for indexing/DB/RPC operations)
 Measure first-time query latency
+Flush only on the last write.
 
 = Rust
 Use Bytes instead of Vec[u8] when possible
