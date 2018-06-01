@@ -208,13 +208,13 @@ impl Query {
         let mut funding = vec![];
         let mut spending = vec![];
         for t in self.load_txns(
-            self.app.store(),
-            txids_by_script_hash(self.app.store(), script_hash),
+            self.app.read_store(),
+            txids_by_script_hash(self.app.read_store(), script_hash),
         )? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &funding {
-            if let Some(spent) = self.find_spending_input(self.app.store(), &funding_output)? {
+            if let Some(spent) = self.find_spending_input(self.app.read_store(), &funding_output)? {
                 spending.push(spent);
             }
         }

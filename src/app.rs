@@ -86,7 +86,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn store(&self) -> &store::DBStore {
+    pub fn write_store(&self) -> &store::WriteStore {
+        &self.store
+    }
+    pub fn read_store(&self) -> &store::ReadStore {
         &self.store
     }
     pub fn index(&self) -> &index::Index {
@@ -129,7 +132,7 @@ fn run_server(config: &Config) -> Result<()> {
         if tip == app.daemon().getbestblockhash()? {
             continue;
         }
-        tip = app.index().update(app.store(), app.daemon())?;
+        tip = app.index().update(app.write_store(), app.daemon())?;
     }
 }
 
