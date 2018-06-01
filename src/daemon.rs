@@ -1,6 +1,7 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
+use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use hex;
@@ -158,10 +159,12 @@ impl Daemon {
             "getblock",
             json!([blockhash.be_hex_string(), /*verbose=*/ false]),
         )?;
-        Ok(deserialize(
-            &hex::decode(block_hex.as_str().chain_err(|| "non-string block")?)
-                .chain_err(|| "non-hex block")?,
-        ).chain_err(|| format!("failed to parse block {}", blockhash))?)
+        let block_bytes = hex::decode(block_hex.as_str().chain_err(|| "non-string block")?)
+            .chain_err(|| "non-hex block")?;
+        let block: Block =
+            deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", blockhash))?;
+        assert_eq!(block.bitcoin_hash(), *blockhash);
+        Ok(block)
     }
 
     pub fn gettransaction(&self, txhash: &Sha256dHash) -> Result<Transaction> {
