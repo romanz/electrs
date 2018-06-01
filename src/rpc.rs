@@ -158,7 +158,7 @@ impl Connection {
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
         // TODO: handle 'verbose' param
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        let tx = self.query.get_tx(&tx_hash)?;
+        let tx = self.query.load_txn(&tx_hash, /*blockhash=*/ None)?;
         Ok(json!(hex::encode(&serialize(&tx).unwrap())))
     }
 

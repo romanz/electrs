@@ -167,11 +167,18 @@ impl Daemon {
         Ok(block)
     }
 
-    pub fn gettransaction(&self, txhash: &Sha256dHash) -> Result<Transaction> {
-        let tx_hex: Value = self.request(
-            "getrawtransaction",
-            json!([txhash.be_hex_string(), /*verbose=*/ false]),
-        )?;
+    pub fn gettransaction(
+        &self,
+        txhash: &Sha256dHash,
+        blockhash: Option<Sha256dHash>,
+    ) -> Result<Transaction> {
+        let mut args = json!([txhash.be_hex_string(), /*verbose=*/ false]);
+        if let Some(blockhash) = blockhash {
+            args.as_array_mut()
+                .unwrap()
+                .push(json!(blockhash.be_hex_string()));
+        }
+        let tx_hex: Value = self.request("getrawtransaction", args)?;
         Ok(
             deserialize(&hex::decode(tx_hex.as_str().chain_err(|| "non-string tx")?)
                 .chain_err(|| "non-hex tx")?)

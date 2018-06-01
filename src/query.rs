@@ -148,7 +148,7 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn: Transaction = self.get_tx(&txid)?;
+                let txn: Transaction = self.load_txn(&txid, Some(tx_row.height))?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
@@ -256,11 +256,24 @@ impl Query {
         Ok(Status { confirmed, mempool })
     }
 
-    pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Result<Transaction> {
-        self.app.daemon().gettransaction(tx_hash)
+    pub fn load_txn(
+        &self,
+        tx_hash: &Sha256dHash,
+        block_height: Option<u32>,
+    ) -> Result<Transaction> {
         if let Some(txn) = self.tracker.read().unwrap().get_txn(&tx_hash) {
             return Ok(txn);
         }
+        let blockhash = match block_height {
+            None => None, // TODO: use local txindex to find indexed height.
+            Some(height) => Some(*self.app
+                .index()
+                .get_header(height as usize)
+                .chain_err(|| format!("missing header at height {}", height))?
+                .hash()),
+        };
+        let result = self.app.daemon().gettransaction(tx_hash, blockhash);
+        result
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {

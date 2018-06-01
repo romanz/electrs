@@ -103,7 +103,8 @@ impl Tracker {
                     continue;
                 }
             };
-            let tx = match daemon.gettransaction(txid) {
+            // The following lookup should find the transaction in mempool.
+            let tx = match daemon.gettransaction(txid, /*blockhash=*/ None) {
                 Ok(tx) => tx,
                 Err(err) => {
                     // e.g. new block or RBF
