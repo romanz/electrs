@@ -249,8 +249,10 @@ impl Query {
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
-        let confirmed = self.confirmed_status(script_hash)?;
-        let mempool = self.mempool_status(script_hash, &confirmed.0)?;
+        let confirmed = self.confirmed_status(script_hash)
+            .chain_err(|| "failed to get confirmed status")?;
+        let mempool = self.mempool_status(script_hash, &confirmed.0)
+            .chain_err(|| "failed to get mempool status")?;
         Ok(Status { confirmed, mempool })
     }
 
