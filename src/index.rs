@@ -243,117 +243,6 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     result
 }
 
-struct Indexer<'a> {
-    headers: &'a [HeaderEntry],
-    header_index: usize,
-
-    daemon: &'a Daemon,
-
-    blocks_size: usize,
-    rows_size: usize,
-    num_of_rows: usize,
-    bar: Option<ProgressBar>,
-}
-
-impl<'a> Indexer<'a> {
-    fn new(headers: &'a [HeaderEntry], daemon: &'a Daemon) -> Indexer<'a> {
-        Indexer {
-            headers: headers,
-            header_index: 0,
-
-            daemon: daemon,
-
-            blocks_size: 0,
-            rows_size: 0,
-            num_of_rows: 0,
-            bar: if headers.len() > 1 {
-                Some(ProgressBar::on(stderr(), headers.len() as u64))
-            } else {
-                None
-            },
-        }
-    }
-
-    fn num_of_headers(&self) -> usize {
-        self.headers.len()
-    }
-}
-
-impl<'a> Iterator for Indexer<'a> {
-    type Item = Vec<Row>;
-
-    fn next(&mut self) -> Option<Vec<Row>> {
-        if self.header_index >= self.num_of_headers() {
-            self.bar.as_mut().map(|b| b.finish());
-            return None;
-        }
-        let entry = &self.headers[self.header_index];
-
-        let blockhash = entry.hash();
-        let block = self.daemon.getblock(&blockhash).unwrap();
-        assert_eq!(block.bitcoin_hash(), *blockhash);
-        self.blocks_size += serialize(&block).unwrap().len();
-
-        let rows = index_block(&block, entry.height());
-        self.num_of_rows += rows.len();
-        for row in &rows {
-            self.rows_size += row.key.len() + row.value.len();
-        }
-
-        self.header_index += 1;
-        if self.header_index % 1000 == 0 {
-            info!(
-                "{} @ {}: {:.3}/{:.3} MB, {} rows",
-                blockhash,
-                entry.height(),
-                self.rows_size as f64 / 1e6_f64,
-                self.blocks_size as f64 / 1e6_f64,
-                self.num_of_rows,
-            );
-        }
-        self.bar.as_mut().map(|b| b.inc());
-        Some(rows)
-    }
-}
-
-struct Batching<'a> {
-    indexer: Indexer<'a>,
-    batch: Vec<Row>,
-    start: Instant,
-}
-
-impl<'a> Batching<'a> {
-    fn new(indexer: Indexer<'a>) -> Batching<'a> {
-        Batching {
-            indexer: indexer,
-            batch: vec![],
-            start: Instant::now(),
-        }
-    }
-}
-
-impl<'a> Iterator for Batching<'a> {
-    type Item = Vec<Row>;
-
-    fn next(&mut self) -> Option<Vec<Row>> {
-        const MAX_ELAPSED: Duration = Duration::from_secs(60);
-        const MAX_BATCH_LEN: usize = 10_000_000;
-
-        while let Some(mut rows) = self.indexer.next() {
-            self.batch.append(&mut rows);
-            if self.batch.len() > MAX_BATCH_LEN || self.start.elapsed() > MAX_ELAPSED {
-                break;
-            }
-        }
-        self.start = Instant::now();
-        if self.batch.is_empty() {
-            None
-        } else {
-            Some(self.batch.split_off(0))
-        }
-    }
-}
-
 pub struct Index {
     // TODO: store also latest snapshot.
     headers: RwLock<HeaderList>,
@@ -385,11 +274,46 @@ impl Index {
         new_headers.last().map(|tip| {
             info!("{:?} ({} left to index)", tip, new_headers.len());
         });
-        for rows in Batching::new(Indexer::new(&new_headers, &daemon)) {
-            store.write(rows);
+        let mut buf = BufferedWriter::new(store);
+        let mut bar = ProgressBar::on(stderr(), new_headers.len() as u64);
+        for header in &new_headers {
+            let block = daemon.getblock(header.hash())?;
+            let rows = index_block(&block, header.height());
+            buf.write(rows);
+            bar.inc();
         }
+        buf.flush(); // make sure no row is left behind
+        bar.finish();
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
         Ok(tip)
+    }
+}
+
+struct BufferedWriter<'a> {
+    batch: Vec<Row>,
+    start: Instant,
+    store: &'a WriteStore,
+}
+
+impl<'a> BufferedWriter<'a> {
+    fn new(store: &'a WriteStore) -> BufferedWriter {
+        BufferedWriter {
+            batch: vec![],
+            start: Instant::now(),
+            store,
+        }
+    }
+
+    fn write(&mut self, mut rows: Vec<Row>) {
+        self.batch.append(&mut rows);
+        if self.batch.len() > 10_000_000 || self.start.elapsed() > Duration::from_secs(60) {
+            self.flush();
+        }
+    }
+
+    fn flush(&mut self) {
+        self.store.write(self.batch.split_off(0));
+        self.start = Instant::now();
     }
 }
