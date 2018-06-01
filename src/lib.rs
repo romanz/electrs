@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 pub mod app;
+mod config;
 mod daemon;
 mod errors;
 mod index;
