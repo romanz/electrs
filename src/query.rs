@@ -258,6 +258,9 @@ impl Query {
 
     pub fn get_tx(&self, tx_hash: &Sha256dHash) -> Result<Transaction> {
         self.app.daemon().gettransaction(tx_hash)
+        if let Some(txn) = self.tracker.read().unwrap().get_txn(&tx_hash) {
+            return Ok(txn);
+        }
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
