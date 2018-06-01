@@ -139,7 +139,11 @@ impl Query {
         }
     }
 
-    fn load_txns(&self, store: &ReadStore, prefixes: Vec<HashPrefix>) -> Result<Vec<TxnHeight>> {
+    fn load_txns_by_prefix(
+        &self,
+        store: &ReadStore,
+        prefixes: Vec<HashPrefix>,
+    ) -> Result<Vec<TxnHeight>> {
         let mut txns = vec![];
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
@@ -159,7 +163,7 @@ impl Query {
         store: &ReadStore,
         funding: &FundingOutput,
     ) -> Result<Option<SpendingInput>> {
-        let spending_txns: Vec<TxnHeight> = self.load_txns(
+        let spending_txns: Vec<TxnHeight> = self.load_txns_by_prefix(
             store,
             txids_by_funding_output(store, &funding.txn_id, funding.output_index),
         )?;
@@ -207,7 +211,7 @@ impl Query {
     ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
         let mut funding = vec![];
         let mut spending = vec![];
-        for t in self.load_txns(
+        for t in self.load_txns_by_prefix(
             self.app.read_store(),
             txids_by_script_hash(self.app.read_store(), script_hash),
         )? {
@@ -229,7 +233,7 @@ impl Query {
         let mut funding = vec![];
         let mut spending = vec![];
         let tracker = self.tracker.read().unwrap();
-        for t in self.load_txns(
+        for t in self.load_txns_by_prefix(
             tracker.index(),
             txids_by_script_hash(tracker.index(), script_hash),
         )? {
