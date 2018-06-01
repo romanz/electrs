@@ -1,5 +1,3 @@
-use bitcoin::blockdata::block::BlockHeader;
-use bitcoin::network::serialize::deserialize;
 use rocksdb;
 
 use util::Bytes;
@@ -51,11 +49,6 @@ impl DBStore {
         DBStore {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
         }
-    }
-
-    pub fn read_header(&self, blockhash: &[u8]) -> Option<BlockHeader> {
-        self.get(&[b"B", blockhash].concat())
-            .map(|value| deserialize(&value).unwrap())
     }
 
     pub fn compact_if_needed(&self) {
