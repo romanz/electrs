@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use daemon::Daemon;
 use store::{ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
-           HeaderMap, HASH_PREFIX_LEN};
+           HeaderMap, Timer, HASH_PREFIX_LEN};
 
 use errors::*;
 
@@ -269,6 +269,7 @@ impl Index {
     }
 
     pub fn update(&self, store: &WriteStore, daemon: &Daemon) -> Result<Sha256dHash> {
+        let mut timer = Timer::new();
         let tip = daemon.getbestblockhash()?;
         let new_headers = daemon.get_new_headers(&self.headers.read().unwrap(), &tip)?;
         new_headers.last().map(|tip| {
@@ -286,6 +287,7 @@ impl Index {
         bar.finish();
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
+        timer.tick(&format!("index update ({} blocks)", bar.total));
         Ok(tip)
     }
 }

@@ -4,6 +4,7 @@ use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
+use std::time::Instant;
 use time;
 
 pub type Bytes = Vec<u8>;
@@ -186,5 +187,24 @@ impl HeaderList {
     // The index of last block header at self.headers vector.
     pub fn height(&self) -> usize {
         self.headers.len() - 1
+    }
+}
+
+pub struct Timer {
+    start: Instant,
+}
+
+impl Timer {
+    pub fn new() -> Timer {
+        Timer {
+            start: Instant::now(),
+        }
+    }
+
+    pub fn tick(&mut self, desc: &str) {
+        let elapsed = self.start.elapsed();
+        let dt = elapsed.as_secs() as f64 + (elapsed.subsec_nanos() as f64) * 1e-9;
+        debug!("{} took {:.2} ms", desc, dt * 1e3);
+        self.start = Instant::now();
     }
 }

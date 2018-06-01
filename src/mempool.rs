@@ -5,12 +5,11 @@ use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::ops::Bound;
 use std::sync::RwLock;
-use std::time::{Duration, Instant};
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
 use store::{ReadStore, Row};
-use util::Bytes;
+use util::{Bytes, Timer};
 
 use errors::*;
 
@@ -86,7 +85,7 @@ impl Tracker {
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
-        let t = Instant::now();
+        let mut timer = Timer::new();
         let new_txids = HashSet::<Sha256dHash>::from_iter(daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?);
@@ -116,11 +115,7 @@ impl Tracker {
         }
         self.update_tx_index();
         self.update_fee_histogram();
-        debug!(
-            "mempool update took {:.1} ms ({} txns)",
-            t.elapsed().in_seconds() * 1e3,
-            self.stats.len()
-        );
+        timer.tick(&format!("mempool update ({} txns)", self.stats.len()));
         Ok(())
     }
 
@@ -160,15 +155,5 @@ impl Tracker {
             histogram.push((fee_rate, bin_size));
         }
         self.histogram = histogram;
-    }
-}
-
-trait InSeconds {
-    fn in_seconds(&self) -> f64;
-}
-
-impl InSeconds for Duration {
-    fn in_seconds(&self) -> f64 {
-        self.as_secs() as f64 + (self.subsec_nanos() as f64) * 1e-9
     }
 }
