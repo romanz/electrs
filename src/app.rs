@@ -1,4 +1,6 @@
 use argparse::{ArgumentParser, Store, StoreTrue};
+use chan;
+use chan_signal;
 use error_chain::ChainedError;
 use simplelog::LevelFilter;
 use std::fs::OpenOptions;
@@ -100,7 +102,30 @@ impl App {
     }
 }
 
+struct Waiter {
+    signal: chan::Receiver<chan_signal::Signal>,
+    duration: Duration,
+}
+
+impl Waiter {
+    fn new(duration: Duration) -> Waiter {
+        let signal = chan_signal::notify(&[chan_signal::Signal::INT]);
+        Waiter { signal, duration }
+    }
+    fn wait(&self) -> Option<chan_signal::Signal> {
+        let signal = &self.signal;
+        let timeout = chan::after(self.duration);
+        let result;
+        chan_select! {
+            signal.recv() -> sig => { result = sig; },
+            timeout.recv() => { result = None; },
+        }
+        result
+    }
+}
+
 fn run_server(config: &Config) -> Result<()> {
+    let signal = Waiter::new(Duration::from_secs(5));
     let daemon = daemon::Daemon::new(config.network_type)?;
     debug!("{:?}", daemon.getblockchaininfo()?);
 
@@ -124,16 +149,16 @@ fn run_server(config: &Config) -> Result<()> {
     });
 
     let query = Arc::new(query::Query::new(app.clone()));
-    let poll_delay = Duration::from_secs(5);
     rpc::start(&config.rpc_addr, query.clone());
-    loop {
-        thread::sleep(poll_delay);
+    while let None = signal.wait() {
         query.update_mempool()?;
         if tip == app.daemon().getbestblockhash()? {
             continue;
         }
         tip = app.index().update(app.write_store(), app.daemon())?;
     }
+    info!("closing server");
+    Ok(())
 }
 
 fn setup_logging(config: &Config) {

@@ -17,6 +17,5 @@ Flush only on the last write.
 
 = Rust
 Use Bytes instead of Vec[u8] when possible
-Handle SIGINT gracefully (https://www.reddit.com/r/rust/comments/6swidb/how_to_properly_catch_sigint_in_a_threaded_program/)
 Return errors instead of panics
 Use generators instead of vectors
