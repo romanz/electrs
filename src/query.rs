@@ -268,18 +268,23 @@ impl Query {
         block_height: Option<u32>,
     ) -> Result<Transaction> {
         if let Some(txn) = self.tracker.read().unwrap().get_txn(&tx_hash) {
-            return Ok(txn);
+            return Ok(txn); // found in mempool (as unconfirmed transaction)
         }
-        let blockhash = match block_height {
-            None => None, // TODO: use local txindex to find indexed height.
-            Some(height) => Some(*self.app
-                .index()
-                .get_header(height as usize)
-                .chain_err(|| format!("missing header at height {}", height))?
-                .hash()),
+        let height = match block_height {
+            Some(height) => height,
+            None => {
+                // Lookup in confirmed transactions' index
+                txrow_by_txid(self.app.read_store(), &tx_hash)
+                    .chain_err(|| format!("not indexed tx {}", tx_hash))?
+                    .height
+            }
         };
-        let result = self.app.daemon().gettransaction(tx_hash, blockhash);
-        result
+        let blockhash = *self.app
+            .index()
+            .get_header(height as usize)
+            .chain_err(|| format!("missing header at height {}", height))?
+            .hash();
+        self.app.daemon().gettransaction(tx_hash, Some(blockhash))
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
