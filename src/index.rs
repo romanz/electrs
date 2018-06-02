@@ -129,8 +129,12 @@ impl TxRow {
         }
     }
 
-    pub fn filter(txid_prefix: &HashPrefix) -> Bytes {
+    pub fn filter_prefix(txid_prefix: &HashPrefix) -> Bytes {
         [b"T", &txid_prefix[..]].concat()
+    }
+
+    pub fn filter_full(txid: &Sha256dHash) -> Bytes {
+        [b"T", &txid[..]].concat()
     }
 
     pub fn to_row(&self) -> Row {

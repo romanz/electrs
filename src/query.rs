@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
-use store::ReadStore;
+use store::{ReadStore, Row};
 use util::{FullHash, HashPrefix, HeaderEntry};
 
 use errors::*;
@@ -97,10 +97,16 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
-// TODO: the 3 functions below can be part of ReadStore.
+// TODO: the functions below can be part of ReadStore.
+fn txrow_by_txid(store: &ReadStore, txid: &Sha256dHash) -> Option<TxRow> {
+    let key = TxRow::filter_full(&txid);
+    let value = store.get(&key)?;
+    Some(TxRow::from_row(&Row { key, value }))
+}
+
 fn txrows_by_prefix(store: &ReadStore, txid_prefix: &HashPrefix) -> Vec<TxRow> {
     store
-        .scan(&TxRow::filter(&txid_prefix))
+        .scan(&TxRow::filter_prefix(&txid_prefix))
         .iter()
         .map(|row| TxRow::from_row(row))
         .collect()
