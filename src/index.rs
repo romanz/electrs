@@ -205,6 +205,7 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
 }
 
 fn read_indexed_headers(store: &ReadStore) -> HeaderList {
+    let mut timer = Timer::new();
     let latest_blockhash: Sha256dHash = match store.get(b"L") {
         // latest blockheader persisted in the DB.
         Some(row) => deserialize(&row).unwrap(),
@@ -216,7 +217,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
         let header: BlockHeader = deserialize(&row.value).unwrap();
         map.insert(deserialize(&key.hash).unwrap(), header);
     }
-    debug!("read {} block headers from DB", map.len());
+    timer.tick(&format!("reading {} headers from DB", map.len()));
     let mut headers = vec![];
     let null_hash = Sha256dHash::default();
     let mut blockhash = latest_blockhash;
@@ -244,6 +245,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     let mut result = HeaderList::empty();
     let entries = result.order(headers);
     result.apply(entries);
+    timer.tick("headers' verification");
     result
 }
 
