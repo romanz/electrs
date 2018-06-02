@@ -357,8 +357,11 @@ pub fn start(addr: &SocketAddr, query: Arc<Query>) -> thread::JoinHandle<()> {
     info!("RPC server running on {}", addr);
     thread::spawn(move || loop {
         let (stream, addr) = listener.accept().expect("accept failed");
-        info!("[{}] connected peer", addr);
-        Connection::new(query.clone(), stream, addr).run();
-        info!("[{}] disconnected peer", addr);
+        let query = query.clone();
+        thread::spawn(move || {
+            info!("[{}] connected peer", addr);
+            Connection::new(query, stream, addr).run();
+            info!("[{}] disconnected peer", addr);
+        });
     })
 }

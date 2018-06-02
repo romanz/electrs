@@ -1,7 +1,6 @@
 = Electrum
 Update height to -1 for txns with any unconfirmed input (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
 Snapshot DB after successful indexing - and run queries on this snapshot
-Handle multiple RPC client in parallel
 Figure out graceful shutting down RPC server
 
 = Bitcoind
