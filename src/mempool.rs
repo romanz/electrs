@@ -89,11 +89,12 @@ impl Tracker {
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
-        let mut timer = Timer::new();
+        let mut metric = Timer::new();
         let new_txids = HashSet::<Sha256dHash>::from_iter(daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?);
         let old_txids = HashSet::from_iter(self.stats.keys().cloned());
+        metric.tick("fetch");
         for txid in new_txids.difference(&old_txids) {
             let entry = match daemon.getmempoolentry(txid) {
                 Ok(entry) => entry,
@@ -118,9 +119,12 @@ impl Tracker {
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
+        metric.tick("diff");
         self.update_tx_index();
+        metric.tick("index");
         self.update_fee_histogram();
-        timer.tick(&format!("mempool update ({} txns)", self.stats.len()));
+        metric.tick("fees");
+        debug!("mempool update ({} txns) {:?}", self.stats.len(), metric);
         Ok(())
     }
 

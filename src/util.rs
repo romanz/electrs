@@ -4,7 +4,7 @@ use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use time;
 
 pub type Bytes = Vec<u8>;
@@ -192,19 +192,52 @@ impl HeaderList {
 
 pub struct Timer {
     start: Instant,
+    metrics: HashMap<&'static str, Duration>,
 }
 
 impl Timer {
     pub fn new() -> Timer {
         Timer {
             start: Instant::now(),
+            metrics: HashMap::new(),
         }
     }
 
-    pub fn tick(&mut self, desc: &str) {
-        let elapsed = self.start.elapsed();
-        let dt = elapsed.as_secs() as f64 + (elapsed.subsec_nanos() as f64) * 1e-9;
-        debug!("{} took {:.2} ms", desc, dt * 1e3);
-        self.start = Instant::now();
+    pub fn tick(&mut self, tag: &'static str) {
+        let new = Instant::now();
+        let elapsed = new.duration_since(self.start);
+        let duration = self.metrics.entry(tag).or_insert(Duration::from_secs(0));
+        *duration += elapsed;
+        self.start = new;
+    }
+}
+
+impl fmt::Debug for Timer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut items: Vec<String> = self.metrics
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, humanize(v)))
+            .collect();
+        items.sort();
+        let total = self.metrics
+            .values()
+            .fold(Duration::from_secs(0), |acc, d| acc + *d);
+        write!(f, "took {} ({})", humanize(&total), items.join(", "))
+    }
+}
+
+const HOUR: f32 = 3600.0;
+const MINUTE: f32 = 60.0;
+
+fn humanize(d: &Duration) -> String {
+    let seconds = d.as_secs() as f32 + (d.subsec_nanos() as f32 * 1e-9);
+    if seconds >= HOUR {
+        format!("{:.2}h", seconds / HOUR)
+    } else if seconds >= MINUTE {
+        format!("{:.2}m", seconds / MINUTE)
+    } else if seconds >= 1.0 {
+        format!("{:.2}s", seconds)
+    } else {
+        format!("{:.2}ms", seconds * 1e3)
     }
 }

@@ -217,7 +217,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
         let header: BlockHeader = deserialize(&row.value).unwrap();
         map.insert(deserialize(&key.hash).unwrap(), header);
     }
-    timer.tick(&format!("reading {} headers from DB", map.len()));
+    timer.tick("load");
     let mut headers = vec![];
     let null_hash = Sha256dHash::default();
     let mut blockhash = latest_blockhash;
@@ -242,10 +242,13 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
             .unwrap_or(null_hash),
         latest_blockhash
     );
+    timer.tick("verify");
     let mut result = HeaderList::empty();
+    let headers_len = headers.len();
     let entries = result.order(headers);
     result.apply(entries);
-    timer.tick("headers' verification");
+    timer.tick("apply");
+    debug!("{} headers' verification {:?}", headers_len, timer);
     result
 }
 
@@ -281,19 +284,32 @@ impl Index {
         new_headers.last().map(|tip| {
             info!("{:?} ({} left to index)", tip, new_headers.len());
         });
+        timer.tick("diff");
+
         let mut buf = BufferedWriter::new(store);
         let mut bar = ProgressBar::on(stderr(), new_headers.len() as u64);
         for header in &new_headers {
+            // Download a new block
             let block = daemon.getblock(header.hash())?;
+            timer.tick("get");
+
+            // Index it
             let rows = index_block(&block, header.height());
+            timer.tick("index");
+
+            // Write to DB
             buf.write(rows);
             bar.inc();
+            timer.tick("write");
         }
         buf.flush(); // make sure no row is left behind
+        timer.tick("write");
+
         bar.finish();
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
-        timer.tick(&format!("index update ({} blocks)", bar.total));
+        timer.tick("apply");
+        debug!("index update ({} blocks) {:?}", bar.total, timer);
         Ok(tip)
     }
 }
