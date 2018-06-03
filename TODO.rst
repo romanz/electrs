@@ -1,19 +1,23 @@
-= Electrum
+Electrum
+========
 Update height to -1 for txns with any unconfirmed input (https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
 Snapshot DB after successful indexing - and run queries on this snapshot
 Figure out graceful shutting down RPC server
 
-= Bitcoind
+Bitcoind
+========
 Handle bitcoind connection failures - instead of crashing
 Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
 Add getrawtransactions() API (for RPC batching)
 
-= Performance
+Performance
+===========
 Add timing/profiler helpers (for indexing/DB/RPC operations)
 Measure first-time query latency
 Flush only on the last write.
 
-= Rust
+Rust
+====
 Use Bytes instead of Vec[u8] when possible
 Return errors instead of panics
 Use generators instead of vectors

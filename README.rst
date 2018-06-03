@@ -1,2 +1,2 @@
-Bitcoin indexer and Electrum Server in Rust
-===========================================
+Electrum Server in Rust
+=======================

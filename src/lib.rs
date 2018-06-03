@@ -12,6 +12,7 @@ extern crate rocksdb;
 extern crate serde;
 extern crate simplelog;
 extern crate time;
+
 #[macro_use]
 extern crate chan;
 #[macro_use]
