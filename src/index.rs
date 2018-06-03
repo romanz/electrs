@@ -288,9 +288,11 @@ impl Index {
 
         let mut buf = BufferedWriter::new(store);
         let mut bar = ProgressBar::on(stderr(), new_headers.len() as u64);
+        let mut txns_count = 0;
         for header in &new_headers {
             // Download a new block
             let block = daemon.getblock(header.hash())?;
+            txns_count += block.txdata.len();
             timer.tick("get");
 
             // Index it
@@ -309,7 +311,10 @@ impl Index {
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
         timer.tick("apply");
-        debug!("index update ({} blocks) {:?}", bar.total, timer);
+        debug!(
+            "index update ({} blocks, {} txns) {:?}",
+            bar.total, txns_count, timer
+        );
         Ok(tip)
     }
 }
