@@ -184,9 +184,8 @@ impl HeaderList {
         &self.tip
     }
 
-    // The index of last block header at self.headers vector.
-    pub fn height(&self) -> usize {
-        self.headers.len() - 1
+    pub fn len(&self) -> usize {
+        self.headers.len()
     }
 }
 
