@@ -138,11 +138,11 @@ pub struct Query {
 }
 
 impl Query {
-    pub fn new(app: Arc<App>) -> Query {
-        Query {
+    pub fn new(app: Arc<App>) -> Arc<Query> {
+        Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new()),
-        }
+        })
     }
 
     fn load_txns_by_prefix(
