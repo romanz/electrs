@@ -229,9 +229,9 @@ impl Daemon {
         bestblockhash: &Sha256dHash,
     ) -> Result<Vec<HeaderEntry>> {
         // Iterate back over headers until known blockash is found:
+        let mut new_headers = vec![];
         let null_hash = Sha256dHash::default();
         let mut blockhash = *bestblockhash;
-        let mut new_headers = Vec::<BlockHeader>::new();
         while blockhash != null_hash {
             if indexed_headers.header_by_blockhash(&blockhash).is_some() {
                 break;
@@ -243,6 +243,6 @@ impl Daemon {
             blockhash = header.prev_blockhash;
         }
         new_headers.reverse(); // so the tip is the last vector entry
-        Ok(indexed_headers.order(new_headers))
+        Ok(new_headers)
     }
 }

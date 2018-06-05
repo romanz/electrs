@@ -280,7 +280,10 @@ impl Index {
     pub fn update(&self, store: &WriteStore, daemon: &Daemon) -> Result<Sha256dHash> {
         let mut timer = Timer::new();
         let tip = daemon.getbestblockhash()?;
-        let new_headers = daemon.get_new_headers(&self.headers.read().unwrap(), &tip)?;
+        let new_headers = {
+            let indexed_headers = self.headers.read().unwrap();
+            indexed_headers.order(daemon.get_new_headers(&indexed_headers, &tip)?)
+        };
         new_headers.last().map(|tip| {
             info!("{:?} ({} left to index)", tip, new_headers.len());
         });
