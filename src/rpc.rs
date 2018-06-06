@@ -59,8 +59,10 @@ impl Connection {
 
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
         let entry = self.query.get_best_header()?;
-        self.last_header_entry = Some(entry.clone());
-        Ok(jsonify_header(&entry))
+        let hex_header = hex::encode(serialize(entry.header()).unwrap());
+        let result = json!({"hex": hex_header, "height": entry.height()});
+        self.last_header_entry = Some(entry);
+        Ok(result)
     }
 
     fn server_version(&self) -> Result<Value> {
@@ -221,7 +223,8 @@ impl Connection {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
                 *last_entry = entry;
-                let header = jsonify_header(last_entry);
+                let hex_header = hex::encode(serialize(last_entry.header()).unwrap());
+                let header = json!({"hex": hex_header, "height": last_entry.height()});
                 result.push(json!({
                     "jsonrpc": "2.0",
                     "method": "blockchain.headers.subscribe",
