@@ -140,6 +140,26 @@ impl Daemon {
         Ok(reply["result"].take())
     }
 
+    fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
+        let reqs = params_list
+            .iter()
+            .map(|params| json!({"method": method, "params": params}))
+            .collect();
+        let mut result = Vec::new();
+        for reply in self.call_jsonrpc(&reqs)
+            .chain_err(|| format!("RPC failed: {}", reqs))?
+            .as_array_mut()
+            .chain_err(|| "non-array response")?
+        {
+            let err = reply["error"].take();
+            if !err.is_null() {
+                bail!("{} RPC error: {}", method, err);
+            }
+            result.push(reply["result"].take())
+        }
+        Ok(result)
+    }
+
     // bitcoind JSONRPC API:
 
     pub fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
@@ -156,6 +176,29 @@ impl Daemon {
             "getblockheader",
             json!([blockhash.be_hex_string(), /*verbose=*/ false]),
         )?)
+    }
+
+    pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
+        let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
+        let params_list: Vec<Value> = self.requests("getblockhash", &heights)?
+            .into_iter()
+            .map(|hash| json!([hash, /*verbose=*/ false]))
+            .collect();
+        let headers: Vec<Value> = self.requests("getblockheader", &params_list)?;
+
+        fn header_from_value(value: Value) -> Result<BlockHeader> {
+            let header_hex = value
+                .as_str()
+                .chain_err(|| format!("non-string header: {}", value))?;
+            let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
+            Ok(deserialize(&header_bytes)
+                .chain_err(|| format!("failed to parse header {}", header_hex))?)
+        }
+        let mut result = Vec::new();
+        for h in headers {
+            result.push(header_from_value(h)?);
+        }
+        Ok(result)
     }
 
     pub fn getblock(&self, blockhash: &Sha256dHash) -> Result<Block> {
@@ -225,6 +268,39 @@ impl Daemon {
             Sha256dHash::from_hex(txid.as_str().chain_err(|| "non-string txid")?)
                 .chain_err(|| "failed to parse txid")?,
         )
+    }
+
+    pub fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
+        let info: Value = self.request("getblockheader", json!([tip.be_hex_string()]))?;
+        let tip_height = info.get("height")
+            .expect("missing height")
+            .as_u64()
+            .expect("non-numeric height") as usize;
+        let all_heights: Vec<usize> = (0..tip_height + 1).collect();
+        let chunk_size = 100_000;
+        let mut result = vec![];
+
+        let null_hash = Sha256dHash::default();
+        for heights in all_heights.chunks(chunk_size) {
+            debug!(
+                "downloading {} headers from #{}",
+                heights.len(),
+                heights.first().unwrap(),
+            );
+            let mut headers = self.getblockheaders(&heights)?;
+            assert!(headers.len() == heights.len());
+            result.append(&mut headers);
+        }
+
+        let mut blockhash = null_hash;
+        for header in &result {
+            assert_eq!(header.prev_blockhash, blockhash);
+            blockhash = header.bitcoin_hash();
+        }
+        assert_eq!(blockhash, *tip);
+
+        info!("downloaded {} headers", result.len());
+        Ok(result)
     }
 
     pub fn get_new_headers(
