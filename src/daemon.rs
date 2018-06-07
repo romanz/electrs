@@ -11,7 +11,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
-use util::{HeaderEntry, HeaderList};
+use util::HeaderList;
 
 use errors::*;
 
@@ -227,7 +227,7 @@ impl Daemon {
         &self,
         indexed_headers: &HeaderList,
         bestblockhash: &Sha256dHash,
-    ) -> Result<Vec<HeaderEntry>> {
+    ) -> Result<Vec<BlockHeader>> {
         // Iterate back over headers until known blockash is found:
         let mut new_headers = vec![];
         let null_hash = Sha256dHash::default();
