@@ -145,19 +145,24 @@ impl Daemon {
             .iter()
             .map(|params| json!({"method": method, "params": params}))
             .collect();
-        let mut result = Vec::new();
+        let mut results = Vec::new();
         for reply in self.call_jsonrpc(&reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?
             .as_array_mut()
             .chain_err(|| "non-array response")?
         {
-            let err = reply["error"].take();
-            if !err.is_null() {
-                bail!("{} RPC error: {}", method, err);
+            let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
+            if let Some(err) = reply_obj.get("error") {
+                if !err.is_null() {
+                    bail!("{} RPC error: {}", method, err);
+                }
             }
-            result.push(reply["result"].take())
+            let result = reply_obj
+                .get_mut("result")
+                .chain_err(|| "no result in reply")?;
+            results.push(result.take())
         }
-        Ok(result)
+        Ok(results)
     }
 
     // bitcoind JSONRPC API:
@@ -184,18 +189,8 @@ impl Daemon {
             .into_iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
-        let headers: Vec<Value> = self.requests("getblockheader", &params_list)?;
-
-        fn header_from_value(value: Value) -> Result<BlockHeader> {
-            let header_hex = value
-                .as_str()
-                .chain_err(|| format!("non-string header: {}", value))?;
-            let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
-            Ok(deserialize(&header_bytes)
-                .chain_err(|| format!("failed to parse header {}", header_hex))?)
-        }
         let mut result = Vec::new();
-        for h in headers {
+        for h in self.requests("getblockheader", &params_list)? {
             result.push(header_from_value(h)?);
         }
         Ok(result)
