@@ -8,13 +8,12 @@ Electrum
 Bitcoind
 ========
 * Use persistent connection for donwloading multiple blocks
-* Use p2p protocol for querying blocks - similar to `bitcoincore-indexd`
 * Handle bitcoind connection failures - instead of crashing
 * Add getrawtransactions() API (for RPC batching)
 
 Performance
 ===========
-* Export accumulated timing metrics (for indexing/DB/RPC operations)
+* Export accumulated timing metrics (for indexing/DB/RPC operations) via Prometheus
 * Measure first-time query latency
 * Sync only on the last write.
 
