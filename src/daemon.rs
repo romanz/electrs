@@ -52,17 +52,6 @@ fn block_from_value(value: Value) -> Result<Block> {
     Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
 }
 
-pub struct Daemon {
-    addr: String,
-    cookie_b64: String,
-}
-
-pub struct MempoolEntry {
-    fee: u64,   // in satoshis
-    vsize: u32, // in virtual bytes (= weight/4)
-    fee_per_vbyte: f32,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockchainInfo {
     chain: String,
@@ -71,6 +60,12 @@ pub struct BlockchainInfo {
     bestblockhash: String,
     size_on_disk: usize,
     pruned: bool,
+}
+
+pub struct MempoolEntry {
+    fee: u64,   // in satoshis
+    vsize: u32, // in virtual bytes (= weight/4)
+    fee_per_vbyte: f32,
 }
 
 impl MempoolEntry {
@@ -93,6 +88,11 @@ impl MempoolEntry {
     pub fn vsize(&self) -> u32 {
         self.vsize
     }
+}
+
+pub struct Daemon {
+    addr: String,
+    cookie_b64: String,
 }
 
 impl Daemon {
