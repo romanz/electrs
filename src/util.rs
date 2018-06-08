@@ -1,8 +1,10 @@
 use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
+use pbr;
 use std::collections::HashMap;
 use std::fmt;
+use std::io::{stderr, Stderr};
 use std::iter::FromIterator;
 use std::time::{Duration, Instant};
 use time;
@@ -239,4 +241,8 @@ fn humanize(d: &Duration) -> String {
     } else {
         format!("{:.2}ms", seconds * 1e3)
     }
+}
+
+pub fn new_progress_bar(count: usize) -> pbr::ProgressBar<Stderr> {
+    pbr::ProgressBar::on(stderr(), count as u64)
 }

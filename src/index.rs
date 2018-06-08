@@ -6,19 +6,15 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use pbr;
-use std::io::{stderr, Stderr};
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use daemon::Daemon;
 use store::{ReadStore, Row, WriteStore};
-use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
+use util::{self, full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
            HeaderMap, Timer, HASH_PREFIX_LEN};
 
 use errors::*;
-
-type ProgressBar = pbr::ProgressBar<Stderr>;
 
 #[derive(Serialize, Deserialize)]
 pub struct TxInKey {
@@ -290,7 +286,7 @@ impl Index {
         timer.tick("diff");
 
         let mut buf = BufferedWriter::new(store);
-        let mut bar = ProgressBar::on(stderr(), new_headers.len() as u64);
+        let mut bar = util::new_progress_bar(new_headers.len());
         let mut txns_count = 0;
         for header in &new_headers {
             // Download a new block
