@@ -211,6 +211,19 @@ impl Daemon {
         Ok(block)
     }
 
+    pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
+        let params_list: Vec<Value> = blockhashes
+            .iter()
+            .map(|hash| json!([hash.be_hex_string(), /*verbose=*/ false]))
+            .collect();
+        let values = self.requests("getblock", &params_list)?;
+        let mut blocks = Vec::new();
+        for value in values {
+            blocks.push(block_from_value(value)?);
+        }
+        Ok(blocks)
+    }
+
     pub fn gettransaction(
         &self,
         txhash: &Sha256dHash,
@@ -267,7 +280,7 @@ impl Daemon {
         )
     }
 
-    pub fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
+    fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
         let info: Value = self.request("getblockheader", json!([tip.be_hex_string()]))?;
         let tip_height = info.get("height")
             .expect("missing height")
@@ -300,6 +313,7 @@ impl Daemon {
         Ok(result)
     }
 
+    // Returns a list of BlockHeaders in ascending height (i.e. the tip is last).
     pub fn get_new_headers(
         &self,
         indexed_headers: &HeaderList,
