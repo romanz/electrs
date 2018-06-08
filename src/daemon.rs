@@ -46,6 +46,12 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
     Ok(deserialize(&header_bytes).chain_err(|| format!("failed to parse header {}", header_hex))?)
 }
 
+fn block_from_value(value: Value) -> Result<Block> {
+    let block_hex = value.as_str().chain_err(|| "non-string block")?;
+    let block_bytes = hex::decode(block_hex).chain_err(|| "non-hex block")?;
+    Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
+}
+
 pub struct Daemon {
     addr: String,
     cookie_b64: String,
@@ -197,14 +203,10 @@ impl Daemon {
     }
 
     pub fn getblock(&self, blockhash: &Sha256dHash) -> Result<Block> {
-        let block_hex: Value = self.request(
+        let block = block_from_value(self.request(
             "getblock",
             json!([blockhash.be_hex_string(), /*verbose=*/ false]),
-        )?;
-        let block_bytes = hex::decode(block_hex.as_str().chain_err(|| "non-string block")?)
-            .chain_err(|| "non-hex block")?;
-        let block: Block =
-            deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", blockhash))?;
+        )?)?;
         assert_eq!(block.bitcoin_hash(), *blockhash);
         Ok(block)
     }
