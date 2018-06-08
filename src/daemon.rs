@@ -8,8 +8,10 @@ use hex;
 use serde_json::{from_str, from_value, Value};
 use std::env::home_dir;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpStream;
+use std::io::{BufRead, BufReader, Lines, Write};
+use std::net::{SocketAddr, TcpStream};
+use std::str::FromStr;
+use std::sync::Mutex;
 
 use util::HeaderList;
 
@@ -90,49 +92,75 @@ impl MempoolEntry {
     }
 }
 
-pub struct Daemon {
-    addr: String,
+struct Connection {
+    tx: TcpStream,
+    rx: Lines<BufReader<TcpStream>>,
     cookie_b64: String,
 }
 
-impl Daemon {
-    pub fn new(network: Network) -> Result<Daemon> {
-        Ok(Daemon {
-            addr: match network {
-                Network::Mainnet => "localhost:8332",
-                Network::Testnet => "localhost:18332",
-            }.to_string(),
-            cookie_b64: base64::encode(&read_cookie(network)?),
+impl Connection {
+    fn new(addr: SocketAddr, cookie_b64: String) -> Result<Connection> {
+        let conn = TcpStream::connect(addr).chain_err(|| format!("failed to connect to {}", addr))?;
+        let reader = BufReader::new(conn.try_clone()
+            .chain_err(|| format!("failed to clone {:?}", conn))?);
+        Ok(Connection {
+            tx: conn,
+            rx: reader.lines(),
+            cookie_b64,
         })
     }
 
-    fn call_jsonrpc(&self, request: &Value) -> Result<Value> {
-        let mut conn = TcpStream::connect(&self.addr)
-            .chain_err(|| format!("failed to connect to {}", self.addr))?;
-        let request = request.to_string();
+    fn send(&mut self, request: &str) -> Result<()> {
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
             self.cookie_b64,
             request.len(),
             request,
         );
-        conn.write_all(msg.as_bytes())
-            .chain_err(|| "failed to send request")?;
+        self.tx
+            .write_all(msg.as_bytes())
+            .chain_err(|| "failed to send request")
+    }
 
+    fn recv(&mut self) -> Result<Value> {
         let mut in_header = true;
         let mut contents: Option<String> = None;
-        for line in BufReader::new(conn).lines() {
+        for line in self.rx.by_ref() {
             let line = line.chain_err(|| "failed to read")?;
             if line.is_empty() {
-                in_header = false;
+                in_header = false; // next line should contain the actual response.
             } else if !in_header {
                 contents = Some(line);
                 break;
             }
         }
         let contents = contents.chain_err(|| "no reply")?;
-        let reply: Value = from_str(&contents).chain_err(|| "invalid JSON")?;
-        Ok(reply)
+        from_str(&contents).chain_err(|| "invalid JSON")
+    }
+}
+
+pub struct Daemon {
+    conn: Mutex<Connection>,
+}
+
+impl Daemon {
+    pub fn new(network: Network) -> Result<Daemon> {
+        let addr = match network {
+            Network::Mainnet => "127.0.0.1:8332",
+            Network::Testnet => "127.0.0.1:18332",
+        };
+        Ok(Daemon {
+            conn: Mutex::new(Connection::new(
+                SocketAddr::from_str(addr).unwrap(),
+                base64::encode(&read_cookie(network)?),
+            )?),
+        })
+    }
+
+    fn call_jsonrpc(&self, request: &Value) -> Result<Value> {
+        let mut conn = self.conn.lock().unwrap();
+        conn.send(&request.to_string())?;
+        conn.recv()
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
