@@ -13,7 +13,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::Mutex;
 
-use util::HeaderList;
+use util::{self, HeaderList};
 
 use errors::*;
 
@@ -315,18 +315,15 @@ impl Daemon {
         let all_heights: Vec<usize> = (0..tip_height + 1).collect();
         let chunk_size = 100_000;
         let mut result = vec![];
-
+        let mut bar = util::new_progress_bar(all_heights.len());
         let null_hash = Sha256dHash::default();
         for heights in all_heights.chunks(chunk_size) {
-            debug!(
-                "downloading {} headers from #{}",
-                heights.len(),
-                heights.first().unwrap(),
-            );
             let mut headers = self.getblockheaders(&heights)?;
             assert!(headers.len() == heights.len());
+            bar.add(headers.len() as u64);
             result.append(&mut headers);
         }
+        bar.finish();
 
         let mut blockhash = null_hash;
         for header in &result {
@@ -334,8 +331,6 @@ impl Daemon {
             blockhash = header.bitcoin_hash();
         }
         assert_eq!(blockhash, *tip);
-
-        info!("downloaded {} headers", result.len());
         Ok(result)
     }
 
