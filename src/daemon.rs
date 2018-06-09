@@ -316,6 +316,7 @@ impl Daemon {
         let chunk_size = 100_000;
         let mut result = vec![];
         let mut bar = util::new_progress_bar(all_heights.len());
+        bar.message("Headers: ");
         let null_hash = Sha256dHash::default();
         for heights in all_heights.chunks(chunk_size) {
             let mut headers = self.getblockheaders(&heights)?;

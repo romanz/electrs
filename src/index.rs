@@ -287,6 +287,7 @@ impl Index {
 
         let mut buf = BufferedWriter::new(store);
         let mut bar = util::new_progress_bar(new_headers.len());
+        bar.message("Blocks: ");
         let mut txns_count = 0;
         for header in &new_headers {
             // Download a new block
