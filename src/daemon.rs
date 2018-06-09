@@ -341,6 +341,9 @@ impl Daemon {
         bestblockhash: &Sha256dHash,
     ) -> Result<Vec<BlockHeader>> {
         // Iterate back over headers until known blockash is found:
+        if indexed_headers.len() == 0 {
+            return self.get_all_headers(bestblockhash);
+        }
         let mut new_headers = vec![];
         let null_hash = Sha256dHash::default();
         let mut blockhash = *bestblockhash;
