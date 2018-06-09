@@ -180,11 +180,9 @@ impl Daemon {
             .map(|params| json!({"method": method, "params": params}))
             .collect();
         let mut results = Vec::new();
-        for reply in self.call_jsonrpc(&reqs)
-            .chain_err(|| format!("RPC failed: {}", reqs))?
-            .as_array_mut()
-            .chain_err(|| "non-array response")?
-        {
+        let mut replies = self.call_jsonrpc(&reqs)
+            .chain_err(|| format!("RPC failed: {}", reqs))?;
+        for reply in replies.as_array_mut().chain_err(|| "non-array response")? {
             let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
             if let Some(err) = reply_obj.get("error") {
                 if !err.is_null() {
