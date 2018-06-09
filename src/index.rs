@@ -6,6 +6,8 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use std::collections::HashMap;
+use std::iter::FromIterator;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
@@ -274,47 +276,52 @@ impl Index {
     }
 
     pub fn update(&self, store: &WriteStore, daemon: &Daemon) -> Result<Sha256dHash> {
-        let mut timer = Timer::new();
         let tip = daemon.getbestblockhash()?;
-        let new_headers = {
+        let new_headers: Vec<HeaderEntry> = {
             let indexed_headers = self.headers.read().unwrap();
             indexed_headers.order(daemon.get_new_headers(&indexed_headers, &tip)?)
         };
         new_headers.last().map(|tip| {
             info!("{:?} ({} left to index)", tip, new_headers.len());
         });
-        timer.tick("diff");
+        {
+            let mut timer = Timer::new();
+            let mut bar = util::new_progress_bar(new_headers.len());
+            bar.message("Blocks: ");
+            let mut buf = BufferedWriter::new(store);
+            let headers_map: HashMap<Sha256dHash, &HeaderEntry> =
+                HashMap::from_iter(new_headers.iter().map(|h| (*h.hash(), h)));
+            for chunk in new_headers.chunks(100) {
+                // Download new blocks
+                let hashes: Vec<Sha256dHash> = chunk.into_iter().map(|h| *h.hash()).collect();
+                let batch = daemon.getblocks(&hashes)?;
+                timer.tick("get");
+                for block in &batch {
+                    let expected_hash = block.bitcoin_hash();
+                    let header = headers_map
+                        .get(&expected_hash)
+                        .expect(&format!("missing header for block {}", expected_hash));
 
-        let mut buf = BufferedWriter::new(store);
-        let mut bar = util::new_progress_bar(new_headers.len());
-        bar.message("Blocks: ");
-        let mut txns_count = 0;
-        for header in &new_headers {
-            // Download a new block
-            let block = daemon.getblock(header.hash())?;
-            txns_count += block.txdata.len();
-            timer.tick("get");
+                    // Index it
+                    let rows = index_block(&block, header.height());
+                    timer.tick("index");
 
-            // Index it
-            let rows = index_block(&block, header.height());
-            timer.tick("index");
-
-            // Write to DB
-            buf.write(rows);
-            bar.inc();
+                    // Write to DB
+                    buf.write(rows);
+                    timer.tick("write");
+                }
+                let block_count = bar.add(batch.len() as u64);
+                if block_count % 10000 == 0 {
+                    debug!("index update ({} blocks) {:?}", block_count, timer);
+                }
+            }
+            buf.flush(); // make sure no row is left behind
             timer.tick("write");
+            bar.finish();
+            debug!("index update ({} blocks) {:?}", new_headers.len(), timer);
         }
-        buf.flush(); // make sure no row is left behind
-        timer.tick("write");
-
-        bar.finish();
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
-        timer.tick("apply");
-        debug!(
-            "index update ({} blocks, {} txns) {:?}",
-            bar.total, txns_count, timer
-        );
         Ok(tip)
     }
 }
