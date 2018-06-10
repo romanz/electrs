@@ -14,6 +14,7 @@ Performance
 ===========
 * Export accumulated timing metrics (for indexing/DB/RPC operations) via Prometheus
 * Measure first-time query latency
+* Experiment with `sled <https://github.com/spacejam/sled>`_ DB
 
 Rust
 ====
