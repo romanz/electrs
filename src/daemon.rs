@@ -55,6 +55,19 @@ fn block_from_value(value: Value) -> Result<Block> {
     Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
 }
 
+fn parse_jsonrpc_reply(reply: &mut Value, method: &str) -> Result<Value> {
+    let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
+    if let Some(err) = reply_obj.get("error") {
+        if !err.is_null() {
+            bail!("{} RPC error: {}", method, err);
+        }
+    }
+    let result = reply_obj
+        .get_mut("result")
+        .chain_err(|| "no result in reply")?;
+    Ok(result.take())
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockchainInfo {
     chain: String,
@@ -170,11 +183,7 @@ impl Daemon {
         let req = json!({"method": method, "params": params});
         let mut reply = self.call_jsonrpc(&req)
             .chain_err(|| format!("RPC failed: {}", req))?;
-        let err = reply["error"].take();
-        if !err.is_null() {
-            bail!("{} RPC error: {}", method, err);
-        }
-        Ok(reply["result"].take())
+        parse_jsonrpc_reply(&mut reply, method)
     }
 
     fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
@@ -186,16 +195,7 @@ impl Daemon {
         let mut replies = self.call_jsonrpc(&reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         for reply in replies.as_array_mut().chain_err(|| "non-array response")? {
-            let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
-            if let Some(err) = reply_obj.get("error") {
-                if !err.is_null() {
-                    bail!("{} RPC error: {}", method, err);
-                }
-            }
-            let result = reply_obj
-                .get_mut("result")
-                .chain_err(|| "no result in reply")?;
-            results.push(result.take())
+            results.push(parse_jsonrpc_reply(reply, method)?)
         }
         Ok(results)
     }
