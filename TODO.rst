@@ -7,7 +7,6 @@ Electrum
 
 Bitcoind
 ========
-* Use persistent connection for donwloading multiple blocks
 * Handle bitcoind connection failures - instead of crashing
 * Add getrawtransactions() API (for RPC batching)
 
@@ -15,7 +14,6 @@ Performance
 ===========
 * Export accumulated timing metrics (for indexing/DB/RPC operations) via Prometheus
 * Measure first-time query latency
-* Sync only on the last write.
 
 Rust
 ====
