@@ -132,9 +132,34 @@ fn txids_by_funding_output(
         .collect()
 }
 
+struct TransactionCache {
+    map: RwLock<HashMap<Sha256dHash, Transaction>>,
+}
+
+impl TransactionCache {
+    fn new() -> TransactionCache {
+        TransactionCache {
+            map: RwLock::new(HashMap::new()),
+        }
+    }
+
+    fn get_or_else<F>(&self, txid: &Sha256dHash, load_txn_func: F) -> Result<Transaction>
+    where
+        F: FnOnce() -> Result<Transaction>,
+    {
+        if let Some(txn) = self.map.read().unwrap().get(txid) {
+            return Ok(txn.clone());
+        }
+        let txn = load_txn_func()?;
+        self.map.write().unwrap().insert(*txid, txn.clone());
+        Ok(txn)
+    }
+}
+
 pub struct Query {
     app: Arc<App>,
     tracker: RwLock<Tracker>,
+    tx_cache: TransactionCache,
 }
 
 impl Query {
@@ -142,6 +167,7 @@ impl Query {
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new()),
+            tx_cache: TransactionCache::new(),
         })
     }
 
@@ -154,7 +180,8 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn: Transaction = self.load_txn(&txid, Some(tx_row.height))?;
+                let txn = self.tx_cache
+                    .get_or_else(&txid, || self.load_txn(&txid, Some(tx_row.height)))?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
