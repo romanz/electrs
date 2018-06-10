@@ -156,7 +156,16 @@ impl Tracker {
         metric.tick("index");
         self.update_fee_histogram();
         metric.tick("fees");
-        debug!("mempool update ({} txns) {:?}", self.stats.len(), metric);
+        let vsize: u64 = self.stats
+            .values()
+            .map(|stat| stat.entry.vsize() as u64)
+            .sum();
+        debug!(
+            "mempool update ({} txns, {:.3} vMB) {:?}",
+            self.stats.len(),
+            vsize as f32 / 1e6,
+            metric
+        );
         Ok(())
     }
 
