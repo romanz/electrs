@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use query::Query;
-use util::HeaderEntry;
+use util::{HeaderEntry, Timer};
 
 use errors::*;
 
@@ -226,6 +226,7 @@ impl Connection {
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
         let mut result = vec![];
+        let mut timer = Timer::new();
         if let Some(ref mut last_entry) = self.last_header_entry {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
@@ -250,6 +251,12 @@ impl Connection {
                 "params": [script_hash.be_hex_string(), new_status_hash]}));
             *status_hash = new_status_hash;
         }
+        timer.tick("total");
+        debug!(
+            "updating {} subscriptions {:?}",
+            self.status_hashes.len(),
+            timer
+        );
         Ok(result)
     }
 
