@@ -356,7 +356,6 @@ impl Channel {
 }
 
 pub struct RPC {
-    acceptor: thread::JoinHandle<()>,
     notification: Sender<()>,
 }
 
@@ -384,7 +383,7 @@ impl RPC {
         let (notification_tx, notification_rx) = channel();
         let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
         info!("RPC server running on {}", addr);
-        let child = thread::spawn(move || {
+        thread::spawn(move || {
             let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
             RPC::start_notification_worker(notification_rx, senders.clone());
             loop {
@@ -401,7 +400,6 @@ impl RPC {
             }
         });
         RPC {
-            acceptor: child,
             notification: notification_tx,
         }
     }
