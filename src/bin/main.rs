@@ -15,7 +15,7 @@ use electrs::{app::{App, Waiter},
               errors::*,
               index::Index,
               query::Query,
-              rpc,
+              rpc::RPC,
               store::{DBStore, StoreOptions}};
 
 fn run_server(config: &Config) -> Result<()> {
@@ -39,13 +39,13 @@ fn run_server(config: &Config) -> Result<()> {
     let app = App::new(store, index, daemon);
 
     let query = Query::new(app.clone());
-    rpc::start(&config.rpc_addr, query.clone());
+    let rpc = RPC::start(config.rpc_addr, query.clone());
     while let None = signal.wait() {
         query.update_mempool()?;
-        if tip == app.daemon().getbestblockhash()? {
-            continue;
+        if tip != app.daemon().getbestblockhash()? {
+            tip = app.index().update(app.write_store(), app.daemon())?;
         }
-        tip = app.index().update(app.write_store(), app.daemon())?;
+        rpc.notify();
     }
     info!("closing server");
     Ok(())
