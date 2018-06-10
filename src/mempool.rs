@@ -90,7 +90,7 @@ impl ReadStore for MempoolStore {
     }
 }
 
-pub struct Stats {
+struct Stats {
     tx: Transaction,
     entry: MempoolEntry,
 }
