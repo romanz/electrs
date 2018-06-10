@@ -127,9 +127,9 @@ impl Tracker {
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
         let mut metric = Timer::new();
-        let new_txids = HashSet::<Sha256dHash>::from_iter(daemon
+        let new_txids = daemon
             .getmempooltxids()
-            .chain_err(|| "failed to update mempool from daemon")?);
+            .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.stats.keys().cloned());
         metric.tick("fetch");
         for txid in new_txids.difference(&old_txids) {

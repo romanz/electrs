@@ -6,6 +6,7 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use hex;
 use serde_json::{from_str, from_value, Value};
+use std::collections::HashSet;
 use std::env::home_dir;
 use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
@@ -271,11 +272,11 @@ impl Daemon {
         )
     }
 
-    pub fn getmempooltxids(&self) -> Result<Vec<Sha256dHash>> {
+    pub fn getmempooltxids(&self) -> Result<HashSet<Sha256dHash>> {
         let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
-        let mut result = vec![];
+        let mut result = HashSet::new();
         for value in txids.as_array().chain_err(|| "non-array result")? {
-            result.push(parse_hash(&value).chain_err(|| "invalid txid")?);
+            result.insert(parse_hash(&value).chain_err(|| "invalid txid")?);
         }
         Ok(result)
     }
