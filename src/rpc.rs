@@ -25,6 +25,12 @@ fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     Ok(script_hash)
 }
 
+fn usize_from_value(val: Option<&Value>, name: &str) -> Result<usize> {
+    let val = val.chain_err(|| format!("missing {}", name))?;
+    let val = val.as_u64().chain_err(|| format!("non-integer {}", name))?;
+    Ok(val as usize)
+}
+
 fn jsonify_header(entry: &HeaderEntry) -> Value {
     let header = entry.header();
     json!({
@@ -85,22 +91,24 @@ impl Connection {
         Ok(json!(self.query.get_fee_histogram()))
     }
 
-    fn blockchain_block_get_chunk(&self, params: &[Value]) -> Result<Value> {
-        const CHUNK_SIZE: usize = 2016;
-        let index = params.get(0).chain_err(|| "missing index")?;
-        let index = index.as_u64().chain_err(|| "non-number index")? as usize;
-        let heights: Vec<usize> = (0..CHUNK_SIZE).map(|h| index * CHUNK_SIZE + h).collect();
+    fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
+        let start_height = usize_from_value(params.get(0), "start_height")?;
+        let count = usize_from_value(params.get(1), "count")?;
+        let heights: Vec<usize> = (start_height..(start_height + count)).collect();
         let headers: Vec<String> = self.query
             .get_headers(&heights)
             .into_iter()
             .map(|entry| hex::encode(&serialize(entry.header()).unwrap()))
             .collect();
-        Ok(json!(headers.join("")))
+        Ok(json!({
+            "count": headers.len(),
+            "hex": headers.join(""),
+            "max": 2016,
+        }))
     }
 
     fn blockchain_block_get_header(&self, params: &[Value]) -> Result<Value> {
-        let height = params.get(0).chain_err(|| "missing height")?;
-        let height = height.as_u64().chain_err(|| "non-number height")? as usize;
+        let height = usize_from_value(params.get(0), "missing height")?;
         let mut entries = self.query.get_headers(&[height]);
         let entry = entries
             .pop()
@@ -110,9 +118,8 @@ impl Connection {
     }
 
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
-        let blocks = params.get(0).chain_err(|| "missing blocks")?;
-        let blocks = blocks.as_u64().chain_err(|| "non-number blocks")? as usize;
-        let fee_rate = self.query.estimate_fee(blocks); // in BTC/kB
+        let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
+        let fee_rate = self.query.estimate_fee(blocks_count); // in BTC/kB
         Ok(json!(fee_rate))
     }
 
@@ -166,8 +173,7 @@ impl Connection {
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        let height = params.get(1).chain_err(|| "missing height")?;
-        let height = height.as_u64().chain_err(|| "non-number height")? as usize;
+        let height = usize_from_value(params.get(1), "height")?;
         let (merkle, pos) = self.query
             .get_merkle_proof(&tx_hash, height)
             .chain_err(|| "cannot create merkle proof")?;
@@ -189,7 +195,7 @@ impl Connection {
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
-            "blockchain.block.get_chunk" => self.blockchain_block_get_chunk(&params),
+            "blockchain.block.headers" => self.blockchain_block_headers(&params),
             "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.relayfee" => self.blockchain_relayfee(),
