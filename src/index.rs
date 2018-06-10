@@ -344,12 +344,14 @@ impl<'a> BufferedWriter<'a> {
     fn write(&mut self, mut rows: Vec<Row>) {
         self.batch.append(&mut rows);
         if self.batch.len() > 10_000_000 || self.start.elapsed() > Duration::from_secs(60) {
-            self.flush();
+            self.store.write(self.batch.split_off(0));
+            self.start = Instant::now();
         }
     }
 
     fn flush(&mut self) {
         self.store.write(self.batch.split_off(0));
         self.start = Instant::now();
+        self.store.flush(); // sync DB to disk
     }
 }

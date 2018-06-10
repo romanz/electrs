@@ -22,6 +22,7 @@ impl ReadStore for FakeStore {
 
 impl WriteStore for FakeStore {
     fn write(&self, _rows: Vec<Row>) {}
+    fn flush(&self) {}
 }
 
 fn run() -> Result<()> {

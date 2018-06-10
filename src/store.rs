@@ -20,6 +20,7 @@ pub trait ReadStore: Sync {
 
 pub trait WriteStore: Sync {
     fn write(&self, rows: Vec<Row>);
+    fn flush(&self);
 }
 
 pub struct DBStore {
@@ -95,7 +96,15 @@ impl WriteStore for DBStore {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(true);
+        opts.set_sync(false);
         self.db.write_opt(batch, &opts).unwrap();
+    }
+
+    fn flush(&self) {
+        let mut opts = rocksdb::WriteOptions::new();
+        opts.set_sync(true);
+        self.db
+            .write_opt(rocksdb::WriteBatch::default(), &opts)
+            .unwrap();
     }
 }
