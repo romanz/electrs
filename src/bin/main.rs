@@ -1,8 +1,4 @@
 extern crate electrs;
-
-#[macro_use]
-extern crate log;
-#[macro_use]
 extern crate error_chain;
 
 use error_chain::ChainedError;
@@ -20,7 +16,6 @@ use electrs::{app::{App, Waiter},
 
 fn run_server(config: &Config) -> Result<()> {
     let daemon = Daemon::new(config.network_type)?;
-    debug!("{:?}", daemon.getblockchaininfo()?);
 
     let signal = Waiter::new(Duration::from_secs(5));
     let store = DBStore::open(
@@ -47,7 +42,6 @@ fn run_server(config: &Config) -> Result<()> {
         }
         rpc.notify();
     }
-    info!("closing server");
     Ok(())
 }
 
@@ -87,7 +81,7 @@ fn main() {
     for _ in Repeat::new(&config) {
         match run_server(&config) {
             Ok(_) => break,
-            Err(e) => error!("{}", e.display_chain()),
+            Err(e) => eprintln!("{}", e.display_chain()),
         }
     }
 }

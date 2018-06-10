@@ -149,12 +149,14 @@ impl Daemon {
             Network::Mainnet => "127.0.0.1:8332",
             Network::Testnet => "127.0.0.1:18332",
         };
-        Ok(Daemon {
+        let daemon = Daemon {
             conn: Mutex::new(Connection::new(
                 SocketAddr::from_str(addr).unwrap(),
                 base64::encode(&read_cookie(network)?),
             )?),
-        })
+        };
+        debug!("{:?}", daemon.getblockchaininfo()?);
+        Ok(daemon)
     }
 
     fn call_jsonrpc(&self, request: &Value) -> Result<Value> {
