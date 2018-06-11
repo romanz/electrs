@@ -10,7 +10,7 @@ pub struct Config {
     pub log_level: simplelog::LevelFilter,
     pub restart: bool,
     pub network_type: Network, // bitcoind JSONRPC endpoint
-    pub db_path: &'static str, // RocksDB directory path
+    pub db_path: String,       // RocksDB directory path
     pub rpc_addr: SocketAddr,  // for serving Electrum clients
 }
 
@@ -19,7 +19,8 @@ impl Config {
         let mut testnet = false;
         let mut verbose = false;
         let mut restart = false;
-        let mut log_file = "".to_string();
+        let mut log_file = "".to_owned();
+        let mut db_dir = "./db".to_owned();
         {
             let mut parser = ArgumentParser::new();
             parser.set_description("Bitcoin indexing server.");
@@ -43,6 +44,11 @@ impl Config {
                 Store,
                 "Write the log into specified file",
             );
+            parser.refer(&mut db_dir).add_option(
+                &["-d", "--db-dir"],
+                Store,
+                "Directory to store index database",
+            );
             parser.parse_args_or_exit();
         }
         let network_type = match testnet {
@@ -59,8 +65,8 @@ impl Config {
             restart,
             network_type,
             db_path: match network_type {
-                Network::Mainnet => "./db/mainnet",
-                Network::Testnet => "./db/testnet",
+                Network::Mainnet => format!("{}/mainnet", db_dir),
+                Network::Testnet => format!("{}/testnet", db_dir),
             },
             rpc_addr: match network_type {
                 Network::Mainnet => "127.0.0.1:50001",

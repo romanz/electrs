@@ -19,7 +19,7 @@ fn run_server(config: &Config) -> Result<()> {
 
     let signal = Waiter::new(Duration::from_secs(5));
     let store = DBStore::open(
-        config.db_path,
+        &config.db_path,
         StoreOptions {
             // compact manually after the first run has finished successfully
             auto_compact: false,
@@ -30,7 +30,7 @@ fn run_server(config: &Config) -> Result<()> {
     store.compact_if_needed();
     drop(store); // to be re-opened soon
 
-    let store = DBStore::open(config.db_path, StoreOptions { auto_compact: true });
+    let store = DBStore::open(&config.db_path, StoreOptions { auto_compact: true });
     let app = App::new(store, index, daemon);
 
     let query = Query::new(app.clone());
