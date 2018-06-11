@@ -16,8 +16,6 @@ use electrs::{app::{App, Waiter},
 
 fn run_server(config: &Config) -> Result<()> {
     let daemon = Daemon::new(config.network_type)?;
-
-    let signal = Waiter::new(Duration::from_secs(5));
     let store = DBStore::open(
         &config.db_path,
         StoreOptions {
@@ -35,6 +33,7 @@ fn run_server(config: &Config) -> Result<()> {
 
     let query = Query::new(app.clone());
     let rpc = RPC::start(config.rpc_addr, query.clone());
+    let signal = Waiter::new(Duration::from_secs(5));
     while let None = signal.wait() {
         query.update_mempool()?;
         if tip != app.daemon().getbestblockhash()? {
