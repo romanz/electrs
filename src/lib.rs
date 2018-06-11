@@ -34,5 +34,6 @@ pub mod index;
 pub mod mempool;
 pub mod query;
 pub mod rpc;
+pub mod signal;
 pub mod store;
 pub mod util;

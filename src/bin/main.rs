@@ -5,16 +5,18 @@ use error_chain::ChainedError;
 use std::thread;
 use std::time::Duration;
 
-use electrs::{app::{App, Waiter},
+use electrs::{app::App,
               config::Config,
               daemon::Daemon,
               errors::*,
               index::Index,
               query::Query,
               rpc::RPC,
+              signal::Waiter,
               store::{DBStore, StoreOptions}};
 
 fn run_server(config: &Config) -> Result<()> {
+    let signal = Waiter::new();
     let daemon = Daemon::new(config.network_type)?;
     let store = DBStore::open(
         &config.db_path,
@@ -24,7 +26,7 @@ fn run_server(config: &Config) -> Result<()> {
         },
     );
     let index = Index::load(&store);
-    let mut tip = index.update(&store, &daemon)?;
+    let mut tip = index.update(&store, &daemon, &signal)?;
     store.compact_if_needed();
     drop(store); // to be re-opened soon
 
@@ -33,11 +35,11 @@ fn run_server(config: &Config) -> Result<()> {
 
     let query = Query::new(app.clone());
     let rpc = RPC::start(config.rpc_addr, query.clone());
-    let signal = Waiter::new(Duration::from_secs(5));
-    while let None = signal.wait() {
+    while let None = signal.wait(Duration::from_secs(5)) {
         query.update_mempool()?;
         if tip != app.daemon().getbestblockhash()? {
-            tip = app.index().update(app.write_store(), app.daemon())?;
+            tip = app.index()
+                .update(app.write_store(), app.daemon(), &signal)?;
         }
         rpc.notify();
     }

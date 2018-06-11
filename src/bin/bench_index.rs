@@ -5,6 +5,7 @@ use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
               index::Index,
+              signal::Waiter,
               store::{ReadStore, Row, WriteStore},
               util::Bytes};
 use error_chain::ChainedError;
@@ -30,7 +31,7 @@ fn run() -> Result<()> {
     let daemon = Daemon::new(config.network_type)?;
     let fake_store = FakeStore {};
     let index = Index::load(&fake_store);
-    index.update(&fake_store, &daemon)?;
+    index.update(&fake_store, &daemon, &Waiter::new())?;
     Ok(())
 }
 

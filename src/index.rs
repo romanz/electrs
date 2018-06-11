@@ -12,6 +12,7 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use daemon::Daemon;
+use signal::Waiter;
 use store::{ReadStore, Row, WriteStore};
 use util::{self, full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
            HeaderMap, Timer, HASH_PREFIX_LEN};
@@ -300,7 +301,12 @@ impl Index {
             .cloned()
     }
 
-    pub fn update(&self, store: &WriteStore, daemon: &Daemon) -> Result<Sha256dHash> {
+    pub fn update(
+        &self,
+        store: &WriteStore,
+        daemon: &Daemon,
+        waiter: &Waiter,
+    ) -> Result<Sha256dHash> {
         let tip = daemon.getbestblockhash()?;
         let new_headers: Vec<HeaderEntry> = {
             let indexed_headers = self.headers.read().unwrap();
@@ -318,6 +324,9 @@ impl Index {
             let headers_map: HashMap<Sha256dHash, &HeaderEntry> =
                 HashMap::from_iter(new_headers.iter().map(|h| (*h.hash(), h)));
             for chunk in new_headers.chunks(100) {
+                if let Some(sig) = waiter.poll() {
+                    bail!("indexing interrupted by {:?}", sig);
+                }
                 // Download new blocks
                 let hashes: Vec<Sha256dHash> = chunk.into_iter().map(|h| *h.hash()).collect();
                 let batch = daemon.getblocks(&hashes)?;

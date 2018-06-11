@@ -25,6 +25,7 @@ pub trait WriteStore: Sync {
 
 pub struct DBStore {
     db: rocksdb::DB,
+    path: String,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ impl DBStore {
         block_opts.set_block_size(256 << 10);
         DBStore {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
+            path: path.to_owned(),
         }
     }
 
@@ -105,5 +107,11 @@ impl WriteStore for DBStore {
         self.db
             .write_opt(rocksdb::WriteBatch::default(), &opts)
             .unwrap();
+    }
+}
+
+impl Drop for DBStore {
+    fn drop(&mut self) {
+        debug!("closing {}", self.path);
     }
 }
