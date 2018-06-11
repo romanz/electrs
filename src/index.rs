@@ -250,6 +250,31 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     result
 }
 
+#[derive(Debug)]
+struct Stats {
+    blocks: usize,
+    txns: usize,
+    vsize: usize,
+}
+
+impl Stats {
+    fn new() -> Stats {
+        Stats {
+            blocks: 0,
+            txns: 0,
+            vsize: 0,
+        }
+    }
+
+    fn update(&mut self, block: &Block) {
+        self.blocks += 1;
+        self.txns += block.txdata.len();
+        for tx in &block.txdata {
+            self.vsize += tx.get_weight() as usize / 4;
+        }
+    }
+}
+
 pub struct Index {
     // TODO: store also latest snapshot.
     headers: RwLock<HeaderList>,
@@ -286,6 +311,7 @@ impl Index {
         });
         {
             let mut timer = Timer::new();
+            let mut stats = Stats::new();
             let mut bar = util::new_progress_bar(new_headers.len());
             bar.message("Blocks: ");
             let mut buf = BufferedWriter::new(store);
@@ -303,22 +329,22 @@ impl Index {
                         .expect(&format!("missing header for block {}", expected_hash));
 
                     // Index it
-                    let rows = index_block(&block, header.height());
+                    let rows = index_block(block, header.height());
                     timer.tick("index");
 
                     // Write to DB
                     buf.write(rows);
                     timer.tick("write");
+                    stats.update(block);
                 }
-                let block_count = bar.add(batch.len() as u64);
-                if block_count % 10000 == 0 {
-                    debug!("index update ({} blocks) {:?}", block_count, timer);
+                if bar.add(batch.len() as u64) % 10000 == 0 {
+                    debug!("index update {:?} {:?}", stats, timer);
                 }
             }
             buf.flush(); // make sure no row is left behind
             timer.tick("write");
             bar.finish();
-            debug!("index update ({} blocks) {:?}", new_headers.len(), timer);
+            debug!("index update {:?} {:?}", stats, timer);
         }
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
