@@ -1,6 +1,7 @@
 use prometheus::{self, Encoder};
 use std::io;
 use std::net::SocketAddr;
+use std::thread;
 use tiny_http;
 
 pub use prometheus::{IntCounter as Counter, IntGauge as Gauge, Opts as MetricOpts};
@@ -30,21 +31,26 @@ impl Metrics {
         g
     }
 
-    pub fn serve(&self) {
+    pub fn start(&self) {
         let server = tiny_http::Server::http(self.addr).unwrap();
-        loop {
-            if let Err(e) = self.handle(server.recv()) {
+        let reg = self.reg.clone();
+        thread::spawn(move || loop {
+            if let Err(e) = handle_request(&reg, server.recv()) {
                 error!("http error: {}", e);
             }
-        }
+        });
     }
-    fn handle(&self, req: io::Result<tiny_http::Request>) -> io::Result<()> {
-        let request = req?;
-        let mut buffer = vec![];
-        prometheus::TextEncoder::new()
-            .encode(&self.reg.gather(), &mut buffer)
-            .unwrap();
-        let response = tiny_http::Response::from_data(buffer);
-        request.respond(response)
-    }
+}
+
+fn handle_request(
+    reg: &prometheus::Registry,
+    request: io::Result<tiny_http::Request>,
+) -> io::Result<()> {
+    let request = request?;
+    let mut buffer = vec![];
+    prometheus::TextEncoder::new()
+        .encode(&reg.gather(), &mut buffer)
+        .unwrap();
+    let response = tiny_http::Response::from_data(buffer);
+    request.respond(response)
 }

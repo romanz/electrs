@@ -28,7 +28,7 @@ fn run_server(config: &Config) -> Result<()> {
         },
     );
     let index = Index::load(&store, &metrics);
-    thread::spawn(move || metrics.serve());
+    metrics.start();
 
     let mut tip = index.update(&store, &daemon, &signal)?;
     store.compact_if_needed();
