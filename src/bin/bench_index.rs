@@ -31,7 +31,7 @@ fn run() -> Result<()> {
     let signal = Waiter::new();
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr);
-    let daemon = Daemon::new(config.network_type)?;
+    let daemon = Daemon::new(config.network_type, &metrics)?;
     let fake_store = FakeStore {};
     let index = Index::load(&fake_store, &metrics);
     index.update(&fake_store, &daemon, &signal)?;

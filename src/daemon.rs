@@ -14,6 +14,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::Mutex;
 
+use metrics::{HistogramOpts, HistogramVec, Metrics};
 use util::{self, HeaderList};
 
 use errors::*;
@@ -155,10 +156,13 @@ impl Connection {
 
 pub struct Daemon {
     conn: Mutex<Connection>,
+
+    // monitoring
+    latency: HistogramVec,
 }
 
 impl Daemon {
-    pub fn new(network: Network) -> Result<Daemon> {
+    pub fn new(network: Network, metrics: &Metrics) -> Result<Daemon> {
         let addr = match network {
             Network::Mainnet => "127.0.0.1:8332",
             Network::Testnet => "127.0.0.1:18332",
@@ -168,20 +172,27 @@ impl Daemon {
                 SocketAddr::from_str(addr).unwrap(),
                 base64::encode(&read_cookie(network)?),
             )?),
+            latency: metrics.histogram(
+                HistogramOpts::new("rpc_latency", "Bitcoind RPC latency (seconds)"),
+                &["method"],
+            ),
         };
         debug!("{:?}", daemon.getblockchaininfo()?);
         Ok(daemon)
     }
 
-    fn call_jsonrpc(&self, request: &Value) -> Result<Value> {
+    fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
+        let timer = self.latency.with_label_values(&[method]).start_timer();
         let mut conn = self.conn.lock().unwrap();
         conn.send(&request.to_string())?;
-        conn.recv()
+        let result = conn.recv();
+        timer.observe_duration();
+        result
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
         let req = json!({"method": method, "params": params});
-        let mut reply = self.call_jsonrpc(&req)
+        let mut reply = self.call_jsonrpc(method, &req)
             .chain_err(|| format!("RPC failed: {}", req))?;
         parse_jsonrpc_reply(&mut reply, method)
     }
@@ -192,7 +203,7 @@ impl Daemon {
             .map(|params| json!({"method": method, "params": params}))
             .collect();
         let mut results = Vec::new();
-        let mut replies = self.call_jsonrpc(&reqs)
+        let mut replies = self.call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         for reply in replies.as_array_mut().chain_err(|| "non-array response")? {
             results.push(parse_jsonrpc_reply(reply, method)?)

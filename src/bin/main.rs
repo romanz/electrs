@@ -19,7 +19,7 @@ use electrs::{app::App,
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
-    let daemon = Daemon::new(config.network_type)?;
+    let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open(
         &config.db_path,
         StoreOptions {
