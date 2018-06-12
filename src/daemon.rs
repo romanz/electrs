@@ -173,7 +173,7 @@ impl Daemon {
                 base64::encode(&read_cookie(network)?),
             )?),
             latency: metrics.histogram(
-                HistogramOpts::new("rpc_latency", "Bitcoind RPC latency (seconds)"),
+                HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (seconds)"),
                 &["method"],
             ),
         };
