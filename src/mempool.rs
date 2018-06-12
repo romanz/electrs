@@ -91,13 +91,13 @@ impl ReadStore for MempoolStore {
     }
 }
 
-struct Stats {
+struct Item {
     tx: Transaction,
     entry: MempoolEntry,
 }
 
 pub struct Tracker {
-    stats: HashMap<Sha256dHash, Stats>,
+    items: HashMap<Sha256dHash, Item>,
     index: MempoolStore,
     histogram: Vec<(f32, u32)>,
 }
@@ -105,14 +105,14 @@ pub struct Tracker {
 impl Tracker {
     pub fn new(metrics: &Metrics) -> Tracker {
         Tracker {
-            stats: HashMap::new(),
+            items: HashMap::new(),
             index: MempoolStore::new(),
             histogram: vec![],
         }
     }
 
     pub fn get_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
-        self.stats.get(txid).map(|stats| stats.tx.clone())
+        self.items.get(txid).map(|stats| stats.tx.clone())
     }
 
     /// Returns vector of (fee_rate, vsize) pairs, where fee_{n-1} > fee_n and vsize_n is the
@@ -130,7 +130,7 @@ impl Tracker {
         let new_txids = daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
-        let old_txids = HashSet::from_iter(self.stats.keys().cloned());
+        let old_txids = HashSet::from_iter(self.items.keys().cloned());
         for txid in new_txids.difference(&old_txids) {
             let entry = match daemon.getmempoolentry(txid) {
                 Ok(entry) => entry,
@@ -153,7 +153,7 @@ impl Tracker {
             self.remove(txid);
         }
         self.update_fee_histogram();
-        let vsize: u64 = self.stats
+        let vsize: u64 = self.items
             .values()
             .map(|stat| stat.entry.vsize() as u64)
             .sum();
@@ -163,18 +163,18 @@ impl Tracker {
     fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {
         trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte());
         self.index.add(&tx);
-        self.stats.insert(*txid, Stats { tx, entry });
+        self.items.insert(*txid, Item { tx, entry });
     }
 
     fn remove(&mut self, txid: &Sha256dHash) {
-        let stats = self.stats
+        let stats = self.items
             .remove(txid)
             .expect(&format!("missing mempool tx {}", txid));
         self.index.remove(&stats.tx);
     }
 
     fn update_fee_histogram(&mut self) {
-        let mut entries: Vec<&MempoolEntry> = self.stats.values().map(|stat| &stat.entry).collect();
+        let mut entries: Vec<&MempoolEntry> = self.items.values().map(|stat| &stat.entry).collect();
         entries.sort_unstable_by(|e1, e2| {
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
