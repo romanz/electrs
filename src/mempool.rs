@@ -9,7 +9,7 @@ use std::sync::RwLock;
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
-use metrics::Metrics;
+use metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use store::{ReadStore, Row};
 use util::Bytes;
 
@@ -96,10 +96,23 @@ struct Item {
     entry: MempoolEntry,
 }
 
+struct Stats {
+    count: Gauge,
+    vsize: Gauge,
+    update: HistogramVec,
+}
+
+impl Stats {
+    fn start_timer(&self, step: &str) -> HistogramTimer {
+        self.update.with_label_values(&[step]).start_timer()
+    }
+}
+
 pub struct Tracker {
     items: HashMap<Sha256dHash, Item>,
     index: MempoolStore,
     histogram: Vec<(f32, u32)>,
+    stats: Stats,
 }
 
 impl Tracker {
@@ -108,6 +121,20 @@ impl Tracker {
             items: HashMap::new(),
             index: MempoolStore::new(),
             histogram: vec![],
+            stats: Stats {
+                count: metrics.gauge(MetricOpts::new(
+                    "mempool_txs_count",
+                    "# of mempool transactions",
+                )),
+                vsize: metrics.gauge(MetricOpts::new(
+                    "mempool_txs_vsize",
+                    "vsize of mempool transactions (in bytes)",
+                )),
+                update: metrics.histogram(
+                    HistogramOpts::new("mempool_update", "Time to update mempool (in seconds)"),
+                    &["step"],
+                ),
+            },
         }
     }
 
@@ -127,10 +154,14 @@ impl Tracker {
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
+        let timer = self.stats.start_timer("fetch");
         let new_txids = daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.items.keys().cloned());
+        timer.observe_duration();
+
+        let timer = self.stats.start_timer("add");
         for txid in new_txids.difference(&old_txids) {
             let entry = match daemon.getmempoolentry(txid) {
                 Ok(entry) => entry,
@@ -149,14 +180,25 @@ impl Tracker {
             };
             self.add(txid, tx, entry);
         }
+        timer.observe_duration();
+
+        let timer = self.stats.start_timer("remove");
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
+        timer.observe_duration();
+
+        let timer = self.stats.start_timer("fees");
         self.update_fee_histogram();
-        let vsize: u64 = self.items
-            .values()
-            .map(|stat| stat.entry.vsize() as u64)
-            .sum();
+        timer.observe_duration();
+
+        self.stats.count.set(self.items.len() as i64);
+        self.stats.vsize.set(
+            self.items
+                .values()
+                .map(|stat| stat.entry.vsize() as i64)
+                .sum::<i64>(),
+        );
         Ok(())
     }
 

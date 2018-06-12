@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 use std::thread;
 use tiny_http;
 
-pub use prometheus::{HistogramOpts, HistogramVec, IntCounter as Counter, IntGauge as Gauge,
-                     Opts as MetricOpts};
+pub use prometheus::{HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
+                     IntGauge as Gauge, Opts as MetricOpts};
 
 pub struct Metrics {
     reg: prometheus::Registry,
