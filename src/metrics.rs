@@ -3,7 +3,7 @@ use std::io;
 use std::net::SocketAddr;
 use tiny_http;
 
-pub use prometheus::{IntCounter as Counter, Opts as MetricOpts};
+pub use prometheus::{IntCounter as Counter, IntGauge as Gauge, Opts as MetricOpts};
 
 pub struct Metrics {
     reg: prometheus::Registry,
@@ -19,9 +19,15 @@ impl Metrics {
     }
 
     pub fn counter(&self, opts: prometheus::Opts) -> Counter {
-        let cnt = Counter::with_opts(opts).unwrap();
-        self.reg.register(Box::new(cnt.clone())).unwrap();
-        cnt
+        let c = Counter::with_opts(opts).unwrap();
+        self.reg.register(Box::new(c.clone())).unwrap();
+        c
+    }
+
+    pub fn gauge(&self, opts: prometheus::Opts) -> Gauge {
+        let g = Gauge::with_opts(opts).unwrap();
+        self.reg.register(Box::new(g.clone())).unwrap();
+        g
     }
 
     pub fn serve(&self) {

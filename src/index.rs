@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::sync::RwLock;
 
 use daemon::Daemon;
-use metrics::{Counter, MetricOpts, Metrics};
+use metrics::{Counter, Gauge, MetricOpts, Metrics};
 use signal::Waiter;
 use store::{ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
@@ -249,6 +249,7 @@ struct Stats {
     blocks: Counter,
     txns: Counter,
     vsize: Counter,
+    height: Gauge,
 }
 
 impl Stats {
@@ -257,15 +258,20 @@ impl Stats {
             blocks: metrics.counter(MetricOpts::new("index_blocks", "# of indexed blocks")),
             txns: metrics.counter(MetricOpts::new("index_txns", "# of indexed transactions")),
             vsize: metrics.counter(MetricOpts::new("index_vsize", "# of indexed vbytes")),
+            height: metrics.gauge(MetricOpts::new(
+                "index_height",
+                "Last indexed block's height",
+            )),
         }
     }
 
-    fn update(&self, block: &Block) {
+    fn update(&self, block: &Block, entry: &HeaderEntry) {
         self.blocks.inc();
         self.txns.inc_by(block.txdata.len() as i64);
         for tx in &block.txdata {
             self.vsize.inc_by(tx.get_weight() as i64 / 4);
         }
+        self.height.set(entry.height() as i64);
     }
 }
 
@@ -331,7 +337,7 @@ impl Index {
 
                     // Write to DB
                     store.write(rows);
-                    self.stats.update(block);
+                    self.stats.update(block, header);
                 }
             }
             store.flush(); // make sure no row is left behind
