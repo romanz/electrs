@@ -8,10 +8,12 @@ extern crate chan_signal;
 extern crate crypto;
 extern crate hex;
 extern crate pbr;
+extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
 extern crate simplelog;
 extern crate time;
+extern crate tiny_http;
 
 #[macro_use]
 extern crate chan;
@@ -32,6 +34,7 @@ pub mod daemon;
 pub mod errors;
 pub mod index;
 pub mod mempool;
+pub mod metrics;
 pub mod query;
 pub mod rpc;
 pub mod signal;

@@ -9,9 +9,10 @@ pub struct Config {
     pub log_file: String,
     pub log_level: simplelog::LevelFilter,
     pub restart: bool,
-    pub network_type: Network, // bitcoind JSONRPC endpoint
-    pub db_path: String,       // RocksDB directory path
-    pub rpc_addr: SocketAddr,  // for serving Electrum clients
+    pub network_type: Network,       // bitcoind JSONRPC endpoint
+    pub db_path: String,             // RocksDB directory path
+    pub rpc_addr: SocketAddr,        // for serving Electrum clients
+    pub monitoring_addr: SocketAddr, // for Prometheus monitoring
 }
 
 impl Config {
@@ -73,6 +74,7 @@ impl Config {
                 Network::Testnet => "127.0.0.1:60001",
             }.parse()
                 .unwrap(),
+            monitoring_addr: "127.0.0.1:42024".parse().unwrap(),
         };
         setup_logging(&config);
         config
