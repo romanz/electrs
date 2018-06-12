@@ -4,7 +4,8 @@ use std::net::SocketAddr;
 use std::thread;
 use tiny_http;
 
-pub use prometheus::{IntCounter as Counter, IntGauge as Gauge, Opts as MetricOpts};
+pub use prometheus::{HistogramOpts, HistogramVec, IntCounter as Counter, IntGauge as Gauge,
+                     Opts as MetricOpts};
 
 pub struct Metrics {
     reg: prometheus::Registry,
@@ -29,6 +30,12 @@ impl Metrics {
         let g = Gauge::with_opts(opts).unwrap();
         self.reg.register(Box::new(g.clone())).unwrap();
         g
+    }
+
+    pub fn histogram(&self, opts: prometheus::HistogramOpts, labels: &[&str]) -> HistogramVec {
+        let h = HistogramVec::new(opts, labels).unwrap();
+        self.reg.register(Box::new(h.clone())).unwrap();
+        h
     }
 
     pub fn start(&self) {
