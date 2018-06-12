@@ -10,6 +10,7 @@ use std::sync::{Arc, RwLock};
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
+use metrics::Metrics;
 use store::{ReadStore, Row};
 use util::{FullHash, HashPrefix, HeaderEntry};
 
@@ -163,10 +164,10 @@ pub struct Query {
 }
 
 impl Query {
-    pub fn new(app: Arc<App>) -> Arc<Query> {
+    pub fn new(app: Arc<App>, metrics: &Metrics) -> Arc<Query> {
         Arc::new(Query {
             app,
-            tracker: RwLock::new(Tracker::new()),
+            tracker: RwLock::new(Tracker::new(metrics)),
             tx_cache: TransactionCache::new(),
         })
     }

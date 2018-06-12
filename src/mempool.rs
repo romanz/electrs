@@ -9,8 +9,9 @@ use std::sync::RwLock;
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
+use metrics::Metrics;
 use store::{ReadStore, Row};
-use util::{Bytes, Timer};
+use util::Bytes;
 
 use errors::*;
 
@@ -102,7 +103,7 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    pub fn new() -> Tracker {
+    pub fn new(metrics: &Metrics) -> Tracker {
         Tracker {
             stats: HashMap::new(),
             index: MempoolStore::new(),
@@ -126,12 +127,10 @@ impl Tracker {
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
-        let mut metric = Timer::new();
         let new_txids = daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.stats.keys().cloned());
-        metric.tick("fetch");
         for txid in new_txids.difference(&old_txids) {
             let entry = match daemon.getmempoolentry(txid) {
                 Ok(entry) => entry,
@@ -153,19 +152,11 @@ impl Tracker {
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
         }
-        metric.tick("index");
         self.update_fee_histogram();
-        metric.tick("fees");
         let vsize: u64 = self.stats
             .values()
             .map(|stat| stat.entry.vsize() as u64)
             .sum();
-        debug!(
-            "mempool update ({} txns, {:.3} vMB) {:?}",
-            self.stats.len(),
-            vsize as f32 / 1e6,
-            metric
-        );
         Ok(())
     }
 

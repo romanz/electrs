@@ -37,7 +37,7 @@ fn run_server(config: &Config) -> Result<()> {
     let store = DBStore::open(&config.db_path, StoreOptions { auto_compact: true });
     let app = App::new(store, index, daemon);
 
-    let query = Query::new(app.clone());
+    let query = Query::new(app.clone(), &metrics);
     let rpc = RPC::start(config.rpc_addr, query.clone());
     while let None = signal.wait(Duration::from_secs(5)) {
         query.update_mempool()?;
