@@ -9,7 +9,6 @@ use crypto::sha2::Sha256;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::sync::RwLock;
-use std::time::{Duration, Instant};
 
 use daemon::Daemon;
 use signal::Waiter;
@@ -320,7 +319,6 @@ impl Index {
             let mut stats = Stats::new();
             let mut bar = util::new_progress_bar(new_headers.len());
             bar.message("Blocks: ");
-            let mut buf = BufferedWriter::new(store);
             let headers_map: HashMap<Sha256dHash, &HeaderEntry> =
                 HashMap::from_iter(new_headers.iter().map(|h| (*h.hash(), h)));
             for chunk in new_headers.chunks(100) {
@@ -342,7 +340,7 @@ impl Index {
                     timer.tick("index");
 
                     // Write to DB
-                    buf.write(rows);
+                    store.write(rows);
                     timer.tick("write");
                     stats.update(block);
                 }
@@ -350,7 +348,7 @@ impl Index {
                     debug!("index update {:?} {:?}", stats, timer);
                 }
             }
-            buf.flush(); // make sure no row is left behind
+            store.flush(); // make sure no row is left behind
             timer.tick("write");
             bar.finish();
             debug!("index update {:?} {:?}", stats, timer);
@@ -358,35 +356,5 @@ impl Index {
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
         Ok(tip)
-    }
-}
-
-struct BufferedWriter<'a> {
-    batch: Vec<Row>,
-    start: Instant,
-    store: &'a WriteStore,
-}
-
-impl<'a> BufferedWriter<'a> {
-    fn new(store: &'a WriteStore) -> BufferedWriter {
-        BufferedWriter {
-            batch: vec![],
-            start: Instant::now(),
-            store,
-        }
-    }
-
-    fn write(&mut self, mut rows: Vec<Row>) {
-        self.batch.append(&mut rows);
-        if self.batch.len() > 10_000_000 || self.start.elapsed() > Duration::from_secs(60) {
-            self.store.write(self.batch.split_off(0));
-            self.start = Instant::now();
-        }
-    }
-
-    fn flush(&mut self) {
-        self.store.write(self.batch.split_off(0));
-        self.start = Instant::now();
-        self.store.flush(); // sync DB to disk
     }
 }
