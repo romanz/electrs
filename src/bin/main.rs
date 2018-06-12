@@ -10,6 +10,7 @@ use electrs::{app::App,
               daemon::Daemon,
               errors::*,
               index::Index,
+              metrics::Metrics,
               query::Query,
               rpc::RPC,
               signal::Waiter,
@@ -17,6 +18,7 @@ use electrs::{app::App,
 
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
+    let metrics = Metrics::new(config.monitoring_addr);
     let daemon = Daemon::new(config.network_type)?;
     let store = DBStore::open(
         &config.db_path,
@@ -25,7 +27,9 @@ fn run_server(config: &Config) -> Result<()> {
             auto_compact: false,
         },
     );
-    let index = Index::load(&store);
+    let index = Index::load(&store, &metrics);
+    thread::spawn(move || metrics.serve());
+
     let mut tip = index.update(&store, &daemon, &signal)?;
     store.compact_if_needed();
     drop(store); // to be re-opened soon

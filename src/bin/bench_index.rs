@@ -5,6 +5,7 @@ use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
               index::Index,
+              metrics::Metrics,
               signal::Waiter,
               store::{ReadStore, Row, WriteStore},
               util::Bytes};
@@ -27,11 +28,13 @@ impl WriteStore for FakeStore {
 }
 
 fn run() -> Result<()> {
+    let signal = Waiter::new();
     let config = Config::from_args();
+    let metrics = Metrics::new(config.monitoring_addr);
     let daemon = Daemon::new(config.network_type)?;
     let fake_store = FakeStore {};
-    let index = Index::load(&fake_store);
-    index.update(&fake_store, &daemon, &Waiter::new())?;
+    let index = Index::load(&fake_store, &metrics);
+    index.update(&fake_store, &daemon, &signal)?;
     Ok(())
 }
 
