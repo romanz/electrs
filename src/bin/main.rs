@@ -20,21 +20,15 @@ fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
     let daemon = Daemon::new(config.network_type, &metrics)?;
-    let store = DBStore::open(
-        &config.db_path,
-        StoreOptions {
-            // compact manually after the first run has finished successfully
-            auto_compact: false,
-        },
-    );
+    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
     let index = Index::load(&store, &metrics);
     metrics.start();
 
     let mut tip = index.update(&store, &daemon, &signal)?;
     store.compact_if_needed();
-    drop(store); // to be re-opened soon
+    drop(store); // bulk import is over
 
-    let store = DBStore::open(&config.db_path, StoreOptions { auto_compact: true });
+    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
     let app = App::new(store, index, daemon);
 
     let query = Query::new(app.clone(), &metrics);

@@ -26,11 +26,12 @@ pub trait WriteStore: Sync {
 pub struct DBStore {
     db: rocksdb::DB,
     path: String,
+    opts: StoreOptions,
 }
 
 #[derive(Debug)]
 pub struct StoreOptions {
-    pub auto_compact: bool,
+    pub bulk_import: bool,
 }
 
 impl DBStore {
@@ -43,13 +44,14 @@ impl DBStore {
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(64 << 20);
         db_opts.set_write_buffer_size(64 << 20);
-        db_opts.set_disable_auto_compactions(!opts.auto_compact);
+        db_opts.set_disable_auto_compactions(opts.bulk_import);
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(256 << 10);
         DBStore {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
             path: path.to_owned(),
+            opts: opts,
         }
     }
 
@@ -97,8 +99,8 @@ impl WriteStore for DBStore {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(false);
-        opts.disable_wal(true);
+        opts.set_sync(!self.opts.bulk_import);
+        opts.disable_wal(self.opts.bulk_import);
         self.db.write_opt(batch, &opts).unwrap();
     }
 
@@ -106,9 +108,8 @@ impl WriteStore for DBStore {
         let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(true);
         opts.disable_wal(false);
-        self.db
-            .write_opt(rocksdb::WriteBatch::default(), &opts)
-            .unwrap();
+        let empty = rocksdb::WriteBatch::default();
+        self.db.write_opt(empty, &opts).unwrap();
     }
 }
 
