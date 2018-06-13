@@ -391,13 +391,13 @@ impl RPC {
 
     fn start_acceptor(addr: SocketAddr) -> Channel<Option<(TcpStream, SocketAddr)>> {
         let chan = Channel::new();
-        let tx = chan.sender();
+        let acceptor = chan.sender();
         thread::spawn(move || {
             let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
             info!("RPC server running on {}", addr);
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
-                tx.send(Some((stream, addr))).expect("send failed");
+                acceptor.send(Some((stream, addr))).expect("send failed");
             }
         });
         chan
