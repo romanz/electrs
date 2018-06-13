@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::sync::RwLock;
 
 use daemon::Daemon;
-use metrics::{Counter, Gauge, MetricOpts, Metrics};
+use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use signal::Waiter;
 use store::{ReadStore, Row, WriteStore};
 use util::{full_hash, hash_prefix, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
@@ -250,6 +250,7 @@ struct Stats {
     txns: Counter,
     vsize: Counter,
     height: Gauge,
+    duration: HistogramVec,
 }
 
 impl Stats {
@@ -262,6 +263,10 @@ impl Stats {
                 "index_height",
                 "Last indexed block's height",
             )),
+            duration: metrics.histogram(
+                HistogramOpts::new("index_duration", "indexing duration (in seconds)"),
+                &["step"],
+            ),
         }
     }
 
@@ -272,6 +277,10 @@ impl Stats {
             self.vsize.inc_by(tx.get_weight() as i64 / 4);
         }
         self.height.set(entry.height() as i64);
+    }
+
+    fn start_timer(&self, step: &str) -> HistogramTimer {
+        self.duration.with_label_values(&[step]).start_timer()
     }
 }
 
@@ -323,24 +332,30 @@ impl Index {
                 if let Some(sig) = waiter.poll() {
                     bail!("indexing interrupted by {:?}", sig);
                 }
-                // Download new blocks
+                let timer = self.stats.start_timer("fetch");
                 let hashes: Vec<Sha256dHash> = chunk.into_iter().map(|h| *h.hash()).collect();
                 let batch = daemon.getblocks(&hashes)?;
+                timer.observe_duration();
+
                 for block in &batch {
                     let expected_hash = block.bitcoin_hash();
                     let header = headers_map
                         .get(&expected_hash)
                         .expect(&format!("missing header for block {}", expected_hash));
 
-                    // Index it
+                    let timer = self.stats.start_timer("index");
                     let rows = index_block(block, header.height());
+                    timer.observe_duration();
 
-                    // Write to DB
+                    let timer = self.stats.start_timer("write");
                     store.write(rows);
+                    timer.observe_duration();
                     self.stats.update(block, header);
                 }
             }
+            let timer = self.stats.start_timer("flush");
             store.flush(); // make sure no row is left behind
+            timer.observe_duration();
         }
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
