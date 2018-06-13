@@ -137,7 +137,7 @@ impl Connection {
             .chain_err(|| "failed to send request")
     }
 
-    fn recv(&mut self) -> Result<Value> {
+    fn recv(&mut self) -> Result<String> {
         let mut in_header = true;
         let mut contents: Option<String> = None;
         for line in self.rx.by_ref() {
@@ -149,8 +149,7 @@ impl Connection {
                 break;
             }
         }
-        let contents = contents.chain_err(|| "no reply")?;
-        from_str(&contents).chain_err(|| "invalid JSON")
+        contents.chain_err(|| "no reply")
     }
 }
 
@@ -159,6 +158,7 @@ pub struct Daemon {
 
     // monitoring
     latency: HistogramVec,
+    size: HistogramVec,
 }
 
 impl Daemon {
@@ -173,8 +173,12 @@ impl Daemon {
                 base64::encode(&read_cookie(network)?),
             )?),
             latency: metrics.histogram(
-                HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (seconds)"),
+                HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
+            ),
+            size: metrics.histogram(
+                HistogramOpts::new("daemon_bytes", "Bitcoind RPC size (in bytes)"),
+                &["method", "dir"],
             ),
         };
         debug!("{:?}", daemon.getblockchaininfo()?);
@@ -184,10 +188,18 @@ impl Daemon {
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
         let timer = self.latency.with_label_values(&[method]).start_timer();
         let mut conn = self.conn.lock().unwrap();
-        conn.send(&request.to_string())?;
-        let result = conn.recv();
+        let request = request.to_string();
+        conn.send(&request)?;
+        self.size
+            .with_label_values(&[method, "send"])
+            .observe(request.len() as f64);
+        let response = conn.recv()?;
+        let result: Value = from_str(&response).chain_err(|| "invalid JSON")?;
         timer.observe_duration();
-        result
+        self.size
+            .with_label_values(&[method, "recv"])
+            .observe(response.len() as f64);
+        Ok(result)
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
