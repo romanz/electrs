@@ -421,19 +421,26 @@ impl RPC {
                 let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
                 let acceptor = RPC::start_acceptor(addr);
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
+                let mut children = vec![];
                 while let Some((stream, addr)) = acceptor.receiver().recv().unwrap() {
                     let query = query.clone();
                     let senders = senders.clone();
                     let stats = stats.clone();
-                    thread::spawn(move || {
+                    children.push(thread::spawn(move || {
                         info!("[{}] connected peer", addr);
                         let conn = Connection::new(query, stream, addr, stats);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
-                    });
+                    }));
                 }
-                info!("stopping RPC server")
+                info!("stopping RPC server");
+                for sender in senders.lock().unwrap().iter() {
+                    let _ = sender.send(Message::Done);
+                }
+                for child in children {
+                    let _ = child.join();
+                }
             }),
         };
         handle
