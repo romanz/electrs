@@ -387,12 +387,12 @@ impl RPC {
     }
 
     pub fn start(addr: SocketAddr, query: Arc<Query>) -> RPC {
-        let (notification_tx, notification_rx) = channel();
+        let (tx, rx) = channel();
         let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
         info!("RPC server running on {}", addr);
         thread::spawn(move || {
             let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
-            RPC::start_notification_worker(notification_rx, senders.clone());
+            RPC::start_notification_worker(rx, senders.clone());
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
                 let query = query.clone();
@@ -406,9 +406,7 @@ impl RPC {
                 });
             }
         });
-        RPC {
-            notification: notification_tx,
-        }
+        RPC { notification: tx }
     }
 
     pub fn notify(&self) {
