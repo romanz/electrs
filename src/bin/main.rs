@@ -38,7 +38,7 @@ fn run_server(config: &Config) -> Result<()> {
     let app = App::new(store, index, daemon);
 
     let query = Query::new(app.clone(), &metrics);
-    let rpc = RPC::start(config.rpc_addr, query.clone());
+    let rpc = RPC::start(config.rpc_addr, query.clone(), &metrics);
     while let None = signal.wait(Duration::from_secs(5)) {
         query.update_mempool()?;
         if tip != app.daemon().getbestblockhash()? {
