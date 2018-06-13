@@ -1,6 +1,5 @@
 Electrum
 ========
-* Gracefully stop RPC server after SIGINT
 * Poll mempool after transaction broadcast
 * Snapshot DB after successful indexing - and run queries on the latest snapshot
 * Update height to -1 for txns with any `unconfirmed input <https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status>`_
