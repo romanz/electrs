@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::sync::Mutex;
 
 use metrics::{HistogramOpts, HistogramVec, Metrics};
-use util::{self, HeaderList};
+use util::HeaderList;
 
 use errors::*;
 
@@ -329,16 +329,12 @@ impl Daemon {
         let all_heights: Vec<usize> = (0..tip_height + 1).collect();
         let chunk_size = 100_000;
         let mut result = vec![];
-        let mut bar = util::new_progress_bar(all_heights.len());
-        bar.message("Headers: ");
         let null_hash = Sha256dHash::default();
         for heights in all_heights.chunks(chunk_size) {
             let mut headers = self.getblockheaders(&heights)?;
             assert!(headers.len() == heights.len());
-            bar.add(headers.len() as u64);
             result.append(&mut headers);
         }
-        bar.finish();
 
         let mut blockhash = null_hash;
         for header in &result {

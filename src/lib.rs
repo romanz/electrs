@@ -7,7 +7,6 @@ extern crate bitcoin;
 extern crate chan_signal;
 extern crate crypto;
 extern crate hex;
-extern crate pbr;
 extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
