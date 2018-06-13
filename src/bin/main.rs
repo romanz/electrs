@@ -44,6 +44,7 @@ fn run_server(config: &Config) -> Result<()> {
         }
         rpc.notify();
     }
+    rpc.exit();
     Ok(())
 }
 
