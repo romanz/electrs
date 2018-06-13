@@ -305,13 +305,9 @@ impl Connection {
                         .chain_err(|| "failed to update subscriptions")?;
                     self.send_values(&values)?
                 }
-                Message::Done => {
-                    debug!("done");
-                    break;
-                }
+                Message::Done => return Ok(()),
             }
         }
-        Ok(())
     }
 
     fn handle_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) {
