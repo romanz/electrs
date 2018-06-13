@@ -294,7 +294,7 @@ impl Index {
     pub fn load(store: &ReadStore, metrics: &Metrics) -> Index {
         Index {
             headers: RwLock::new(read_indexed_headers(store)),
-            stats: (Stats::new(metrics)),
+            stats: Stats::new(metrics),
         }
     }
 
