@@ -4,6 +4,7 @@ use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
+use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use time;
 
 pub type Bytes = Vec<u8>;
@@ -185,5 +186,45 @@ impl HeaderList {
 
     pub fn len(&self) -> usize {
         self.headers.len()
+    }
+}
+
+pub struct SyncChannel<T> {
+    tx: SyncSender<T>,
+    rx: Receiver<T>,
+}
+
+impl<T> SyncChannel<T> {
+    pub fn new(size: usize) -> SyncChannel<T> {
+        let (tx, rx) = sync_channel(size);
+        SyncChannel { tx, rx }
+    }
+
+    pub fn sender(&self) -> SyncSender<T> {
+        self.tx.clone()
+    }
+
+    pub fn receiver(&self) -> &Receiver<T> {
+        &self.rx
+    }
+}
+
+pub struct Channel<T> {
+    tx: Sender<T>,
+    rx: Receiver<T>,
+}
+
+impl<T> Channel<T> {
+    pub fn new() -> Channel<T> {
+        let (tx, rx) = channel();
+        Channel { tx, rx }
+    }
+
+    pub fn sender(&self) -> Sender<T> {
+        self.tx.clone()
+    }
+
+    pub fn receiver(&self) -> &Receiver<T> {
+        &self.rx
     }
 }
