@@ -3,7 +3,7 @@ use std::io;
 use std::net::SocketAddr;
 use tiny_http;
 
-pub use prometheus::{HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
+pub use prometheus::{GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
                      IntGauge as Gauge, Opts as MetricOpts};
 
 use util::spawn_thread;
@@ -29,6 +29,12 @@ impl Metrics {
 
     pub fn gauge(&self, opts: prometheus::Opts) -> Gauge {
         let g = Gauge::with_opts(opts).unwrap();
+        self.reg.register(Box::new(g.clone())).unwrap();
+        g
+    }
+
+    pub fn gauge_vec(&self, opts: prometheus::Opts, labels: &[&str]) -> GaugeVec {
+        let g = GaugeVec::new(opts, labels).unwrap();
         self.reg.register(Box::new(g.clone())).unwrap();
         g
     }
