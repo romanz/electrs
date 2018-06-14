@@ -111,6 +111,7 @@ struct Connection {
     tx: TcpStream,
     rx: Lines<BufReader<TcpStream>>,
     cookie_b64: String,
+    addr: SocketAddr,
 }
 
 impl Connection {
@@ -122,6 +123,20 @@ impl Connection {
             tx: conn,
             rx: reader.lines(),
             cookie_b64,
+            addr,
+        })
+    }
+
+    pub fn reconnect(&self) -> Result<Connection> {
+        let conn = TcpStream::connect(self.addr)
+            .chain_err(|| format!("failed to connect to {}", self.addr))?;
+        let reader = BufReader::new(conn.try_clone()
+            .chain_err(|| format!("failed to clone {:?}", conn))?);
+        Ok(Connection {
+            tx: conn,
+            rx: reader.lines(),
+            cookie_b64: self.cookie_b64.clone(),
+            addr: self.addr,
         })
     }
 
@@ -183,6 +198,14 @@ impl Daemon {
         };
         debug!("{:?}", daemon.getblockchaininfo()?);
         Ok(daemon)
+    }
+
+    pub fn reconnect(&self) -> Result<Daemon> {
+        Ok(Daemon {
+            conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
+            latency: self.latency.clone(),
+            size: self.size.clone(),
+        })
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
