@@ -293,10 +293,13 @@ pub struct Index {
 
 impl Index {
     pub fn load(store: &ReadStore, daemon: &Daemon, metrics: &Metrics) -> Result<Index> {
+        let stats = Stats::new(metrics);
+        let headers = read_indexed_headers(store);
+        stats.height.set((headers.len() as i64) - 1);
         Ok(Index {
-            headers: RwLock::new(read_indexed_headers(store)),
+            headers: RwLock::new(headers),
             daemon: daemon.reconnect()?,
-            stats: Stats::new(metrics),
+            stats,
         })
     }
 
