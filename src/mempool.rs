@@ -124,11 +124,11 @@ impl Tracker {
             histogram: vec![],
             stats: Stats {
                 count: metrics.gauge(MetricOpts::new(
-                    "mempool_txs_count",
+                    "mempool_count",
                     "# of mempool transactions",
                 )),
                 vsize: metrics.gauge(MetricOpts::new(
-                    "mempool_txs_vsize",
+                    "mempool_vsize",
                     "vsize of mempool transactions (in bytes)",
                 )),
                 update: metrics.histogram_vec(
