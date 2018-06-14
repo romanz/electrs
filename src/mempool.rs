@@ -218,22 +218,27 @@ impl Tracker {
     fn update_fee_histogram(&mut self) {
         let mut entries: Vec<&MempoolEntry> = self.items.values().map(|stat| &stat.entry).collect();
         entries.sort_unstable_by(|e1, e2| {
+            // sort by descending fee rate
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
-        let mut histogram = vec![];
-        let mut bin_size = 0;
-        let mut last_fee_rate = None;
-        for e in entries {
-            last_fee_rate = Some(e.fee_per_vbyte());
-            bin_size += e.vsize();
-            if bin_size > VSIZE_BIN_WIDTH {
-                histogram.push((e.fee_per_vbyte(), bin_size));
-                bin_size = 0;
-            }
-        }
-        if let Some(fee_rate) = last_fee_rate {
-            histogram.push((fee_rate, bin_size));
-        }
-        self.histogram = histogram;
+        self.histogram = electrum_fees(&entries);
     }
+}
+
+fn electrum_fees(entries: &[&MempoolEntry]) -> Vec<(f32, u32)> {
+    let mut histogram = vec![];
+    let mut bin_size = 0;
+    let mut last_fee_rate = None;
+    for e in entries {
+        last_fee_rate = Some(e.fee_per_vbyte());
+        bin_size += e.vsize();
+        if bin_size > VSIZE_BIN_WIDTH {
+            histogram.push((e.fee_per_vbyte(), bin_size));
+            bin_size = 0;
+        }
+    }
+    if let Some(fee_rate) = last_fee_rate {
+        histogram.push((fee_rate, bin_size));
+    }
+    histogram
 }
