@@ -1,11 +1,12 @@
 use prometheus::{self, Encoder};
 use std::io;
 use std::net::SocketAddr;
-use std::thread;
 use tiny_http;
 
 pub use prometheus::{HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
                      IntGauge as Gauge, Opts as MetricOpts};
+
+use util::spawn_thread;
 
 pub struct Metrics {
     reg: prometheus::Registry,
@@ -41,7 +42,7 @@ impl Metrics {
     pub fn start(&self) {
         let server = tiny_http::Server::http(self.addr).unwrap();
         let reg = self.reg.clone();
-        thread::spawn(move || loop {
+        spawn_thread("metrics", move || loop {
             if let Err(e) = handle_request(&reg, server.recv()) {
                 error!("http error: {}", e);
             }
