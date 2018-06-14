@@ -33,7 +33,7 @@ impl Metrics {
         g
     }
 
-    pub fn histogram(&self, opts: prometheus::HistogramOpts, labels: &[&str]) -> HistogramVec {
+    pub fn histogram_vec(&self, opts: prometheus::HistogramOpts, labels: &[&str]) -> HistogramVec {
         let h = HistogramVec::new(opts, labels).unwrap();
         self.reg.register(Box::new(h.clone())).unwrap();
         h

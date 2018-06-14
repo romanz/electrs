@@ -263,7 +263,7 @@ impl Stats {
                 "index_height",
                 "Last indexed block's height",
             )),
-            duration: metrics.histogram(
+            duration: metrics.histogram_vec(
                 HistogramOpts::new("index_duration", "indexing duration (in seconds)"),
                 &["step"],
             ),

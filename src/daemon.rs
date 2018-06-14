@@ -187,11 +187,11 @@ impl Daemon {
                 SocketAddr::from_str(addr).unwrap(),
                 base64::encode(&read_cookie(network)?),
             )?),
-            latency: metrics.histogram(
+            latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
             ),
-            size: metrics.histogram(
+            size: metrics.histogram_vec(
                 HistogramOpts::new("daemon_bytes", "Bitcoind RPC size (in bytes)"),
                 &["method", "dir"],
             ),

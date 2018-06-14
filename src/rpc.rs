@@ -405,7 +405,7 @@ impl RPC {
 
     pub fn start(addr: SocketAddr, query: Arc<Query>, metrics: &Metrics) -> RPC {
         let stats = Arc::new(Stats {
-            latency: metrics.histogram(
+            latency: metrics.histogram_vec(
                 HistogramOpts::new("electrum_rpc", "Electrum RPC latency (seconds)"),
                 &["method"],
             ),

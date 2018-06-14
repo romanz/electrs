@@ -130,7 +130,7 @@ impl Tracker {
                     "mempool_txs_vsize",
                     "vsize of mempool transactions (in bytes)",
                 )),
-                update: metrics.histogram(
+                update: metrics.histogram_vec(
                     HistogramOpts::new("mempool_update", "Time to update mempool (in seconds)"),
                     &["step"],
                 ),
