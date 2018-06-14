@@ -8,7 +8,6 @@ use std::net::SocketAddr;
 pub struct Config {
     pub log_file: String,
     pub log_level: simplelog::LevelFilter,
-    pub restart: bool,
     pub network_type: Network,       // bitcoind JSONRPC endpoint
     pub db_path: String,             // RocksDB directory path
     pub rpc_addr: SocketAddr,        // for serving Electrum clients
@@ -19,7 +18,6 @@ impl Config {
     pub fn from_args() -> Config {
         let mut testnet = false;
         let mut verbose = false;
-        let mut restart = false;
         let mut log_file = "".to_owned();
         let mut db_dir = "./db".to_owned();
         {
@@ -34,11 +32,6 @@ impl Config {
                 &["-v", "--verbose"],
                 StoreTrue,
                 "More verbose logging to stderr",
-            );
-            parser.refer(&mut restart).add_option(
-                &["--restart"],
-                StoreTrue,
-                "Restart the server in case of a recoverable error",
             );
             parser.refer(&mut log_file).add_option(
                 &["-l", "--log-file"],
@@ -63,7 +56,6 @@ impl Config {
             } else {
                 simplelog::LevelFilter::Info
             },
-            restart,
             network_type,
             db_path: match network_type {
                 Network::Mainnet => format!("{}/mainnet", db_dir),

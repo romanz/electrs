@@ -2,7 +2,6 @@ extern crate electrs;
 extern crate error_chain;
 
 use error_chain::ChainedError;
-use std::thread;
 use std::time::Duration;
 
 use electrs::{app::App,
@@ -46,43 +45,9 @@ fn run_server(config: &Config) -> Result<()> {
     Ok(())
 }
 
-struct Repeat {
-    do_restart: bool,
-    iter_count: usize,
-}
-
-impl Repeat {
-    fn new(config: &Config) -> Repeat {
-        Repeat {
-            do_restart: config.restart,
-            iter_count: 0,
-        }
-    }
-}
-
-impl Iterator for Repeat {
-    type Item = ();
-
-    fn next(&mut self) -> Option<()> {
-        self.iter_count += 1;
-        if self.iter_count == 1 {
-            return Some(()); // don't sleep before 1st iteration
-        }
-        thread::sleep(Duration::from_secs(1));
-        if self.do_restart {
-            Some(())
-        } else {
-            None
-        }
-    }
-}
-
 fn main() {
     let config = Config::from_args();
-    for _ in Repeat::new(&config) {
-        match run_server(&config) {
-            Ok(_) => break,
-            Err(e) => eprintln!("{}", e.display_chain()),
-        }
+    if let Err(e) = run_server(&config) {
+        eprintln!("server failed: {}", e.display_chain());
     }
 }
