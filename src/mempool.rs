@@ -231,17 +231,22 @@ impl Tracker {
     }
 
     fn report_fees(&self, entries: &[&MempoolEntry]) {
-        let block_vsize = 1_000_000;
-        let mut blocks = 1;
+        let block_vsize = 1_000_000f32;
+        let mut blocks = 0.1f32;
         let mut vsize = 0;
+        self.stats.fees.reset();
         for e in entries {
             vsize += e.vsize();
-            if vsize > blocks * block_vsize {
+            if vsize > (blocks * block_vsize) as u32 {
                 self.stats
                     .fees
-                    .with_label_values(&[&blocks.to_string()])
+                    .with_label_values(&[&format!("{:.1}", blocks)])
                     .set(e.fee_per_vbyte() as f64);
-                blocks += 1;
+                if blocks >= 1.0 {
+                    blocks = blocks + 1.0;
+                } else {
+                    blocks = (blocks * 2.0).min(1.0);
+                }
             }
         }
     }
