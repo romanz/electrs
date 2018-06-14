@@ -9,7 +9,7 @@ use std::sync::RwLock;
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
-use metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
+use metrics::{Gauge, GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use store::{ReadStore, Row};
 use util::Bytes;
 
@@ -100,6 +100,7 @@ struct Stats {
     count: Gauge,
     vsize: Gauge,
     update: HistogramVec,
+    fees: GaugeVec,
 }
 
 impl Stats {
@@ -133,6 +134,10 @@ impl Tracker {
                 update: metrics.histogram_vec(
                     HistogramOpts::new("mempool_update", "Time to update mempool (in seconds)"),
                     &["step"],
+                ),
+                fees: metrics.gauge_vec(
+                    MetricOpts::new("mempool_fees", "Fee rate to get confirmation in N blocks"),
+                    &["blocks"],
                 ),
             },
         }
@@ -222,6 +227,23 @@ impl Tracker {
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
         self.histogram = electrum_fees(&entries);
+        self.report_fees(&entries);
+    }
+
+    fn report_fees(&self, entries: &[&MempoolEntry]) {
+        let block_vsize = 1_000_000;
+        let mut blocks = 1;
+        let mut vsize = 0;
+        for e in entries {
+            vsize += e.vsize();
+            if vsize > blocks * block_vsize {
+                self.stats
+                    .fees
+                    .with_label_values(&[&blocks.to_string()])
+                    .set(e.fee_per_vbyte() as f64);
+                blocks += 1;
+            }
+        }
     }
 }
 
