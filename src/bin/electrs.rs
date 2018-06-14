@@ -28,7 +28,7 @@ fn run_server(config: &Config) -> Result<()> {
     drop(store); // bulk import is over
 
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
-    let app = App::new(store, index, daemon);
+    let app = App::new(store, index, daemon.reconnect()?);
 
     let query = Query::new(app.clone(), &metrics);
     query.update_mempool()?; // poll once before starting RPC server
