@@ -23,9 +23,9 @@ fn run_server(config: &Config) -> Result<()> {
 
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
-    let index = Index::load(&store, &metrics);
+    let index = Index::load(&store, &daemon, &metrics)?;
 
-    let mut tip = index.update(&store, &daemon, &signal)?;
+    let mut tip = index.update(&store, &signal)?;
     store.compact_if_needed();
     drop(store); // bulk import is over
 
@@ -39,8 +39,7 @@ fn run_server(config: &Config) -> Result<()> {
     while let None = signal.wait(Duration::from_secs(5)) {
         query.update_mempool()?;
         if tip != app.daemon().getbestblockhash()? {
-            tip = app.index()
-                .update(app.write_store(), app.daemon(), &signal)?;
+            tip = app.index().update(app.write_store(), &signal)?;
         }
         rpc.notify();
     }

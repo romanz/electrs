@@ -35,8 +35,8 @@ fn run() -> Result<()> {
 
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let fake_store = FakeStore {};
-    let index = Index::load(&fake_store, &metrics);
-    index.update(&fake_store, &daemon, &signal)?;
+    let index = Index::load(&fake_store, &daemon, &metrics)?;
+    index.update(&fake_store, &signal)?;
     Ok(())
 }
 
