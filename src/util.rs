@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
+use std::thread;
 use time;
 
 pub type Bytes = Vec<u8>;
@@ -227,4 +228,16 @@ impl<T> Channel<T> {
     pub fn receiver(&self) -> &Receiver<T> {
         &self.rx
     }
+}
+
+pub fn spawn_thread<F, T>(name: &str, f: F) -> thread::JoinHandle<T>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    thread::Builder::new()
+        .name(name.to_owned())
+        .spawn(f)
+        .unwrap()
 }
