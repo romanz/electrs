@@ -1,2 +1,0 @@
-Electrum Server in Rust
-=======================
