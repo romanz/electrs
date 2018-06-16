@@ -227,28 +227,6 @@ impl Tracker {
             e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
         });
         self.histogram = electrum_fees(&entries);
-        self.report_fees(&entries);
-    }
-
-    fn report_fees(&self, entries: &[&MempoolEntry]) {
-        let block_vsize = 1_000_000f32;
-        let mut blocks = 0.1f32;
-        let mut vsize = 0;
-        self.stats.fees.reset();
-        for e in entries {
-            vsize += e.vsize();
-            if vsize > (blocks * block_vsize) as u32 {
-                self.stats
-                    .fees
-                    .with_label_values(&[&format!("{:.1}", blocks)])
-                    .set(e.fee_per_vbyte() as f64);
-                if blocks >= 1.0 {
-                    blocks = blocks + 1.0;
-                } else {
-                    blocks = (blocks * 2.0).min(1.0);
-                }
-            }
-        }
     }
 }
 
