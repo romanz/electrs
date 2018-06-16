@@ -1,5 +1,7 @@
 # Electrum Server in Rust
 
+[![Build Status](https://travis-ci.com/romanz/electrs.svg?branch=master)](https://travis-ci.com/romanz/electrs)
+
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx)
 and [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server/).
 
