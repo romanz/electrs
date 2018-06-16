@@ -5,16 +5,16 @@
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx)
 and [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server/).
 
-## Features:
+## Features
 
- * Supports Electrum protocol [v1.2](https://electrumx.readthedocs.io/en/latest/protocol.html).
- * Maintains an index over transaction inputs and outputs, allowing fast balance queries.
- * Fast synchronization of the Bitcoin blockchain (~5 hours for ~184GB @ June 2018) on modest hardware (without SSD).
- * Low index storage overhead (~20%), relying on a local full node for actual transaction retrieval.
- * Efficient mempool tracker (allowing better fee estimation).
- * Low CPU & memory usage after initial indexing is over.
- * [`txindex`](https://github.com/bitcoin/bitcoin/blob/81069a75bd71f21f9cbab97c68f7347073cc9ae5/src/init.cpp#L406) is not required for the Bitcoin node.
- * Using a single RocksDB database, for better consistency and crash recovery.
+ * Supports Electrum protocol [v1.2](https://electrumx.readthedocs.io/en/latest/protocol.html)
+ * Maintains an index over transaction inputs and outputs, allowing fast balance queries
+ * Fast synchronization of the Bitcoin blockchain (~5 hours for ~184GB @ June 2018) on modest hardware (without SSD)
+ * Low index storage overhead (~20%), relying on a local full node for actual transaction retrieval
+ * Efficient mempool tracker (allowing better fee estimation)
+ * Low CPU & memory usage after initial indexing is over
+ * [`txindex`](https://github.com/bitcoin/bitcoin/blob/81069a75bd71f21f9cbab97c68f7347073cc9ae5/src/init.cpp#L406) is not required for the Bitcoin node
+ * Using a single RocksDB database, for better consistency and crash recovery
 
 ## Usage
 
