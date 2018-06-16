@@ -11,10 +11,10 @@ and [Electrum Personal Server](https://github.com/chris-belcher/electrum-persona
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
  * Fast synchronization of the Bitcoin blockchain (~5 hours for ~184GB @ June 2018) on modest hardware (without SSD)
  * Low index storage overhead (~20%), relying on a local full node for actual transaction retrieval
- * Efficient mempool tracker (allowing better fee estimation)
+ * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
  * Low CPU & memory usage after initial indexing is over
  * [`txindex`](https://github.com/bitcoin/bitcoin/blob/81069a75bd71f21f9cbab97c68f7347073cc9ae5/src/init.cpp#L406) is not required for the Bitcoin node
- * Using a single RocksDB database, for better consistency and crash recovery
+ * Using a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
 
 ## Usage
 
