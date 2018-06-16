@@ -5,16 +5,20 @@
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx)
 and [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server/).
 
+The motivation behind this project is to enable a user to run his own Electrum server, with required hardware resources not much beyond those of a full node.
+The server indexes the whole Bitcoin blockchain, and this index enables fast queries for any given user wallet, allowing the user to keep real-time track of his balances and his transaction history using the [Electrum wallet](https://electrum.org/).
+Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers, thus preserving the privacy of the user's addresses and balances.
+
 ## Features
 
  * Supports Electrum protocol [v1.2](https://electrumx.readthedocs.io/en/latest/protocol.html)
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
  * Fast synchronization of the Bitcoin blockchain (~5 hours for ~184GB @ June 2018) on modest hardware (without SSD)
- * Low index storage overhead (~20%), relying on a local full node for actual transaction retrieval
+ * Low index storage overhead (~20%), relying on a local full node for transaction retrieval
  * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
- * Low CPU & memory usage after initial indexing is over
- * [`txindex`](https://github.com/bitcoin/bitcoin/blob/81069a75bd71f21f9cbab97c68f7347073cc9ae5/src/init.cpp#L406) is not required for the Bitcoin node
- * Using a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
+ * Low CPU & memory usage (after initial indexing)
+ * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
+ * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
 
 ## Usage
 
