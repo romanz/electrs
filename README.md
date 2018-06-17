@@ -1,5 +1,9 @@
 # Electrum Server in Rust
 
+<p>
+  <img src="https://upload.wikimedia.org/wikipedia/commons/c/c3/Gold-121700.jpg" width="40%" />
+</p>
+
 [![Build Status](https://travis-ci.com/romanz/electrs.svg?branch=master)](https://travis-ci.com/romanz/electrs)
 
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx)
