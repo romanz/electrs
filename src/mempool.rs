@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::ops::Bound;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
@@ -101,11 +101,41 @@ struct Stats {
     vsize: Gauge,
     update: HistogramVec,
     fees: GaugeVec,
+    max_fee_rate: Mutex<f32>,
 }
 
 impl Stats {
     fn start_timer(&self, step: &str) -> HistogramTimer {
         self.update.with_label_values(&[step]).start_timer()
+    }
+
+    fn update_fees(&self, entries: &[&MempoolEntry]) {
+        let mut bands: Vec<(f32, u32)> = vec![];
+        let mut fee_rate = 1.0f32; // [sat/vbyte]
+        let mut vsize = 0u32; // vsize of transactions paying <= fee_rate
+        for e in entries {
+            while fee_rate < e.fee_per_vbyte() {
+                bands.push((fee_rate, vsize));
+                fee_rate *= 2.0;
+            }
+            vsize += e.vsize();
+        }
+        let mut max_fee_rate = self.max_fee_rate.lock().unwrap();
+        loop {
+            bands.push((fee_rate, vsize));
+            if fee_rate < *max_fee_rate {
+                fee_rate *= 2.0;
+                continue;
+            }
+            *max_fee_rate = fee_rate;
+            break;
+        }
+        drop(max_fee_rate);
+        for (fee_rate, vsize) in bands {
+            // labels should be ordered by fee_rate value
+            let label = format!("≤{:10.0}", fee_rate);
+            self.fees.with_label_values(&[&label]).set(vsize as f64);
+        }
     }
 }
 
@@ -142,6 +172,7 @@ impl Tracker {
                     ),
                     &["fee_rate"],
                 ),
+                max_fee_rate: Mutex::new(1.0),
             },
         }
     }
@@ -229,30 +260,7 @@ impl Tracker {
             e1.fee_per_vbyte().partial_cmp(&e2.fee_per_vbyte()).unwrap()
         });
         self.histogram = electrum_fees(&entries);
-        self.monitor_fee_bands(&entries);
-    }
-
-    fn monitor_fee_bands(&self, entries: &[&MempoolEntry]) {
-        let mut bands: Vec<(f32, u32)> = vec![];
-        let mut fee_rate = 1.0f32; // [sat/vbyte]
-        let mut vsize = 0u32; // vsize of transactions paying <= fee_rate
-        for e in entries {
-            while fee_rate < e.fee_per_vbyte() {
-                bands.push((fee_rate, vsize));
-                fee_rate *= 2.0;
-            }
-            vsize += e.vsize();
-        }
-        bands.push((fee_rate, vsize));
-
-        for (fee_rate, vsize) in bands {
-            // labels should be ordered by fee_rate value
-            let label = format!("≤{:10.0}", fee_rate);
-            self.stats
-                .fees
-                .with_label_values(&[&label])
-                .set(vsize as f64);
-        }
+        self.stats.update_fees(&entries);
     }
 }
 
