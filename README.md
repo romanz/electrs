@@ -7,7 +7,7 @@ and [Electrum Personal Server](https://github.com/chris-belcher/electrum-persona
 
 The motivation behind this project is to enable a user to run his own Electrum server,
 with required hardware resources not much beyond those of a [full node](https://en.bitcoin.it/wiki/Full_node#Why_should_you_use_a_full_node_wallet).
-The server indexes the whole Bitcoin blockchain, and this index enables fast queries for any given user wallet,
+The server indexes the entire Bitcoin blockchain, and the resulting index enables fast queries for any given user wallet,
 allowing the user to keep real-time track of his balances and his transaction history using the [Electrum wallet](https://electrum.org/).
 Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
 thus preserving the privacy of the user's addresses and balances.
