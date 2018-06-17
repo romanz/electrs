@@ -332,20 +332,25 @@ impl Index {
 
         let chan = SyncChannel::new(1);
         let sender = chan.sender();
+        let blockhashes: Vec<Sha256dHash> = new_headers.iter().map(|h| *h.hash()).collect();
         let fetcher = spawn_thread("fetcher", move || {
-            for chunk in new_headers.chunks(100) {
-                let hashes: Vec<Sha256dHash> = chunk.into_iter().map(|h| *h.hash()).collect();
-                sender.send(daemon.getblocks(&hashes)).unwrap();
+            for chunk in blockhashes.chunks(100) {
+                sender
+                    .send(daemon.getblocks(&chunk))
+                    .expect("failed sending blocks to be indexed");
             }
-            sender.send(Ok(vec![])).unwrap(); // explicit end of stream
-            new_headers
+            sender
+                .send(Ok(vec![]))
+                .expect("failed sending explicit end of stream");
         });
         loop {
             if let Some(sig) = waiter.poll() {
                 bail!("indexing interrupted by SIG{:?}", sig);
             }
             let timer = self.stats.start_timer("fetch");
-            let batch = chan.receiver().recv().unwrap()?;
+            let batch = chan.receiver()
+                .recv()
+                .expect("block fetch exited prematurely")?;
             timer.observe_duration();
             if batch.is_empty() {
                 break;
@@ -371,7 +376,7 @@ impl Index {
         store.flush(); // make sure no row is left behind
         timer.observe_duration();
 
-        let new_headers = fetcher.join().unwrap();
+        fetcher.join().expect("block fetcher failed");
         self.headers.write().unwrap().apply(new_headers);
         assert_eq!(tip, *self.headers.read().unwrap().tip());
         Ok(tip)
