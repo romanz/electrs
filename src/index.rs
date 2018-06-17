@@ -337,7 +337,7 @@ impl Index {
                 let hashes: Vec<Sha256dHash> = chunk.into_iter().map(|h| *h.hash()).collect();
                 sender.send(daemon.getblocks(&hashes)).unwrap();
             }
-            sender.send(Ok(vec![])).unwrap();
+            sender.send(Ok(vec![])).unwrap(); // explicit end of stream
             new_headers
         });
         loop {
