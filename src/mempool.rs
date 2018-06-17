@@ -136,8 +136,11 @@ impl Tracker {
                     &["step"],
                 ),
                 fees: metrics.gauge_vec(
-                    MetricOpts::new("mempool_fees", "Fee rate to get confirmation in N blocks"),
-                    &["blocks"],
+                    MetricOpts::new(
+                        "mempool_fees",
+                        "Total vsize of transactions paying at most given fee rate",
+                    ),
+                    &["fee_rate"],
                 ),
             },
         }
@@ -223,10 +226,33 @@ impl Tracker {
     fn update_fee_histogram(&mut self) {
         let mut entries: Vec<&MempoolEntry> = self.items.values().map(|stat| &stat.entry).collect();
         entries.sort_unstable_by(|e1, e2| {
-            // sort by descending fee rate
-            e2.fee_per_vbyte().partial_cmp(&e1.fee_per_vbyte()).unwrap()
+            e1.fee_per_vbyte().partial_cmp(&e2.fee_per_vbyte()).unwrap()
         });
         self.histogram = electrum_fees(&entries);
+        self.monitor_fee_bands(&entries);
+    }
+
+    fn monitor_fee_bands(&self, entries: &[&MempoolEntry]) {
+        let mut bands: Vec<(f32, u32)> = vec![];
+        let mut fee_rate = 1.0f32; // [sat/vbyte]
+        let mut vsize = 0u32; // vsize of transactions paying <= fee_rate
+        for e in entries {
+            while fee_rate < e.fee_per_vbyte() {
+                bands.push((fee_rate, vsize));
+                fee_rate *= 2.0;
+            }
+            vsize += e.vsize();
+        }
+        bands.push((fee_rate, vsize));
+
+        for (fee_rate, vsize) in bands {
+            // labels should be ordered by fee_rate value
+            let label = format!("≤{:10.0}", fee_rate);
+            self.stats
+                .fees
+                .with_label_values(&[&label])
+                .set(vsize as f64);
+        }
     }
 }
 
@@ -234,10 +260,11 @@ fn electrum_fees(entries: &[&MempoolEntry]) -> Vec<(f32, u32)> {
     let mut histogram = vec![];
     let mut bin_size = 0;
     let mut last_fee_rate = None;
-    for e in entries {
+    for e in entries.iter().rev() {
         last_fee_rate = Some(e.fee_per_vbyte());
         bin_size += e.vsize();
         if bin_size > VSIZE_BIN_WIDTH {
+            // vsize of transactions paying >= e.fee_per_vbyte()
             histogram.push((e.fee_per_vbyte(), bin_size));
             bin_size = 0;
         }
