@@ -44,6 +44,9 @@ $ cargo run --release -- -v -l debug.log
 [INFO] best=0000000000000000001134b741f53f4e49e9f8073e41af6d8aaad3b849ebeee4 height=527673 @ 2018-06-16T04:03:53Z (527674 left to index)
 # <initial indexing takes a few hours>
 [DEBUG] applying 527674 new headers from height 0
+[INFO] starting full compaction
+# <full compaction happens once, and may take ~1 hour>
+[INFO] finished full compaction
 [DEBUG] closing ./db/mainnet
 [DEBUG] opening ./db/mainnet with StoreOptions { bulk_import: false }
 [INFO] RPC server running on 127.0.0.1:50001
