@@ -1,6 +1,5 @@
 #![recursion_limit = "1024"]
 
-extern crate argparse;
 extern crate base64;
 extern crate bincode;
 extern crate bitcoin;
@@ -10,12 +9,13 @@ extern crate hex;
 extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
-extern crate simplelog;
 extern crate time;
 extern crate tiny_http;
 
 #[macro_use]
 extern crate chan;
+#[macro_use]
+extern crate clap;
 #[macro_use]
 extern crate arrayref;
 #[macro_use]

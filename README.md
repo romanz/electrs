@@ -40,20 +40,20 @@ $ bitcoind -server=1 -daemon=0 -txindex=0 -prune=0
 
 # First build should take ~20 minutes
 $ cargo build --release
-$ cargo run --release -- -v -l debug.log
-[INFO] Config { log_file: "debug.log", log_level: Debug, network_type: Mainnet, db_path: "./db/mainnet", rpc_addr: V4(127.0.0.1:50001), monitoring_addr: V4(127.0.0.1:42024) }
-[DEBUG] BlockchainInfo { chain: "main", blocks: 527673, headers: 527677, bestblockhash: "0000000000000000001134b741f53f4e49e9f8073e41af6d8aaad3b849ebeee4", size_on_disk: 196048138442, pruned: false }
-[DEBUG] opening ./db/mainnet with StoreOptions { bulk_import: true }
-[DEBUG] applying 0 new headers from height 0
-[INFO] best=0000000000000000001134b741f53f4e49e9f8073e41af6d8aaad3b849ebeee4 height=527673 @ 2018-06-16T04:03:53Z (527674 left to index)
+$ cargo run --release -- -vvv -l debug.log
+Config { verbosity: 3, network_type: Mainnet, db_path: "/home/roman/Code/Bitcoin/elect-rs/db/mainnet", rpc_addr: V4(127.0.0.1:50001), monitoring_addr: V4(127.0.0.1:42024) }
+DEBUG - BlockchainInfo { chain: "main", blocks: 528021, headers: 528021, bestblockhash: "0000000000000000000e322bbf044887078ddc6228e9c7c7f5c5bd93ccd8dab6", size_on_disk: 196239576671, pruned: false }
+DEBUG - opening ./db/mainnet with StoreOptions { bulk_import: true }
+DEBUG - applying 0 new headers from height 0
+INFO - best=0000000000000000001134b741f53f4e49e9f8073e41af6d8aaad3b849ebeee4 height=527673 @ 2018-06-16T04:03:53Z (527674 left to index)
 # <initial indexing takes a few hours>
-[DEBUG] applying 527674 new headers from height 0
-[INFO] starting full compaction
+DEBUG - applying 527674 new headers from height 0
+INFO - starting full compaction
 # <full compaction happens once, and may take ~1 hour>
-[INFO] finished full compaction
-[DEBUG] closing ./db/mainnet
-[DEBUG] opening ./db/mainnet with StoreOptions { bulk_import: false }
-[INFO] RPC server running on 127.0.0.1:50001
+INFO - finished full compaction
+DEBUG - closing ./db/mainnet
+DEBUG - opening ./db/mainnet with StoreOptions { bulk_import: false }
+INFO - RPC server running on 127.0.0.1:50001
 
 # The index database is stored here:
 $ du db/
