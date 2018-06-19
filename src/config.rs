@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 #[derive(Debug)]
 pub struct Config {
     pub verbosity: usize,
+    pub timestamp: bool,
     pub network_type: Network,       // bitcoind JSONRPC endpoint
     pub db_path: String,             // RocksDB directory path
     pub rpc_addr: SocketAddr,        // for serving Electrum clients
@@ -20,6 +21,11 @@ impl Config {
                     .short("v")
                     .multiple(true)
                     .help("Increase logging verbosity"),
+            )
+            .arg(
+                Arg::with_name("timestamp")
+                    .long("timestamp")
+                    .help("Prepend log lines with a timestamp"),
             )
             .arg(
                 Arg::with_name("db_dir")
@@ -41,6 +47,7 @@ impl Config {
         let db_dir = m.value_of("db_dir").unwrap_or("./db");
         Config {
             verbosity: m.occurrences_of("verbosity") as usize,
+            timestamp: m.is_present("timestamp"),
             network_type,
             db_path: match network_type {
                 Network::Mainnet => format!("{}/mainnet", db_dir),

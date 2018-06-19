@@ -52,6 +52,11 @@ fn main() {
     stderrlog::new()
         .module(module_path!())
         .verbosity(config.verbosity)
+        .timestamp(if config.timestamp {
+            stderrlog::Timestamp::Microsecond
+        } else {
+            stderrlog::Timestamp::Off
+        })
         .init()
         .expect("logging initialization failed");
     if let Err(e) = run_server(&config) {
