@@ -1,11 +1,12 @@
 use clap::{App, Arg};
-use daemon::Network;
 use std::net::SocketAddr;
+use stderrlog;
+
+use daemon::Network;
 
 #[derive(Debug)]
 pub struct Config {
-    pub verbosity: usize,
-    pub timestamp: bool,
+    pub log: stderrlog::StdErrLog,
     pub network_type: Network,       // bitcoind JSONRPC endpoint
     pub db_path: String,             // RocksDB directory path
     pub rpc_addr: SocketAddr,        // for serving Electrum clients
@@ -45,9 +46,16 @@ impl Config {
             true => Network::Testnet,
         };
         let db_dir = m.value_of("db_dir").unwrap_or("./db");
+        let mut log = stderrlog::new();
+        log.verbosity(m.occurrences_of("verbosity") as usize);
+        log.timestamp(if m.is_present("timestamp") {
+            stderrlog::Timestamp::Microsecond
+        } else {
+            stderrlog::Timestamp::Off
+        });
+        log.init().expect("logging initialization failed");
         Config {
-            verbosity: m.occurrences_of("verbosity") as usize,
-            timestamp: m.is_present("timestamp"),
+            log,
             network_type,
             db_path: match network_type {
                 Network::Mainnet => format!("{}/mainnet", db_dir),

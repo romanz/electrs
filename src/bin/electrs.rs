@@ -1,6 +1,5 @@
 extern crate electrs;
 extern crate error_chain;
-extern crate stderrlog;
 
 use error_chain::ChainedError;
 use std::time::Duration;
@@ -48,17 +47,6 @@ fn run_server(config: &Config) -> Result<()> {
 
 fn main() {
     let config = Config::from_args();
-    eprintln!("{:?}", config);
-    stderrlog::new()
-        .module(module_path!())
-        .verbosity(config.verbosity)
-        .timestamp(if config.timestamp {
-            stderrlog::Timestamp::Microsecond
-        } else {
-            stderrlog::Timestamp::Off
-        })
-        .init()
-        .expect("logging initialization failed");
     if let Err(e) = run_server(&config) {
         eprintln!("server failed: {}", e.display_chain());
     }
