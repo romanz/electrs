@@ -98,9 +98,8 @@ struct Item {
 
 struct Stats {
     count: Gauge,
-    vsize: Gauge,
     update: HistogramVec,
-    fees: GaugeVec,
+    vsize: GaugeVec,
     max_fee_rate: Mutex<f32>,
 }
 
@@ -109,7 +108,7 @@ impl Stats {
         self.update.with_label_values(&[step]).start_timer()
     }
 
-    fn update_fees(&self, entries: &[&MempoolEntry]) {
+    fn update(&self, entries: &[&MempoolEntry]) {
         let mut bands: Vec<(f32, u32)> = vec![];
         let mut fee_rate = 1.0f32; // [sat/vbyte]
         let mut vsize = 0u32; // vsize of transactions paying <= fee_rate
@@ -134,7 +133,7 @@ impl Stats {
         for (fee_rate, vsize) in bands {
             // labels should be ordered by fee_rate value
             let label = format!("≤{:10.0}", fee_rate);
-            self.fees.with_label_values(&[&label]).set(vsize as f64);
+            self.vsize.with_label_values(&[&label]).set(vsize as f64);
         }
     }
 }
@@ -157,17 +156,13 @@ impl Tracker {
                     "mempool_count",
                     "# of mempool transactions",
                 )),
-                vsize: metrics.gauge(MetricOpts::new(
-                    "mempool_vsize",
-                    "vsize of mempool transactions (in bytes)",
-                )),
                 update: metrics.histogram_vec(
                     HistogramOpts::new("mempool_update", "Time to update mempool (in seconds)"),
                     &["step"],
                 ),
-                fees: metrics.gauge_vec(
+                vsize: metrics.gauge_vec(
                     MetricOpts::new(
-                        "mempool_fees",
+                        "mempool_vsize",
                         "Total vsize of transactions paying at most given fee rate",
                     ),
                     &["fee_rate"],
@@ -232,12 +227,6 @@ impl Tracker {
         timer.observe_duration();
 
         self.stats.count.set(self.items.len() as i64);
-        self.stats.vsize.set(
-            self.items
-                .values()
-                .map(|stat| stat.entry.vsize() as i64)
-                .sum::<i64>(),
-        );
         Ok(())
     }
 
@@ -260,7 +249,7 @@ impl Tracker {
             e1.fee_per_vbyte().partial_cmp(&e2.fee_per_vbyte()).unwrap()
         });
         self.histogram = electrum_fees(&entries);
-        self.stats.update_fees(&entries);
+        self.stats.update(&entries);
     }
 }
 
