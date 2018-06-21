@@ -36,6 +36,7 @@ pub mod errors;
 pub mod index;
 pub mod mempool;
 pub mod metrics;
+pub mod parse;
 pub mod query;
 pub mod rpc;
 pub mod signal;
