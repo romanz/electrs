@@ -5,6 +5,7 @@ extern crate bincode;
 extern crate bitcoin;
 extern crate chan_signal;
 extern crate crypto;
+extern crate glob;
 extern crate hex;
 extern crate prometheus;
 extern crate rocksdb;

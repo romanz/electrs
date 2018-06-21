@@ -4,6 +4,7 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
+use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
 use std::collections::HashSet;
@@ -11,6 +12,7 @@ use std::env::home_dir;
 use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
 
@@ -25,14 +27,29 @@ pub enum Network {
     Testnet,
 }
 
-fn read_cookie(network: Network) -> Result<Vec<u8>> {
-    let mut path = home_dir().unwrap();
+fn data_dir(network: Network) -> Result<PathBuf> {
+    let mut path = home_dir().chain_err(|| "could not find home directory")?;
     path.push(".bitcoin");
     if let Network::Testnet = network {
         path.push("testnet3");
     }
+    Ok(path)
+}
+
+fn read_cookie(network: Network) -> Result<Vec<u8>> {
+    let mut path = data_dir(network)?;
     path.push(".cookie");
     fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
+}
+
+pub fn list_blk_files(network: Network) -> Result<Vec<PathBuf>> {
+    let mut path = data_dir(network)?;
+    path.push("blocks");
+    path.push("blk*.dat");
+    Ok(glob::glob(path.to_str().unwrap())
+        .chain_err(|| "failed to list blk*.dat files")?
+        .map(|res| res.unwrap())
+        .collect())
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
@@ -169,6 +186,7 @@ impl Connection {
 }
 
 pub struct Daemon {
+    network: Network,
     conn: Mutex<Connection>,
 
     // monitoring
@@ -183,6 +201,7 @@ impl Daemon {
             Network::Testnet => "127.0.0.1:18332",
         };
         let daemon = Daemon {
+            network,
             conn: Mutex::new(Connection::new(
                 SocketAddr::from_str(addr).unwrap(),
                 base64::encode(&read_cookie(network)?),
@@ -202,6 +221,7 @@ impl Daemon {
 
     pub fn reconnect(&self) -> Result<Daemon> {
         Ok(Daemon {
+            network: self.network,
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             latency: self.latency.clone(),
             size: self.size.clone(),
