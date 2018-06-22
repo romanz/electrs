@@ -4,16 +4,10 @@ extern crate error_chain;
 use error_chain::ChainedError;
 use std::time::Duration;
 
-use electrs::{app::App,
-              config::Config,
-              daemon::Daemon,
-              errors::*,
-              index::Index,
-              metrics::Metrics,
-              query::Query,
-              rpc::RPC,
-              signal::Waiter,
-              store::{DBStore, StoreOptions}};
+use electrs::{
+    app::App, config::Config, daemon::Daemon, errors::*, index::Index, metrics::Metrics,
+    query::Query, rpc::RPC, signal::Waiter, store::{DBStore, StoreOptions},
+};
 
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();

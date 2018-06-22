@@ -1,14 +1,10 @@
 extern crate electrs;
 extern crate error_chain;
 
-use electrs::{config::Config,
-              daemon::Daemon,
-              errors::*,
-              index::Index,
-              metrics::Metrics,
-              signal::Waiter,
-              store::{ReadStore, Row, WriteStore},
-              util::Bytes};
+use electrs::{
+    config::Config, daemon::Daemon, errors::*, index, metrics::Metrics, parse::Parser,
+    signal::Waiter, store::{ReadStore, Row, WriteStore}, util::Bytes,
+};
 use error_chain::ChainedError;
 
 struct FakeStore;
