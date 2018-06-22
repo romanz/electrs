@@ -6,7 +6,6 @@ use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::thread;
-use std::time::Instant;
 
 use daemon::{list_blk_files, Network};
 use util::SyncChannel;
@@ -25,56 +24,67 @@ impl Parser {
         })
     }
 
-    pub fn run(&self) -> Result<()> {
-        info!("reading {} files", self.files.len());
-        let blobs = read_files(&self.files);
-        for blob in blobs.receiver().iter() {
-            let t = Instant::now();
-            let blocks = parse_blk_file(&blob?);
-            debug!("parsing {} blocks took {:?}", blocks.len(), t.elapsed());
-        }
-        Ok(())
+    pub fn start(&self) -> SyncChannel<Result<Vec<Block>>> {
+        let chan = SyncChannel::new(1);
+        let tx = chan.sender();
+        let blobs = read_files(self.files.clone());
+        thread::spawn(move || {
+            for msg in blobs.receiver().iter() {
+                match msg {
+                    Ok(blob) => {
+                        let blocks = parse_blocks(&blob);
+                        tx.send(blocks).unwrap();
+                    }
+                    Err(err) => {
+                        tx.send(Err(err)).unwrap();
+                        return;
+                    }
+                }
+            }
+        });
+        chan
     }
 }
 
-fn read_files(files: &[PathBuf]) -> SyncChannel<Result<Vec<u8>>> {
+fn read_files(files: Vec<PathBuf>) -> SyncChannel<Result<Vec<u8>>> {
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
-    let files = files.to_vec();
     thread::spawn(move || {
+        info!("reading {} files", files.len());
         for f in &files {
-            let t = Instant::now();
             let msg = fs::read(f).chain_err(|| format!("failed to read {:?}", f));
-            debug!("reading {:?} took {:?}", f, t.elapsed());
+            debug!("read {:?}", f);
             tx.send(msg).unwrap();
         }
     });
     chan
 }
 
-fn parse_blk_file(data: &[u8]) -> Vec<Block> {
+fn parse_blocks(data: &[u8]) -> Result<Vec<Block>> {
     let mut cursor = Cursor::new(&data);
-    let mut result = vec![];
+    let mut blocks = vec![];
     let max_pos = data.len() as u64;
     while cursor.position() < max_pos {
         let mut decoder = RawDecoder::new(cursor);
-        match decoder.read_u32().expect("no magic") {
+        match decoder.read_u32().chain_err(|| "no magic")? {
             0 => break,
-            x => assert_eq!(x, 0xD9B4BEF9, "incorrect magic {:x}", x),
+            0xD9B4BEF9 => (),
+            x => bail!("incorrect magic {:x}", x),
         };
-        let block_size = decoder.read_u32().expect("no block size");
+        let block_size = decoder.read_u32().chain_err(|| "no block size")?;
         cursor = decoder.into_inner();
 
         let start = cursor.position() as usize;
         cursor
             .seek(SeekFrom::Current(block_size as i64))
-            .expect(&format!("seek {} failed", block_size));
+            .chain_err(|| format!("seek {} failed", block_size))?;
         let end = cursor.position() as usize;
 
         let block: Block = deserialize(&data[start..end])
-            .expect(&format!("failed to parse block at {}..{}", start, end));
+            .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
         trace!("block {}, {} bytes", block.bitcoin_hash(), block_size);
-        result.push(block);
+        blocks.push(block);
     }
-    result
+    debug!("parsed {} blocks", blocks.len());
+    Ok(blocks)
 }
