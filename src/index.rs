@@ -183,7 +183,7 @@ pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) 
     rows.push(TxRow::new(&txid, height as u32).to_row());
 }
 
-fn index_block(block: &Block, height: usize) -> Vec<Row> {
+pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
     let mut rows = vec![];
     for txn in &block.txdata {
         index_transaction(&txn, height, &mut rows);
@@ -197,12 +197,15 @@ fn index_block(block: &Block, height: usize) -> Vec<Row> {
         }).unwrap(),
         value: serialize(&block.header).unwrap(),
     });
-    // Store last indexed block (i.e. all previous blocks were indexed)
-    rows.push(Row {
-        key: b"L".to_vec(),
-        value: serialize(&blockhash).unwrap(),
-    });
     rows
+}
+
+fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
+    // Store last indexed block (i.e. all previous blocks were indexed)
+    Row {
+        key: b"L".to_vec(),
+        value: serialize(blockhash).unwrap(),
+    }
 }
 
 fn read_indexed_headers(store: &ReadStore) -> HeaderList {
@@ -359,13 +362,14 @@ impl Index {
             }
 
             for block in &batch {
-                let expected_hash = block.bitcoin_hash();
+                let blockhash = block.bitcoin_hash();
                 let height = *height_map
-                    .get(&expected_hash)
-                    .expect(&format!("missing header for block {}", expected_hash));
+                    .get(&blockhash)
+                    .expect(&format!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
-                let rows = index_block(block, height);
+                let mut rows = index_block(block, height);
+                rows.push(last_indexed_block(&blockhash));
                 timer.observe_duration();
 
                 let timer = self.stats.start_timer("write");
