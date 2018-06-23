@@ -75,10 +75,10 @@ fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Ve
     chan.into_receiver()
 }
 
-fn parse_blocks(data: &[u8]) -> Result<Vec<Block>> {
-    let mut cursor = Cursor::new(&data);
+fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
+    let mut cursor = Cursor::new(&blob);
     let mut blocks = vec![];
-    let max_pos = data.len() as u64;
+    let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
         let mut decoder = RawDecoder::new(cursor);
         match decoder.read_u32().chain_err(|| "no magic")? {
@@ -95,14 +95,14 @@ fn parse_blocks(data: &[u8]) -> Result<Vec<Block>> {
             .chain_err(|| format!("seek {} failed", block_size))?;
         let end = cursor.position() as usize;
 
-        let block: Block = deserialize(&data[start..end])
+        let block: Block = deserialize(&blob[start..end])
             .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
         blocks.push(block);
     }
     trace!(
         "parsed {} blocks from {:.2} MB blob",
         blocks.len(),
-        data.len() as f32 / 1e6
+        blob.len() as f32 / 1e6
     );
     Ok(blocks)
 }
