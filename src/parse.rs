@@ -9,6 +9,7 @@ use std::sync::mpsc::Receiver;
 use std::thread;
 
 use daemon::Daemon;
+use metrics::{HistogramOpts, HistogramVec, Metrics};
 use util::SyncChannel;
 
 use errors::*;
@@ -16,24 +17,33 @@ use errors::*;
 /// An efficient parser for Bitcoin blk*.dat files.
 pub struct Parser {
     files: Vec<PathBuf>,
+    // metrics
+    duration: HistogramVec,
 }
 
 impl Parser {
-    pub fn new(daemon: &Daemon) -> Result<Parser> {
+    pub fn new(daemon: &Daemon, metrics: &Metrics) -> Result<Parser> {
         Ok(Parser {
             files: daemon.list_blk_files()?,
+            duration: metrics.histogram_vec(
+                HistogramOpts::new("parse_duration", "Block parsing duration (in seconds)"),
+                &["step"],
+            ),
         })
     }
 
     pub fn start(self) -> Receiver<Result<Vec<Block>>> {
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
-        let blobs = read_files(self.files.clone());
+        let blobs = read_files(self.files.clone(), self.duration.clone());
+        let duration = self.duration.clone();
         thread::spawn(move || {
             for msg in blobs.iter() {
                 match msg {
                     Ok(blob) => {
+                        let timer = duration.with_label_values(&["parse"]).start_timer();
                         let blocks = parse_blocks(&blob);
+                        timer.observe_duration();
                         tx.send(blocks).unwrap();
                     }
                     Err(err) => {
@@ -53,8 +63,10 @@ fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Ve
     thread::spawn(move || {
         info!("reading {} files", files.len());
         for f in &files {
+            let timer = duration.with_label_values(&["read"]).start_timer();
             let msg = fs::read(f).chain_err(|| format!("failed to read {:?}", f));
             debug!("read {:?}", f);
+            timer.observe_duration();
             tx.send(msg).unwrap();
         }
     });
