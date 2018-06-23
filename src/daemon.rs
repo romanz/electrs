@@ -42,16 +42,6 @@ fn read_cookie(network: Network) -> Result<Vec<u8>> {
     fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
 }
 
-pub fn list_blk_files(network: Network) -> Result<Vec<PathBuf>> {
-    let mut path = data_dir(network)?;
-    path.push("blocks");
-    path.push("blk*.dat");
-    Ok(glob::glob(path.to_str().unwrap())
-        .chain_err(|| "failed to list blk*.dat files")?
-        .map(|res| res.unwrap())
-        .collect())
-}
-
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
     Ok(
         Sha256dHash::from_hex(value.as_str().chain_err(|| "non-string value")?)
@@ -226,6 +216,16 @@ impl Daemon {
             latency: self.latency.clone(),
             size: self.size.clone(),
         })
+    }
+
+    pub fn list_blk_files(&self) -> Result<Vec<PathBuf>> {
+        let mut path = data_dir(self.network)?;
+        path.push("blocks");
+        path.push("blk*.dat");
+        Ok(glob::glob(path.to_str().unwrap())
+            .chain_err(|| "failed to list blk*.dat files")?
+            .map(|res| res.unwrap())
+            .collect())
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {

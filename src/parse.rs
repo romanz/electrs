@@ -7,7 +7,7 @@ use std::io::{Cursor, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::thread;
 
-use daemon::{list_blk_files, Network};
+use daemon::Daemon;
 use util::SyncChannel;
 
 use errors::*;
@@ -18,9 +18,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(network: Network) -> Result<Parser> {
+    pub fn new(daemon: &Daemon) -> Result<Parser> {
         Ok(Parser {
-            files: list_blk_files(network)?,
+            files: daemon.list_blk_files()?,
         })
     }
 
