@@ -59,8 +59,8 @@ fn run(config: Config) -> Result<()> {
         new_headers.iter().map(|h| (*h.hash(), h.height())),
     );
 
-    let chan = Parser::new(&daemon)?.start();
-    for blocks in chan.receiver().iter() {
+    let chan = Parser::new(&daemon, &metrics)?.start();
+    for blocks in chan.iter() {
         if let Some(sig) = signal.poll() {
             bail!("indexing interrupted by SIG{:?}", sig);
         }

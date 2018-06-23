@@ -208,6 +208,10 @@ impl<T> SyncChannel<T> {
     pub fn receiver(&self) -> &Receiver<T> {
         &self.rx
     }
+
+    pub fn into_receiver(self) -> Receiver<T> {
+        self.rx
+    }
 }
 
 pub struct Channel<T> {
@@ -227,6 +231,10 @@ impl<T> Channel<T> {
 
     pub fn receiver(&self) -> &Receiver<T> {
         &self.rx
+    }
+
+    pub fn into_receiver(self) -> Receiver<T> {
+        self.rx
     }
 }
 

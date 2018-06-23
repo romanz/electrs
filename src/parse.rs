@@ -5,6 +5,7 @@ use bitcoin::network::serialize::{deserialize, RawDecoder};
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
 use std::thread;
 
 use daemon::Daemon;
@@ -24,12 +25,12 @@ impl Parser {
         })
     }
 
-    pub fn start(&self) -> SyncChannel<Result<Vec<Block>>> {
+    pub fn start(self) -> Receiver<Result<Vec<Block>>> {
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
         let blobs = read_files(self.files.clone());
         thread::spawn(move || {
-            for msg in blobs.receiver().iter() {
+            for msg in blobs.iter() {
                 match msg {
                     Ok(blob) => {
                         let blocks = parse_blocks(&blob);
@@ -42,11 +43,11 @@ impl Parser {
                 }
             }
         });
-        chan
+        chan.into_receiver()
     }
 }
 
-fn read_files(files: Vec<PathBuf>) -> SyncChannel<Result<Vec<u8>>> {
+fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<u8>>> {
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
     thread::spawn(move || {
@@ -57,7 +58,7 @@ fn read_files(files: Vec<PathBuf>) -> SyncChannel<Result<Vec<u8>>> {
             tx.send(msg).unwrap();
         }
     });
-    chan
+    chan.into_receiver()
 }
 
 fn parse_blocks(data: &[u8]) -> Result<Vec<Block>> {
