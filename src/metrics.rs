@@ -3,10 +3,8 @@ use std::io;
 use std::net::SocketAddr;
 use tiny_http;
 
-pub use prometheus::{
-    GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
-    IntGauge as Gauge, Opts as MetricOpts,
-};
+pub use prometheus::{GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,
+                     IntGauge as Gauge, Opts as MetricOpts};
 
 use util::spawn_thread;
 

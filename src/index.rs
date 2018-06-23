@@ -14,10 +14,8 @@ use daemon::Daemon;
 use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use signal::Waiter;
 use store::{ReadStore, Row, WriteStore};
-use util::{
-    full_hash, hash_prefix, spawn_thread, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
-    HeaderMap, SyncChannel, HASH_PREFIX_LEN,
-};
+use util::{full_hash, hash_prefix, spawn_thread, Bytes, FullHash, HashPrefix, HeaderEntry,
+           HeaderList, HeaderMap, SyncChannel, HASH_PREFIX_LEN};
 
 use errors::*;
 
