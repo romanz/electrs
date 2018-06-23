@@ -74,7 +74,7 @@ fn run(config: Config) -> Result<()> {
                 warn!("unknown block {}", blockhash);
             }
         }
-        debug!("indexed {} blocks", blocks.len());
+        trace!("indexed {} blocks", blocks.len());
     }
     debug!("done");
     Ok(())

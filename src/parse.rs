@@ -52,6 +52,7 @@ impl Parser {
                     }
                 }
             }
+            debug!("parsed {} blk files", self.files.len());
         });
         chan.into_receiver()
     }
@@ -61,14 +62,16 @@ fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Ve
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
     thread::spawn(move || {
-        info!("reading {} files", files.len());
         for f in &files {
             let timer = duration.with_label_values(&["read"]).start_timer();
             let msg = fs::read(f).chain_err(|| format!("failed to read {:?}", f));
-            debug!("read {:?}", f);
             timer.observe_duration();
+            if let Ok(ref blob) = msg {
+                trace!("read {:.2} MB from {:?}", blob.len() as f32 / 1e6, f);
+            }
             tx.send(msg).unwrap();
         }
+        debug!("read {} blk files", files.len());
     });
     chan.into_receiver()
 }
@@ -95,9 +98,12 @@ fn parse_blocks(data: &[u8]) -> Result<Vec<Block>> {
 
         let block: Block = deserialize(&data[start..end])
             .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
-        trace!("block {}, {} bytes", block.bitcoin_hash(), block_size);
         blocks.push(block);
     }
-    debug!("parsed {} blocks", blocks.len());
+    trace!(
+        "parsed {} blocks from {:.2} MB blob",
+        blocks.len(),
+        data.len() as f32 / 1e6
+    );
     Ok(blocks)
 }
