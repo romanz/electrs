@@ -48,7 +48,10 @@ impl Metrics {
     }
 
     pub fn start(&self) {
-        let server = tiny_http::Server::http(self.addr).unwrap();
+        let server = tiny_http::Server::http(self.addr).expect(&format!(
+            "failed to start monitoring HTTP server at {}",
+            self.addr
+        ));
         let reg = self.reg.clone();
         spawn_thread("metrics", move || loop {
             if let Err(e) = handle_request(&reg, server.recv()) {
