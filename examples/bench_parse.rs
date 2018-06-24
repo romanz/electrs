@@ -15,9 +15,10 @@ use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
               index,
-              metrics::Metrics,
+              metrics::{HistogramOpts, Metrics},
               parse::Parser,
               signal::Waiter,
+              store::{DBStore, StoreOptions},
               store::{ReadStore, Row, WriteStore},
               util::{Bytes, HeaderEntry, HeaderList}};
 
@@ -45,7 +46,7 @@ fn run(config: Config) -> Result<()> {
     metrics.start();
 
     let daemon = Daemon::new(config.network_type, &metrics)?;
-    let fake_store = FakeStore {};
+    let store = DBStore::open("./bench-db", StoreOptions { bulk_import: true });
 
     let tip = daemon.getbestblockhash()?;
     let new_headers: Vec<HeaderEntry> = {
@@ -59,22 +60,31 @@ fn run(config: Config) -> Result<()> {
         new_headers.iter().map(|h| (*h.hash(), h.height())),
     );
 
+    let duration = metrics.histogram_vec(
+        HistogramOpts::new("index_duration", "indexing duration (in seconds)"),
+        &["step"],
+    );
     let chan = Parser::new(&daemon, &metrics)?.start();
     for blocks in chan.iter() {
         if let Some(sig) = signal.poll() {
             bail!("indexing interrupted by SIG{:?}", sig);
         }
         let blocks = blocks?;
+        let timer = duration.with_label_values(&["index"]).start_timer();
+        let mut rows = vec![];
         for block in &blocks {
             let blockhash = block.bitcoin_hash();
             if let Some(height) = height_map.get(&blockhash) {
-                let rows = index::index_block(block, *height);
-                fake_store.write(rows);
+                rows.extend(index::index_block(block, *height));
             } else {
                 warn!("unknown block {}", blockhash);
             }
         }
-        trace!("indexed {} blocks", blocks.len());
+        timer.observe_duration();
+
+        let timer = duration.with_label_values(&["write"]).start_timer();
+        store.write(rows);
+        timer.observe_duration();
     }
     debug!("done");
     Ok(())
