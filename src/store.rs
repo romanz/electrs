@@ -45,6 +45,7 @@ impl DBStore {
         db_opts.set_target_file_size_base(64 << 20);
         db_opts.set_write_buffer_size(64 << 20);
         db_opts.set_disable_auto_compactions(opts.bulk_import);
+        db_opts.set_max_open_files(1024); // default ulimit value
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(256 << 10);
