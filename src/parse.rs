@@ -1,15 +1,20 @@
 use bitcoin::blockdata::block::Block;
+use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::SimpleDecoder;
 use bitcoin::network::serialize::{deserialize, RawDecoder};
+use bitcoin::util::hash::Sha256dHash;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
+use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
-use std::thread;
 
 use daemon::Daemon;
+use index::index_block;
 use metrics::{HistogramOpts, HistogramVec, Metrics};
-use util::SyncChannel;
+use store::Row;
+use util::{spawn_thread, HeaderEntry, SyncChannel};
 
 use errors::*;
 
@@ -31,36 +36,69 @@ impl Parser {
         })
     }
 
-    pub fn start(self) -> Receiver<Result<Vec<Block>>> {
+    pub fn start(self, headers: Vec<HeaderEntry>) -> Receiver<Result<Vec<Row>>> {
+        let height_map = HashMap::<Sha256dHash, usize>::from_iter(
+            headers.iter().map(|h| (*h.hash(), h.height())),
+        );
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
-        let blobs = read_files(self.files.clone(), self.duration.clone());
+        let parser = parse_files(self.files.clone(), self.duration.clone());
         let duration = self.duration.clone();
-        thread::spawn(move || {
-            for msg in blobs.iter() {
+        spawn_thread("bulk_indexer", move || {
+            for msg in parser.iter() {
                 match msg {
-                    Ok(blob) => {
-                        let timer = duration.with_label_values(&["parse"]).start_timer();
-                        let blocks = parse_blocks(&blob);
-                        timer.observe_duration();
-                        tx.send(blocks).unwrap();
+                    Ok(blocks) => {
+                        let mut rows = vec![];
+                        for block in &blocks {
+                            let blockhash = block.bitcoin_hash();
+                            if let Some(height) = height_map.get(&blockhash) {
+                                let timer = duration.with_label_values(&["index"]).start_timer();
+                                rows.extend(index_block(block, *height));
+                                timer.observe_duration();
+                            } else {
+                                warn!("unknown block {}", blockhash);
+                            }
+                        }
+                        trace!("indexed {} rows from {} blocks", rows.len(), blocks.len());
+                        tx.send(Ok(rows)).unwrap();
                     }
                     Err(err) => {
                         tx.send(Err(err)).unwrap();
-                        return;
                     }
                 }
             }
-            debug!("parsed {} blk files", self.files.len());
         });
         chan.into_receiver()
     }
 }
 
+fn parse_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<Block>>> {
+    let chan = SyncChannel::new(1);
+    let tx = chan.sender();
+    let blobs = read_files(files, duration.clone());
+    let duration = duration.clone();
+    spawn_thread("bulk_parser", move || {
+        for msg in blobs.iter() {
+            match msg {
+                Ok(blob) => {
+                    let timer = duration.with_label_values(&["parse"]).start_timer();
+                    let blocks = parse_blocks(&blob);
+                    timer.observe_duration();
+                    tx.send(blocks).unwrap();
+                }
+                Err(err) => {
+                    tx.send(Err(err)).unwrap();
+                }
+            }
+        }
+    });
+    chan.into_receiver()
+}
+
 fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<u8>>> {
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
-    thread::spawn(move || {
+    spawn_thread("bulk_reader", move || {
         for f in &files {
             let timer = duration.with_label_values(&["read"]).start_timer();
             let msg = fs::read(f).chain_err(|| format!("failed to read {:?}", f));
