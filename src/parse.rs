@@ -36,7 +36,7 @@ impl Parser {
         })
     }
 
-    pub fn start(self, headers: Vec<HeaderEntry>) -> Receiver<Result<Vec<Row>>> {
+    pub fn start(self, headers: Vec<HeaderEntry>) -> Receiver<Result<Vec<Vec<Row>>>> {
         let height_map = HashMap::<Sha256dHash, usize>::from_iter(
             headers.iter().map(|h| (*h.hash(), h.height())),
         );
@@ -53,7 +53,7 @@ impl Parser {
                             let blockhash = block.bitcoin_hash();
                             if let Some(height) = height_map.get(&blockhash) {
                                 let timer = duration.with_label_values(&["index"]).start_timer();
-                                rows.extend(index_block(block, *height));
+                                rows.push(index_block(block, *height));
                                 timer.observe_duration();
                             } else {
                                 warn!("unknown block {}", blockhash);

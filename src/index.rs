@@ -359,6 +359,7 @@ impl Index {
                 break;
             }
 
+            let mut rows_vec = vec![];
             for block in &batch {
                 let blockhash = block.bitcoin_hash();
                 let height = *height_map
@@ -366,15 +367,15 @@ impl Index {
                     .expect(&format!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
-                let mut rows = index_block(block, height);
-                rows.push(last_indexed_block(&blockhash));
-                timer.observe_duration();
-
-                let timer = self.stats.start_timer("write");
-                store.write(rows);
+                let mut block_rows = index_block(block, height);
+                block_rows.push(last_indexed_block(&blockhash));
+                rows_vec.push(block_rows);
                 timer.observe_duration();
                 self.stats.update(block, height);
             }
+            let timer = self.stats.start_timer("write");
+            store.write(rows_vec);
+            timer.observe_duration();
         }
         let timer = self.stats.start_timer("flush");
         store.flush(); // make sure no row is left behind
