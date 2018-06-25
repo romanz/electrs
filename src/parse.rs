@@ -9,7 +9,7 @@ use std::sync::mpsc::Receiver;
 
 use daemon::Daemon;
 use index::{index_block, last_indexed_block, read_indexed_blockhashes};
-use metrics::{HistogramOpts, HistogramVec, Metrics};
+use metrics::{HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use store::{ReadStore, Row};
 use util::{spawn_thread, HeaderList, SyncChannel};
 
@@ -34,6 +34,10 @@ pub fn parser(
         HistogramOpts::new("parse_duration", "Block parsing duration (in seconds)"),
         &["step"],
     );
+    let blocks_count = metrics.counter_vec(
+        MetricOpts::new("parse_blocks", "# of block parsed (from blk*.dat)"),
+        &["type"],
+    );
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
     let current_headers = load_headers(daemon)?;
@@ -48,6 +52,7 @@ pub fn parser(
                     for block in &blocks {
                         let blockhash = block.bitcoin_hash();
                         if indexed_blockhashes.contains(&blockhash) {
+                            blocks_count.with_label_values(&["skipped"]).inc();
                             continue;
                         }
                         if let Some(header) = current_headers.header_by_blockhash(&blockhash) {
@@ -55,8 +60,10 @@ pub fn parser(
                             rows.push(index_block(block, header.height()));
                             timer.observe_duration();
                             indexed_blockhashes.insert(blockhash);
+                            blocks_count.with_label_values(&["indexed"]).inc();
                         } else {
                             warn!("unknown block {}", blockhash);
+                            blocks_count.with_label_values(&["unknown"]).inc();
                         }
                     }
                     tx.send(Ok(rows)).unwrap();
