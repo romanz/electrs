@@ -10,7 +10,7 @@ use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
               metrics::Metrics,
-              parse::parser,
+              parse::Parser,
               signal::Waiter,
               store::{DBStore, StoreOptions, WriteStore}};
 
@@ -24,7 +24,7 @@ fn run(config: Config) -> Result<()> {
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open("./test-db", StoreOptions { bulk_import: true });
 
-    let chan = parser(&daemon, &store, &metrics)?;
+    let chan = Parser::new(&daemon, &store, &metrics)?.start();
     for rows in chan.iter() {
         if let Some(sig) = signal.poll() {
             bail!("indexing interrupted by SIG{:?}", sig);
