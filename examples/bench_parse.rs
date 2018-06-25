@@ -37,6 +37,6 @@ fn run(config: Config) -> Result<()> {
 
 fn main() {
     if let Err(e) = run(Config::from_args()) {
-        eprintln!("{}", e.display_chain());
+        error!("{}", e.display_chain());
     }
 }

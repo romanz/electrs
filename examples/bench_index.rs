@@ -1,6 +1,9 @@
 extern crate electrs;
 extern crate error_chain;
 
+#[macro_use]
+extern crate log;
+
 use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
@@ -42,6 +45,6 @@ fn run() -> Result<()> {
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("{}", e.display_chain());
+        error!("{}", e.display_chain());
     }
 }

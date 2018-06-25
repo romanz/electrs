@@ -1,6 +1,9 @@
 extern crate electrs;
 extern crate error_chain;
 
+#[macro_use]
+extern crate log;
+
 use error_chain::ChainedError;
 use std::time::Duration;
 
@@ -48,6 +51,6 @@ fn run_server(config: &Config) -> Result<()> {
 fn main() {
     let config = Config::from_args();
     if let Err(e) = run_server(&config) {
-        eprintln!("server failed: {}", e.display_chain());
+        error!("server failed: {}", e.display_chain());
     }
 }
