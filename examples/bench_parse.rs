@@ -31,7 +31,7 @@ fn run(config: Config) -> Result<()> {
         }
         store.write(rows?);
     }
-    debug!("done");
+    store.compact_if_needed();
     Ok(())
 }
 
