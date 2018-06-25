@@ -145,13 +145,14 @@ fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
     while cursor.position() < max_pos {
         let pos = cursor.position();
         let mut decoder = RawDecoder::new(cursor);
-        match decoder.read_u32().chain_err(|| "no magic")? {
-            0 => {
+        match decoder.read_u32() {
+            Ok(0) => {
                 cursor = decoder.into_inner(); // skip zeroes
                 continue;
             }
-            0xD9B4BEF9 => (),
-            x => bail!("incorrect magic {:x} at {}", x, pos),
+            Ok(0xD9B4BEF9) => (),
+            Ok(x) => bail!("incorrect magic {:x} at {}", x, pos),
+            Err(_) => break, // EOF
         };
         let block_size = decoder.read_u32().chain_err(|| "no block size")?;
         cursor = decoder.into_inner();
