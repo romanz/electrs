@@ -6,7 +6,7 @@ use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::RwLock;
 
@@ -198,12 +198,21 @@ pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
     rows
 }
 
-fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
+pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
     // Store last indexed block (i.e. all previous blocks were indexed)
     Row {
         key: b"L".to_vec(),
         value: serialize(blockhash).unwrap(),
     }
+}
+
+pub fn read_indexed_blockhashes(store: &ReadStore) -> HashSet<Sha256dHash> {
+    let mut result = HashSet::new();
+    for row in store.scan(b"B") {
+        let key: BlockKey = bincode::deserialize(&row.key).unwrap();
+        result.insert(deserialize(&key.hash).unwrap());
+    }
+    result
 }
 
 fn read_indexed_headers(store: &ReadStore) -> HeaderList {
