@@ -85,14 +85,12 @@ impl Parser {
                 tx.send(rows).unwrap();
             }
             info!("indexed {} blocks", self.indexed_blockhashes.len());
-            let mut last_indexed_blockhash = None;
-            for header in self.current_headers.iter() {
-                if self.indexed_blockhashes.contains(header.hash()) {
-                    last_indexed_blockhash = Some(header.hash());
-                }
-            }
-            if let Some(blockhash) = last_indexed_blockhash {
-                let rows = vec![last_indexed_block(blockhash)];
+            if let Some(last_header) = self.current_headers
+                .iter()
+                .take_while(|h| self.indexed_blockhashes.contains(h.hash()))
+                .last()
+            {
+                let rows = vec![last_indexed_block(last_header.hash())];
                 tx.send(Ok(vec![rows])).unwrap();
             }
         });
