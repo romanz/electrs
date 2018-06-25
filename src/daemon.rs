@@ -228,6 +228,13 @@ impl Daemon {
             .collect())
     }
 
+    pub fn magic(&self) -> u32 {
+        match self.network {
+            Network::Mainnet => 0xD9B4BEF9,
+            Network::Testnet => 0x0709110B,
+        }
+    }
+
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
         let timer = self.latency.with_label_values(&[method]).start_timer();
         let mut conn = self.conn.lock().unwrap();

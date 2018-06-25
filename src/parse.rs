@@ -28,6 +28,7 @@ fn load_headers(daemon: &Daemon) -> Result<HeaderList> {
 }
 
 pub struct Parser {
+    magic: u32,
     files: Vec<PathBuf>,
     indexed_blockhashes: HashSet<Sha256dHash>,
     current_headers: HeaderList,
@@ -39,6 +40,7 @@ pub struct Parser {
 impl Parser {
     pub fn new(daemon: &Daemon, store: &ReadStore, metrics: &Metrics) -> Result<Parser> {
         Ok(Parser {
+            magic: daemon.magic(),
             files: daemon.list_blk_files()?,
             indexed_blockhashes: read_indexed_blockhashes(store),
             current_headers: load_headers(daemon)?,
@@ -78,7 +80,7 @@ impl Parser {
     pub fn start(mut self) -> Receiver<Result<Vec<Vec<Row>>>> {
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
-        let parser = parse_files(self.files.split_off(0), self.duration.clone());
+        let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
         spawn_thread("bulk_indexer", move || {
             for blocks in parser.iter() {
                 let rows = blocks.map(|b| self.index_blocks(&b));
@@ -98,7 +100,11 @@ impl Parser {
     }
 }
 
-fn parse_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<Block>>> {
+fn parse_files(
+    files: Vec<PathBuf>,
+    duration: HistogramVec,
+    magic: u32,
+) -> Receiver<Result<Vec<Block>>> {
     let chan = SyncChannel::new(1);
     let tx = chan.sender();
     let blobs = read_files(files, duration.clone());
@@ -107,7 +113,7 @@ fn parse_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<V
             match msg {
                 Ok(blob) => {
                     let timer = duration.with_label_values(&["parse"]).start_timer();
-                    let blocks = parse_blocks(&blob);
+                    let blocks = parse_blocks(&blob, magic);
                     timer.observe_duration();
                     tx.send(blocks).unwrap();
                 }
@@ -138,7 +144,7 @@ fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Ve
     chan.into_receiver()
 }
 
-fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
+fn parse_blocks(blob: &[u8], magic: u32) -> Result<Vec<Block>> {
     let mut cursor = Cursor::new(&blob);
     let mut blocks = vec![];
     let max_pos = blob.len() as u64;
@@ -150,8 +156,11 @@ fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
                 cursor = decoder.into_inner(); // skip zeroes
                 continue;
             }
-            Ok(0xD9B4BEF9) => (),
-            Ok(x) => bail!("incorrect magic {:x} at {}", x, pos),
+            Ok(x) => {
+                if x != magic {
+                    bail!("incorrect magic {:08x} at {}", x, pos)
+                }
+            }
             Err(_) => break, // EOF
         };
         let block_size = decoder.read_u32().chain_err(|| "no block size")?;
