@@ -127,7 +127,10 @@ fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
         let pos = cursor.position();
         let mut decoder = RawDecoder::new(cursor);
         match decoder.read_u32().chain_err(|| "no magic")? {
-            0 => break,
+            0 => {
+                cursor = decoder.into_inner(); // skip zeroes
+                continue;
+            }
             0xD9B4BEF9 => (),
             x => bail!("incorrect magic {:x} at {}", x, pos),
         };
