@@ -7,28 +7,13 @@ extern crate log;
 use electrs::{config::Config,
               daemon::Daemon,
               errors::*,
+              fake::FakeStore,
               index::Index,
               metrics::Metrics,
               signal::Waiter,
               store::{ReadStore, Row, WriteStore},
               util::Bytes};
 use error_chain::ChainedError;
-
-struct FakeStore;
-
-impl ReadStore for FakeStore {
-    fn get(&self, _key: &[u8]) -> Option<Bytes> {
-        None
-    }
-    fn scan(&self, _prefix: &[u8]) -> Vec<Row> {
-        vec![]
-    }
-}
-
-impl WriteStore for FakeStore {
-    fn write(&self, _rows: Vec<Vec<Row>>) {}
-    fn flush(&self) {}
-}
 
 fn run() -> Result<()> {
     let signal = Waiter::new();
