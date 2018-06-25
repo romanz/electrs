@@ -4,7 +4,8 @@ use std::net::SocketAddr;
 use tiny_http;
 
 pub use prometheus::{GaugeVec, Histogram, HistogramOpts, HistogramTimer, HistogramVec,
-                     IntCounter as Counter, IntGauge as Gauge, Opts as MetricOpts};
+                     IntCounter as Counter, IntCounterVec as CounterVec, IntGauge as Gauge,
+                     Opts as MetricOpts};
 
 use util::spawn_thread;
 
@@ -23,6 +24,12 @@ impl Metrics {
 
     pub fn counter(&self, opts: prometheus::Opts) -> Counter {
         let c = Counter::with_opts(opts).unwrap();
+        self.reg.register(Box::new(c.clone())).unwrap();
+        c
+    }
+
+    pub fn counter_vec(&self, opts: prometheus::Opts, labels: &[&str]) -> CounterVec {
+        let c = CounterVec::new(opts, labels).unwrap();
         self.reg.register(Box::new(c.clone())).unwrap();
         c
     }
