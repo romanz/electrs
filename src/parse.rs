@@ -59,7 +59,6 @@ pub fn parser(
                             warn!("unknown block {}", blockhash);
                         }
                     }
-                    trace!("indexed {} rows from {} blocks", rows.len(), blocks.len());
                     tx.send(Ok(rows)).unwrap();
                 }
                 Err(err) => {
@@ -67,6 +66,7 @@ pub fn parser(
                 }
             }
         }
+        info!("indexed {} blocks", indexed_blockhashes.len());
         for header in current_headers.iter().rev() {
             if indexed_blockhashes.contains(header.hash()) {
                 info!("{:?}", header);
@@ -75,7 +75,6 @@ pub fn parser(
                 return;
             }
         }
-        warn!("could not found tip")
     });
     Ok(chan.into_receiver())
 }
@@ -125,11 +124,12 @@ fn parse_blocks(blob: &[u8]) -> Result<Vec<Block>> {
     let mut blocks = vec![];
     let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
+        let pos = cursor.position();
         let mut decoder = RawDecoder::new(cursor);
         match decoder.read_u32().chain_err(|| "no magic")? {
             0 => break,
             0xD9B4BEF9 => (),
-            x => bail!("incorrect magic {:x}", x),
+            x => bail!("incorrect magic {:x} at {}", x, pos),
         };
         let block_size = decoder.read_u32().chain_err(|| "no block size")?;
         cursor = decoder.into_inner();
