@@ -4,6 +4,7 @@ use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
+use std::slice;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use std::thread;
 use time;
@@ -187,6 +188,10 @@ impl HeaderList {
 
     pub fn len(&self) -> usize {
         self.headers.len()
+    }
+
+    pub fn iter(&self) -> slice::Iter<HeaderEntry> {
+        self.headers.iter()
     }
 }
 
