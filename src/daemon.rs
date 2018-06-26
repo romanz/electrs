@@ -393,6 +393,7 @@ impl Daemon {
         let mut result = vec![];
         let null_hash = Sha256dHash::default();
         for heights in all_heights.chunks(chunk_size) {
+            debug!("downloading {} block headers", heights.len());
             let mut headers = self.getblockheaders(&heights)?;
             assert!(headers.len() == heights.len());
             result.append(&mut headers);
@@ -417,6 +418,11 @@ impl Daemon {
         if indexed_headers.len() == 0 {
             return self.get_all_headers(bestblockhash);
         }
+        debug!(
+            "downloading new block headers ({} already indexed) from {}",
+            indexed_headers.len(),
+            bestblockhash,
+        );
         let mut new_headers = vec![];
         let null_hash = Sha256dHash::default();
         let mut blockhash = *bestblockhash;
