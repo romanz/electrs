@@ -33,7 +33,7 @@ pub mod app;
 pub mod config;
 pub mod daemon;
 pub mod errors;
-mod fake;
+pub mod fake;
 pub mod index;
 pub mod mempool;
 pub mod metrics;

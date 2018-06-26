@@ -10,9 +10,7 @@ use electrs::{config::Config,
               fake::FakeStore,
               index::Index,
               metrics::Metrics,
-              signal::Waiter,
-              store::{ReadStore, Row, WriteStore},
-              util::Bytes};
+              signal::Waiter};
 use error_chain::ChainedError;
 
 fn run() -> Result<()> {
