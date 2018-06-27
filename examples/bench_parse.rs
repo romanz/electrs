@@ -6,11 +6,11 @@ extern crate log;
 #[macro_use]
 extern crate error_chain;
 
-use electrs::{config::Config,
+use electrs::{bulk::Parser,
+              config::Config,
               daemon::Daemon,
               errors::*,
               metrics::Metrics,
-              parse::Parser,
               signal::Waiter,
               store::{DBStore, StoreOptions, WriteStore}};
 

@@ -30,6 +30,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 pub mod app;
+pub mod bulk;
 pub mod config;
 pub mod daemon;
 pub mod errors;
@@ -37,7 +38,6 @@ pub mod fake;
 pub mod index;
 pub mod mempool;
 pub mod metrics;
-pub mod parse;
 pub mod query;
 pub mod rpc;
 pub mod signal;

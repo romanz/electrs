@@ -55,7 +55,7 @@ impl Parser {
         })
     }
 
-    pub fn index_blocks(&mut self, blocks: &[Block]) -> Vec<Vec<Row>> {
+    fn index_blocks(&mut self, blocks: &[Block]) -> Vec<Vec<Row>> {
         let mut rows = vec![];
         for block in blocks {
             let blockhash = block.bitcoin_hash();
@@ -76,6 +76,8 @@ impl Parser {
     }
 
     pub fn start(mut self) -> Receiver<Result<Vec<Vec<Row>>>> {
+        info!("indexing {} blk*.dat files", self.files.len());
+        debug!("{} blocks are already indexed", self.indexed_blockhashes.len());
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
         let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
