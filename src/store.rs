@@ -47,6 +47,7 @@ impl DBStore {
         db_opts.set_min_write_buffer_number(2);
         db_opts.set_max_write_buffer_number(3);
         db_opts.set_disable_auto_compactions(opts.bulk_import);
+        db_opts.set_advise_random_on_open(!opts.bulk_import);
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(256 << 10);
