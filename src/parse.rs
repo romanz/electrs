@@ -45,7 +45,7 @@ impl Parser {
             indexed_blockhashes: read_indexed_blockhashes(store),
             current_headers: load_headers(daemon)?,
             duration: metrics.histogram_vec(
-                HistogramOpts::new("parse_duration", "Block parsing duration (in seconds)"),
+                HistogramOpts::new("parse_duration", "blk*.dat parsing duration (in seconds)"),
                 &["step"],
             ),
             block_count: metrics.counter_vec(
@@ -64,9 +64,7 @@ impl Parser {
                 continue;
             }
             if let Some(header) = self.current_headers.header_by_blockhash(&blockhash) {
-                let timer = self.duration.with_label_values(&["index"]).start_timer();
                 rows.push(index_block(block, header.height()));
-                timer.observe_duration();
                 self.indexed_blockhashes.insert(blockhash);
                 self.block_count.with_label_values(&["indexed"]).inc();
             } else {
@@ -83,7 +81,9 @@ impl Parser {
         let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
         spawn_thread("bulk_indexer", move || {
             for blocks in parser.iter() {
+                let timer = self.duration.with_label_values(&["index"]).start_timer();
                 let rows = blocks.map(|b| self.index_blocks(&b));
+                timer.observe_duration();
                 tx.send(rows).unwrap();
             }
             info!("indexed {} blocks", self.indexed_blockhashes.len());
