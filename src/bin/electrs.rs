@@ -27,7 +27,7 @@ fn run_server(config: &Config) -> Result<()> {
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
     let parser = Parser::new(&daemon, &store, &metrics)?;
-    store.bulk_load(parser.start(), &signal)?;
+    store.bulk_load(parser, &signal)?;
 
     let daemon = daemon.reconnect()?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });

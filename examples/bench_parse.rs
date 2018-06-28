@@ -3,7 +3,6 @@ extern crate electrs;
 
 #[macro_use]
 extern crate log;
-#[macro_use]
 extern crate error_chain;
 
 use electrs::{bulk::Parser,
@@ -12,7 +11,7 @@ use electrs::{bulk::Parser,
               errors::*,
               metrics::Metrics,
               signal::Waiter,
-              store::{DBStore, StoreOptions, WriteStore}};
+              store::{DBStore, StoreOptions}};
 
 use error_chain::ChainedError;
 
@@ -24,8 +23,8 @@ fn run(config: Config) -> Result<()> {
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open("./test-db", StoreOptions { bulk_import: true });
 
-    let chan = Parser::new(&daemon, &store, &metrics)?.start();
-    store.load(chan, &signal)
+    let parser = Parser::new(&daemon, &store, &metrics)?;
+    store.bulk_load(parser, &signal)
 }
 
 fn main() {

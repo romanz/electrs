@@ -1,6 +1,6 @@
 use rocksdb;
-use std::sync::mpsc::Receiver;
 
+use bulk::Parser;
 use signal::Waiter;
 use util::Bytes;
 
@@ -63,12 +63,12 @@ impl DBStore {
         }
     }
 
-    pub fn bulk_load(self, rows: Receiver<Result<Vec<Vec<Row>>>>, signal: &Waiter) -> Result<()> {
+    pub fn bulk_load(self, parser: Parser, signal: &Waiter) -> Result<()> {
         let key = b"F"; // full compaction marker
         if self.get(key).is_some() {
             return Ok(());
         }
-        for rows in rows.iter() {
+        for rows in parser.start().iter() {
             if let Some(sig) = signal.poll() {
                 bail!("indexing interrupted by SIG{:?}", sig);
             }
