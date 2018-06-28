@@ -1,6 +1,10 @@
 use rocksdb;
+use std::sync::mpsc::Receiver;
 
+use signal::Waiter;
 use util::Bytes;
+
+use errors::*;
 
 pub struct Row {
     pub key: Bytes,
@@ -58,15 +62,22 @@ impl DBStore {
         }
     }
 
-    pub fn compact_if_needed(&self) {
+    pub fn bulk_load(self, rows: Receiver<Result<Vec<Vec<Row>>>>, signal: &Waiter) -> Result<()> {
         let key = b"F"; // full compaction marker
         if self.get(key).is_some() {
-            return;
+            return Ok(());
+        }
+        for rows in rows.iter() {
+            if let Some(sig) = signal.poll() {
+                bail!("indexing interrupted by SIG{:?}", sig);
+            }
+            self.write(rows?);
         }
         info!("starting full compaction");
         self.db.compact_range(None, None); // should take a while
         self.db.put(key, b"").unwrap();
         info!("finished full compaction");
+        Ok(())
     }
 }
 

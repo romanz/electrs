@@ -25,14 +25,7 @@ fn run(config: Config) -> Result<()> {
     let store = DBStore::open("./test-db", StoreOptions { bulk_import: true });
 
     let chan = Parser::new(&daemon, &store, &metrics)?.start();
-    for rows in chan.iter() {
-        if let Some(sig) = signal.poll() {
-            bail!("indexing interrupted by SIG{:?}", sig);
-        }
-        store.write(rows?);
-    }
-    store.compact_if_needed();
-    Ok(())
+    store.load(chan, &signal)
 }
 
 fn main() {

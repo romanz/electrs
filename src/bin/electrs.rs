@@ -1,6 +1,6 @@
 extern crate electrs;
-extern crate error_chain;
 
+extern crate error_chain;
 #[macro_use]
 extern crate log;
 
@@ -8,6 +8,7 @@ use error_chain::ChainedError;
 use std::time::Duration;
 
 use electrs::{app::App,
+              bulk::Parser,
               config::Config,
               daemon::Daemon,
               errors::*,
@@ -21,28 +22,30 @@ use electrs::{app::App,
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
+    metrics.start();
+
     let daemon = Daemon::new(config.network_type, &metrics)?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
-    let index = Index::load(&store, &daemon, &metrics)?;
+    let parser = Parser::new(&daemon, &store, &metrics)?;
+    store.bulk_load(parser.start(), &signal)?;
 
-    metrics.start();
-    let mut tip = index.update(&store, &signal)?;
-    store.compact_if_needed();
-    drop(store); // bulk import is over
-
+    let daemon = daemon.reconnect()?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
-    let app = App::new(store, index, daemon.reconnect()?);
+    let index = Index::load(&store, &daemon, &metrics)?;
+    let app = App::new(store, index, daemon);
 
     let query = Query::new(app.clone(), &metrics);
-    query.update_mempool()?; // poll once before starting RPC server
-
+    let mut tip = *query.get_best_header()?.hash();
     let rpc = RPC::start(config.rpc_addr, query.clone(), &metrics);
-    while let None = signal.wait(Duration::from_secs(5)) {
+    loop {
         query.update_mempool()?;
         if tip != app.daemon().getbestblockhash()? {
             tip = app.index().update(app.write_store(), &signal)?;
         }
         rpc.notify();
+        if signal.wait(Duration::from_secs(5)).is_some() {
+            break;
+        }
     }
     rpc.exit();
     Ok(())
