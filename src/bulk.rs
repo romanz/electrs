@@ -81,7 +81,7 @@ impl Parser {
             "{} blocks are already indexed",
             self.indexed_blockhashes.len()
         );
-        let chan = SyncChannel::new(1);
+        let chan = SyncChannel::new(0);
         let tx = chan.sender();
         let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
         spawn_thread("bulk_indexer", move || {
