@@ -1,5 +1,6 @@
 extern crate electrs;
 
+#[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate log;
@@ -17,7 +18,25 @@ use electrs::{app::App,
               query::Query,
               rpc::RPC,
               signal::Waiter,
-              store::{DBStore, StoreOptions}};
+              store::{DBStore, ReadStore, StoreOptions, WriteStore}};
+
+fn bulk_load(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics) -> Result<()> {
+    let key = b"F"; // full compaction marker
+    if store.get(key).is_some() {
+        return Ok(());
+    }
+    let parser = Parser::new(daemon, &store, &metrics)?;
+    for rows in parser.start().iter() {
+        if let Some(sig) = signal.poll() {
+            bail!("indexing interrupted by SIG{:?}", sig);
+        }
+        store.write(rows?);
+    }
+    store.flush();
+    store.compact();
+    store.put(key, b"");
+    Ok(())
+}
 
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
@@ -25,9 +44,12 @@ fn run_server(config: &Config) -> Result<()> {
     metrics.start();
 
     let daemon = Daemon::new(config.network_type, &metrics)?;
-    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
-    let parser = Parser::new(&daemon, &store, &metrics)?;
-    store.bulk_load(parser, &signal)?;
+    bulk_load(
+        DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
+        &daemon,
+        &signal,
+        &metrics,
+    )?;
 
     let daemon = daemon.reconnect()?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });

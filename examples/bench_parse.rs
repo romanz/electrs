@@ -10,13 +10,11 @@ use electrs::{bulk::Parser,
               daemon::Daemon,
               errors::*,
               metrics::Metrics,
-              signal::Waiter,
-              store::{DBStore, StoreOptions}};
+              store::{DBStore, StoreOptions, WriteStore}};
 
 use error_chain::ChainedError;
 
 fn run(config: Config) -> Result<()> {
-    let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
@@ -24,7 +22,10 @@ fn run(config: Config) -> Result<()> {
     let store = DBStore::open("./test-db", StoreOptions { bulk_import: true });
 
     let parser = Parser::new(&daemon, &store, &metrics)?;
-    store.bulk_load(parser, &signal)
+    for rows in parser.start().iter() {
+        store.write(rows?);
+    }
+    Ok(())
 }
 
 fn main() {
