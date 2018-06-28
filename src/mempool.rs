@@ -193,7 +193,11 @@ impl Tracker {
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.items.keys().cloned());
-        trace!("{} transactions in mempool (previosly {})", new_txids.len(), old_txids.len());
+        trace!(
+            "{} transactions in mempool (previosly {})",
+            new_txids.len(),
+            old_txids.len()
+        );
         timer.observe_duration();
 
         let timer = self.stats.start_timer("add");

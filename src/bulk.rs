@@ -77,7 +77,10 @@ impl Parser {
 
     pub fn start(mut self) -> Receiver<Result<Vec<Vec<Row>>>> {
         info!("indexing {} blk*.dat files", self.files.len());
-        debug!("{} blocks are already indexed", self.indexed_blockhashes.len());
+        debug!(
+            "{} blocks are already indexed",
+            self.indexed_blockhashes.len()
+        );
         let chan = SyncChannel::new(1);
         let tx = chan.sender();
         let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
