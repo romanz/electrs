@@ -193,6 +193,7 @@ impl Tracker {
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.items.keys().cloned());
+        trace!("{} transactions in mempool (previosly {})", new_txids.len(), old_txids.len());
         timer.observe_duration();
 
         let timer = self.stats.start_timer("add");
@@ -231,7 +232,6 @@ impl Tracker {
     }
 
     fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {
-        trace!("new tx: {}, {:.3}", txid, entry.fee_per_vbyte());
         self.index.add(&tx);
         self.items.insert(*txid, Item { tx, entry });
     }
