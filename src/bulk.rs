@@ -110,7 +110,7 @@ fn parse_files(
     duration: HistogramVec,
     magic: u32,
 ) -> Receiver<Result<Vec<Block>>> {
-    let chan = SyncChannel::new(1);
+    let chan = SyncChannel::new(0);
     let tx = chan.sender();
     let blobs = read_files(files, duration.clone());
     spawn_thread("bulk_parser", move || {
@@ -132,7 +132,7 @@ fn parse_files(
 }
 
 fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<u8>>> {
-    let chan = SyncChannel::new(1);
+    let chan = SyncChannel::new(0);
     let tx = chan.sender();
     spawn_thread("bulk_reader", move || {
         for f in &files {
