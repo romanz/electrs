@@ -15,6 +15,7 @@
 
 # Performance
 
+* Use rayon for faster multi-block indexing on multi-core systems
 * Experiment with [sled](https://github.com/spacejam/sled) DB
 
 # Rust
