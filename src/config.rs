@@ -54,7 +54,7 @@ impl Config {
             stderrlog::Timestamp::Off
         });
         log.init().expect("logging initialization failed");
-        Config {
+        let config = Config {
             log,
             network_type,
             db_path: match network_type {
@@ -67,6 +67,8 @@ impl Config {
             }.parse()
                 .unwrap(),
             monitoring_addr: "127.0.0.1:42024".parse().unwrap(),
-        }
+        };
+        eprintln!("{:?}", config);
+        config
     }
 }
