@@ -40,6 +40,8 @@ $ bitcoind -server=1 -daemon=0 -txindex=0 -prune=0
 
 # First build should take ~20 minutes
 $ cargo build --release
+
+# First index sync should take ~2.5 hours
 $ cargo run --release -- -vvv --timestamp --db-dir ./db
 2018-06-28T23:09:17 - DEBUG - BlockchainInfo { chain: "main", blocks: 529656, headers: 529656, bestblockhash: "0000000000000000000d6344eeaa8dece87a438c25948e9038e8fecd4c64ac0f", size_on_disk: 197723753341, pruned: false }
 2018-06-28T23:09:17 - DEBUG - opening ./db/mainnet with StoreOptions { bulk_import: true }
