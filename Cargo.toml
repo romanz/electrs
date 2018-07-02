@@ -2,6 +2,13 @@
 name = "electrs"
 version = "0.1.0"
 authors = ["Roman Zeyde <me@romanzey.de>"]
+description = "An efficient re-implementation of Electrum Server in Rust"
+license = "MIT"
+homepage = "https://github.com/romanz/electrs"
+repository = "https://github.com/romanz/electrs"
+keywords = ["bitcoin", "electrum", "server", "index", "database"]
+documentation = "https://docs.rs/electrs/"
+readme = "README.md"
 
 [dependencies]
 arrayref = "0.3"
