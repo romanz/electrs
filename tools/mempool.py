@@ -1,7 +1,9 @@
 import binascii
 import json
 import socket
-import time
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 s = socket.create_connection(('localhost', 8332))
 r = s.makefile()
@@ -32,13 +34,23 @@ def request(method, params_list):
 
 
 def main():
-    t = time.time()
     txids, = request('getrawmempool', [[False]])
-    print('{:.3f} {}'.format(time.time() - t, len(txids)))
-    t = time.time()
     txids = list(map(lambda a: [a], txids))
+
     entries = request('getmempoolentry', txids)
-    print('{:.3f} {}'.format(time.time() - t, len(entries)))
+    entries = [{'fee': e['fee']*1e8, 'vsize': e['size']} for e in entries]
+    for e in entries:
+        e['rate'] = e['fee'] / e['vsize']  # sat/vbyte
+    entries.sort(key=lambda e: e['rate'], reverse=True)
+
+    vsize = np.array([e['vsize'] for e in entries]).cumsum()
+    rate = np.array([e['rate'] for e in entries])
+
+    plt.semilogy(vsize / 1e6, rate, '-')
+    plt.xlabel('Mempool size (MB)')
+    plt.ylabel('Fee rate (sat/vbyte)')
+    plt.grid()
+    plt.show()
 
 
 if __name__ == '__main__':
