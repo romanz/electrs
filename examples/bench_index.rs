@@ -14,7 +14,7 @@ fn run() -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
-    let daemon = Daemon::new(config.network_type, &metrics)?;
+    let daemon = Daemon::new(&config.daemon_dir, config.network_type, &metrics)?;
     let fake_store = FakeStore {};
     let index = Index::load(&fake_store, &daemon, &metrics)?;
     index.update(&fake_store, &signal)?;
