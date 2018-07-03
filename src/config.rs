@@ -33,7 +33,6 @@ impl Config {
             )
             .arg(
                 Arg::with_name("db_dir")
-                    .short("d")
                     .long("db-dir")
                     .help("Directory to store index database (deafult: ./db/)")
                     .takes_value(true),
