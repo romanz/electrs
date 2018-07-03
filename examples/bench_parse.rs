@@ -5,12 +5,10 @@ extern crate electrs;
 extern crate log;
 extern crate error_chain;
 
-use electrs::{bulk::Parser,
-              config::Config,
-              daemon::Daemon,
-              errors::*,
-              metrics::Metrics,
-              store::{DBStore, StoreOptions, WriteStore}};
+use electrs::{
+    bulk::Parser, config::Config, daemon::Daemon, errors::*, metrics::Metrics,
+    store::{DBStore, StoreOptions, WriteStore},
+};
 
 use error_chain::ChainedError;
 

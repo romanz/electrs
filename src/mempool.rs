@@ -92,7 +92,7 @@ impl ReadStore for MempoolStore {
 }
 
 struct Item {
-    tx: Transaction, // stored for faster retrieval and index removal
+    tx: Transaction,     // stored for faster retrieval and index removal
     entry: MempoolEntry, // caches mempool fee rates
 }
 

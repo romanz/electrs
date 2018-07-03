@@ -8,17 +8,11 @@ extern crate log;
 use error_chain::ChainedError;
 use std::time::Duration;
 
-use electrs::{app::App,
-              bulk::Parser,
-              config::Config,
-              daemon::Daemon,
-              errors::*,
-              index::Index,
-              metrics::Metrics,
-              query::Query,
-              rpc::RPC,
-              signal::Waiter,
-              store::{DBStore, ReadStore, StoreOptions, WriteStore}};
+use electrs::{
+    app::App, bulk::Parser, config::Config, daemon::Daemon, errors::*, index::Index,
+    metrics::Metrics, query::Query, rpc::RPC, signal::Waiter,
+    store::{DBStore, ReadStore, StoreOptions, WriteStore},
+};
 
 fn bulk_load(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics) -> Result<()> {
     let key = b"F"; // full compaction marker

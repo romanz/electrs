@@ -4,8 +4,10 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 
-use electrs::{config::Config, daemon::Daemon, errors::*, fake::FakeStore, index::Index,
-              metrics::Metrics, signal::Waiter};
+use electrs::{
+    config::Config, daemon::Daemon, errors::*, fake::FakeStore, index::Index, metrics::Metrics,
+    signal::Waiter,
+};
 use error_chain::ChainedError;
 
 fn run() -> Result<()> {
