@@ -8,8 +8,6 @@
 
 # Bitcoind
 
-* Stream blocks (instead batching RPCs)
-* Use nTx from [getblockheader RPC](https://github.com/bitcoin/bitcoin/pull/13451) for better batching
 * Handle bitcoind connection failures - instead of crashing
 * Add getrawtransactions() API (for RPC batching)
 
