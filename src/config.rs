@@ -57,7 +57,11 @@ impl Config {
         let db_dir = m.value_of("db_dir").unwrap_or("./db");
         let mut daemon_dir = m.value_of("daemon_dir")
             .map(|p| PathBuf::from(p))
-            .unwrap_or(home_dir().expect("no homedir"));
+            .unwrap_or_else(|| {
+                let mut default_dir = home_dir().expect("no homedir");
+                default_dir.push(".bitcoin");
+                default_dir
+            });
         if let Network::Testnet = network_type {
             daemon_dir.push("testnet3");
         }
