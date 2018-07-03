@@ -20,6 +20,5 @@
 
 # Rust
 
-* Use Bytes instead of Vec[u8] when possible
-* Return errors instead of panics
+* Use [bytes](https://carllerche.github.io/bytes/bytes/index.html) instead of `Vec<u8>` when possible
 * Use generators instead of vectors
