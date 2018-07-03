@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import binascii
 import json
 import socket
@@ -49,6 +50,7 @@ def main():
     plt.semilogy(vsize / 1e6, rate, '-')
     plt.xlabel('Mempool size (MB)')
     plt.ylabel('Fee rate (sat/vbyte)')
+    plt.title('{} transactions'.format(len(entries)))
     plt.grid()
     plt.show()
 
