@@ -8,7 +8,6 @@
 
 # Bitcoind
 
-* Handle bitcoind connection failures - instead of crashing
 * Add getrawtransactions() API (for RPC batching)
 
 # Performance
