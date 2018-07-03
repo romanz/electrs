@@ -94,6 +94,39 @@ impl DBStore {
         info!("finished full compaction");
         store
     }
+
+    pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
+        ScanIterator {
+            prefix: prefix.to_vec(),
+            iter: self.db.prefix_iterator(prefix),
+            done: false,
+        }
+    }
+}
+
+pub struct ScanIterator {
+    prefix: Vec<u8>,
+    iter: rocksdb::DBIterator,
+    done: bool,
+}
+
+impl Iterator for ScanIterator {
+    type Item = Row;
+
+    fn next(&mut self) -> Option<Row> {
+        if self.done {
+            return None;
+        }
+        let (key, value) = self.iter.next()?;
+        if !key.starts_with(&self.prefix) {
+            self.done = true;
+            return None;
+        }
+        Some(Row {
+            key: key.to_vec(),
+            value: value.to_vec(),
+        })
+    }
 }
 
 impl ReadStore for DBStore {
