@@ -8,7 +8,6 @@ use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
 use std::collections::HashSet;
-use std::env::home_dir;
 use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -27,17 +26,8 @@ pub enum Network {
     Testnet,
 }
 
-fn data_dir(network: Network) -> Result<PathBuf> {
-    let mut path = home_dir().chain_err(|| "could not find home directory")?;
-    path.push(".bitcoin");
-    if let Network::Testnet = network {
-        path.push("testnet3");
-    }
-    Ok(path)
-}
-
-fn read_cookie(network: Network) -> Result<Vec<u8>> {
-    let mut path = data_dir(network)?;
+fn read_cookie(daemon_dir: PathBuf) -> Result<Vec<u8>> {
+    let mut path = daemon_dir;
     path.push(".cookie");
     fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
 }
@@ -122,14 +112,14 @@ struct Connection {
 }
 
 impl Connection {
-    fn new(addr: SocketAddr, cookie_b64: String) -> Result<Connection> {
+    fn new(addr: SocketAddr, daemon_dir: &PathBuf) -> Result<Connection> {
         let conn = TcpStream::connect(addr).chain_err(|| format!("failed to connect to {}", addr))?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
             tx: conn,
             rx: reader.lines(),
-            cookie_b64,
+            cookie_b64: base64::encode(&read_cookie(daemon_dir.clone())?),
             addr,
         })
     }
@@ -176,6 +166,7 @@ impl Connection {
 }
 
 pub struct Daemon {
+    daemon_dir: PathBuf,
     network: Network,
     conn: Mutex<Connection>,
 
@@ -185,16 +176,17 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(network: Network, metrics: &Metrics) -> Result<Daemon> {
+    pub fn new(daemon_dir: &PathBuf, network: Network, metrics: &Metrics) -> Result<Daemon> {
         let addr = match network {
             Network::Mainnet => "127.0.0.1:8332",
             Network::Testnet => "127.0.0.1:18332",
         };
         let daemon = Daemon {
+            daemon_dir: daemon_dir.clone(),
             network,
             conn: Mutex::new(Connection::new(
                 SocketAddr::from_str(addr).unwrap(),
-                base64::encode(&read_cookie(network)?),
+                &daemon_dir,
             )?),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
@@ -211,6 +203,7 @@ impl Daemon {
 
     pub fn reconnect(&self) -> Result<Daemon> {
         Ok(Daemon {
+            daemon_dir: self.daemon_dir.clone(),
             network: self.network,
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             latency: self.latency.clone(),
@@ -219,7 +212,7 @@ impl Daemon {
     }
 
     pub fn list_blk_files(&self) -> Result<Vec<PathBuf>> {
-        let mut path = data_dir(self.network)?;
+        let mut path = self.daemon_dir.clone();
         path.push("blocks");
         path.push("blk*.dat");
         Ok(glob::glob(path.to_str().unwrap())

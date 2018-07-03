@@ -43,7 +43,7 @@ fn run_server(config: &Config) -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
-    let daemon = Daemon::new(config.network_type, &metrics)?;
+    let daemon = Daemon::new(&config.daemon_dir, config.network_type, &metrics)?;
     bulk_load(
         DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
         &daemon,

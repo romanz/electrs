@@ -1,5 +1,7 @@
 use clap::{App, Arg};
+use std::env::home_dir;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use stderrlog;
 
 use daemon::Network;
@@ -9,6 +11,7 @@ pub struct Config {
     pub log: stderrlog::StdErrLog,
     pub network_type: Network,       // bitcoind JSONRPC endpoint
     pub db_path: String,             // RocksDB directory path
+    pub daemon_dir: PathBuf,         // Bitcoind data directory
     pub rpc_addr: SocketAddr,        // for serving Electrum clients
     pub monitoring_addr: SocketAddr, // for Prometheus monitoring
 }
@@ -32,7 +35,13 @@ impl Config {
                 Arg::with_name("db_dir")
                     .short("d")
                     .long("db-dir")
-                    .help("Directory to store index database")
+                    .help("Directory to store index database (deafult: ./db/)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("daemon_dir")
+                    .long("daemon-dir")
+                    .help("Data directory of Bitcoind (default: ~/.bitcoin/)")
                     .takes_value(true),
             )
             .arg(
@@ -46,6 +55,13 @@ impl Config {
             true => Network::Testnet,
         };
         let db_dir = m.value_of("db_dir").unwrap_or("./db");
+        let mut daemon_dir = m.value_of("daemon_dir")
+            .map(|p| PathBuf::from(p))
+            .unwrap_or(home_dir().expect("no homedir"));
+        if let Network::Testnet = network_type {
+            daemon_dir.push("testnet3");
+        }
+
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
         log.timestamp(if m.is_present("timestamp") {
@@ -61,6 +77,7 @@ impl Config {
                 Network::Mainnet => format!("{}/mainnet", db_dir),
                 Network::Testnet => format!("{}/testnet", db_dir),
             },
+            daemon_dir,
             rpc_addr: match network_type {
                 Network::Mainnet => "127.0.0.1:50001",
                 Network::Testnet => "127.0.0.1:60001",
