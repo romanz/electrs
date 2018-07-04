@@ -12,8 +12,8 @@
 
 # Performance
 
+* Experiment with [SSTable ingestion](https://github.com/facebook/rocksdb/wiki/Creating-and-Ingesting-SST-files)
 * Use rayon for faster multi-block indexing on multi-core systems
-* Experiment with [sled](https://github.com/spacejam/sled) DB
 
 # Rust
 
