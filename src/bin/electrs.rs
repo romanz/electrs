@@ -49,19 +49,18 @@ fn run_server(config: &Config) -> Result<()> {
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
     let index = Index::load(&store, &daemon, &metrics)?;
     let app = App::new(store, index, daemon);
+    let mut tip = app.index().update(app.write_store(), &signal)?;
 
     let query = Query::new(app.clone(), &metrics);
-    let mut tip = *query.get_best_header()?.hash();
+    query.update_mempool()?;
+
     let rpc = RPC::start(config.rpc_addr, query.clone(), &metrics);
-    loop {
-        query.update_mempool()?;
+    while let None = signal.wait(Duration::from_secs(5)) {
         if tip != app.daemon().getbestblockhash()? {
             tip = app.index().update(app.write_store(), &signal)?;
         }
-        rpc.notify();
-        if signal.wait(Duration::from_secs(5)).is_some() {
-            break;
-        }
+        query.update_mempool()?;
+        rpc.notify(); // update subscribed clients
     }
     rpc.exit();
     Ok(())
