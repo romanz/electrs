@@ -5,6 +5,8 @@ extern crate electrs;
 extern crate log;
 extern crate error_chain;
 
+use std::path::Path;
+
 use electrs::{
     bulk::Parser, config::Config, daemon::Daemon, errors::*, metrics::Metrics,
     store::{DBStore, StoreOptions, WriteStore},
@@ -17,7 +19,7 @@ fn run(config: Config) -> Result<()> {
     metrics.start();
 
     let daemon = Daemon::new(&config.daemon_dir, config.network_type, &metrics)?;
-    let store = DBStore::open("./test-db", StoreOptions { bulk_import: true });
+    let store = DBStore::open(Path::new("./test-db"), StoreOptions { bulk_import: true });
 
     let parser = Parser::new(&daemon, &store, &metrics)?;
     for rows in parser.start().iter() {

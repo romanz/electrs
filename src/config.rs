@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use std::env::home_dir;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use stderrlog;
 
 use daemon::Network;
@@ -10,7 +10,7 @@ use daemon::Network;
 pub struct Config {
     pub log: stderrlog::StdErrLog,
     pub network_type: Network,       // bitcoind JSONRPC endpoint
-    pub db_path: String,             // RocksDB directory path
+    pub db_path: PathBuf,            // RocksDB directory path
     pub daemon_dir: PathBuf,         // Bitcoind data directory
     pub rpc_addr: SocketAddr,        // for serving Electrum clients
     pub monitoring_addr: SocketAddr, // for Prometheus monitoring
@@ -53,7 +53,7 @@ impl Config {
             false => Network::Mainnet,
             true => Network::Testnet,
         };
-        let db_dir = m.value_of("db_dir").unwrap_or("./db");
+        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let mut daemon_dir = m.value_of("daemon_dir")
             .map(|p| PathBuf::from(p))
             .unwrap_or_else(|| {
@@ -77,8 +77,8 @@ impl Config {
             log,
             network_type,
             db_path: match network_type {
-                Network::Mainnet => format!("{}/mainnet", db_dir),
-                Network::Testnet => format!("{}/testnet", db_dir),
+                Network::Mainnet => db_dir.join("mainnet"),
+                Network::Testnet => db_dir.join("testnet"),
             },
             daemon_dir,
             rpc_addr: match network_type {

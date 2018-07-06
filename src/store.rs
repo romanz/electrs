@@ -1,5 +1,7 @@
 use rocksdb;
 
+use std::path::Path;
+
 use util::Bytes;
 
 pub struct Row {
@@ -25,7 +27,6 @@ pub trait WriteStore: Sync {
 
 pub struct DBStore {
     db: rocksdb::DB,
-    path: String,
     opts: StoreOptions,
 }
 
@@ -36,8 +37,8 @@ pub struct StoreOptions {
 
 impl DBStore {
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &str, opts: StoreOptions) -> DBStore {
-        debug!("opening {} with {:?}", path, &opts);
+    pub fn open(path: &Path, opts: StoreOptions) -> DBStore {
+        debug!("opening {:?} with {:?}", path, &opts);
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
@@ -54,7 +55,6 @@ impl DBStore {
         block_opts.set_block_size(256 << 10);
         DBStore {
             db: rocksdb::DB::open(&db_opts, &path).unwrap(),
-            path: path.to_owned(),
             opts: opts,
         }
     }
@@ -120,6 +120,6 @@ impl WriteStore for DBStore {
 
 impl Drop for DBStore {
     fn drop(&mut self) {
-        debug!("closing {}", self.path);
+        trace!("closing DB");
     }
 }
