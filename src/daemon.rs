@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::str::FromStr;
 use std::sync::Mutex;
 
@@ -26,8 +26,8 @@ pub enum Network {
     Testnet,
 }
 
-fn read_cookie(daemon_dir: PathBuf) -> Result<Vec<u8>> {
-    let mut path = daemon_dir;
+fn read_cookie(daemon_dir: &Path) -> Result<Vec<u8>> {
+    let mut path = daemon_dir.to_path_buf();
     path.push(".cookie");
     fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
 }
@@ -112,14 +112,14 @@ struct Connection {
 }
 
 impl Connection {
-    fn new(addr: SocketAddr, daemon_dir: &PathBuf) -> Result<Connection> {
+    fn new(addr: SocketAddr, cookie_b64: String) -> Result<Connection> {
         let conn = TcpStream::connect(addr).chain_err(|| format!("failed to connect to {}", addr))?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
             tx: conn,
             rx: reader.lines(),
-            cookie_b64: base64::encode(&read_cookie(daemon_dir.clone())?),
+            cookie_b64,
             addr,
         })
     }
@@ -186,7 +186,7 @@ impl Daemon {
             network,
             conn: Mutex::new(Connection::new(
                 SocketAddr::from_str(addr).unwrap(),
-                &daemon_dir,
+                base64::encode(&read_cookie(daemon_dir)?),
             )?),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
