@@ -68,7 +68,7 @@ impl Config {
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
         log.timestamp(if m.is_present("timestamp") {
-            stderrlog::Timestamp::Microsecond
+            stderrlog::Timestamp::Millisecond
         } else {
             stderrlog::Timestamp::Off
         });
