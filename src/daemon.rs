@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
 
@@ -26,10 +26,13 @@ pub enum Network {
     Testnet,
 }
 
-fn read_cookie(daemon_dir: &Path) -> Result<Vec<u8>> {
+fn read_cookie(daemon_dir: &Path) -> Result<String> {
     let mut path = daemon_dir.to_path_buf();
     path.push(".cookie");
-    fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))
+    let contents = String::from_utf8(
+        fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))?
+    ).chain_err(|| "invalid cookie string")?;
+    Ok(contents.trim().to_owned())
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
