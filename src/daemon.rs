@@ -69,10 +69,10 @@ fn parse_jsonrpc_reply(reply: &mut Value, method: &str) -> Result<Value> {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockchainInfo {
     chain: String,
-    blocks: usize,
-    headers: usize,
+    blocks: u32,
+    headers: u32,
     bestblockhash: String,
-    size_on_disk: usize,
+    size_on_disk: u64,
     pruned: bool,
 }
 
