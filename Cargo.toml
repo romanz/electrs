@@ -22,7 +22,7 @@ error-chain = "0.12"
 hex = "0.3"
 log = "0.4"
 prometheus = "0.4"
-rocksdb = "0.10"
+rocksdb = { git = "https://github.com/pingcap/rust-rocksdb", rev = "9a1c83c5382fbaee8a5102213c711bbe52d71470" }
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
