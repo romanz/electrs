@@ -23,11 +23,8 @@ Allow Bitcoin daemon to sync before starting Electrum server:
 $ bitcoind -server=1 -daemon=0 -txindex=0 -prune=0
 ```
 
-If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please set `~/.bitcoin/.cookie` file to contain a single line of the form:
-```
-USER:PASSWORD
-```
-Otherwise, `~/.bitcoin/.cookie` will be [written automatically](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) by bitcoind, allowing this server to use bitcoind JSONRPC interface.
+If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `--cookie=USER:PASSWORD` command-line flag.
+Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be read, allowing this server to use bitcoind JSONRPC interface.
 
 ## Usage
 
