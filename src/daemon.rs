@@ -8,10 +8,9 @@ use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
 use std::collections::HashSet;
-use std::fs;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
 
@@ -24,15 +23,6 @@ use errors::*;
 pub enum Network {
     Mainnet,
     Testnet,
-}
-
-fn read_cookie(daemon_dir: &Path) -> Result<String> {
-    let mut path = daemon_dir.to_path_buf();
-    path.push(".cookie");
-    let contents = String::from_utf8(
-        fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))?
-    ).chain_err(|| "invalid cookie string")?;
-    Ok(contents.trim().to_owned())
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
@@ -179,7 +169,12 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(daemon_dir: &PathBuf, network: Network, metrics: &Metrics) -> Result<Daemon> {
+    pub fn new(
+        daemon_dir: &PathBuf,
+        cookie: &str,
+        network: Network,
+        metrics: &Metrics,
+    ) -> Result<Daemon> {
         let addr = match network {
             Network::Mainnet => "127.0.0.1:8332",
             Network::Testnet => "127.0.0.1:18332",
@@ -189,7 +184,7 @@ impl Daemon {
             network,
             conn: Mutex::new(Connection::new(
                 SocketAddr::from_str(addr).unwrap(),
-                base64::encode(&read_cookie(daemon_dir)?),
+                base64::encode(cookie),
             )?),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
