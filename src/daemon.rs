@@ -145,7 +145,14 @@ impl Connection {
     fn recv(&mut self) -> Result<String> {
         let mut in_header = true;
         let mut contents: Option<String> = None;
-        for line in self.rx.by_ref() {
+        let iter = self.rx.by_ref();
+        let status = iter.next()
+            .chain_err(|| "no status")?
+            .chain_err(|| "failed to read status")?;
+        if status != "HTTP/1.1 200 OK" {
+            bail!("request failed: {}", status);
+        }
+        for line in iter {
             let line = line.chain_err(|| "failed to read")?;
             if line.is_empty() {
                 in_header = false; // next line should contain the actual response.
