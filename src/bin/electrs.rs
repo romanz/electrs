@@ -19,18 +19,15 @@ fn bulk_index(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metric
     if store.get(key).is_some() {
         return Ok(());
     }
-    let parser = Parser::new(daemon, &store, &metrics)?;
-    for msg in parser.start().iter() {
+    let parser = Parser::new(daemon, &metrics)?;
+    let blkfiles = daemon.list_blk_files()?;
+    for path in &blkfiles {
         if let Some(sig) = signal.poll() {
             bail!("indexing interrupted by SIG{:?}", sig);
         }
-        match msg.rows() {
-            Ok(rows) => {
-                store.write(rows);
-                trace!("indexed {:?}", msg.path());
-            }
-            Err(err) => bail!("failed to index {:?}: {:?}", msg.path(), err),
-        }
+        let rows = parser.index_blkfile(path)?;
+        store.write(&rows);
+        trace!("indexed {:?}", path);
     }
     store.flush();
     store.compact();
