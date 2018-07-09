@@ -18,7 +18,12 @@ fn run(config: Config) -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
-    let daemon = Daemon::new(&config.daemon_dir, &config.cookie, config.network_type, &metrics)?;
+    let daemon = Daemon::new(
+        &config.daemon_dir,
+        &config.cookie,
+        config.network_type,
+        &metrics,
+    )?;
     let store = DBStore::open(Path::new("./test-db"), StoreOptions { bulk_import: true });
 
     let parser = Parser::new(&daemon, &store, &metrics)?;
