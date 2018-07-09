@@ -14,7 +14,7 @@ use electrs::{
     store::{DBStore, ReadStore, StoreOptions, WriteStore},
 };
 
-fn bulk_load(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics) -> Result<()> {
+fn bulk_index(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics) -> Result<()> {
     let key = b"F"; // full compaction marker
     if store.get(key).is_some() {
         return Ok(());
@@ -49,7 +49,7 @@ fn run_server(config: &Config) -> Result<()> {
         config.network_type,
         &metrics,
     )?;
-    bulk_load(
+    bulk_index(
         DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
         &daemon,
         &signal,
