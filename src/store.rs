@@ -1,10 +1,12 @@
 use rocksdb;
 use rocksdb::Writable;
 
+use std::cmp::Ordering;
 use std::path::Path;
 
 use util::Bytes;
 
+#[derive(Clone)]
 pub struct Row {
     pub key: Bytes,
     pub value: Bytes,
@@ -15,6 +17,26 @@ impl Row {
         (self.key, self.value)
     }
 }
+
+impl Ord for Row {
+    fn cmp(&self, other: &Row) -> Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+impl PartialOrd for Row {
+    fn partial_cmp(&self, other: &Row) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Row {
+    fn eq(&self, other: &Row) -> bool {
+        self.key.eq(&other.key)
+    }
+}
+
+impl Eq for Row {}
 
 pub trait ReadStore: Sync {
     fn get(&self, key: &[u8]) -> Option<Bytes>;
