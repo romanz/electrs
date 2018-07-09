@@ -56,7 +56,7 @@ impl DBStore {
         cf_opts.set_disable_auto_compactions(opts.bulk_import);
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
-        block_opts.set_block_size(256 << 10);
+        block_opts.set_block_size(1 << 20);
         DBStore {
             db: rocksdb::DB::open_cf(db_opts, path, vec![("default", cf_opts)]).unwrap(),
             opts: opts,
