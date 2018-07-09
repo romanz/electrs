@@ -6,7 +6,7 @@ use bitcoin::util::hash::Sha256dHash;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
 use daemon::Daemon;
@@ -35,6 +35,21 @@ pub struct Parser {
     // metrics
     duration: HistogramVec,
     block_count: CounterVec,
+}
+
+pub struct Rows {
+    // A list of rows (for each block at specific blk*.dat file)
+    rows: Result<Vec<Vec<Row>>>,
+    path: PathBuf,
+}
+
+impl Rows {
+    pub fn rows(&self) -> &Result<Vec<Vec<Row>>> {
+        &self.rows
+    }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 impl Parser {
@@ -75,7 +90,7 @@ impl Parser {
         rows
     }
 
-    pub fn start(mut self) -> Receiver<Result<Vec<Vec<Row>>>> {
+    pub fn start(mut self) -> Receiver<Rows> {
         info!("indexing {} blk*.dat files", self.files.len());
         debug!(
             "{} blocks are already indexed",
@@ -85,11 +100,14 @@ impl Parser {
         let tx = chan.sender();
         let parser = parse_files(self.files.split_off(0), self.duration.clone(), self.magic);
         spawn_thread("bulk_indexer", move || {
-            for blocks in parser.iter() {
+            for msg in parser.iter() {
                 let timer = self.duration.with_label_values(&["index"]).start_timer();
-                let rows = blocks.map(|b| self.index_blocks(&b));
+                let rows = msg.blocks.map(|b| self.index_blocks(&b));
                 timer.observe_duration();
-                tx.send(rows).unwrap();
+                tx.send(Rows {
+                    rows,
+                    path: msg.path,
+                }).unwrap();
             }
             info!("indexed {} blocks", self.indexed_blockhashes.len());
             if let Some(last_header) = self.current_headers
@@ -97,54 +115,64 @@ impl Parser {
                 .take_while(|h| self.indexed_blockhashes.contains(h.hash()))
                 .last()
             {
-                let rows = vec![last_indexed_block(last_header.hash())];
-                tx.send(Ok(vec![rows])).unwrap();
+                let rows = Ok(vec![vec![last_indexed_block(last_header.hash())]]);
+                tx.send(Rows {
+                    rows,
+                    path: PathBuf::new(),
+                }).unwrap();
             }
         });
         chan.into_receiver()
     }
 }
 
-fn parse_files(
-    files: Vec<PathBuf>,
-    duration: HistogramVec,
-    magic: u32,
-) -> Receiver<Result<Vec<Block>>> {
+struct Blocks {
+    blocks: Result<Vec<Block>>,
+    path: PathBuf,
+}
+
+fn parse_files(files: Vec<PathBuf>, duration: HistogramVec, magic: u32) -> Receiver<Blocks> {
     let chan = SyncChannel::new(0);
     let tx = chan.sender();
-    let blobs = read_files(files, duration.clone());
+    let blkfiles = read_files(files, duration.clone());
     spawn_thread("bulk_parser", move || {
-        for msg in blobs.iter() {
-            match msg {
-                Ok(blob) => {
+        for msg in blkfiles.iter() {
+            let blocks = match msg.contents {
+                Ok(contents) => {
                     let timer = duration.with_label_values(&["parse"]).start_timer();
-                    let blocks = parse_blocks(&blob, magic);
+                    let blocks = parse_blocks(&contents, magic);
                     timer.observe_duration();
-                    tx.send(blocks).unwrap();
+                    blocks
                 }
-                Err(err) => {
-                    tx.send(Err(err)).unwrap();
-                }
-            }
+                Err(err) => Err(err),
+            };
+            tx.send(Blocks {
+                blocks,
+                path: msg.path,
+            }).unwrap();
         }
     });
     chan.into_receiver()
 }
 
-fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<Result<Vec<u8>>> {
+struct BlkFile {
+    contents: Result<Vec<u8>>,
+    path: PathBuf,
+}
+
+fn read_files(files: Vec<PathBuf>, duration: HistogramVec) -> Receiver<BlkFile> {
     let chan = SyncChannel::new(0);
     let tx = chan.sender();
     spawn_thread("bulk_reader", move || {
-        for f in &files {
+        for path in files {
             let timer = duration.with_label_values(&["read"]).start_timer();
-            let msg = fs::read(f).chain_err(|| format!("failed to read {:?}", f));
+            let contents = fs::read(&path).chain_err(|| format!("failed to read {:?}", path));
             timer.observe_duration();
-            if let Ok(ref blob) = msg {
-                trace!("read {:.2} MB from {:?}", blob.len() as f32 / 1e6, f);
+            if let Ok(ref blob) = contents {
+                trace!("read {:.2} MB from {:?}", blob.len() as f32 / 1e6, path);
             }
-            tx.send(msg).unwrap();
+            tx.send(BlkFile { contents, path }).unwrap();
         }
-        debug!("read {} blk files", files.len());
     });
     chan.into_receiver()
 }

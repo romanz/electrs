@@ -22,7 +22,7 @@ pub trait ReadStore: Sync {
 }
 
 pub trait WriteStore: Sync {
-    fn write(&self, rows_vec: Vec<Vec<Row>>);
+    fn write(&self, rows_vec: &[Vec<Row>]);
     fn flush(&self);
 }
 
@@ -95,7 +95,7 @@ impl ReadStore for DBStore {
 }
 
 impl WriteStore for DBStore {
-    fn write(&self, rows_vec: Vec<Vec<Row>>) {
+    fn write(&self, rows_vec: &[Vec<Row>]) {
         let batch = rocksdb::WriteBatch::default();
         for rows in rows_vec {
             for row in rows {

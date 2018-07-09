@@ -385,7 +385,7 @@ impl Index {
                 self.stats.update(block, height);
             }
             let timer = self.stats.start_timer("write");
-            store.write(rows_vec);
+            store.write(&rows_vec);
             timer.observe_duration();
         }
         let timer = self.stats.start_timer("flush");

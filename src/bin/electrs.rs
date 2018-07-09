@@ -20,11 +20,17 @@ fn bulk_load(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics
         return Ok(());
     }
     let parser = Parser::new(daemon, &store, &metrics)?;
-    for rows in parser.start().iter() {
+    for msg in parser.start().iter() {
         if let Some(sig) = signal.poll() {
             bail!("indexing interrupted by SIG{:?}", sig);
         }
-        store.write(rows?);
+        match msg.rows() {
+            Ok(rows) => {
+                store.write(rows);
+                trace!("indexed {:?}", msg.path());
+            }
+            Err(err) => bail!("failed to index {:?}: {:?}", msg.path(), err),
+        }
     }
     store.flush();
     store.compact();
