@@ -22,12 +22,10 @@ fn bulk_index(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metric
     let parser = Parser::new(daemon, &metrics)?;
     let blkfiles = daemon.list_blk_files()?;
     for path in &blkfiles {
-        if let Some(sig) = signal.poll() {
-            bail!("indexing interrupted by SIG{:?}", sig);
-        }
         let rows = parser.index_blkfile(path)?;
         store.write(&rows);
         trace!("indexed {:?}", path);
+        signal.poll_err()?;
     }
     store.flush();
     store.compact();

@@ -358,9 +358,7 @@ impl Index {
                 .expect("failed sending explicit end of stream");
         });
         loop {
-            if let Some(sig) = waiter.poll() {
-                bail!("indexing interrupted by SIG{:?}", sig);
-            }
+            waiter.poll_err()?;
             let timer = self.stats.start_timer("fetch");
             let batch = chan.receiver()
                 .recv()
