@@ -1,8 +1,8 @@
-extern crate bitcoin;
 extern crate electrs;
 
 #[macro_use]
 extern crate log;
+
 extern crate error_chain;
 
 use std::path::Path;
@@ -25,10 +25,11 @@ fn run(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = DBStore::open(Path::new("./test-db"), StoreOptions { bulk_import: true });
-
-    let parser = Parser::new(&daemon, &store, &metrics)?;
-    for rows in parser.start().iter() {
-        store.write(rows?);
+    let parser = Parser::new(&daemon, &metrics)?;
+    for path in daemon.list_blk_files()? {
+        let blob = parser.read_blkfile(&path)?;
+        let rows = parser.index_blkfile(blob)?;
+        store.write(rows);
     }
     Ok(())
 }

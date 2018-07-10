@@ -368,7 +368,7 @@ impl Index {
                 break;
             }
 
-            let mut rows_vec = vec![];
+            let mut rows = vec![];
             for block in &batch {
                 let blockhash = block.bitcoin_hash();
                 let height = *height_map
@@ -378,12 +378,12 @@ impl Index {
                 let timer = self.stats.start_timer("index");
                 let mut block_rows = index_block(block, height);
                 block_rows.push(last_indexed_block(&blockhash));
-                rows_vec.push(block_rows);
+                rows.extend(block_rows);
                 timer.observe_duration();
                 self.stats.update(block, height);
             }
             let timer = self.stats.start_timer("write");
-            store.write(&rows_vec);
+            store.write(rows);
             timer.observe_duration();
         }
         let timer = self.stats.start_timer("flush");

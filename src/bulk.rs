@@ -2,16 +2,13 @@ use bitcoin::blockdata::block::Block;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::SimpleDecoder;
 use bitcoin::network::serialize::{deserialize, RawDecoder};
-// use bitcoin::util::hash::Sha256dHash;
-// use std::collections::HashSet;
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::Path;
-// use std::sync::mpsc::Receiver;
 
 use daemon::Daemon;
 use index::{index_block, last_indexed_block};
-use metrics::{CounterVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
+use metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use store::Row;
 use util::HeaderList;
 
@@ -25,6 +22,7 @@ pub struct Parser {
     // metrics
     duration: HistogramVec,
     block_count: CounterVec,
+    bytes_read: Histogram,
 }
 
 impl Parser {
@@ -40,25 +38,33 @@ impl Parser {
                 MetricOpts::new("parse_blocks", "# of block parsed (from blk*.dat)"),
                 &["type"],
             ),
+
+            bytes_read: metrics.histogram(HistogramOpts::new(
+                "parse_bytes_read",
+                "# of bytes read (from blk*.dat)",
+            )),
         })
     }
 
-    pub fn index_blkfile(&self, path: &Path) -> Result<Vec<Vec<Row>>> {
+    pub fn read_blkfile(&self, path: &Path) -> Result<Vec<u8>> {
         let timer = self.duration.with_label_values(&["read"]).start_timer();
         let blob = fs::read(&path).chain_err(|| format!("failed to read {:?}", path))?;
         timer.observe_duration();
-        trace!("read {:.2} MB from {:?}", blob.len() as f32 / 1e6, path);
+        self.bytes_read.observe(blob.len() as f64);
+        return Ok(blob);
+    }
 
+    pub fn index_blkfile(&self, blob: Vec<u8>) -> Result<Vec<Row>> {
         let timer = self.duration.with_label_values(&["parse"]).start_timer();
         let blocks = parse_blocks(blob, self.magic)?;
         timer.observe_duration();
 
-        let mut rows = vec![];
+        let mut rows = Vec::<Row>::new();
         let timer = self.duration.with_label_values(&["index"]).start_timer();
         for block in blocks {
             let blockhash = block.bitcoin_hash();
             if let Some(header) = self.current_headers.header_by_blockhash(&blockhash) {
-                rows.push(index_block(&block, header.height()));
+                rows.extend(index_block(&block, header.height()));
                 self.block_count.with_label_values(&["indexed"]).inc();
             } else {
                 debug!("skipping block {}", blockhash); // will be indexed later (after bulk load is over)
@@ -102,11 +108,6 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
             .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
         blocks.push(block);
     }
-    trace!(
-        "parsed {} blocks from {:.2} MB blob",
-        blocks.len(),
-        blob.len() as f32 / 1e6
-    );
     Ok(blocks)
 }
 

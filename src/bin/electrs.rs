@@ -1,6 +1,5 @@
 extern crate electrs;
 
-#[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate log;
@@ -20,12 +19,11 @@ fn bulk_index(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metric
         return Ok(());
     }
     let parser = Parser::new(daemon, &metrics)?;
-    let blkfiles = daemon.list_blk_files()?;
-    for path in &blkfiles {
-        let rows = parser.index_blkfile(path)?;
-        store.write(&rows);
-        trace!("indexed {:?}", path);
+    for path in daemon.list_blk_files()? {
         signal.poll_err()?;
+        let blob = parser.read_blkfile(&path)?;
+        let rows = parser.index_blkfile(blob)?;
+        store.write(rows);
     }
     store.flush();
     store.compact();

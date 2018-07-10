@@ -44,7 +44,7 @@ pub trait ReadStore: Sync {
 }
 
 pub trait WriteStore: Sync {
-    fn write(&self, rows_vec: &[Vec<Row>]);
+    fn write(&self, rows: Vec<Row>);
     fn flush(&self);
 }
 
@@ -117,12 +117,10 @@ impl ReadStore for DBStore {
 }
 
 impl WriteStore for DBStore {
-    fn write(&self, rows_vec: &[Vec<Row>]) {
+    fn write(&self, rows: Vec<Row>) {
         let batch = rocksdb::WriteBatch::default();
-        for rows in rows_vec {
-            for row in rows {
-                batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
-            }
+        for row in rows {
+            batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(!self.opts.bulk_import);
