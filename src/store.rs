@@ -68,7 +68,7 @@ impl DBStore {
         db_opts.increase_parallelism(2);
         db_opts.set_keep_log_file_num(10);
 
-        let mut cf_opts = rocksdb::rocksdb_options::ColumnFamilyOptions::new();
+        let mut cf_opts = rocksdb::ColumnFamilyOptions::new();
         cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         cf_opts.compression(rocksdb::DBCompressionType::Snappy);
         cf_opts.set_target_file_size_base(128 << 20);
@@ -83,6 +83,10 @@ impl DBStore {
             db: rocksdb::DB::open_cf(db_opts, path, vec![("default", cf_opts)]).unwrap(),
             opts: opts,
         }
+    }
+
+    pub fn sstable(&self) -> SSTableWriter {
+        SSTableWriter::new()
     }
 
     pub fn put(&self, key: &[u8], value: &[u8]) {
@@ -140,5 +144,37 @@ impl WriteStore for DBStore {
 impl Drop for DBStore {
     fn drop(&mut self) {
         trace!("closing DB");
+    }
+}
+
+pub struct SSTableWriter {
+    writer: rocksdb::SstFileWriter,
+}
+
+impl SSTableWriter {
+    fn new() -> Self {
+        let mut cf_opts = rocksdb::ColumnFamilyOptions::new();
+        cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+        cf_opts.compression(rocksdb::DBCompressionType::Snappy);
+        SSTableWriter {
+            writer: rocksdb::SstFileWriter::new(rocksdb::EnvOptions::new(), cf_opts),
+        }
+    }
+
+    pub fn build(mut self, path: &Path, mut rows: Vec<Row>) {
+        rows.sort();
+        rows.dedup(); // SSTableWriter requires ascending keys.
+        let path = path.to_str().unwrap();
+        self.writer
+            .open(path)
+            .expect(&format!("failed to open SSTable {}", path));
+        for row in &rows {
+            self.writer
+                .put(row.key.as_slice(), row.value.as_slice())
+                .expect(&format!("failed to write SSTable {}", path));
+        }
+        self.writer
+            .finish()
+            .expect(&format!("failed to close SSTable {}", path));
     }
 }
