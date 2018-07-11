@@ -2,9 +2,12 @@ use bitcoin::blockdata::block::Block;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::SimpleDecoder;
 use bitcoin::network::serialize::{deserialize, RawDecoder};
+use bitcoin::util::hash::Sha256dHash;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::Mutex;
 
 use daemon::Daemon;
 use index::{index_block, last_indexed_block};
@@ -19,6 +22,7 @@ use errors::*;
 pub struct Parser {
     magic: u32,
     current_headers: HeaderList,
+    indexed_blockhashes: Mutex<HashSet<Sha256dHash>>,
     // metrics
     duration: HistogramVec,
     block_count: CounterVec,
@@ -30,6 +34,7 @@ impl Parser {
         Ok(Parser {
             magic: daemon.magic(),
             current_headers: load_headers(daemon)?,
+            indexed_blockhashes: Mutex::new(HashSet::new()),
             duration: metrics.histogram_vec(
                 HistogramOpts::new("parse_duration", "blk*.dat parsing duration (in seconds)"),
                 &["step"],
@@ -64,8 +69,16 @@ impl Parser {
         for block in blocks {
             let blockhash = block.bitcoin_hash();
             if let Some(header) = self.current_headers.header_by_blockhash(&blockhash) {
-                rows.extend(index_block(&block, header.height()));
-                self.block_count.with_label_values(&["indexed"]).inc();
+                if self.indexed_blockhashes
+                    .lock()
+                    .expect("indexed_blockhashes")
+                    .insert(blockhash.clone())
+                {
+                    rows.extend(index_block(&block, header.height()));
+                    self.block_count.with_label_values(&["indexed"]).inc();
+                } else {
+                    self.block_count.with_label_values(&["duplicate"]).inc();
+                }
             } else {
                 debug!("skipping block {}", blockhash); // will be indexed later (after bulk load is over)
                 self.block_count.with_label_values(&["skipped"]).inc();
