@@ -2,7 +2,7 @@ use rocksdb;
 use rocksdb::Writable;
 
 use std::cmp::Ordering;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use util::Bytes;
 
@@ -91,6 +91,16 @@ impl DBStore {
 
     pub fn put(&self, key: &[u8], value: &[u8]) {
         self.db.put(key, value).unwrap();
+    }
+
+    pub fn ingest(&self, sstables: &[PathBuf]) {
+        let mut opts = rocksdb::IngestExternalFileOptions::new();
+        opts.move_files(true);
+        let sstables: Vec<&str> = sstables.iter().map(|path| path.to_str().unwrap()).collect();
+        info!("ingesting {} SSTables", sstables.len());
+        self.db
+            .ingest_external_file(&opts, &sstables)
+            .expect("failed to ingest SSTables")
     }
 
     pub fn compact(&self) {
