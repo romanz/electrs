@@ -72,6 +72,10 @@ impl Parser {
             }
         }
         timer.observe_duration();
+
+        let timer = self.duration.with_label_values(&["sort"]).start_timer();
+        rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+        timer.observe_duration();
         Ok(rows)
     }
 }
