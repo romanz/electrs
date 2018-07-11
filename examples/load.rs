@@ -87,7 +87,9 @@ fn run(config: Config) -> Result<()> {
                 .expect("indexer panicked")
                 .expect("indexing failed")
         });
-        store.compact();
+        store.write(vec![parser.last_indexed_row()]);
+        store.flush();
+        store.compact(); // will take a while.
     }).join()
         .expect("writer panicked");
     Ok(())

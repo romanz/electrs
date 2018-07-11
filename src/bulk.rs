@@ -51,6 +51,16 @@ impl Parser {
         })
     }
 
+    pub fn last_indexed_row(&self) -> Row {
+        let indexed_blockhashes = self.indexed_blockhashes.lock().unwrap();
+        let last_header = self.current_headers
+            .iter()
+            .take_while(|h| indexed_blockhashes.contains(h.hash()))
+            .last()
+            .expect("no indexed header found");
+        last_indexed_block(last_header.hash())
+    }
+
     pub fn read_blkfile(&self, path: &Path) -> Result<Vec<u8>> {
         let timer = self.duration.with_label_values(&["read"]).start_timer();
         let blob = fs::read(&path).chain_err(|| format!("failed to read {:?}", path))?;
