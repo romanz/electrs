@@ -46,6 +46,7 @@ impl DBStore {
         db_opts.create_if_missing(true);
         db_opts.increase_parallelism(2);
         db_opts.set_keep_log_file_num(10);
+        db_opts.set_compaction_readahead_size(2 << 20);
 
         let mut cf_opts = rocksdb::ColumnFamilyOptions::new();
         cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
