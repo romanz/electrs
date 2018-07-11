@@ -18,7 +18,7 @@ use electrs::{
 use error_chain::ChainedError;
 
 type JoinHandle = std::thread::JoinHandle<Result<()>>;
-type BlobReceiver = Arc<Mutex<Receiver<Vec<u8>>>>;
+type BlobReceiver = Arc<Mutex<Receiver<(Vec<u8>, PathBuf)>>>;
 
 fn start_reader(blk_files: Vec<PathBuf>, parser: Arc<Parser>) -> (BlobReceiver, JoinHandle) {
     let chan = SyncChannel::new(0);
@@ -26,7 +26,7 @@ fn start_reader(blk_files: Vec<PathBuf>, parser: Arc<Parser>) -> (BlobReceiver, 
     let handle = spawn_thread("bulk_read", move || -> Result<()> {
         for path in blk_files {
             blobs
-                .send(parser.read_blkfile(&path)?)
+                .send((parser.read_blkfile(&path)?, path))
                 .expect("failed to send blk*.dat contents");
         }
         Ok(())
@@ -37,13 +37,13 @@ fn start_reader(blk_files: Vec<PathBuf>, parser: Arc<Parser>) -> (BlobReceiver, 
 fn start_indexer(
     blobs: BlobReceiver,
     parser: Arc<Parser>,
-    rows: SyncSender<Vec<Row>>,
+    rows: SyncSender<(Vec<Row>, PathBuf)>,
 ) -> JoinHandle {
     spawn_thread("bulk_index", move || -> Result<()> {
         loop {
             let msg = blobs.lock().unwrap().recv();
-            if let Ok(blob) = msg {
-                rows.send(parser.index_blkfile(blob)?)
+            if let Ok((blob, path)) = msg {
+                rows.send((parser.index_blkfile(blob)?, path))
                     .expect("failed to send indexed rows")
             } else {
                 debug!("no more blocks to index");
@@ -78,8 +78,8 @@ fn run(config: Config) -> Result<()> {
         .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
         .collect();
     spawn_thread("bulk_writer", move || {
-        for rows in rows_chan.into_receiver() {
-            debug!("indexed {:.2}M rows", rows.len() as f32 / 1e6);
+        for (rows, path) in rows_chan.into_receiver() {
+            trace!("indexed {:?}: {} rows", path, rows.len());
             store.write(rows);
         }
         reader
