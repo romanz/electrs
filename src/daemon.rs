@@ -220,10 +220,12 @@ impl Daemon {
         let mut path = self.daemon_dir.clone();
         path.push("blocks");
         path.push("blk*.dat");
-        Ok(glob::glob(path.to_str().unwrap())
+        let mut paths: Vec<PathBuf> = glob::glob(path.to_str().unwrap())
             .chain_err(|| "failed to list blk*.dat files")?
             .map(|res| res.unwrap())
-            .collect())
+            .collect();
+        paths.sort();
+        Ok(paths)
     }
 
     pub fn magic(&self) -> u32 {
