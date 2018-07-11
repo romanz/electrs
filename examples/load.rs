@@ -5,7 +5,7 @@ extern crate log;
 
 extern crate error_chain;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{
     mpsc::{Receiver, SyncSender}, Arc, Mutex,
 };
@@ -55,16 +55,21 @@ fn start_indexer(
 }
 
 fn run(config: Config) -> Result<()> {
+    if config.db_path.exists() {
+        panic!(
+            "DB {:?} must not exist when running this benchmark!",
+            config.db_path
+        );
+    }
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
-
     let daemon = Daemon::new(
         &config.daemon_dir,
         &config.cookie,
         config.network_type,
         &metrics,
     )?;
-    let store = DBStore::open(Path::new("./test-db"), StoreOptions { bulk_import: true });
+    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
     let blk_files = daemon.list_blk_files()?;
     let parser = Arc::new(Parser::new(&daemon, &metrics)?);
     let (blobs, reader) = start_reader(blk_files, parser.clone());
