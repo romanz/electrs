@@ -46,6 +46,12 @@ fn block_from_value(value: Value) -> Result<Block> {
     Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
 }
 
+fn tx_from_value(value: Value) -> Result<Transaction> {
+    let tx_hex = value.as_str().chain_err(|| "non-string tx")?;
+    let tx_bytes = hex::decode(tx_hex).chain_err(|| "non-hex tx")?;
+    Ok(deserialize(&tx_bytes).chain_err(|| format!("failed to parse tx {}", tx_hex))?)
+}
+
 fn parse_jsonrpc_reply(reply: &mut Value, method: &str) -> Result<Value> {
     let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
     if let Some(err) = reply_obj.get("error") {
@@ -337,12 +343,21 @@ impl Daemon {
                 .unwrap()
                 .push(json!(blockhash.be_hex_string()));
         }
-        let tx_hex: Value = self.request("getrawtransaction", args)?;
-        Ok(
-            deserialize(&hex::decode(tx_hex.as_str().chain_err(|| "non-string tx")?)
-                .chain_err(|| "non-hex tx")?)
-                .chain_err(|| format!("failed to parse tx {}", txhash))?,
-        )
+        tx_from_value(self.request("getrawtransaction", args)?)
+    }
+
+    pub fn gettransactions(&self, txhashes: &[Sha256dHash]) -> Result<Vec<Transaction>> {
+        let params_list: Vec<Value> = txhashes
+            .iter()
+            .map(|txhash| json!([txhash.be_hex_string(), /*verbose=*/ false]))
+            .collect();
+
+        let values = self.requests("getrawtransaction", &params_list)?;
+        let mut txs = vec![];
+        for value in values {
+            txs.push(tx_from_value(value)?);
+        }
+        Ok(txs)
     }
 
     pub fn getmempooltxids(&self) -> Result<HashSet<Sha256dHash>> {

@@ -201,22 +201,23 @@ impl Tracker {
         timer.observe_duration();
 
         let timer = self.stats.start_timer("add");
-        for txid in new_txids.difference(&old_txids) {
-            let entry = match daemon.getmempoolentry(txid) {
-                Ok(entry) => entry,
-                Err(err) => {
-                    warn!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
-                    continue;
+        let txids_to_add: Vec<Sha256dHash> = new_txids.difference(&old_txids).cloned().collect();
+        let entries: Vec<(&Sha256dHash, MempoolEntry)> = txids_to_add
+            .iter()
+            .filter_map(|txid| {
+                match daemon.getmempoolentry(txid) {
+                    Ok(entry) => Some((txid, entry)),
+                    Err(err) => {
+                        warn!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
+                        None
+                    }
                 }
-            };
-            // The following lookup should find the transaction in mempool.
-            let tx = match daemon.gettransaction(txid, /*blockhash=*/ None) {
-                Ok(tx) => tx,
-                Err(err) => {
-                    warn!("missing tx {}: {}", txid, err); // e.g. new block or RBF
-                    continue;
-                }
-            };
+            })
+            .collect();
+        let txs = daemon.gettransactions(&txids_to_add)?;
+        assert_eq!(entries.len(), txs.len());
+        for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
+            assert_eq!(tx.txid(), *txid);
             self.add(txid, tx, entry);
         }
         timer.observe_duration();
