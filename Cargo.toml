@@ -21,6 +21,7 @@ clap = "2.31"
 error-chain = "0.12"
 glob = "0.2"
 hex = "0.3"
+libc = "0.2"
 log = "0.4"
 prometheus = "0.4"
 rocksdb = { git = "https://github.com/pingcap/rust-rocksdb", rev = "9a1c83c5382fbaee8a5102213c711bbe52d71470" }

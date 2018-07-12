@@ -69,6 +69,7 @@ fn run(config: Config) -> Result<()> {
         config.network_type,
         &metrics,
     )?;
+    bulk::set_open_files_limit(2048); // twice the default `ulimit -n` value
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
     let blk_files = daemon.list_blk_files()?;
     let parser = Arc::new(Parser::new(&daemon, &metrics)?);

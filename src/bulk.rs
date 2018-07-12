@@ -3,6 +3,7 @@ use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::SimpleDecoder;
 use bitcoin::network::serialize::{deserialize, RawDecoder};
 use bitcoin::util::hash::Sha256dHash;
+use libc;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
@@ -145,4 +146,18 @@ fn load_headers(daemon: &Daemon) -> Result<HeaderList> {
     let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
     headers.apply(new_headers);
     Ok(headers)
+}
+
+pub fn set_open_files_limit(limit: u64) {
+    let resource = libc::RLIMIT_NOFILE;
+    let mut rlim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    let result = unsafe { libc::getrlimit(resource, &mut rlim) };
+    if result < 0 {
+        panic!("getrlimit() failed: {}", result);
+    }
+    rlim.rlim_cur = limit;  // set softs limit only.
+    let result = unsafe { libc::setrlimit(resource, &rlim) };
+    if result < 0 {
+        panic!("setrlimit() failed: {}", result);
+    }
 }

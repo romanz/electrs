@@ -7,6 +7,7 @@ extern crate chan_signal;
 extern crate crypto;
 extern crate glob;
 extern crate hex;
+extern crate libc;
 extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
