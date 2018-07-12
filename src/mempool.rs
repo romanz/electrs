@@ -196,7 +196,7 @@ impl Tracker {
         trace!(
             "{} transactions in mempool ({:+})",
             new_txids.len(),
-            new_txids.len() - old_txids.len()
+            new_txids.len() as i64 - old_txids.len() as i64
         );
         timer.observe_duration();
 
