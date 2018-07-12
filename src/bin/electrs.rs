@@ -8,28 +8,9 @@ use error_chain::ChainedError;
 use std::time::Duration;
 
 use electrs::{
-    app::App, bulk::Parser, config::Config, daemon::Daemon, errors::*, index::Index,
-    metrics::Metrics, query::Query, rpc::RPC, signal::Waiter,
-    store::{DBStore, ReadStore, StoreOptions, WriteStore},
+    app::App, bulk, config::Config, daemon::Daemon, errors::*, index::Index, metrics::Metrics,
+    query::Query, rpc::RPC, signal::Waiter, store::{DBStore, StoreOptions},
 };
-
-fn bulk_index(store: DBStore, daemon: &Daemon, signal: &Waiter, metrics: &Metrics) -> Result<()> {
-    let key = b"F"; // full compaction marker
-    if store.get(key).is_some() {
-        return Ok(());
-    }
-    let parser = Parser::new(daemon, &metrics)?;
-    for path in daemon.list_blk_files()? {
-        signal.poll_err()?;
-        let blob = parser.read_blkfile(&path)?;
-        let rows = parser.index_blkfile(blob)?;
-        store.write(rows);
-    }
-    store.flush();
-    store.compact();
-    store.put(key, b"");
-    Ok(())
-}
 
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::new();
@@ -42,13 +23,12 @@ fn run_server(config: &Config) -> Result<()> {
         config.network_type,
         &metrics,
     )?;
-    bulk_index(
-        DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
+    // Perform initial indexing from local blk*.dat block files.
+    bulk::index(
         &daemon,
-        &signal,
         &metrics,
+        DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
     )?;
-
     let daemon = daemon.reconnect()?;
     let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
     let index = Index::load(&store, &daemon, &metrics)?;
