@@ -16,7 +16,7 @@ use std::thread;
 use daemon::Daemon;
 use index::{index_block, last_indexed_block};
 use metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricOpts, Metrics};
-use store::{DBStore, Row, WriteStore};
+use store::{DBStore, ReadStore, Row, WriteStore};
 use util::{spawn_thread, HeaderList, SyncChannel};
 
 use errors::*;
@@ -211,6 +211,9 @@ fn start_indexer(
 
 pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<()> {
     set_open_files_limit(2048); // twice the default `ulimit -n` value
+    if store.get(FINISH_MARKER).is_some() {
+        return Ok(());
+    }
     let blk_files = daemon.list_blk_files()?;
     let parser = Parser::new(daemon, metrics)?;
     let (blobs, reader) = start_reader(blk_files, parser.clone());
