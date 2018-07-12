@@ -11,7 +11,7 @@ use std::sync::{
 };
 
 use electrs::{
-    bulk::Parser, config::Config, daemon::Daemon, errors::*, metrics::Metrics,
+    bulk::{Parser, FINISH_MARKER}, config::Config, daemon::Daemon, errors::*, metrics::Metrics,
     store::{DBStore, Row, StoreOptions, WriteStore}, util::{spawn_thread, SyncChannel},
 };
 
@@ -95,6 +95,7 @@ fn run(config: Config) -> Result<()> {
         store.write(vec![parser.last_indexed_row()]);
         store.flush();
         store.compact(); // will take a while.
+        store.put(FINISH_MARKER, b"");
     }).join()
         .expect("writer panicked");
     Ok(())

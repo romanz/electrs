@@ -17,7 +17,7 @@ use util::HeaderList;
 
 use errors::*;
 
-/// An efficient parser for Bitcoin blk*.dat files.
+pub const FINISH_MARKER: &'static [u8] = b"F";
 
 pub struct Parser {
     magic: u32,
