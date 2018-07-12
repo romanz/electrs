@@ -28,29 +28,28 @@ Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/021218
 
 ## Usage
 
-First index sync should take ~2.5 hours:
+First index sync should take ~2 hours:
 ```bash
 $ cargo run --release -- -vvv --timestamp --db-dir ./db
-2018-06-28T23:09:17 - DEBUG - BlockchainInfo { chain: "main", blocks: 529656, headers: 529656, bestblockhash: "0000000000000000000d6344eeaa8dece87a438c25948e9038e8fecd4c64ac0f", size_on_disk: 197723753341, pruned: false }
-2018-06-28T23:09:17 - DEBUG - opening ./db/mainnet with StoreOptions { bulk_import: true }
-2018-06-28T23:09:30 - INFO - indexing 1300 blk*.dat files
-2018-06-29T00:28:16 - DEBUG - read 1300 blk files
-2018-06-29T00:28:22 - INFO - indexed 529657 blocks
-2018-06-29T00:28:23 - INFO - starting full compaction
-2018-06-29T01:35:02 - INFO - finished full compaction
-2018-06-29T01:35:02 - DEBUG - closing ./db/mainnet
-2018-06-29T01:35:03 - DEBUG - opening ./db/mainnet with StoreOptions { bulk_import: false }
-2018-06-29T01:35:12 - DEBUG - applying 529657 new headers from height 0
-2018-06-29T01:35:13 - INFO - RPC server running on 127.0.0.1:50001
-2018-06-29T01:35:14 - DEBUG - downloading new block headers (529657 already indexed) from 000000000000000000207ca53fd49f8de7f7f67dcde34af505882ab2be5d8fc5
-2018-06-29T01:35:14 - INFO - best=000000000000000000207ca53fd49f8de7f7f67dcde34af505882ab2be5d8fc5 height=529668 @ 2018-06-28T22:26:05Z (12 left to index)
-2018-06-29T01:35:15 - DEBUG - applying 12 new headers from height 529657
+2018-07-12T21:30:46 - DEBUG - BlockchainInfo { chain: "main", blocks: 531645, headers: 531645, bestblockhash: "00000000000000000006e41b275b21fc44e3b7afa8a8092aa6a7e4b84345f1f1", size_on_disk: 199667678141, pruned: false }
+2018-07-12T21:30:46 - DEBUG - opening "./db/mainnet" with StoreOptions { bulk_import: true }
+2018-07-12T21:30:46 - INFO - indexing 1313 blk*.dat files
+2018-07-12T21:30:58 - DEBUG - applying 531646 new headers from height 0
+2018-07-12T22:34:36 - DEBUG - last indexed block: best=00000000000000000006e41b275b21fc44e3b7afa8a8092aa6a7e4b84345f1f1 height=531645 @ 2018-07-12T18:20:51Z
+2018-07-12T22:34:37 - INFO - starting full compaction
+2018-07-12T23:18:53 - INFO - finished full compaction
+2018-07-12T23:18:53 - DEBUG - opening "./db/mainnet" with StoreOptions { bulk_import: false }
+2018-07-12T23:19:05 - DEBUG - applying 531646 new headers from height 0
+2018-07-12T23:19:05 - DEBUG - downloading new block headers (531646 already indexed) from 0000000000000000002face92073e7b1dbcb02df32ea891b187a6c10b37dc8ad
+2018-07-12T23:19:06 - INFO - best=0000000000000000002face92073e7b1dbcb02df32ea891b187a6c10b37dc8ad height=531656 @ 2018-07-12T20:07:12Z (11 left to index)
+2018-07-12T23:19:08 - DEBUG - applying 11 new headers from height 531646
+2018-07-12T23:19:11 - INFO - RPC server running on 127.0.0.1:50001
 ```
 
 The index database is stored here:
 ```bash
 $ du db/
-36G db/mainnet/
+37G db/mainnet/
 ```
 
 ## Electrum client
