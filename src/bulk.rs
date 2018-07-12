@@ -58,6 +58,7 @@ impl Parser {
             .take_while(|h| indexed_blockhashes.contains(h.hash()))
             .last()
             .expect("no indexed header found");
+        debug!("last indexed block: {:?}", last_header);
         last_indexed_block(last_header.hash())
     }
 
