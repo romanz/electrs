@@ -215,6 +215,7 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<()> {
         return Ok(());
     }
     let blk_files = daemon.list_blk_files()?;
+    info!("indexing {} blk*.dat files", blk_files.len());
     let parser = Parser::new(daemon, metrics)?;
     let (blobs, reader) = start_reader(blk_files, parser.clone());
     let rows_chan = SyncChannel::new(0);
