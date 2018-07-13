@@ -209,39 +209,42 @@ fn start_indexer(
     })
 }
 
-pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<()> {
+pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBStore> {
     set_open_files_limit(2048); // twice the default `ulimit -n` value
-    if store.get(FINISH_MARKER).is_some() {
-        return Ok(());
-    }
-    let blk_files = daemon.list_blk_files()?;
-    info!("indexing {} blk*.dat files", blk_files.len());
-    let parser = Parser::new(daemon, metrics)?;
-    let (blobs, reader) = start_reader(blk_files, parser.clone());
-    let rows_chan = SyncChannel::new(0);
-    let indexers: Vec<JoinHandle> = (0..2)
-        .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
-        .collect();
-    spawn_thread("bulk_writer", move || {
-        for (rows, path) in rows_chan.into_receiver() {
-            trace!("indexed {:?}: {} rows", path, rows.len());
-            store.write(rows);
-        }
-        reader
-            .join()
-            .expect("reader panicked")
-            .expect("reader failed");
+    let result = if store.get(FINISH_MARKER).is_none() {
+        let blk_files = daemon.list_blk_files()?;
+        info!("indexing {} blk*.dat files", blk_files.len());
+        let parser = Parser::new(daemon, metrics)?;
+        let (blobs, reader) = start_reader(blk_files, parser.clone());
+        let rows_chan = SyncChannel::new(0);
+        let indexers: Vec<JoinHandle> = (0..2)
+            .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
+            .collect();
+        spawn_thread("bulk_writer", move || -> Result<DBStore> {
+            for (rows, path) in rows_chan.into_receiver() {
+                trace!("indexed {:?}: {} rows", path, rows.len());
+                store.write(rows);
+            }
+            reader
+                .join()
+                .expect("reader panicked")
+                .expect("reader failed");
 
-        indexers.into_iter().for_each(|i| {
-            i.join()
-                .expect("indexer panicked")
-                .expect("indexing failed")
-        });
-        store.write(vec![parser.last_indexed_row()]);
-        store.flush();
-        store.compact(); // will take a while.
-        store.put(FINISH_MARKER, b"");
-    }).join()
-        .expect("writer panicked");
-    Ok(())
+            indexers.into_iter().for_each(|i| {
+                i.join()
+                    .expect("indexer panicked")
+                    .expect("indexing failed")
+            });
+            store.write(vec![parser.last_indexed_row()]);
+            store.flush();
+            store.compact(); // will take a while.
+            store.put(FINISH_MARKER, b"");
+            Ok(store)
+        }).join()
+            .expect("writer panicked")
+    } else {
+        Ok(store)
+    };
+    // Enable auto compactions after bulk indexing is over.
+    result.map(|store| store.enable_compaction())
 }

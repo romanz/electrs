@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use electrs::{
     app::App, bulk, config::Config, daemon::Daemon, errors::*, index::Index, metrics::Metrics,
-    query::Query, rpc::RPC, signal::Waiter, store::{DBStore, StoreOptions},
+    query::Query, rpc::RPC, signal::Waiter, store::DBStore,
 };
 
 fn run_server(config: &Config) -> Result<()> {
@@ -24,13 +24,8 @@ fn run_server(config: &Config) -> Result<()> {
         &metrics,
     )?;
     // Perform initial indexing from local blk*.dat block files.
-    bulk::index(
-        &daemon,
-        &metrics,
-        DBStore::open(&config.db_path, StoreOptions { bulk_import: true }),
-    )?;
+    let store = bulk::index(&daemon, &metrics, DBStore::open(&config.db_path))?;
     let daemon = daemon.reconnect()?;
-    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: false });
     let index = Index::load(&store, &daemon, &metrics)?;
     let app = App::new(store, index, daemon);
     let mut tip = app.index().update(app.write_store(), &signal)?;

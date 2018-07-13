@@ -27,7 +27,7 @@ fn run(config: Config) -> Result<()> {
         config.network_type,
         &metrics,
     )?;
-    let store = DBStore::open(&config.db_path, StoreOptions { bulk_import: true });
+    let store = DBStore::open(&config.db_path);
     bulk::index(&daemon, &metrics, store)
 }
 

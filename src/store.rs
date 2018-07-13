@@ -29,19 +29,14 @@ pub trait WriteStore: Sync {
 
 pub struct DBStore {
     db: rocksdb::DB,
-    opts: StoreOptions,
-}
-
-#[derive(Debug)]
-pub struct StoreOptions {
-    pub bulk_import: bool,
+    bulk_import: bool,
 }
 
 impl DBStore {
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path, opts: StoreOptions) -> DBStore {
+    pub fn open(path: &Path) -> Self {
         let path = path.to_str().unwrap();
-        debug!("opening {:?} with {:?}", path, &opts);
+        debug!("opening DB at {:?}", path);
         let mut db_opts = rocksdb::DBOptions::default();
         db_opts.create_if_missing(true);
         db_opts.set_keep_log_file_num(10);
@@ -54,14 +49,25 @@ impl DBStore {
         cf_opts.set_write_buffer_size(64 << 20);
         cf_opts.set_min_write_buffer_number(2);
         cf_opts.set_max_write_buffer_number(3);
-        cf_opts.set_disable_auto_compactions(opts.bulk_import);
+        cf_opts.set_disable_auto_compactions(true); // for initial bulk load
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(1 << 20);
         DBStore {
             db: rocksdb::DB::open_cf(db_opts, path, vec![("default", cf_opts)]).unwrap(),
-            opts: opts,
+            bulk_import: true,
         }
+    }
+
+    pub fn enable_compaction(mut self) -> Self {
+        self.bulk_import = false;
+        {
+            let cf = self.db.cf_handle("default").expect("no default CF");
+            self.db
+                .set_options_cf(cf, &vec![("disable_auto_compactions", "false")])
+                .expect("failed to enable auto compactions");
+        }
+        self
     }
 
     pub fn sstable(&self) -> SSTableWriter {
@@ -116,8 +122,8 @@ impl WriteStore for DBStore {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(!self.opts.bulk_import);
-        opts.disable_wal(self.opts.bulk_import);
+        opts.set_sync(!self.bulk_import);
+        opts.disable_wal(self.bulk_import);
         self.db.write_opt(batch, &opts).unwrap();
     }
 
