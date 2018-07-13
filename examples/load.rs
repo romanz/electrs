@@ -7,7 +7,7 @@ extern crate error_chain;
 
 use electrs::{
     bulk, config::Config, daemon::Daemon, errors::*, metrics::Metrics,
-    store::{DBStore, StoreOptions},
+    store::{DBStore},
 };
 
 use error_chain::ChainedError;
@@ -28,7 +28,8 @@ fn run(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = DBStore::open(&config.db_path);
-    bulk::index(&daemon, &metrics, store)
+    bulk::index(&daemon, &metrics, store)?;
+    Ok(())
 }
 
 fn main() {
