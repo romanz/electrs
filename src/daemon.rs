@@ -270,7 +270,7 @@ impl Daemon {
             .iter()
             .map(|params| json!({"method": method, "params": params}))
             .collect();
-        let mut results = Vec::new();
+        let mut results = vec![];
         let mut replies = self.call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         for reply in replies.as_array_mut().chain_err(|| "non-array response")? {
@@ -303,7 +303,7 @@ impl Daemon {
             .into_iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
-        let mut result = Vec::new();
+        let mut result = vec![];
         for h in self.requests("getblockheader", &params_list)? {
             result.push(header_from_value(h)?);
         }
@@ -325,7 +325,7 @@ impl Daemon {
             .map(|hash| json!([hash.be_hex_string(), /*verbose=*/ false]))
             .collect();
         let values = self.requests("getblock", &params_list)?;
-        let mut blocks = Vec::new();
+        let mut blocks = vec![];
         for value in values {
             blocks.push(block_from_value(value)?);
         }
