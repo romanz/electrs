@@ -75,6 +75,12 @@ pub struct BlockchainInfo {
     pruned: bool,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NetworkInfo {
+    version: u64,
+    subversion: String,
+}
+
 pub struct MempoolEntry {
     fee: u64,   // in satoshis
     vsize: u32, // in virtual bytes (= weight/4)
@@ -210,6 +216,7 @@ impl Daemon {
             ),
         };
         debug!("{:?}", daemon.getblockchaininfo()?);
+        debug!("{:?}", daemon.getnetworkinfo()?);
         Ok(daemon)
     }
 
@@ -285,6 +292,11 @@ impl Daemon {
     pub fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
         let info: Value = self.request("getblockchaininfo", json!([]))?;
         Ok(from_value(info).chain_err(|| "invalid blockchain info")?)
+    }
+
+    pub fn getnetworkinfo(&self) -> Result<NetworkInfo> {
+        let info: Value = self.request("getnetworkinfo", json!([]))?;
+        Ok(from_value(info).chain_err(|| "invalid network info")?)
     }
 
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
