@@ -3,7 +3,9 @@ cache: cargo
 rust:
   - stable
   - beta
-
+before_script:
+  - rustup component add rustfmt-preview
 script:
+  - cargo fmt --all -- --check
   - cargo build --verbose
   - cargo test --verbose
