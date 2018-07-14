@@ -149,11 +149,12 @@ impl Connection {
     }
 
     fn recv(&mut self) -> Result<String> {
+        // TODO: use proper HTTP parser.
         let mut in_header = true;
         let mut contents: Option<String> = None;
         let iter = self.rx.by_ref();
         let status = iter.next()
-            .chain_err(|| "no status")?
+            .chain_err(|| "disconnected from daemon")?
             .chain_err(|| "failed to read status")?;
         if status != "HTTP/1.1 200 OK" {
             bail!("request failed: {}", status);
