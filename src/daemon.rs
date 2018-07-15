@@ -191,19 +191,16 @@ pub struct Daemon {
 impl Daemon {
     pub fn new(
         daemon_dir: &PathBuf,
+        daemon_rpc_url: &str,
         cookie: &str,
         network: Network,
         metrics: &Metrics,
     ) -> Result<Daemon> {
-        let addr = match network {
-            Network::Mainnet => "127.0.0.1:8332",
-            Network::Testnet => "127.0.0.1:18332",
-        };
         let daemon = Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
             conn: Mutex::new(Connection::new(
-                SocketAddr::from_str(addr).unwrap(),
+                SocketAddr::from_str(daemon_rpc_url).unwrap(),
                 base64::encode(cookie),
             )?),
             latency: metrics.histogram_vec(

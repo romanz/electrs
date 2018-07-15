@@ -20,6 +20,7 @@ fn run(config: Config) -> Result<()> {
     metrics.start();
     let daemon = Daemon::new(
         &config.daemon_dir,
+        &config.daemon_rpc_url,
         &config.cookie,
         config.network_type,
         &metrics,

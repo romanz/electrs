@@ -19,6 +19,7 @@ fn run_server(config: &Config) -> Result<()> {
 
     let daemon = Daemon::new(
         &config.daemon_dir,
+        &config.daemon_rpc_url,
         &config.cookie,
         config.network_type,
         &metrics,
