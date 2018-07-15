@@ -19,7 +19,7 @@ fn run_server(config: &Config) -> Result<()> {
 
     let daemon = Daemon::new(
         &config.daemon_dir,
-        &config.daemon_rpc_url,
+        config.daemon_rpc_addr,
         &config.cookie,
         config.network_type,
         &metrics,
@@ -35,7 +35,7 @@ fn run_server(config: &Config) -> Result<()> {
         app.update(&signal)?;
         query.update_mempool()?;
         server
-            .get_or_insert_with(|| RPC::start(config.rpc_addr, query.clone(), &metrics))
+            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics))
             .notify(); // update subscribed clients
         if signal.wait(Duration::from_secs(5)).is_some() {
             break;

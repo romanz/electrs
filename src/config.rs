@@ -21,13 +21,13 @@ fn read_cookie(daemon_dir: &Path) -> Result<String> {
 #[derive(Debug)]
 pub struct Config {
     pub log: stderrlog::StdErrLog,
-    pub network_type: Network,       // bitcoind JSONRPC endpoint
-    pub db_path: PathBuf,            // RocksDB directory path
-    pub daemon_dir: PathBuf,         // Bitcoind data directory
-    pub daemon_rpc_url: String,      // Bitcoind rpc ip:port
-    pub cookie: String,              // for bitcoind JSONRPC authentication ("USER:PASSWORD")
-    pub rpc_addr: SocketAddr,        // for serving Electrum clients
-    pub monitoring_addr: SocketAddr, // for Prometheus monitoring
+    pub network_type: Network,         // bitcoind JSONRPC endpoint
+    pub db_path: PathBuf,              // RocksDB directory path
+    pub daemon_dir: PathBuf,           // Bitcoind data directory
+    pub daemon_rpc_addr: SocketAddr,   // for connecting Bitcoind JSONRPC
+    pub cookie: String,                // for bitcoind JSONRPC authentication ("USER:PASSWORD")
+    pub electrum_rpc_addr: SocketAddr, // for serving Electrum clients
+    pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
 }
 
 impl Config {
@@ -69,37 +69,56 @@ impl Config {
                     .help("Connect to a testnet bitcoind instance"),
             )
             .arg(
-                Arg::with_name("port")
-                    .short("p")
-                    .help("Port to listen to (default: 50001 for mainnet and 60001 for testnet)")
+                Arg::with_name("electrum_rpc_addr")
+                    .long("electrum-rpc-addr")
+                    .help("Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet and '127.0.0.1:60001' for testnet)")
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("daemon_rpc_url")
-                    .long("daemon-rpc-url")
-                    .help("Url of the Bitcoind rpc (default: 127.0.0.1:8332 for mainnet and 127.0.01:18332 for testnet)")
+                Arg::with_name("daemon_rpc_addr")
+                    .long("daemon-rpc-addr")
+                    .help("Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet and 127.0.0.1:18332 for testnet)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("monitoring_addr")
+                    .long("monitoring-addr")
+                    .help("Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:42024)")
                     .takes_value(true),
             )
             .get_matches();
+
+        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let network_type = match m.is_present("testnet") {
             false => Network::Mainnet,
             true => Network::Testnet,
         };
-        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
-
-        let listen_port = value_t!(m, "port", u16).unwrap_or(match network_type {
+        let db_path = match network_type {
+            Network::Mainnet => db_dir.join("mainnet"),
+            Network::Testnet => db_dir.join("testnet"),
+        };
+        let default_daemon_port = match network_type {
+            Network::Mainnet => 8332,
+            Network::Testnet => 18332,
+        };
+        let default_electrum_port = match network_type {
             Network::Mainnet => 50001,
             Network::Testnet => 60001,
-        });
-        let daemon_rpc_url = m.value_of("daemon_rpc_url")
-            .unwrap_or(&format!(
-                "127.0.0.1:{}",
-                match network_type {
-                    Network::Mainnet => 8332,
-                    Network::Testnet => 18332,
-                }
-            ))
-            .to_string();
+        };
+
+        let daemon_rpc_addr: SocketAddr = m.value_of("daemon_rpc_addr")
+            .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port))
+            .parse()
+            .expect("invalid Bitcoind RPC address");
+        let electrum_rpc_addr: SocketAddr = m.value_of("electrum_rpc_addr")
+            .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port))
+            .parse()
+            .expect("invalid Electrum RPC address");
+        let monitoring_addr: SocketAddr = m.value_of("monitoring_addr")
+            .unwrap_or("127.0.0.1:42024")
+            .parse()
+            .expect("invalid Prometheus monitoring address");
+
         let mut daemon_dir = m.value_of("daemon_dir")
             .map(|p| PathBuf::from(p))
             .unwrap_or_else(|| {
@@ -125,15 +144,12 @@ impl Config {
         let config = Config {
             log,
             network_type,
-            db_path: match network_type {
-                Network::Mainnet => db_dir.join("mainnet"),
-                Network::Testnet => db_dir.join("testnet"),
-            },
+            db_path,
             daemon_dir,
-            daemon_rpc_url,
+            daemon_rpc_addr,
             cookie,
-            rpc_addr: format!("127.0.0.1:{}", listen_port).parse().unwrap(),
-            monitoring_addr: "127.0.0.1:42024".parse().unwrap(),
+            electrum_rpc_addr,
+            monitoring_addr,
         };
         eprintln!("{:?}", config);
         config

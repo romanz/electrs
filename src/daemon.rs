@@ -11,7 +11,6 @@ use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use metrics::{HistogramOpts, HistogramVec, Metrics};
@@ -191,7 +190,7 @@ pub struct Daemon {
 impl Daemon {
     pub fn new(
         daemon_dir: &PathBuf,
-        daemon_rpc_url: &str,
+        daemon_rpc_addr: SocketAddr,
         cookie: &str,
         network: Network,
         metrics: &Metrics,
@@ -200,7 +199,7 @@ impl Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
             conn: Mutex::new(Connection::new(
-                SocketAddr::from_str(daemon_rpc_url).unwrap(),
+                daemon_rpc_addr,
                 base64::encode(cookie),
             )?),
             latency: metrics.histogram_vec(
