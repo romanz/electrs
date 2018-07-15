@@ -25,23 +25,22 @@ fn run_server(config: &Config) -> Result<()> {
     )?;
     // Perform initial indexing from local blk*.dat block files.
     let store = bulk::index(&daemon, &metrics, DBStore::open(&config.db_path))?;
-    let daemon = daemon.reconnect()?;
     let index = Index::load(&store, &daemon, &metrics)?;
-    let app = App::new(store, index, daemon);
-    let mut tip = app.index().update(app.write_store(), &signal)?;
-
+    let app = App::new(store, index, daemon)?;
     let query = Query::new(app.clone(), &metrics);
-    query.update_mempool()?;
 
-    let rpc = RPC::start(config.rpc_addr, query.clone(), &metrics);
-    while let None = signal.wait(Duration::from_secs(5)) {
-        if tip != app.daemon().getbestblockhash()? {
-            tip = app.index().update(app.write_store(), &signal)?;
-        }
+    let mut server = None;
+    loop {
+        app.update(&signal)?;
         query.update_mempool()?;
-        rpc.notify(); // update subscribed clients
+        server
+            .get_or_insert_with(|| RPC::start(config.rpc_addr, query.clone(), &metrics))
+            .notify(); // update subscribed clients
+        if signal.wait(Duration::from_secs(5)).is_some() {
+            break;
+        }
     }
-    rpc.exit();
+    server.map(|s| s.exit());
     Ok(())
 }
 
