@@ -64,20 +64,20 @@ impl Config {
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("testnet")
-                    .long("testnet")
-                    .help("Connect to a testnet bitcoind instance"),
+                Arg::with_name("network")
+                    .help("Select Bitcoin network type ('mainnet', 'testnet' or 'regtest')")
+                    .takes_value(true),
             )
             .arg(
                 Arg::with_name("electrum_rpc_addr")
                     .long("electrum-rpc-addr")
-                    .help("Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet and '127.0.0.1:60001' for testnet)")
+                    .help("Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)")
                     .takes_value(true),
             )
             .arg(
                 Arg::with_name("daemon_rpc_addr")
                     .long("daemon-rpc-addr")
-                    .help("Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet and 127.0.0.1:18332 for testnet)")
+                    .help("Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)")
                     .takes_value(true),
             )
             .arg(
@@ -89,21 +89,29 @@ impl Config {
             .get_matches();
 
         let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
-        let network_type = match m.is_present("testnet") {
-            false => Network::Mainnet,
-            true => Network::Testnet,
+        let network_name = m.value_of("network").unwrap_or("mainnet");
+
+        let network_type = match network_name {
+            "mainnet" => Network::Mainnet,
+            "testnet" => Network::Testnet,
+            "regtest" => Network::Regtest,
+            _ => Network::Testnet,
         };
+
         let db_path = match network_type {
             Network::Mainnet => db_dir.join("mainnet"),
             Network::Testnet => db_dir.join("testnet"),
+            Network::Regtest => db_dir.join("regtest"),
         };
         let default_daemon_port = match network_type {
             Network::Mainnet => 8332,
             Network::Testnet => 18332,
+            Network::Regtest => 18443,
         };
         let default_electrum_port = match network_type {
             Network::Mainnet => 50001,
             Network::Testnet => 60001,
+            Network::Regtest => 60401,
         };
 
         let daemon_rpc_addr: SocketAddr = m.value_of("daemon_rpc_addr")
@@ -128,6 +136,8 @@ impl Config {
             });
         if let Network::Testnet = network_type {
             daemon_dir.push("testnet3");
+        } else if let Network::Regtest = network_type {
+            daemon_dir.push("regtest");
         }
         let cookie = m.value_of("cookie")
             .map(|s| s.to_owned())
