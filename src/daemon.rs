@@ -359,7 +359,7 @@ impl Daemon {
         tx_from_value(self.request("getrawtransaction", args)?)
     }
 
-    pub fn gettransactions(&self, txhashes: &[Sha256dHash]) -> Result<Vec<Transaction>> {
+    pub fn gettransactions(&self, txhashes: &[&Sha256dHash]) -> Result<Vec<Transaction>> {
         let params_list: Vec<Value> = txhashes
             .iter()
             .map(|txhash| json!([txhash.be_hex_string(), /*verbose=*/ false]))
@@ -370,6 +370,7 @@ impl Daemon {
         for value in values {
             txs.push(tx_from_value(value)?);
         }
+        assert_eq!(txhashes.len(), txs.len());
         Ok(txs)
     }
 

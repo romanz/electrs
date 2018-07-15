@@ -201,9 +201,8 @@ impl Tracker {
         timer.observe_duration();
 
         let timer = self.stats.start_timer("add");
-        let txids_to_add: Vec<Sha256dHash> = new_txids.difference(&old_txids).cloned().collect();
-        let entries: Vec<(&Sha256dHash, MempoolEntry)> = txids_to_add
-            .iter()
+        let txids_iter = new_txids.difference(&old_txids);
+        let entries: Vec<(&Sha256dHash, MempoolEntry)> = txids_iter
             .filter_map(|txid| {
                 match daemon.getmempoolentry(txid) {
                     Ok(entry) => Some((txid, entry)),
@@ -214,8 +213,8 @@ impl Tracker {
                 }
             })
             .collect();
-        let txs = daemon.gettransactions(&txids_to_add)?;
-        assert_eq!(entries.len(), txs.len());
+        let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
+        let txs = daemon.gettransactions(&txids)?;
         for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
             assert_eq!(tx.txid(), *txid);
             self.add(txid, tx, entry);
