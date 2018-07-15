@@ -2,10 +2,10 @@
 
 Install [latest Rust](https://rustup.rs/) (1.26+) and [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+).
 
-Also, install `clang` (for building `rust-rocksdb`):
+Also, install the following packages (on Debian):
 ```bash
 $ sudo apt update
-$ sudo apt install clang
+$ sudo apt install clang cmake  # for building 'rust-rocksdb'
 ```
 
 ## Build
