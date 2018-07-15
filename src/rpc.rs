@@ -287,6 +287,7 @@ impl Connection {
     fn handle_replies(&mut self) -> Result<()> {
         loop {
             let msg = self.chan.receiver().recv().chain_err(|| "channel closed")?;
+            trace!("RPC {:?}", msg);
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
@@ -344,6 +345,7 @@ impl Connection {
     }
 }
 
+#[derive(Debug)]
 pub enum Message {
     Request(String),
     PeriodicUpdate,
