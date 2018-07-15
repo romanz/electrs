@@ -198,10 +198,7 @@ impl Daemon {
         let daemon = Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
-            conn: Mutex::new(Connection::new(
-                daemon_rpc_addr,
-                base64::encode(cookie),
-            )?),
+            conn: Mutex::new(Connection::new(daemon_rpc_addr, base64::encode(cookie))?),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
