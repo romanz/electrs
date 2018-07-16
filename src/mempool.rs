@@ -208,13 +208,19 @@ impl Tracker {
                     Ok(entry) => Some((txid, entry)),
                     Err(err) => {
                         warn!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
-                        None
+                        None // ignore this transaction for now
                     }
                 }
             })
             .collect();
         let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
-        let txs = daemon.gettransactions(&txids)?;
+        let txs = match daemon.gettransactions(&txids) {
+            Ok(txs) => txs,
+            Err(err) => {
+                warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
+                return Ok(()); // keep the mempool until next update()
+            }
+        };
         for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
             assert_eq!(tx.txid(), *txid);
             self.add(txid, tx, entry);
