@@ -151,7 +151,7 @@ fn load_headers(daemon: &Daemon) -> Result<HeaderList> {
     Ok(headers)
 }
 
-fn set_open_files_limit(limit: u64) {
+fn set_open_files_limit(limit: libc::rlim_t) {
     let resource = libc::RLIMIT_NOFILE;
     let mut rlim = libc::rlimit {
         rlim_cur: 0,
