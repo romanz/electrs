@@ -134,10 +134,10 @@ impl Config {
                 default_dir.push(".bitcoin");
                 default_dir
             });
-        if let Network::Testnet = network_type {
-            daemon_dir.push("testnet3");
-        } else if let Network::Regtest = network_type {
-            daemon_dir.push("regtest");
+        match network_type {
+            Network::Mainnet => (),
+            Network::Testnet => daemon_dir.push("testnet3"),
+            Network::Regtest => daemon_dir.push("regtest"),
         }
         let cookie = m.value_of("cookie")
             .map(|s| s.to_owned())
