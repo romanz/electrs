@@ -388,13 +388,9 @@ impl Daemon {
 
     pub fn getmempoolentry(&self, txid: &Sha256dHash) -> Result<MempoolEntry> {
         let entry = self.request("getmempoolentry", json!([txid.be_hex_string()]))?;
-        let fees = entry
-            .get("fees")
-            .chain_err(|| "missing fees section")?
-            .as_object()
-            .chain_err(|| "non-object fees")?;
-        let fee = (fees.get("base")
-            .chain_err(|| "missing base fee")?
+        let fee = (entry
+            .get("fee")
+            .chain_err(|| "missing fee")?
             .as_f64()
             .chain_err(|| "non-float fee")? * 100_000_000f64) as u64;
         let vsize = entry
