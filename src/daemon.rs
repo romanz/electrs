@@ -52,16 +52,18 @@ fn tx_from_value(value: Value) -> Result<Transaction> {
 }
 
 fn parse_jsonrpc_reply(reply: &mut Value, method: &str) -> Result<Value> {
-    let reply_obj = reply.as_object_mut().chain_err(|| "non-object reply")?;
-    if let Some(err) = reply_obj.get("error") {
-        if !err.is_null() {
-            bail!("{} RPC error: {}", method, err);
+    if let Some(reply_obj) = reply.as_object_mut() {
+        if let Some(err) = reply_obj.get("error") {
+            if !err.is_null() {
+                bail!("{} RPC error: {}", method, err);
+            }
         }
+        if let Some(result) = reply_obj.get_mut("result") {
+            return Ok(result.take());
+        }
+        bail!("no result in reply: {:?}", reply_obj);
     }
-    let result = reply_obj
-        .get_mut("result")
-        .chain_err(|| "no result in reply")?;
-    Ok(result.take())
+    bail!("non-object reply: {:?}", reply);
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -275,10 +277,13 @@ impl Daemon {
         let mut results = vec![];
         let mut replies = self.call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
-        for reply in replies.as_array_mut().chain_err(|| "non-array response")? {
-            results.push(parse_jsonrpc_reply(reply, method)?)
+        if let Some(replies_vec) = replies.as_array_mut() {
+            for reply in replies_vec {
+                results.push(parse_jsonrpc_reply(reply, method)?)
+            }
+            return Ok(results);
         }
-        Ok(results)
+        bail!("non-array replies: {:?}", replies);
     }
 
     // bitcoind JSONRPC API:
