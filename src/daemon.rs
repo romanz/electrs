@@ -26,10 +26,12 @@ pub enum Network {
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
-    Ok(
-        Sha256dHash::from_hex(value.as_str().chain_err(|| "non-string value")?)
-            .chain_err(|| "non-hex value")?,
-    )
+    Ok(Sha256dHash::from_hex(value
+        .as_str()
+        .chain_err(|| format!("non-string value: {}", value))?)
+        .chain_err(|| {
+        format!("non-hex value: {}", value)
+    })?)
 }
 
 fn header_from_value(value: Value) -> Result<BlockHeader> {
