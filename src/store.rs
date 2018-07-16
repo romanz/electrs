@@ -1,7 +1,7 @@
 use rocksdb;
 use rocksdb::Writable;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use util::Bytes;
 
@@ -70,22 +70,8 @@ impl DBStore {
         self
     }
 
-    pub fn sstable(&self) -> SSTableWriter {
-        SSTableWriter::new()
-    }
-
     pub fn put(&self, key: &[u8], value: &[u8]) {
         self.db.put(key, value).unwrap();
-    }
-
-    pub fn ingest(&self, sstables: &[PathBuf]) {
-        let mut opts = rocksdb::IngestExternalFileOptions::new();
-        opts.move_files(true);
-        let sstables: Vec<&str> = sstables.iter().map(|path| path.to_str().unwrap()).collect();
-        info!("ingesting {} SSTables", sstables.len());
-        self.db
-            .ingest_external_file(&opts, &sstables)
-            .expect("failed to ingest SSTables")
     }
 
     pub fn compact(&self) {
@@ -139,37 +125,5 @@ impl WriteStore for DBStore {
 impl Drop for DBStore {
     fn drop(&mut self) {
         trace!("closing DB");
-    }
-}
-
-pub struct SSTableWriter {
-    writer: rocksdb::SstFileWriter,
-}
-
-impl SSTableWriter {
-    fn new() -> Self {
-        let mut cf_opts = rocksdb::ColumnFamilyOptions::new();
-        cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
-        cf_opts.compression(rocksdb::DBCompressionType::Snappy);
-        SSTableWriter {
-            writer: rocksdb::SstFileWriter::new(rocksdb::EnvOptions::new(), cf_opts),
-        }
-    }
-
-    pub fn build(mut self, path: &Path, mut rows: Vec<Row>) {
-        rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
-        rows.dedup_by(|a, b| a.key.eq(&b.key)); // SSTableWriter requires ascending keys.
-        let path = path.to_str().unwrap();
-        self.writer
-            .open(path)
-            .expect(&format!("failed to open SSTable {}", path));
-        for row in &rows {
-            self.writer
-                .put(row.key.as_slice(), row.value.as_slice())
-                .expect(&format!("failed to write SSTable {}", path));
-        }
-        self.writer
-            .finish()
-            .expect(&format!("failed to close SSTable {}", path));
     }
 }
