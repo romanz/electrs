@@ -88,21 +88,16 @@ impl Config {
             )
             .get_matches();
 
-        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let network_name = m.value_of("network").unwrap_or("mainnet");
-
         let network_type = match network_name {
             "mainnet" => Network::Mainnet,
             "testnet" => Network::Testnet,
             "regtest" => Network::Regtest,
-            _ => Network::Testnet,
+            _ => panic!("unsupported Bitcoin network: {:?}", network_name),
         };
+        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
+        let db_path = db_dir.join(network_name);
 
-        let db_path = match network_type {
-            Network::Mainnet => db_dir.join("mainnet"),
-            Network::Testnet => db_dir.join("testnet"),
-            Network::Regtest => db_dir.join("regtest"),
-        };
         let default_daemon_port = match network_type {
             Network::Mainnet => 8332,
             Network::Testnet => 18332,
