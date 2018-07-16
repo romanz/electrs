@@ -1,9 +1,12 @@
 language: rust
-cache: cargo
-rust:
-  - stable
+
+cache:
+  cargo: true
+  timeout: 450
+
 before_script:
   - rustup component add rustfmt-preview
+
 script:
   - cargo fmt --all -- --write-mode=check
   - cargo build
