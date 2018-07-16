@@ -51,7 +51,7 @@ fn tx_from_value(value: Value) -> Result<Transaction> {
     Ok(deserialize(&tx_bytes).chain_err(|| format!("failed to parse tx {}", tx_hex))?)
 }
 
-fn parse_jsonrpc_reply(reply: &mut Value, method: &str) -> Result<Value> {
+fn parse_jsonrpc_reply(mut reply: Value, method: &str) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
         if let Some(err) = reply_obj.get("error") {
             if !err.is_null() {
@@ -264,9 +264,9 @@ impl Daemon {
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
         let req = json!({"method": method, "params": params});
-        let mut reply = self.call_jsonrpc(method, &req)
+        let reply = self.call_jsonrpc(method, &req)
             .chain_err(|| format!("RPC failed: {}", req))?;
-        parse_jsonrpc_reply(&mut reply, method)
+        parse_jsonrpc_reply(reply, method)
     }
 
     fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
@@ -279,7 +279,7 @@ impl Daemon {
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         if let Some(replies_vec) = replies.as_array_mut() {
             for reply in replies_vec {
-                results.push(parse_jsonrpc_reply(reply, method)?)
+                results.push(parse_jsonrpc_reply(reply.take(), method)?)
             }
             return Ok(results);
         }
