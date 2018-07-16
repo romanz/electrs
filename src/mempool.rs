@@ -213,6 +213,10 @@ impl Tracker {
                 }
             })
             .collect();
+        if entries.is_empty() {
+            trace!("no mempool entries found!");
+            return Ok(());
+        }
         let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
         let txs = match daemon.gettransactions(&txids) {
             Ok(txs) => txs,
