@@ -1,44 +1,55 @@
 #!/usr/bin/env python3
 import binascii
 import json
+import os
 import socket
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-s = socket.create_connection(('localhost', 8332))
-r = s.makefile()
-cookie = binascii.b2a_base64(open('/home/roman/.bitcoin/.cookie', 'rb').read())
-cookie = cookie.decode('ascii').strip()
+class Daemon:
+    def __init__(self):
+        self.sock = socket.create_connection(('localhost', 8332))
+        self.fd = self.sock.makefile()
+        path = os.path.expanduser('~/.bitcoin/.cookie')
+        cookie = binascii.b2a_base64(open(path, 'rb').read())
+        self.cookie = cookie.decode('ascii').strip()
+        self.index = 0
 
-def request(method, params_list):
-    obj = [{"method": method, "params": params} for params in params_list]
-    request = json.dumps(obj)
+    def request(self, method, params_list):
+        obj = [{"method": method, "params": params, "id": self.index}
+               for params in params_list]
+        request = json.dumps(obj)
 
-    msg = ('POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n'
-           '{}'.format(cookie, len(request), request))
-    s.sendall(msg.encode('ascii'))
+        msg = ('POST / HTTP/1.1\n'
+               'Authorization: Basic {}\n'
+               'Content-Length: {}\n\n'
+               '{}'.format(self.cookie, len(request), request))
+        self.sock.sendall(msg.encode('ascii'))
 
-    status = r.readline().strip()
-    headers = []
-    while True:
-        line = r.readline().strip()
-        if line:
-            headers.append(line)
-        else:
-            break
+        status = self.fd.readline().strip()
+        while True:
+            if self.fd.readline().strip():
+                continue  # skip headers
+            else:
+                break  # next line will contain the response
 
-    data = r.readline().strip()
-    replies = json.loads(data)
-    assert all(r['error'] is None for r in replies), replies
-    return [d['result'] for d in replies]
+        data = self.fd.readline().strip()
+        replies = json.loads(data)
+        for reply in replies:
+            assert reply['error'] is None
+            assert reply['id'] == self.index
+
+        self.index += 1
+        return [d['result'] for d in replies]
 
 
 def main():
-    txids, = request('getrawmempool', [[False]])
+    d = Daemon()
+    txids, = d.request('getrawmempool', [[False]])
     txids = list(map(lambda a: [a], txids))
 
-    entries = request('getmempoolentry', txids)
+    entries = d.request('getmempoolentry', txids)
     entries = [{'fee': e['fee']*1e8, 'vsize': e['size']} for e in entries]
     for e in entries:
         e['rate'] = e['fee'] / e['vsize']  # sat/vbyte
