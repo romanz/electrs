@@ -54,12 +54,24 @@ fn tx_from_value(value: Value) -> Result<Transaction> {
     Ok(deserialize(&tx_bytes).chain_err(|| format!("failed to parse tx {}", tx_hex))?)
 }
 
-fn parse_jsonrpc_reply(mut reply: Value, method: &str) -> Result<Value> {
+fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
         if let Some(err) = reply_obj.get("error") {
             if !err.is_null() {
                 bail!("{} RPC error: {}", method, err);
             }
+        }
+        let id = reply_obj
+            .get("id")
+            .chain_err(|| format!("no id in reply: {:?}", reply_obj))?
+            .clone();
+        if id != expected_id {
+            bail!(
+                "wrong {} response id {}, expected {}",
+                method,
+                id,
+                expected_id
+            );
         }
         if let Some(result) = reply_obj.get_mut("result") {
             return Ok(result.take());
@@ -182,10 +194,29 @@ impl Connection {
     }
 }
 
+struct Counter {
+    value: Mutex<u64>,
+}
+
+impl Counter {
+    fn new() -> Self {
+        Counter {
+            value: Mutex::new(0),
+        }
+    }
+
+    fn next(&self) -> u64 {
+        let mut value = self.value.lock().unwrap();
+        *value += 1;
+        *value
+    }
+}
+
 pub struct Daemon {
     daemon_dir: PathBuf,
     network: Network,
     conn: Mutex<Connection>,
+    message_id: Counter, // for monotonic JSONRPC 'id'
 
     // monitoring
     latency: HistogramVec,
@@ -204,6 +235,7 @@ impl Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
             conn: Mutex::new(Connection::new(daemon_rpc_addr, base64::encode(cookie))?),
+            message_id: Counter::new(),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
@@ -223,6 +255,7 @@ impl Daemon {
             daemon_dir: self.daemon_dir.clone(),
             network: self.network,
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
+            message_id: Counter::new(),
             latency: self.latency.clone(),
             size: self.size.clone(),
         })
@@ -267,23 +300,25 @@ impl Daemon {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
-        let req = json!({"method": method, "params": params});
+        let id = self.message_id.next();
+        let req = json!({"method": method, "params": params, "id": id});
         let reply = self.call_jsonrpc(method, &req)
             .chain_err(|| format!("RPC failed: {}", req))?;
-        parse_jsonrpc_reply(reply, method)
+        parse_jsonrpc_reply(reply, method, id)
     }
 
     fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
+        let id = self.message_id.next();
         let reqs = params_list
             .iter()
-            .map(|params| json!({"method": method, "params": params}))
+            .map(|params| json!({"method": method, "params": params, "id": id}))
             .collect();
         let mut results = vec![];
         let mut replies = self.call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         if let Some(replies_vec) = replies.as_array_mut() {
             for reply in replies_vec {
-                results.push(parse_jsonrpc_reply(reply.take(), method)?)
+                results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
             }
             return Ok(results);
         }
