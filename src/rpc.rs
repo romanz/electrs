@@ -311,17 +311,28 @@ impl Connection {
         }
     }
 
-    fn handle_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) {
+    fn handle_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) -> Result<()> {
         loop {
-            let mut line = String::new();
+            let mut line = Vec::<u8>::new();
             reader
-                .read_line(&mut line)  // TODO: use .lines() iterator
-                .expect("failed to read a request");
+                .read_until(b'\n', &mut line)
+                .chain_err(|| "failed to read a request")?;
             if line.is_empty() {
-                tx.send(Message::Done).expect("channel closed");
-                break;
+                tx.send(Message::Done).chain_err(|| "channel closed")?;
+                return Ok(());
             } else {
-                tx.send(Message::Request(line)).expect("channel closed");
+                match String::from_utf8(line) {
+                    Ok(req) => tx.send(Message::Request(req))
+                        .chain_err(|| "channel closed")?,
+                    Err(err) => {
+                        let _ = tx.send(Message::Done);
+                        bail!(
+                            "invalid UTF8 {:?}: {:?}",
+                            String::from_utf8_lossy(err.as_bytes()),
+                            err
+                        )
+                    }
+                }
             }
         }
     }
@@ -339,8 +350,8 @@ impl Connection {
         }
         info!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
-        if child.join().is_err() {
-            error!("[{}] receiver panicked", self.addr);
+        if let Err(err) = child.join().expect("receiver panicked") {
+            error!("[{}] receiver failed: {}", self.addr, err);
         }
     }
 }
