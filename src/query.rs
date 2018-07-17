@@ -16,16 +16,19 @@ use util::{FullHash, HashPrefix, HeaderEntry};
 
 use errors::*;
 
-struct FundingOutput {
-    txn_id: Sha256dHash,
-    height: u32,
-    output_index: usize,
-    value: u64,
+pub struct FundingOutput {
+    pub txn_id: Sha256dHash,
+    pub height: u32,
+    pub output_index: usize,
+    pub value: u64,
 }
+
+type OutPoint = (Sha256dHash, usize); // (txid, output_index)
 
 struct SpendingInput {
     txn_id: Sha256dHash,
     height: u32,
+    funding_output: OutPoint,
     value: u64,
 }
 
@@ -69,6 +72,23 @@ impl Status {
             txns_map.into_iter().map(|item| (item.1, item.0)).collect();
         txns.sort();
         txns
+    }
+
+    pub fn unspent(&self) -> Vec<&FundingOutput> {
+        let mut outputs_map = HashMap::<OutPoint, &FundingOutput>::new();
+        for f in self.funding() {
+            outputs_map.insert((f.txn_id, f.output_index), f);
+        }
+        for s in self.spending() {
+            if let None = outputs_map.remove(&s.funding_output) {
+                warn!("failed to remove {:?}", s.funding_output);
+            }
+        }
+        outputs_map
+            .into_iter()
+            .map(|item| item.1) // a reference to unspent output
+            .collect::<Vec<&FundingOutput>>()
+        // TODO: sort the outputs by height
     }
 
     pub fn hash(&self) -> Option<FullHash> {
@@ -210,6 +230,7 @@ impl Query {
                     spending_inputs.push(SpendingInput {
                         txn_id: t.txn.txid(),
                         height: t.height,
+                        funding_output: (funding.txn_id, funding.output_index),
                         value: funding.value,
                     })
                 }
