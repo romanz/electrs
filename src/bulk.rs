@@ -113,16 +113,15 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
     let mut blocks = vec![];
     let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
-        let pos = cursor.position();
         let mut decoder = RawDecoder::new(cursor);
         match decoder.read_u32() {
-            Ok(0) => {
-                cursor = decoder.into_inner(); // skip zeroes
-                continue;
-            }
-            Ok(x) => {
-                if x != magic {
-                    bail!("incorrect magic {:08x} at {}", x, pos)
+            Ok(value) => {
+                if magic != value {
+                    cursor = decoder.into_inner();
+                    cursor
+                        .seek(SeekFrom::Current(-3))
+                        .expect("failed to seek back");
+                    continue;
                 }
             }
             Err(_) => break, // EOF
