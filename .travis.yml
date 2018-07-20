@@ -1,5 +1,7 @@
 language: rust
 
+env: CARGO_INCREMENTAL=0
+
 cache:
   cargo: true
   timeout: 450
