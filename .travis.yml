@@ -6,10 +6,18 @@ cache:
   cargo: true
   timeout: 450
 
-before_script:
-  - rustup component add rustfmt-preview
+stages:
+  - lint
+  - test
 
-script:
-  - cargo fmt --all -- --write-mode=check
-  - cargo build
-  - cargo test
+jobs:
+  include:
+    - stage: test
+      script:
+        - cargo build
+        - cargo test
+    - stage: lint
+      before_script:
+        - rustup component add rustfmt-preview
+      script:
+        - cargo fmt --all -- --write-mode=check
