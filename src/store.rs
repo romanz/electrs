@@ -1,7 +1,6 @@
 use rocksdb;
-use rocksdb::Writable;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use util::Bytes;
 
@@ -27,47 +26,54 @@ pub trait WriteStore: Sync {
     fn flush(&self);
 }
 
-pub struct DBStore {
-    db: rocksdb::DB,
+#[derive(Clone)]
+struct Options {
+    path: PathBuf,
     bulk_import: bool,
 }
 
-impl DBStore {
-    /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path) -> Self {
-        let path = path.to_str().unwrap();
-        debug!("opening DB at {:?}", path);
-        let mut db_opts = rocksdb::DBOptions::default();
-        db_opts.create_if_missing(true);
-        db_opts.set_keep_log_file_num(10);
-        db_opts.set_compaction_readahead_size(2 << 20);
+pub struct DBStore {
+    db: rocksdb::DB,
+    opts: Options,
+}
 
-        let mut cf_opts = rocksdb::ColumnFamilyOptions::new();
-        cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
-        cf_opts.compression(rocksdb::DBCompressionType::Snappy);
-        cf_opts.set_target_file_size_base(128 << 20);
-        cf_opts.set_write_buffer_size(64 << 20);
-        cf_opts.set_min_write_buffer_number(2);
-        cf_opts.set_max_write_buffer_number(3);
-        cf_opts.set_disable_auto_compactions(true); // for initial bulk load
+impl DBStore {
+    fn open_opts(opts: Options) -> Self {
+        debug!("opening DB at {:?}", opts.path);
+        let mut db_opts = rocksdb::Options::default();
+        db_opts.create_if_missing(true);
+        // db_opts.set_keep_log_file_num(10);
+        db_opts.set_compaction_readahead_size(2 << 20);
+        db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+        db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
+        db_opts.set_target_file_size_base(128 << 20);
+        db_opts.set_write_buffer_size(64 << 20);
+        db_opts.set_min_write_buffer_number(2);
+        db_opts.set_max_write_buffer_number(3);
+        db_opts.set_disable_auto_compactions(opts.bulk_import); // for initial bulk load
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(1 << 20);
         DBStore {
-            db: rocksdb::DB::open_cf(db_opts, path, vec![("default", cf_opts)]).unwrap(),
-            bulk_import: true,
+            db: rocksdb::DB::open(&db_opts, &opts.path).unwrap(),
+            opts,
         }
     }
 
-    pub fn enable_compaction(mut self) -> Self {
-        self.bulk_import = false;
-        {
-            let cf = self.db.cf_handle("default").expect("no default CF");
-            self.db
-                .set_options_cf(cf, &vec![("disable_auto_compactions", "false")])
-                .expect("failed to enable auto compactions");
-        }
-        self
+    /// Opens a new RocksDB at the specified location.
+    pub fn open(path: &Path) -> Self {
+        DBStore::open_opts(Options {
+            path: path.to_path_buf(),
+            bulk_import: true,
+        })
+    }
+
+    pub fn enable_compaction(self) -> Self {
+        let mut opts = self.opts.clone();
+        opts.bulk_import = false;
+        drop(self);
+        // DB must be closed before being re-opened:
+        DBStore::open_opts(opts)
     }
 
     pub fn put(&self, key: &[u8], value: &[u8]) {
@@ -89,13 +95,17 @@ impl ReadStore for DBStore {
     // TODO: use generators
     fn scan(&self, prefix: &[u8]) -> Vec<Row> {
         let mut rows = vec![];
-        let mut iter = self.db.iter();
-        iter.seek(rocksdb::SeekKey::Key(prefix));
-        for (key, value) in &mut iter {
+        for (key, value) in self.db.iterator(rocksdb::IteratorMode::From(
+            prefix,
+            rocksdb::Direction::Forward,
+        )) {
             if !key.starts_with(prefix) {
                 break;
             }
-            rows.push(Row { key, value });
+            rows.push(Row {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
         }
         rows
     }
@@ -103,13 +113,13 @@ impl ReadStore for DBStore {
 
 impl WriteStore for DBStore {
     fn write(&self, rows: Vec<Row>) {
-        let batch = rocksdb::WriteBatch::default();
+        let mut batch = rocksdb::WriteBatch::default();
         for row in rows {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();
         }
         let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(!self.bulk_import);
-        opts.disable_wal(self.bulk_import);
+        opts.set_sync(!self.opts.bulk_import);
+        opts.disable_wal(self.opts.bulk_import);
         self.db.write_opt(batch, &opts).unwrap();
     }
 
@@ -124,6 +134,6 @@ impl WriteStore for DBStore {
 
 impl Drop for DBStore {
     fn drop(&mut self) {
-        trace!("closing DB");
+        trace!("closing DB at {:?}", self.opts.path);
     }
 }

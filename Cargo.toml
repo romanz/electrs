@@ -24,7 +24,7 @@ hex = "0.3"
 libc = "0.2"
 log = "0.4"
 prometheus = "0.4"
-rocksdb = { git = "https://github.com/pingcap/rust-rocksdb", rev = "9a1c83c5382fbaee8a5102213c711bbe52d71470" }
+rocksdb = "0.10.1"
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
