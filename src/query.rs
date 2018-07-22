@@ -70,7 +70,7 @@ impl Status {
         }
         let mut txns: Vec<(i32, Sha256dHash)> =
             txns_map.into_iter().map(|item| (item.1, item.0)).collect();
-        txns.sort();
+        txns.sort_unstable();
         txns
     }
 
@@ -84,11 +84,12 @@ impl Status {
                 warn!("failed to remove {:?}", s.funding_output);
             }
         }
-        outputs_map
+        let mut outputs = outputs_map
             .into_iter()
             .map(|item| item.1) // a reference to unspent output
-            .collect::<Vec<&FundingOutput>>()
-        // TODO: sort the outputs by height
+            .collect::<Vec<&FundingOutput>>();
+        outputs.sort_unstable_by_key(|out| out.height);
+        outputs
     }
 
     pub fn hash(&self) -> Option<FullHash> {
