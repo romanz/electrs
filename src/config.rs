@@ -28,6 +28,7 @@ pub struct Config {
     pub cookie: String,                // for bitcoind JSONRPC authentication ("USER:PASSWORD")
     pub electrum_rpc_addr: SocketAddr, // for serving Electrum clients
     pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
+    pub skip_bulk_import: bool,        // slower initial indexing, for low-memory systems
 }
 
 impl Config {
@@ -86,6 +87,11 @@ impl Config {
                     .long("monitoring-addr")
                     .help("Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:42024)")
                     .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("skip_bulk_import")
+                    .long("skip-bulk-import")
+                    .help("Prepend log lines with a timestamp"),
             )
             .get_matches();
 
@@ -156,6 +162,7 @@ impl Config {
             cookie,
             electrum_rpc_addr,
             monitoring_addr,
+            skip_bulk_import: m.is_present("skip_bulk_import"),
         };
         eprintln!("{:?}", config);
         config

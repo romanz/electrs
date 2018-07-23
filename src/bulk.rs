@@ -253,3 +253,10 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBSto
     // Enable auto compactions after bulk indexing is over.
     result.map(|store| store.enable_compaction())
 }
+
+pub fn skip(store: DBStore) -> Result<DBStore> {
+    store.flush();
+    store.put(FINISH_MARKER, b"");
+    warn!("skipping bulk import of blk*.dat files'");
+    Ok(store.enable_compaction())
+}
