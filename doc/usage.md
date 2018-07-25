@@ -55,7 +55,7 @@ $ du db/
 ## Electrum client
 ```bash
 # Connect only to the local server, for better privacy
-$ ./local-electrum.bash
+$ ./scripts/local-electrum.bash
 ```
 
 ## Monitoring
