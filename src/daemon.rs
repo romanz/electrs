@@ -495,10 +495,10 @@ impl Daemon {
             }
             let header = self.getblockheader(&blockhash)
                 .chain_err(|| format!("failed to get {} header", blockhash))?;
-            trace!("downloaded {} block header", blockhash);
             new_headers.push(header);
             blockhash = header.prev_blockhash;
         }
+        trace!("downloaded {} block headers", new_headers.len());
         new_headers.reverse(); // so the tip is the last vector entry
         Ok(new_headers)
     }
