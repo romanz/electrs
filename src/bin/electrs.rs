@@ -35,7 +35,7 @@ fn run_server(config: &Config) -> Result<()> {
     let app = App::new(store, index, daemon)?;
     let query = Query::new(app.clone(), &metrics);
 
-    let mut server = None;
+    let mut server = None; // Electrum RPC server
     loop {
         app.update(&signal)?;
         query.update_mempool()?;
