@@ -132,9 +132,14 @@ struct Connection {
     addr: SocketAddr,
 }
 
+fn tcp_connect(addr: SocketAddr) -> Result<TcpStream> {
+    TcpStream::connect(addr)
+        .chain_err(|| ErrorKind::Connection(format!("failed to connect to {}", addr)))
+}
+
 impl Connection {
     fn new(addr: SocketAddr, cookie_b64: String) -> Result<Connection> {
-        let conn = TcpStream::connect(addr).chain_err(|| format!("failed to connect to {}", addr))?;
+        let conn = tcp_connect(addr)?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
@@ -146,8 +151,7 @@ impl Connection {
     }
 
     pub fn reconnect(&self) -> Result<Connection> {
-        let conn = TcpStream::connect(self.addr)
-            .chain_err(|| format!("failed to connect to {}", self.addr))?;
+        let conn = tcp_connect(self.addr)?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
@@ -176,7 +180,7 @@ impl Connection {
         let mut contents: Option<String> = None;
         let iter = self.rx.by_ref();
         let status = iter.next()
-            .chain_err(|| "disconnected from daemon")?
+            .chain_err(|| ErrorKind::Connection("disconnection from daemon".to_owned()))?
             .chain_err(|| "failed to read status")?;
         if status != "HTTP/1.1 200 OK" {
             bail!("request failed: {}", status);
@@ -190,7 +194,7 @@ impl Connection {
                 break;
             }
         }
-        contents.chain_err(|| "no reply")
+        contents.chain_err(|| "no reply from daemon")
     }
 }
 
