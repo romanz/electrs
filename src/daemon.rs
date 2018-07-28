@@ -155,15 +155,7 @@ impl Connection {
     }
 
     pub fn reconnect(&self) -> Result<Connection> {
-        let conn = tcp_connect(self.addr)?;
-        let reader = BufReader::new(conn.try_clone()
-            .chain_err(|| format!("failed to clone {:?}", conn))?);
-        Ok(Connection {
-            tx: conn,
-            rx: reader.lines(),
-            cookie_getter: self.cookie_getter.clone(),
-            addr: self.addr,
-        })
+        Connection::new(self.addr, self.cookie_getter.clone())
     }
 
     fn send(&mut self, request: &str) -> Result<()> {
