@@ -91,7 +91,7 @@ impl Config {
             .arg(
                 Arg::with_name("skip_bulk_import")
                     .long("skip-bulk-import")
-                    .help("Prepend log lines with a timestamp"),
+                    .help("Allows skipping import of blk dat files. Useful for remote full node or low memory"),
             )
             .get_matches();
 
