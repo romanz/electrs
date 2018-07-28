@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use metrics::{HistogramOpts, HistogramVec, Metrics};
 use util::HeaderList;
@@ -125,10 +125,14 @@ impl MempoolEntry {
     }
 }
 
+pub trait CookieGetter: Send + Sync {
+    fn get(&self) -> String;
+}
+
 struct Connection {
     tx: TcpStream,
     rx: Lines<BufReader<TcpStream>>,
-    cookie_b64: String,
+    cookie_getter: Arc<CookieGetter>,
     addr: SocketAddr,
 }
 
@@ -138,14 +142,14 @@ fn tcp_connect(addr: SocketAddr) -> Result<TcpStream> {
 }
 
 impl Connection {
-    fn new(addr: SocketAddr, cookie_b64: String) -> Result<Connection> {
+    fn new(addr: SocketAddr, cookie_getter: Arc<CookieGetter>) -> Result<Connection> {
         let conn = tcp_connect(addr)?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
             tx: conn,
             rx: reader.lines(),
-            cookie_b64,
+            cookie_getter,
             addr,
         })
     }
@@ -157,15 +161,16 @@ impl Connection {
         Ok(Connection {
             tx: conn,
             rx: reader.lines(),
-            cookie_b64: self.cookie_b64.clone(),
+            cookie_getter: self.cookie_getter.clone(),
             addr: self.addr,
         })
     }
 
     fn send(&mut self, request: &str) -> Result<()> {
+        let cookie_b64 = base64::encode(&self.cookie_getter.get());
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
-            self.cookie_b64,
+            cookie_b64,
             request.len(),
             request,
         );
@@ -231,14 +236,14 @@ impl Daemon {
     pub fn new(
         daemon_dir: &PathBuf,
         daemon_rpc_addr: SocketAddr,
-        cookie: &str,
+        cookie_getter: Arc<CookieGetter>,
         network: Network,
         metrics: &Metrics,
     ) -> Result<Daemon> {
         let daemon = Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
-            conn: Mutex::new(Connection::new(daemon_rpc_addr, base64::encode(cookie))?),
+            conn: Mutex::new(Connection::new(daemon_rpc_addr, cookie_getter)?),
             message_id: Counter::new(),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
