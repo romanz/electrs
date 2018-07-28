@@ -12,6 +12,8 @@ use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use metrics::{HistogramOpts, HistogramVec, Metrics};
 use util::HeaderList;
@@ -137,8 +139,16 @@ struct Connection {
 }
 
 fn tcp_connect(addr: SocketAddr) -> Result<TcpStream> {
-    TcpStream::connect(addr)
-        .chain_err(|| ErrorKind::Connection(format!("failed to connect to {}", addr)))
+    loop {
+        match TcpStream::connect(addr) {
+            Ok(conn) => return Ok(conn),
+            Err(err) => {
+                warn!("failed to connect daemon at {}: {}", addr, err);
+                thread::sleep(Duration::from_secs(3));
+                continue;
+            }
+        }
+    }
 }
 
 impl Connection {
@@ -166,9 +176,9 @@ impl Connection {
             request.len(),
             request,
         );
-        self.tx
-            .write_all(msg.as_bytes())
-            .chain_err(|| "failed to send request")
+        self.tx.write_all(msg.as_bytes()).chain_err(|| {
+            ErrorKind::Connection("disconnected from daemon while sending".to_owned())
+        })
     }
 
     fn recv(&mut self) -> Result<String> {
@@ -177,13 +187,16 @@ impl Connection {
         let mut contents: Option<String> = None;
         let iter = self.rx.by_ref();
         let status = iter.next()
-            .chain_err(|| ErrorKind::Connection("disconnection from daemon".to_owned()))?
+            .chain_err(|| {
+                ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
+            })?
             .chain_err(|| "failed to read status")?;
         if status != "HTTP/1.1 200 OK" {
-            bail!("request failed: {}", status);
+            let msg = format!("request failed {:?}", status);
+            bail!(ErrorKind::Connection(msg));
         }
         for line in iter {
-            let line = line.chain_err(|| "failed to read")?;
+            let line = line.chain_err(|| ErrorKind::Connection("failed to read".to_owned()))?;
             if line.is_empty() {
                 in_header = false; // next line should contain the actual response.
             } else if !in_header {
@@ -191,7 +204,7 @@ impl Connection {
                 break;
             }
         }
-        contents.chain_err(|| "no reply from daemon")
+        contents.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
     }
 }
 
@@ -300,10 +313,25 @@ impl Daemon {
         Ok(result)
     }
 
+    fn retry_call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
+        loop {
+            match self.call_jsonrpc(method, request) {
+                Err(Error(ErrorKind::Connection(msg), _)) => {
+                    warn!("connection failed: {}", msg);
+                    thread::sleep(Duration::from_secs(3));
+                    let mut conn = self.conn.lock().unwrap();
+                    *conn = conn.reconnect()?;
+                    continue;
+                }
+                result => return result,
+            }
+        }
+    }
+
     fn request(&self, method: &str, params: Value) -> Result<Value> {
         let id = self.message_id.next();
         let req = json!({"method": method, "params": params, "id": id});
-        let reply = self.call_jsonrpc(method, &req)
+        let reply = self.retry_call_jsonrpc(method, &req)
             .chain_err(|| format!("RPC failed: {}", req))?;
         parse_jsonrpc_reply(reply, method, id)
     }
@@ -315,7 +343,7 @@ impl Daemon {
             .map(|params| json!({"method": method, "params": params, "id": id}))
             .collect();
         let mut results = vec![];
-        let mut replies = self.call_jsonrpc(method, &reqs)
+        let mut replies = self.retry_call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         if let Some(replies_vec) = replies.as_array_mut() {
             for reply in replies_vec {
