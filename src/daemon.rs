@@ -128,7 +128,7 @@ impl MempoolEntry {
 }
 
 pub trait CookieGetter: Send + Sync {
-    fn get(&self) -> Result<String>;
+    fn get(&self) -> Result<Vec<u8>>;
 }
 
 struct Connection {

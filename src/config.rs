@@ -161,7 +161,7 @@ impl Config {
     pub fn cookie_getter(&self) -> Arc<CookieGetter> {
         if let Some(ref value) = self.cookie {
             Arc::new(StaticCookie {
-                value: value.clone(),
+                value: value.as_bytes().to_vec(),
             })
         } else {
             Arc::new(CookieFile {
@@ -172,11 +172,11 @@ impl Config {
 }
 
 struct StaticCookie {
-    value: String,
+    value: Vec<u8>,
 }
 
 impl CookieGetter for StaticCookie {
-    fn get(&self) -> Result<String> {
+    fn get(&self) -> Result<Vec<u8>> {
         Ok(self.value.clone())
     }
 }
@@ -186,17 +186,10 @@ struct CookieFile {
 }
 
 impl CookieGetter for CookieFile {
-    fn get(&self) -> Result<String> {
-        read_cookie(&self.daemon_dir)
-            .chain_err(|| ErrorKind::Connection("no cookie found".to_owned()))
+    fn get(&self) -> Result<Vec<u8>> {
+        let path = self.daemon_dir.join(".cookie");
+        let contents = fs::read(&path)
+            .chain_err(|| ErrorKind::Connection(format!("failed to read cookie from {:?}", path)))?;
+        Ok(contents)
     }
-}
-
-fn read_cookie(daemon_dir: &Path) -> Result<String> {
-    let mut path = daemon_dir.to_path_buf();
-    path.push(".cookie");
-    let contents = String::from_utf8(
-        fs::read(&path).chain_err(|| format!("failed to read cookie from {:?}", path))?
-    ).chain_err(|| "invalid cookie string")?;
-    Ok(contents.trim().to_owned())
 }
