@@ -91,7 +91,7 @@ impl Config {
             .arg(
                 Arg::with_name("skip_bulk_import")
                     .long("skip-bulk-import")
-                    .help("Prepend log lines with a timestamp"),
+                    .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
             )
             .get_matches();
 
