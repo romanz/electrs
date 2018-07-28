@@ -292,8 +292,8 @@ impl Daemon {
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
-        let timer = self.latency.with_label_values(&[method]).start_timer();
         let mut conn = self.conn.lock().unwrap();
+        let timer = self.latency.with_label_values(&[method]).start_timer();
         let request = request.to_string();
         conn.send(&request)?;
         self.size
