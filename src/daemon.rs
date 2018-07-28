@@ -128,7 +128,7 @@ impl MempoolEntry {
 }
 
 pub trait CookieGetter: Send + Sync {
-    fn get(&self) -> String;
+    fn get(&self) -> Result<String>;
 }
 
 struct Connection {
@@ -169,10 +169,10 @@ impl Connection {
     }
 
     fn send(&mut self, request: &str) -> Result<()> {
-        let cookie_b64 = base64::encode(&self.cookie_getter.get());
+        let cookie = &self.cookie_getter.get()?;
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
-            cookie_b64,
+            base64::encode(cookie),
             request.len(),
             request,
         );

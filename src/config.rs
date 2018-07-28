@@ -176,8 +176,8 @@ struct StaticCookie {
 }
 
 impl CookieGetter for StaticCookie {
-    fn get(&self) -> String {
-        self.value.clone()
+    fn get(&self) -> Result<String> {
+        Ok(self.value.clone())
     }
 }
 
@@ -186,8 +186,9 @@ struct CookieFile {
 }
 
 impl CookieGetter for CookieFile {
-    fn get(&self) -> String {
-        read_cookie(&self.daemon_dir).unwrap()
+    fn get(&self) -> Result<String> {
+        read_cookie(&self.daemon_dir)
+            .chain_err(|| ErrorKind::Connection("no cookie found".to_owned()))
     }
 }
 
