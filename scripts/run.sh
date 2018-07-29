@@ -2,6 +2,7 @@
 set -eu
 
 T=5
+export RUST_BACKTRACE=1
 while :
 do
 	cargo fmt
