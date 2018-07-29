@@ -21,6 +21,7 @@ fn run() -> Result<()> {
         config.daemon_rpc_addr,
         config.cookie_getter(),
         config.network_type,
+        signal.clone(),
         &metrics,
     )?;
     let fake_store = FakeStore {};

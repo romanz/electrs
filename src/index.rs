@@ -358,7 +358,7 @@ impl Index {
                 .expect("failed sending explicit end of stream");
         });
         loop {
-            waiter.poll_err()?;
+            waiter.poll()?;
             let timer = self.stats.start_timer("fetch");
             let batch = chan.receiver()
                 .recv()

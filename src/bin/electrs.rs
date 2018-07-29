@@ -5,6 +5,7 @@ extern crate error_chain;
 extern crate log;
 
 use error_chain::ChainedError;
+use std::process;
 use std::time::Duration;
 
 use electrs::{
@@ -22,6 +23,7 @@ fn run_server(config: &Config) -> Result<()> {
         config.daemon_rpc_addr,
         config.cookie_getter(),
         config.network_type,
+        signal.clone(),
         &metrics,
     )?;
     // Perform initial indexing from local blk*.dat block files.
@@ -42,7 +44,8 @@ fn run_server(config: &Config) -> Result<()> {
         server
             .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics))
             .notify(); // update subscribed clients
-        if signal.wait(Duration::from_secs(5)).is_some() {
+        if let Err(err) = signal.wait(Duration::from_secs(5)) {
+            info!("stopping server: {}", err);
             break;
         }
     }
@@ -53,5 +56,6 @@ fn main() {
     let config = Config::from_args();
     if let Err(e) = run_server(&config) {
         error!("server failed: {}", e.display_chain());
+        process::exit(1);
     }
 }

@@ -5,7 +5,10 @@ extern crate log;
 
 extern crate error_chain;
 
-use electrs::{bulk, config::Config, daemon::Daemon, errors::*, metrics::Metrics, store::DBStore};
+use electrs::{
+    bulk, config::Config, daemon::Daemon, errors::*, metrics::Metrics, signal::Waiter,
+    store::DBStore,
+};
 
 use error_chain::ChainedError;
 
@@ -16,6 +19,7 @@ fn run(config: Config) -> Result<()> {
             config.db_path
         );
     }
+    let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
     let daemon = Daemon::new(
@@ -23,6 +27,7 @@ fn run(config: Config) -> Result<()> {
         config.daemon_rpc_addr,
         config.cookie_getter(),
         config.network_type,
+        signal,
         &metrics,
     )?;
     let store = DBStore::open(&config.db_path);

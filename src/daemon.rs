@@ -12,10 +12,10 @@ use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
 
 use metrics::{HistogramOpts, HistogramVec, Metrics};
+use signal::Waiter;
 use util::HeaderList;
 
 use errors::*;
@@ -136,15 +136,16 @@ struct Connection {
     rx: Lines<BufReader<TcpStream>>,
     cookie_getter: Arc<CookieGetter>,
     addr: SocketAddr,
+    signal: Waiter,
 }
 
-fn tcp_connect(addr: SocketAddr) -> Result<TcpStream> {
+fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
     loop {
         match TcpStream::connect(addr) {
             Ok(conn) => return Ok(conn),
             Err(err) => {
                 warn!("failed to connect daemon at {}: {}", addr, err);
-                thread::sleep(Duration::from_secs(3));
+                signal.wait(Duration::from_secs(3))?;
                 continue;
             }
         }
@@ -152,8 +153,12 @@ fn tcp_connect(addr: SocketAddr) -> Result<TcpStream> {
 }
 
 impl Connection {
-    fn new(addr: SocketAddr, cookie_getter: Arc<CookieGetter>) -> Result<Connection> {
-        let conn = tcp_connect(addr)?;
+    fn new(
+        addr: SocketAddr,
+        cookie_getter: Arc<CookieGetter>,
+        signal: Waiter,
+    ) -> Result<Connection> {
+        let conn = tcp_connect(addr, &signal)?;
         let reader = BufReader::new(conn.try_clone()
             .chain_err(|| format!("failed to clone {:?}", conn))?);
         Ok(Connection {
@@ -161,11 +166,12 @@ impl Connection {
             rx: reader.lines(),
             cookie_getter,
             addr,
+            signal,
         })
     }
 
     pub fn reconnect(&self) -> Result<Connection> {
-        Connection::new(self.addr, self.cookie_getter.clone())
+        Connection::new(self.addr, self.cookie_getter.clone(), self.signal.clone())
     }
 
     fn send(&mut self, request: &str) -> Result<()> {
@@ -231,6 +237,7 @@ pub struct Daemon {
     network: Network,
     conn: Mutex<Connection>,
     message_id: Counter, // for monotonic JSONRPC 'id'
+    signal: Waiter,
 
     // monitoring
     latency: HistogramVec,
@@ -243,13 +250,19 @@ impl Daemon {
         daemon_rpc_addr: SocketAddr,
         cookie_getter: Arc<CookieGetter>,
         network: Network,
+        signal: Waiter,
         metrics: &Metrics,
     ) -> Result<Daemon> {
         let daemon = Daemon {
             daemon_dir: daemon_dir.clone(),
             network,
-            conn: Mutex::new(Connection::new(daemon_rpc_addr, cookie_getter)?),
+            conn: Mutex::new(Connection::new(
+                daemon_rpc_addr,
+                cookie_getter,
+                signal.clone(),
+            )?),
             message_id: Counter::new(),
+            signal,
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
@@ -270,6 +283,7 @@ impl Daemon {
             network: self.network,
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             message_id: Counter::new(),
+            signal: self.signal.clone(),
             latency: self.latency.clone(),
             size: self.size.clone(),
         })
@@ -318,7 +332,7 @@ impl Daemon {
             match self.call_jsonrpc(method, request) {
                 Err(Error(ErrorKind::Connection(msg), _)) => {
                     warn!("connection failed: {}", msg);
-                    thread::sleep(Duration::from_secs(3));
+                    self.signal.wait(Duration::from_secs(3))?;
                     let mut conn = self.conn.lock().unwrap();
                     *conn = conn.reconnect()?;
                     continue;
