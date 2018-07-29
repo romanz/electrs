@@ -485,13 +485,14 @@ impl RPC {
                         info!("[{}] disconnected peer", addr);
                     }));
                 }
-                info!("stopping RPC server");
+                trace!("closing RPC connections");
                 for sender in senders.lock().unwrap().iter() {
                     let _ = sender.send(Message::Done);
                 }
                 for child in children {
                     let _ = child.join();
                 }
+                trace!("RPC connections are closed");
             })),
         };
         handle
@@ -504,7 +505,9 @@ impl RPC {
 
 impl Drop for RPC {
     fn drop(&mut self) {
+        trace!("stop accepting new RPCs");
         self.notification.send(Notification::Exit).unwrap();
         self.server.take().map(|t| t.join().unwrap());
+        trace!("RPC server is stopped");
     }
 }
