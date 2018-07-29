@@ -408,7 +408,7 @@ pub enum Notification {
 
 pub struct RPC {
     notification: Sender<Notification>,
-    server: thread::JoinHandle<()>,
+    server: Option<thread::JoinHandle<()>>, // so we can join the server while dropping this ojbect
 }
 
 struct Stats {
@@ -468,7 +468,7 @@ impl RPC {
         let notification = Channel::new();
         let handle = RPC {
             notification: notification.sender(),
-            server: spawn_thread("rpc", move || {
+            server: Some(spawn_thread("rpc", move || {
                 let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
                 let acceptor = RPC::start_acceptor(addr);
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
@@ -492,7 +492,7 @@ impl RPC {
                 for child in children {
                     let _ = child.join();
                 }
-            }),
+            })),
         };
         handle
     }
@@ -500,9 +500,11 @@ impl RPC {
     pub fn notify(&self) {
         self.notification.send(Notification::Periodic).unwrap();
     }
+}
 
-    pub fn exit(self) {
+impl Drop for RPC {
+    fn drop(&mut self) {
         self.notification.send(Notification::Exit).unwrap();
-        self.server.join().unwrap();
+        self.server.take().map(|t| t.join().unwrap());
     }
 }

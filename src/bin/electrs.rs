@@ -46,7 +46,6 @@ fn run_server(config: &Config) -> Result<()> {
             break;
         }
     }
-    server.map(|s| s.exit());
     Ok(())
 }
 
