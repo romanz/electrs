@@ -44,7 +44,7 @@ impl DBStore {
         db_opts.create_if_missing(true);
         // db_opts.set_keep_log_file_num(10);
         db_opts.set_max_open_files(2048);
-        db_opts.set_compaction_readahead_size(2 << 20);
+        db_opts.set_compaction_readahead_size(1 << 20);
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(128 << 20);
