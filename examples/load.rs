@@ -1,3 +1,5 @@
+/// Benchmark bulk indexing flow (using local blk*.dat files).
+/// Persist (and compact) the resulting index
 extern crate electrs;
 
 #[macro_use]

@@ -1,3 +1,4 @@
+/// Benchmark regular indexing flow (using JSONRPC), don't persist the resulting index.
 extern crate electrs;
 extern crate error_chain;
 
