@@ -20,7 +20,7 @@ $ cargo build --release
 
 Allow Bitcoin daemon to sync before starting Electrum server:
 ```bash
-$ bitcoind -server=1 -daemon=0 -txindex=0 -prune=0
+$ bitcoind -server=1 -txindex=0 -prune=0
 ```
 
 If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `--cookie=USER:PASSWORD` command-line flag.
