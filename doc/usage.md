@@ -23,14 +23,14 @@ Allow Bitcoin daemon to sync before starting Electrum server:
 $ bitcoind -server=1 -txindex=0 -prune=0
 ```
 
-If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `--cookie=USER:PASSWORD` command-line flag.
+If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `--cookie="USER:PASSWORD"` command-line flag.
 Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be read, allowing this server to use bitcoind JSONRPC interface.
 
 ## Usage
 
 First index sync should take ~2 hours:
 ```bash
-$ cargo run --release -- -vvv --timestamp --db-dir ./db
+$ cargo run --release -- -vvv --timestamp --db-dir ./db [--cookie="USER:PASSWORD"]
 2018-07-12T21:30:46 - DEBUG - BlockchainInfo { chain: "main", blocks: 531645, headers: 531645, bestblockhash: "00000000000000000006e41b275b21fc44e3b7afa8a8092aa6a7e4b84345f1f1", size_on_disk: 199667678141, pruned: false }
 2018-07-12T21:30:46 - DEBUG - opening "./db/mainnet" with StoreOptions { bulk_import: true }
 2018-07-12T21:30:46 - INFO - indexing 1313 blk*.dat files
