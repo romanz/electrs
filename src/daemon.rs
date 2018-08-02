@@ -91,6 +91,7 @@ pub struct BlockchainInfo {
     bestblockhash: String,
     size_on_disk: u64,
     pruned: bool,
+    initialblockdownload: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -280,7 +281,16 @@ impl Daemon {
                 network_info.subversion,
             )
         }
-        debug!("{:?}", daemon.getblockchaininfo()?);
+        let blockchain_info = daemon.getblockchaininfo()?;
+        debug!("{:?}", blockchain_info);
+        if blockchain_info.initialblockdownload == true {
+            bail!(ErrorKind::Connection(
+                "wait until bitcoin is synced (i.e. initialblockdownload = false)".to_owned()
+            ))
+        }
+        if blockchain_info.pruned == true {
+            bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
+        }
         Ok(daemon)
     }
 
