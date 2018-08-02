@@ -72,8 +72,7 @@ impl DBStore {
     pub fn enable_compaction(self) -> Self {
         let mut opts = self.opts.clone();
         opts.bulk_import = false;
-        drop(self);
-        // DB must be closed before being re-opened:
+        drop(self); // DB must be closed before being re-opened
         DBStore::open_opts(opts)
     }
 
@@ -81,10 +80,15 @@ impl DBStore {
         self.db.put(key, value).unwrap();
     }
 
-    pub fn compact(&self) {
+    pub fn compact(self) -> Self {
+        let opts = self.opts.clone();
+        drop(self); // DB must be closed before being re-opened
+
+        let store = DBStore::open_opts(opts);
         info!("starting full compaction");
-        self.db.compact_range(None, None); // would take a while
+        store.db.compact_range(None, None); // would take a while
         info!("finished full compaction");
+        store
     }
 }
 

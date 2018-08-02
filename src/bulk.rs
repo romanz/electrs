@@ -242,7 +242,8 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBSto
             });
             store.write(vec![parser.last_indexed_row()]);
             store.flush();
-            store.compact(); // will take a while.
+
+            let store = store.compact(); // will take a while.
             store.put(FINISH_MARKER, b"");
             Ok(store)
         }).join()
