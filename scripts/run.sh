@@ -4,14 +4,16 @@ trap 'kill $(jobs -p)' EXIT
 
 DELAY=5
 LOG=/tmp/electrs.log
+CARGO="cargo +stable"
+
 tail -v -n0 -F "$LOG" &
 
 export RUST_BACKTRACE=1
 while :
 do
-	cargo fmt
-	cargo check --release
-	cargo run --release -- $* 2>> "$LOG"
+	$CARGO fmt
+	$CARGO check --release
+	$CARGO run --release -- $* 2>> "$LOG"
 	echo "Restarting in $DELAY seconds..."
 	sleep $DELAY
 done
