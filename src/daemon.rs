@@ -272,8 +272,15 @@ impl Daemon {
                 &["method", "dir"],
             ),
         };
+        let network_info = daemon.getnetworkinfo()?;
+        debug!("{:?}", network_info);
+        if network_info.version < 00_16_00_00 {
+            bail!(
+                "{} is not supported - please use bitcoind 0.16+",
+                network_info.subversion,
+            )
+        }
         debug!("{:?}", daemon.getblockchaininfo()?);
-        debug!("{:?}", daemon.getnetworkinfo()?);
         Ok(daemon)
     }
 
