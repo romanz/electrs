@@ -5,6 +5,7 @@ extern crate bincode;
 extern crate bitcoin;
 extern crate chan_signal;
 extern crate crypto;
+extern crate dirs;
 extern crate glob;
 extern crate hex;
 extern crate libc;

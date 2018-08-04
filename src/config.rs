@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use std::env::home_dir;
+use dirs::home_dir;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
