@@ -45,7 +45,8 @@ impl MempoolStore {
         for row in rows {
             let (key, value) = row.into_pair();
             let no_values_left = {
-                let values = map.get_mut(&key)
+                let values = map
+                    .get_mut(&key)
                     .expect(&format!("missing key {} in mempool", hex::encode(&key)));
                 let last_value = values
                     .pop()
@@ -250,7 +251,8 @@ impl Tracker {
     }
 
     fn remove(&mut self, txid: &Sha256dHash) {
-        let stats = self.items
+        let stats = self
+            .items
             .remove(txid)
             .expect(&format!("missing mempool tx {}", txid));
         self.index.remove(&stats.tx);

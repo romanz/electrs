@@ -28,12 +28,11 @@ pub enum Network {
 }
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
-    Ok(Sha256dHash::from_hex(value
-        .as_str()
-        .chain_err(|| format!("non-string value: {}", value))?)
-        .chain_err(|| {
-        format!("non-hex value: {}", value)
-    })?)
+    Ok(Sha256dHash::from_hex(
+        value
+            .as_str()
+            .chain_err(|| format!("non-string value: {}", value))?,
+    ).chain_err(|| format!("non-hex value: {}", value))?)
 }
 
 fn header_from_value(value: Value) -> Result<BlockHeader> {
@@ -160,8 +159,10 @@ impl Connection {
         signal: Waiter,
     ) -> Result<Connection> {
         let conn = tcp_connect(addr, &signal)?;
-        let reader = BufReader::new(conn.try_clone()
-            .chain_err(|| format!("failed to clone {:?}", conn))?);
+        let reader = BufReader::new(
+            conn.try_clone()
+                .chain_err(|| format!("failed to clone {:?}", conn))?,
+        );
         Ok(Connection {
             tx: conn,
             rx: reader.lines(),
@@ -193,7 +194,8 @@ impl Connection {
         let mut in_header = true;
         let mut contents: Option<String> = None;
         let iter = self.rx.by_ref();
-        let status = iter.next()
+        let status = iter
+            .next()
             .chain_err(|| {
                 ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
             })?
@@ -362,7 +364,8 @@ impl Daemon {
     fn request(&self, method: &str, params: Value) -> Result<Value> {
         let id = self.message_id.next();
         let req = json!({"method": method, "params": params, "id": id});
-        let reply = self.retry_call_jsonrpc(method, &req)
+        let reply = self
+            .retry_call_jsonrpc(method, &req)
             .chain_err(|| format!("RPC failed: {}", req))?;
         parse_jsonrpc_reply(reply, method, id)
     }
@@ -374,7 +377,8 @@ impl Daemon {
             .map(|params| json!({"method": method, "params": params, "id": id}))
             .collect();
         let mut results = vec![];
-        let mut replies = self.retry_call_jsonrpc(method, &reqs)
+        let mut replies = self
+            .retry_call_jsonrpc(method, &reqs)
             .chain_err(|| format!("RPC failed: {}", reqs))?;
         if let Some(replies_vec) = replies.as_array_mut() {
             for reply in replies_vec {
@@ -410,7 +414,8 @@ impl Daemon {
 
     pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
         let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
-        let params_list: Vec<Value> = self.requests("getblockhash", &heights)?
+        let params_list: Vec<Value> = self
+            .requests("getblockhash", &heights)?
             .into_iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
@@ -507,7 +512,8 @@ impl Daemon {
 
     fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
         let info: Value = self.request("getblockheader", json!([tip.be_hex_string()]))?;
-        let tip_height = info.get("height")
+        let tip_height = info
+            .get("height")
             .expect("missing height")
             .as_u64()
             .expect("non-numeric height") as usize;
@@ -553,7 +559,8 @@ impl Daemon {
             if indexed_headers.header_by_blockhash(&blockhash).is_some() {
                 break;
             }
-            let header = self.getblockheader(&blockhash)
+            let header = self
+                .getblockheader(&blockhash)
                 .chain_err(|| format!("failed to get {} header", blockhash))?;
             new_headers.push(header);
             blockhash = header.prev_blockhash;

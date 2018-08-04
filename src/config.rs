@@ -108,20 +108,24 @@ impl Config {
             Network::Regtest => 60401,
         };
 
-        let daemon_rpc_addr: SocketAddr = m.value_of("daemon_rpc_addr")
+        let daemon_rpc_addr: SocketAddr = m
+            .value_of("daemon_rpc_addr")
             .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port))
             .parse()
             .expect("invalid Bitcoind RPC address");
-        let electrum_rpc_addr: SocketAddr = m.value_of("electrum_rpc_addr")
+        let electrum_rpc_addr: SocketAddr = m
+            .value_of("electrum_rpc_addr")
             .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port))
             .parse()
             .expect("invalid Electrum RPC address");
-        let monitoring_addr: SocketAddr = m.value_of("monitoring_addr")
+        let monitoring_addr: SocketAddr = m
+            .value_of("monitoring_addr")
             .unwrap_or("127.0.0.1:42024")
             .parse()
             .expect("invalid Prometheus monitoring address");
 
-        let mut daemon_dir = m.value_of("daemon_dir")
+        let mut daemon_dir = m
+            .value_of("daemon_dir")
             .map(|p| PathBuf::from(p))
             .unwrap_or_else(|| {
                 let mut default_dir = home_dir().expect("no homedir");

@@ -9,7 +9,8 @@ use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{
-    mpsc::{Receiver, SyncSender}, Arc, Mutex,
+    mpsc::{Receiver, SyncSender},
+    Arc, Mutex,
 };
 use std::thread;
 
@@ -61,7 +62,8 @@ impl Parser {
 
     fn last_indexed_row(&self) -> Row {
         let indexed_blockhashes = self.indexed_blockhashes.lock().unwrap();
-        let last_header = self.current_headers
+        let last_header = self
+            .current_headers
             .iter()
             .take_while(|h| indexed_blockhashes.contains(h.hash()))
             .last()
@@ -88,7 +90,8 @@ impl Parser {
         for block in blocks {
             let blockhash = block.bitcoin_hash();
             if let Some(header) = self.current_headers.header_by_blockhash(&blockhash) {
-                if self.indexed_blockhashes
+                if self
+                    .indexed_blockhashes
                     .lock()
                     .expect("indexed_blockhashes")
                     .insert(blockhash.clone())

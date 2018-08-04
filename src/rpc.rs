@@ -124,7 +124,8 @@ impl Connection {
         let start_height = usize_from_value(params.get(0), "start_height")?;
         let count = usize_from_value(params.get(1), "count")?;
         let heights: Vec<usize> = (start_height..(start_height + count)).collect();
-        let headers: Vec<String> = self.query
+        let headers: Vec<String> = self
+            .query
             .get_headers(&heights)
             .into_iter()
             .map(|entry| hex::encode(&serialize(entry.header()).unwrap()))
@@ -219,7 +220,8 @@ impl Connection {
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
         let height = usize_from_value(params.get(1), "height")?;
-        let (merkle, pos) = self.query
+        let (merkle, pos) = self
+            .query
             .get_merkle_proof(&tx_hash, height)
             .chain_err(|| "cannot create merkle proof")?;
         let merkle: Vec<String> = merkle
@@ -233,7 +235,8 @@ impl Connection {
     }
 
     fn handle_command(&mut self, method: &str, params: &[Value], id: &Number) -> Result<Value> {
-        let timer = self.stats
+        let timer = self
+            .stats
             .latency
             .with_label_values(&[method])
             .start_timer();
@@ -276,7 +279,8 @@ impl Connection {
     }
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
-        let timer = self.stats
+        let timer = self
+            .stats
             .latency
             .with_label_values(&["periodic_update"])
             .start_timer();
@@ -340,7 +344,8 @@ impl Connection {
                     self.send_values(&[reply])?
                 }
                 Message::PeriodicUpdate => {
-                    let values = self.update_subscriptions()
+                    let values = self
+                        .update_subscriptions()
                         .chain_err(|| "failed to update subscriptions")?;
                     self.send_values(&values)?
                 }
@@ -360,7 +365,8 @@ impl Connection {
                 return Ok(());
             } else {
                 match String::from_utf8(line) {
-                    Ok(req) => tx.send(Message::Request(req))
+                    Ok(req) => tx
+                        .send(Message::Request(req))
                         .chain_err(|| "channel closed")?,
                     Err(err) => {
                         let _ = tx.send(Message::Done);

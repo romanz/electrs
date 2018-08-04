@@ -202,7 +202,8 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn = self.tx_cache
+                let txn = self
+                    .tx_cache
                     .get_or_else(&txid, || self.load_txn(&txid, Some(tx_row.height)))?;
                 txns.push(TxnHeight {
                     txn,
@@ -305,9 +306,11 @@ impl Query {
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
-        let confirmed = self.confirmed_status(script_hash)
+        let confirmed = self
+            .confirmed_status(script_hash)
             .chain_err(|| "failed to get confirmed status")?;
-        let mempool = self.mempool_status(script_hash, &confirmed.0)
+        let mempool = self
+            .mempool_status(script_hash, &confirmed.0)
             .chain_err(|| "failed to get mempool status")?;
         Ok(Status { confirmed, mempool })
     }
@@ -329,7 +332,8 @@ impl Query {
                     .height
             }
         };
-        let blockhash = *self.app
+        let blockhash = *self
+            .app
             .index()
             .get_header(height as usize)
             .chain_err(|| format!("missing header at height {}", height))?
@@ -355,7 +359,8 @@ impl Query {
         tx_hash: &Sha256dHash,
         height: usize,
     ) -> Result<(Vec<Sha256dHash>, usize)> {
-        let header_entry = self.app
+        let header_entry = self
+            .app
             .index()
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;

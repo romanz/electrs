@@ -233,7 +233,8 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     let null_hash = Sha256dHash::default();
     let mut blockhash = latest_blockhash;
     while blockhash != null_hash {
-        let header = map.remove(&blockhash)
+        let header = map
+            .remove(&blockhash)
             .expect(&format!("missing {} header in DB", blockhash));
         blockhash = header.prev_blockhash;
         headers.push(header);
@@ -360,7 +361,8 @@ impl Index {
         loop {
             waiter.poll()?;
             let timer = self.stats.start_timer("fetch");
-            let batch = chan.receiver()
+            let batch = chan
+                .receiver()
                 .recv()
                 .expect("block fetch exited prematurely")?;
             timer.observe_duration();
