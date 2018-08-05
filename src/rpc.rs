@@ -51,6 +51,14 @@ fn unspent_from_status(status: &Status) -> Value {
     ))
 }
 
+fn address_from_value(val: Option<&Value>) -> Result<Address> {
+    let addr = val
+        .chain_err(|| "no address")?
+        .as_str()
+        .chain_err(|| "non-string address")?;
+    Address::from_str(addr).chain_err(|| format!("invalid address {}", addr))
+}
+
 fn jsonify_header(entry: &HeaderEntry) -> Value {
     let header = entry.header();
     json!({
@@ -173,6 +181,15 @@ impl Connection {
         )
     }
 
+    fn blockchain_address_get_balance(&self, params: &[Value]) -> Result<Value> {
+        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
+        let status = self.query.status(&script_hash[..])?;
+        Ok(
+            json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
+        )
+    }
+
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
@@ -191,12 +208,7 @@ impl Connection {
     }
 
     fn blockchain_address_listunspent(&self, params: &[Value]) -> Result<Value> {
-        let address = params
-            .get(0)
-            .chain_err(|| "no address")?
-            .as_str()
-            .chain_err(|| "non-string address")?;
-        let addr = Address::from_str(address).chain_err(|| format!("invalid address {}", address))?;
+        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
         let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
@@ -251,6 +263,7 @@ impl Connection {
             "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.relayfee" => self.blockchain_relayfee(),
+            "blockchain.address.get_balance" => self.blockchain_address_get_balance(&params),
             "blockchain.address.listunspent" => self.blockchain_address_listunspent(&params),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),
             "blockchain.scripthash.get_balance" => self.blockchain_scripthash_get_balance(&params),
