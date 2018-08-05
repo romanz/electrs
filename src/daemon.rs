@@ -462,6 +462,21 @@ impl Daemon {
         tx_from_value(self.request("getrawtransaction", args)?)
     }
 
+    pub fn gettransaction_raw(
+        &self,
+        txhash: &Sha256dHash,
+        blockhash: Option<Sha256dHash>,
+        verbose: bool,
+    ) -> Result<Value> {
+        let mut args = json!([txhash.be_hex_string(), verbose]);
+        if let Some(blockhash) = blockhash {
+            args.as_array_mut()
+                .unwrap()
+                .push(json!(blockhash.be_hex_string()));
+        }
+        Ok(self.request("getrawtransaction", args)?)
+    }
+
     pub fn gettransactions(&self, txhashes: &[&Sha256dHash]) -> Result<Vec<Transaction>> {
         let params_list: Vec<Value> = txhashes
             .iter()
