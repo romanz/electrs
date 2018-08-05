@@ -48,7 +48,7 @@ impl DBStore {
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(128 << 20);
-        db_opts.set_write_buffer_size(128 << 20);
+        db_opts.set_write_buffer_size(256 << 20);
         db_opts.set_disable_auto_compactions(opts.bulk_import); // for initial bulk load
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
