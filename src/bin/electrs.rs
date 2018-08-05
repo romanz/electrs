@@ -30,10 +30,10 @@ fn run_server(config: &Config) -> Result<()> {
     let store = DBStore::open(&config.db_path);
     let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
     let store = if config.skip_bulk_import {
-        index.update(&store, &signal)?;
-        bulk::skip(store)
+        index.update(&store, &signal)?; // slower: uses JSONRPC for fetching blocks
+        bulk::compact(store)
     } else {
-        bulk::index(&daemon, &metrics, store)
+        bulk::index(&daemon, &metrics, store) // faster, but uses more memory
     }?;
 
     let app = App::new(store, index, daemon)?;

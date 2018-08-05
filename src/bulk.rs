@@ -244,11 +244,7 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBSto
                     .expect("indexing failed")
             });
             store.write(vec![parser.last_indexed_row()]);
-            store.flush();
-
-            let store = store.compact(); // will take a while.
-            store.put(FINISH_MARKER, b"");
-            Ok(store)
+            Ok(store.compact())
         }).join()
             .expect("writer panicked")
     } else {
@@ -258,9 +254,9 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBSto
     result.map(|store| store.enable_compaction())
 }
 
-pub fn skip(store: DBStore) -> Result<DBStore> {
+pub fn compact(store: DBStore) -> Result<DBStore> {
     store.flush();
+    let store = store.compact(); // will take a while.
     store.put(FINISH_MARKER, b"");
-    warn!("skipping bulk import of blk*.dat files'");
     Ok(store.enable_compaction())
 }

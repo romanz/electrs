@@ -69,9 +69,14 @@ impl DBStore {
 
     pub fn enable_compaction(self) -> Self {
         let mut opts = self.opts.clone();
-        opts.bulk_import = false;
-        drop(self); // DB must be closed before being re-opened
-        DBStore::open_opts(opts)
+        if opts.bulk_import == true {
+            opts.bulk_import = false;
+            drop(self); // DB must be closed before being re-opened
+            info!("enabling auto-compactions");
+            DBStore::open_opts(opts)
+        } else {
+            self
+        }
     }
 
     pub fn put(&self, key: &[u8], value: &[u8]) {
