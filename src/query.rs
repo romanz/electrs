@@ -11,6 +11,7 @@ use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
 use metrics::Metrics;
+use serde_json::Value;
 use store::{ReadStore, Row};
 use util::{FullHash, HashPrefix, HeaderEntry};
 
@@ -204,7 +205,7 @@ impl Query {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
                 let txn = self
                     .tx_cache
-                    .get_or_else(&txid, || self.load_txn(&txid, Some(tx_row.height)))?;
+                    .get_or_else(&txid, || self.load_txn(&txid, tx_row.height))?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
@@ -315,30 +316,45 @@ impl Query {
         Ok(Status { confirmed, mempool })
     }
 
-    pub fn load_txn(
+    fn lookup_confirmed_blockhash(
         &self,
         tx_hash: &Sha256dHash,
         block_height: Option<u32>,
-    ) -> Result<Transaction> {
-        if let Some(txn) = self.tracker.read().unwrap().get_txn(&tx_hash) {
-            return Ok(txn); // found in mempool (as unconfirmed transaction)
-        }
-        let height = match block_height {
-            Some(height) => height,
-            None => {
-                // Lookup in confirmed transactions' index
-                txrow_by_txid(self.app.read_store(), &tx_hash)
-                    .chain_err(|| format!("not indexed tx {}", tx_hash))?
-                    .height
-            }
+    ) -> Result<Option<Sha256dHash>> {
+        let blockhash = if self.tracker.read().unwrap().get_txn(&tx_hash).is_some() {
+            None // found in mempool (as unconfirmed transaction)
+        } else {
+            // Lookup in confirmed transactions' index
+            let height = match block_height {
+                Some(height) => height,
+                None => {
+                    txrow_by_txid(self.app.read_store(), &tx_hash)
+                        .chain_err(|| format!("not indexed tx {}", tx_hash))?
+                        .height
+                }
+            };
+            let header = self
+                .app
+                .index()
+                .get_header(height as usize)
+                .chain_err(|| format!("missing header at height {}", height))?;
+            Some(*header.hash())
         };
-        let blockhash = *self
-            .app
-            .index()
-            .get_header(height as usize)
-            .chain_err(|| format!("missing header at height {}", height))?
-            .hash();
-        self.app.daemon().gettransaction(tx_hash, Some(blockhash))
+        Ok(blockhash)
+    }
+
+    // Internal API for transaction retrieval
+    fn load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
+        let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
+        self.app.daemon().gettransaction(tx_hash, blockhash)
+    }
+
+    // Public API for transaction retrieval (for Electrum RPC)
+    pub fn get_transaction(&self, tx_hash: &Sha256dHash, verbose: bool) -> Result<Value> {
+        let blockhash = self.lookup_confirmed_blockhash(tx_hash, /*block_height*/ None)?;
+        self.app
+            .daemon()
+            .gettransaction_raw(tx_hash, blockhash, verbose)
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {

@@ -223,10 +223,12 @@ impl Connection {
     }
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
-        // TODO: handle 'verbose' param
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        let tx = self.query.load_txn(&tx_hash, /*blockhash=*/ None)?;
-        Ok(json!(hex::encode(&serialize(&tx).unwrap())))
+        let verbose = match params.get(1) {
+            Some(value) => value.as_bool().chain_err(|| "non-bool verbose value")?,
+            None => false,
+        };
+        Ok(self.query.get_transaction(&tx_hash, verbose)?)
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
