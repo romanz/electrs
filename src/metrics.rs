@@ -1,6 +1,11 @@
+use page_size;
 use prometheus::{self, Encoder};
+use std::fs;
 use std::io;
 use std::net::SocketAddr;
+use std::path::Path;
+use std::thread;
+use std::time::Duration;
 use tiny_http;
 
 pub use prometheus::{
@@ -9,6 +14,8 @@ pub use prometheus::{
 };
 
 use util::spawn_thread;
+
+use errors::*;
 
 pub struct Metrics {
     reg: prometheus::Registry,
@@ -64,6 +71,7 @@ impl Metrics {
             "failed to start monitoring HTTP server at {}",
             self.addr
         ));
+        start_process_exporter(&self);
         let reg = self.reg.clone();
         spawn_thread("metrics", move || loop {
             if let Err(e) = handle_request(&reg, server.recv()) {
@@ -84,4 +92,39 @@ fn handle_request(
         .unwrap();
     let response = tiny_http::Response::from_data(buffer);
     request.respond(response)
+}
+
+struct Stats {
+    rss: usize,
+}
+
+fn parse_stats(path: &Path) -> Result<Stats> {
+    let value = fs::read_to_string(path).chain_err(|| "failed to read stats")?;
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    let page_size = page_size::get();
+
+    let rss_in_pages: usize = parts
+        .get(23)
+        .chain_err(|| "missing value")?
+        .parse::<usize>()
+        .chain_err(|| "invalid value")?;
+
+    Ok(Stats {
+        rss: rss_in_pages * page_size,
+    })
+}
+
+fn start_process_exporter(metrics: &Metrics) {
+    let rss = metrics.gauge(MetricOpts::new(
+        "process_memory_rss",
+        "Resident memory size [bytes]",
+    ));
+    let path = Path::new("/proc/self/stat");
+    spawn_thread("exporter", move || loop {
+        match parse_stats(path) {
+            Ok(stats) => rss.set(stats.rss as i64),
+            Err(e) => warn!("failed to parse {:?}: {}", path, e),
+        }
+        thread::sleep(Duration::from_secs(5));
+    });
 }

@@ -9,6 +9,7 @@ extern crate dirs;
 extern crate glob;
 extern crate hex;
 extern crate libc;
+extern crate page_size;
 extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
