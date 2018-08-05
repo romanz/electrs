@@ -28,12 +28,14 @@ fn run_server(config: &Config) -> Result<()> {
     )?;
     // Perform initial indexing from local blk*.dat block files.
     let store = DBStore::open(&config.db_path);
+    let index = Index::load(&store, &daemon, &metrics)?;
     let store = if config.skip_bulk_import {
+        index.update(&store, &signal)?;
         bulk::skip(store)
     } else {
         bulk::index(&daemon, &metrics, store)
     }?;
-    let index = Index::load(&store, &daemon, &metrics)?;
+
     let app = App::new(store, index, daemon)?;
     let query = Query::new(app.clone(), &metrics);
 
