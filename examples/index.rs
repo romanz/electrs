@@ -26,7 +26,7 @@ fn run() -> Result<()> {
         &metrics,
     )?;
     let fake_store = FakeStore {};
-    let index = Index::load(&fake_store, &daemon, &metrics)?;
+    let index = Index::load(&fake_store, &daemon, &metrics, config.index_batch_size)?;
     index.update(&fake_store, &signal)?;
     Ok(())
 }

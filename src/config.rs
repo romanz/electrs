@@ -21,6 +21,7 @@ pub struct Config {
     pub electrum_rpc_addr: SocketAddr, // for serving Electrum clients
     pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
     pub skip_bulk_import: bool,        // slower initial indexing, for low-memory systems
+    pub index_batch_size: usize,       // number of blocks to index in parallel
 }
 
 impl Config {
@@ -84,6 +85,12 @@ impl Config {
                 Arg::with_name("skip_bulk_import")
                     .long("skip-bulk-import")
                     .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
+            )
+            .arg(
+                Arg::with_name("index_batch_size")
+                    .long("index-batch-size")
+                    .help("Number of blocks to get in one JSONRPC request from bitcoind")
+                    .default_value("100"),
             )
             .get_matches();
 
@@ -157,6 +164,7 @@ impl Config {
             electrum_rpc_addr,
             monitoring_addr,
             skip_bulk_import: m.is_present("skip_bulk_import"),
+            index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
         };
         eprintln!("{:?}", config);
         config

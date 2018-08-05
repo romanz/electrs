@@ -304,10 +304,16 @@ pub struct Index {
     headers: RwLock<HeaderList>,
     daemon: Daemon,
     stats: Stats,
+    batch_size: usize,
 }
 
 impl Index {
-    pub fn load(store: &ReadStore, daemon: &Daemon, metrics: &Metrics) -> Result<Index> {
+    pub fn load(
+        store: &ReadStore,
+        daemon: &Daemon,
+        metrics: &Metrics,
+        batch_size: usize,
+    ) -> Result<Index> {
         let stats = Stats::new(metrics);
         let headers = read_indexed_headers(store);
         stats.height.set((headers.len() as i64) - 1);
@@ -315,6 +321,7 @@ impl Index {
             headers: RwLock::new(headers),
             daemon: daemon.reconnect()?,
             stats,
+            batch_size,
         })
     }
 
@@ -353,8 +360,9 @@ impl Index {
         let chan = SyncChannel::new(1);
         let sender = chan.sender();
         let blockhashes: Vec<Sha256dHash> = new_headers.iter().map(|h| *h.hash()).collect();
+        let batch_size = self.batch_size;
         let fetcher = spawn_thread("fetcher", move || {
-            for chunk in blockhashes.chunks(100) {
+            for chunk in blockhashes.chunks(batch_size) {
                 sender
                     .send(daemon.getblocks(&chunk))
                     .expect("failed sending blocks to be indexed");
