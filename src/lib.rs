@@ -14,6 +14,7 @@ extern crate prometheus;
 extern crate rocksdb;
 extern crate serde;
 extern crate stderrlog;
+extern crate sysconf;
 extern crate time;
 extern crate tiny_http;
 

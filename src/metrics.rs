@@ -3,9 +3,9 @@ use prometheus::{self, Encoder};
 use std::fs;
 use std::io;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::thread;
 use std::time::Duration;
+use sysconf;
 use tiny_http;
 
 pub use prometheus::{
@@ -95,23 +95,33 @@ fn handle_request(
 }
 
 struct Stats {
-    rss: usize,
+    utime: f64,
+    rss: u64,
+    fds: usize,
 }
 
-fn parse_stats(path: &Path) -> Result<Stats> {
-    let value = fs::read_to_string(path).chain_err(|| "failed to read stats")?;
+fn parse_stats() -> Result<Stats> {
+    let value = fs::read_to_string("/proc/self/stat").chain_err(|| "failed to read stats")?;
     let parts: Vec<&str> = value.split_whitespace().collect();
-    let page_size = page_size::get();
+    let page_size = page_size::get() as u64;
+    let ticks_per_second = sysconf::raw::sysconf(sysconf::raw::SysconfVariable::ScClkTck)
+        .expect("failed to get _SC_CLK_TCK") as f64;
 
-    let rss_in_pages: usize = parts
-        .get(23)
-        .chain_err(|| "missing value")?
-        .parse::<usize>()
-        .chain_err(|| "invalid value")?;
+    let parse_part = |index: usize, name: &str| -> Result<u64> {
+        Ok(parts
+            .get(index)
+            .chain_err(|| format!("missing {}: {:?}", name, parts))?
+            .parse::<u64>()
+            .chain_err(|| format!("invalid {}: {:?}", name, parts))?)
+    };
 
-    Ok(Stats {
-        rss: rss_in_pages * page_size,
-    })
+    // For details, see '/proc/[pid]/stat' section at `man 5 proc`:
+    let utime = parse_part(13, "utime")? as f64 / ticks_per_second;
+    let rss = parse_part(23, "rss")? * page_size;
+    let fds = fs::read_dir("/proc/self/fd")
+        .chain_err(|| "failed to read fd directory")?
+        .count();
+    Ok(Stats { utime, rss, fds })
 }
 
 fn start_process_exporter(metrics: &Metrics) {
@@ -119,11 +129,19 @@ fn start_process_exporter(metrics: &Metrics) {
         "process_memory_rss",
         "Resident memory size [bytes]",
     ));
-    let path = Path::new("/proc/self/stat");
+    let cpu = metrics.gauge_vec(
+        MetricOpts::new("process_cpu_usage", "CPU usage by this process [seconds]"),
+        &["type"],
+    );
+    let fds = metrics.gauge(MetricOpts::new("process_fs_fds", "# of file descriptors"));
     spawn_thread("exporter", move || loop {
-        match parse_stats(path) {
-            Ok(stats) => rss.set(stats.rss as i64),
-            Err(e) => warn!("failed to parse {:?}: {}", path, e),
+        match parse_stats() {
+            Ok(stats) => {
+                cpu.with_label_values(&["utime"]).set(stats.utime as f64);
+                rss.set(stats.rss as i64);
+                fds.set(stats.fds as i64);
+            }
+            Err(e) => warn!("failed to export stats: {}", e),
         }
         thread::sleep(Duration::from_secs(5));
     });
