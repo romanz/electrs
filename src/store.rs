@@ -79,10 +79,6 @@ impl DBStore {
         }
     }
 
-    pub fn put(&self, key: &[u8], value: &[u8]) {
-        self.db.put(key, value).unwrap();
-    }
-
     pub fn compact(self) -> Self {
         let opts = self.opts.clone();
         drop(self); // DB must be closed before being re-opened

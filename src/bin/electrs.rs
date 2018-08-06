@@ -31,7 +31,7 @@ fn run_server(config: &Config) -> Result<()> {
     let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
     let store = if config.skip_bulk_import {
         index.update(&store, &signal)?; // slower: uses JSONRPC for fetching blocks
-        bulk::compact(store)
+        bulk::full_compaction(store)
     } else {
         bulk::index(&daemon, &metrics, store) // faster, but uses more memory
     }?;
