@@ -276,7 +276,7 @@ impl Daemon {
             ),
         };
         let network_info = daemon.getnetworkinfo()?;
-        debug!("{:?}", network_info);
+        info!("{:?}", network_info);
         if network_info.version < 00_16_00_00 {
             bail!(
                 "{} is not supported - please use bitcoind 0.16+",
@@ -284,7 +284,7 @@ impl Daemon {
             )
         }
         let blockchain_info = daemon.getblockchaininfo()?;
-        debug!("{:?}", blockchain_info);
+        info!("{:?}", blockchain_info);
         if blockchain_info.initialblockdownload == true {
             bail!(ErrorKind::Connection(
                 "wait until bitcoin is synced (i.e. initialblockdownload = false)".to_owned()
