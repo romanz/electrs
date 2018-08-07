@@ -22,7 +22,7 @@ pub struct Config {
     pub cookie: Option<String>,        // for bitcoind JSONRPC authentication ("USER:PASSWORD")
     pub electrum_rpc_addr: SocketAddr, // for serving Electrum clients
     pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
-    pub skip_bulk_import: bool,        // slower initial indexing, for low-memory systems
+    pub jsonrpc_import: bool,          // slower initial indexing, for low-memory systems
     pub index_batch_size: usize,       // number of blocks to index in parallel
     pub bulk_index_threads: usize,     // number of threads to use for bulk indexing
 }
@@ -85,8 +85,8 @@ impl Config {
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("skip_bulk_import")
-                    .long("skip-bulk-import")
+                Arg::with_name("jsonrpc_import")
+                    .long("jsonrpc-import")
                     .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
             )
             .arg(
@@ -181,7 +181,7 @@ impl Config {
             cookie,
             electrum_rpc_addr,
             monitoring_addr,
-            skip_bulk_import: m.is_present("skip_bulk_import"),
+            jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
         };
