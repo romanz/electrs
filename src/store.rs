@@ -50,6 +50,7 @@ impl DBStore {
         db_opts.set_target_file_size_base(128 << 20);
         db_opts.set_write_buffer_size(256 << 20);
         db_opts.set_disable_auto_compactions(opts.bulk_import); // for initial bulk load
+        db_opts.set_advise_random_on_open(!opts.bulk_import); // bulk load uses sequential I/O
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
         block_opts.set_block_size(1 << 20);
