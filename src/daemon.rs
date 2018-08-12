@@ -200,20 +200,27 @@ impl Connection {
                 ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
             })?
             .chain_err(|| "failed to read status")?;
-        if status != "HTTP/1.1 200 OK" {
-            let msg = format!("request failed {:?}", status);
-            bail!(ErrorKind::Connection(msg));
-        }
+        let mut headers = vec![];
         for line in iter {
             let line = line.chain_err(|| ErrorKind::Connection("failed to read".to_owned()))?;
             if line.is_empty() {
                 in_header = false; // next line should contain the actual response.
-            } else if !in_header {
+            } else if in_header {
+                headers.push(line);
+            } else {
                 contents = Some(line);
                 break;
             }
         }
-        contents.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
+        if status == "HTTP/1.1 200 OK" {
+            contents.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
+        } else {
+            let msg = format!(
+                "request failed {:?}: {:?} = {:?}",
+                status, headers, contents
+            );
+            bail!(ErrorKind::Connection(msg));
+        }
     }
 }
 
