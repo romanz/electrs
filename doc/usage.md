@@ -1,6 +1,8 @@
 ## Installation
 
-Install [latest Rust](https://rustup.rs/) (1.26+) and [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+).
+Install [latest Rust](https://rustup.rs/) (1.26+),
+[latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+)
+and [latest Electrum wallet](https://electrum.org/#download) (3.2+).
 
 Also, install the following packages (on Debian):
 ```bash
