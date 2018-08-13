@@ -173,6 +173,16 @@ impl Connection {
         Ok(result)
     }
 
+    fn blockchain_address_subscribe(&mut self, params: &[Value]) -> Result<Value> {
+        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
+        let status = self.query.status(&script_hash[..])?;
+        let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+        let script_hash: Sha256dHash = deserialize(&script_hash).unwrap();
+        self.status_hashes.insert(script_hash, result.clone());
+        Ok(result)
+    }
+
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
@@ -265,6 +275,7 @@ impl Connection {
             "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.relayfee" => self.blockchain_relayfee(),
+            "blockchain.address.subscribe" => self.blockchain_address_subscribe(&params),
             "blockchain.address.get_balance" => self.blockchain_address_get_balance(&params),
             "blockchain.address.listunspent" => self.blockchain_address_listunspent(&params),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),
