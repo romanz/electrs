@@ -55,10 +55,22 @@ fn tx_from_value(value: Value) -> Result<Transaction> {
     Ok(deserialize(&tx_bytes).chain_err(|| format!("failed to parse tx {}", tx_hex))?)
 }
 
+/// Parse JSONRPC error code, if exists.
+fn parse_error_code(err: &Value) -> Option<i64> {
+    err.as_object()?.get("code")?.as_i64()
+}
+
 fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
         if let Some(err) = reply_obj.get("error") {
             if !err.is_null() {
+                if let Some(code) = parse_error_code(&err) {
+                    match code {
+                        // RPC_IN_WARMUP -> retry by later reconnection
+                        -28 => bail!(ErrorKind::Connection(err.to_string())),
+                        _ => (),
+                    }
+                }
                 bail!("{} RPC error: {}", method, err);
             }
         }
