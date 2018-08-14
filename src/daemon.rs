@@ -370,11 +370,28 @@ impl Daemon {
         Ok(result)
     }
 
-    fn retry_call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
+    fn handle_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
+        let id = self.message_id.next();
+        let reqs = params_list
+            .iter()
+            .map(|params| json!({"method": method, "params": params, "id": id}))
+            .collect();
+        let mut results = vec![];
+        let mut replies = self.call_jsonrpc(method, &reqs)?;
+        if let Some(replies_vec) = replies.as_array_mut() {
+            for reply in replies_vec {
+                results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
+            }
+            return Ok(results);
+        }
+        bail!("non-array replies: {:?}", replies);
+    }
+
+    fn retry_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
         loop {
-            match self.call_jsonrpc(method, request) {
+            match self.handle_request_batch(method, params_list) {
                 Err(Error(ErrorKind::Connection(msg), _)) => {
-                    warn!("connection failed: {}", msg);
+                    warn!("reconnecting due to {}", msg);
                     self.signal.wait(Duration::from_secs(3))?;
                     let mut conn = self.conn.lock().unwrap();
                     *conn = conn.reconnect()?;
@@ -386,28 +403,13 @@ impl Daemon {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
-        let mut values = self.requests(method, &[params])?;
+        let mut values = self.retry_request_batch(method, &[params])?;
         assert_eq!(values.len(), 1);
         Ok(values.remove(0))
     }
 
     fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
-        let id = self.message_id.next();
-        let reqs = params_list
-            .iter()
-            .map(|params| json!({"method": method, "params": params, "id": id}))
-            .collect();
-        let mut results = vec![];
-        let mut replies = self
-            .retry_call_jsonrpc(method, &reqs)
-            .chain_err(|| format!("RPC failed: {}", reqs))?;
-        if let Some(replies_vec) = replies.as_array_mut() {
-            for reply in replies_vec {
-                results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
-            }
-            return Ok(results);
-        }
-        bail!("non-array replies: {:?}", replies);
+        self.retry_request_batch(method, params_list)
     }
 
     // bitcoind JSONRPC API:
