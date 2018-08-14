@@ -3,7 +3,6 @@
 * Support TLS (via https://docs.rs/rustls/)
 * Snapshot DB after successful indexing - and run queries on the latest snapshot
 * Update height to -1 for txns with any [unconfirmed input](https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
-* Limit mempool TXs (e.g. by fee rate) when mempool is large
 
 # Rust
 
