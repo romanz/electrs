@@ -212,15 +212,20 @@ impl Connection {
                 break;
             }
         }
+
         if status == "HTTP/1.1 200 OK" {
-            contents.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
+            contents
+        } else if status == "HTTP/1.1 500 Internal Server Error" {
+            warn!("HTTP status: {}", status);
+            contents // the contents should have a JSONRPC error field
         } else {
-            let msg = format!(
+            bail!(
                 "request failed {:?}: {:?} = {:?}",
-                status, headers, contents
+                status,
+                headers,
+                contents
             );
-            bail!(ErrorKind::Connection(msg));
-        }
+        }.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
     }
 }
 
