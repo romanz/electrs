@@ -38,10 +38,10 @@ pub struct Status {
     mempool: (Vec<FundingOutput>, Vec<SpendingInput>),
 }
 
-fn calc_balance((funding, spending): &(Vec<FundingOutput>, Vec<SpendingInput>)) -> u64 {
-    let funded_values = funding.iter().map(|output| output.value);
-    let spent_values = spending.iter().map(|input| input.value);
-    funded_values.sum::<u64>() - spent_values.sum::<u64>()
+fn calc_balance((funding, spending): &(Vec<FundingOutput>, Vec<SpendingInput>)) -> i64 {
+    let funded: u64 = funding.iter().map(|output| output.value).sum();
+    let spent: u64 = spending.iter().map(|input| input.value).sum();
+    funded as i64 - spent as i64
 }
 
 impl Status {
@@ -53,11 +53,11 @@ impl Status {
         self.confirmed.1.iter().chain(self.mempool.1.iter())
     }
 
-    pub fn confirmed_balance(&self) -> u64 {
+    pub fn confirmed_balance(&self) -> i64 {
         calc_balance(&self.confirmed)
     }
 
-    pub fn mempool_balance(&self) -> u64 {
+    pub fn mempool_balance(&self) -> i64 {
         calc_balance(&self.mempool)
     }
 
