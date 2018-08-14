@@ -8,10 +8,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Daemon:
-    def __init__(self):
-        self.sock = socket.create_connection(('localhost', 8332))
+    def __init__(self, port=8332, cookie_dir='~/.bitcoin'):
+        self.sock = socket.create_connection(('localhost', port))
         self.fd = self.sock.makefile()
-        path = os.path.expanduser('~/.bitcoin/.cookie')
+        path = os.path.join(os.path.expanduser(cookie_dir), '.cookie')
         cookie = binascii.b2a_base64(open(path, 'rb').read())
         self.cookie = cookie.decode('ascii').strip()
         self.index = 0
