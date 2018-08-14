@@ -374,12 +374,9 @@ impl Daemon {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
-        let id = self.message_id.next();
-        let req = json!({"method": method, "params": params, "id": id});
-        let reply = self
-            .retry_call_jsonrpc(method, &req)
-            .chain_err(|| format!("RPC failed: {}", req))?;
-        parse_jsonrpc_reply(reply, method, id)
+        let mut values = self.requests(method, &[params])?;
+        assert_eq!(values.len(), 1);
+        Ok(values.remove(0))
     }
 
     fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
