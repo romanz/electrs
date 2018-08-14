@@ -78,7 +78,7 @@ impl Config {
             .arg(
                 Arg::with_name("monitoring_addr")
                     .long("monitoring-addr")
-                    .help("Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:42024)")
+                    .help("Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet and 127.0.0.1:24224 for regtest)")
                     .takes_value(true),
             )
             .arg(
@@ -114,6 +114,11 @@ impl Config {
             Network::Testnet => 60001,
             Network::Regtest => 60401,
         };
+        let default_monitoring_port = match network_type {
+            Network::Mainnet => 4224,
+            Network::Testnet => 14224,
+            Network::Regtest => 24224,
+        };
 
         let daemon_rpc_addr: SocketAddr = m
             .value_of("daemon_rpc_addr")
@@ -127,7 +132,7 @@ impl Config {
             .expect("invalid Electrum RPC address");
         let monitoring_addr: SocketAddr = m
             .value_of("monitoring_addr")
-            .unwrap_or("127.0.0.1:42024")
+            .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port))
             .parse()
             .expect("invalid Prometheus monitoring address");
 
