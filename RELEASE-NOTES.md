@@ -1,3 +1,15 @@
+# 0.3.0 (14 Aug 2018)
+
+* Optimize for low-memory systems
+* Improve compaction performance
+* Handle disconnections from bitcoind by retrying
+* Make `blk*.dat` ingestion more robust
+* Support regtest network
+* Support more Electrum RPC methods
+* Export more Prometheus metrics (CPU, RAM, file descriptors)
+* Add `scripts/run.sh` for building and running `electrs`
+* Add some Python tools (as API usage examples)
+
 # 0.2.0 (14 Jul 2018)
 
 * Allow specifying custom bitcoind data directory
