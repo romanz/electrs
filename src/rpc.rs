@@ -229,6 +229,10 @@ impl Connection {
         let tx = hex::decode(&tx).chain_err(|| "non-hex tx")?;
         let tx: Transaction = deserialize(&tx).chain_err(|| "failed to parse tx")?;
         let txid = self.query.broadcast(&tx)?;
+        self.query.update_mempool()?;
+        if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate) {
+            warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
+        }
         Ok(json!(txid.be_hex_string()))
     }
 
