@@ -9,6 +9,7 @@
 * Export more Prometheus metrics (CPU, RAM, file descriptors)
 * Add `scripts/run.sh` for building and running `electrs`
 * Add some Python tools (as API usage examples)
+* Change default Prometheus monitoring ports
 
 # 0.2.0 (14 Jul 2018)
 
