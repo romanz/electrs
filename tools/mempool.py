@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import binascii
 import json
 import os
@@ -8,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Daemon:
-    def __init__(self, port=8332, cookie_dir='~/.bitcoin'):
+    def __init__(self, port, cookie_dir):
         self.sock = socket.create_connection(('localhost', port))
         self.fd = self.sock.makefile()
         path = os.path.join(os.path.expanduser(cookie_dir), '.cookie')
@@ -45,7 +46,15 @@ class Daemon:
 
 
 def main():
-    d = Daemon()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--testnet', action='store_true')
+    args = parser.parse_args()
+
+    if args.testnet:
+        d = Daemon(port=18332, cookie_dir='~/.bitcoin/testnet3')
+    else:
+        d = Daemon(port=8332, cookie_dir='~/.bitcoin')
+
     txids, = d.request('getrawmempool', [[False]])
     txids = list(map(lambda a: [a], txids))
 
