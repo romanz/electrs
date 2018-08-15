@@ -423,7 +423,7 @@ impl Connection {
                 e.display_chain().to_string()
             );
         }
-        info!("[{}] shutting down connection", self.addr);
+        debug!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
         if let Err(err) = child.join().expect("receiver panicked") {
             error!("[{}] receiver failed: {}", self.addr, err);
