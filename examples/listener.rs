@@ -10,6 +10,6 @@ fn main() {
     let _ = Config::from_args();
     let rx = notify::run().into_receiver();
     for blockhash in rx.iter() {
-        info!("{:?}", blockhash.be_hex_string())
+        info!("block {}", blockhash.be_hex_string())
     }
 }
