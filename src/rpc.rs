@@ -394,17 +394,18 @@ impl Connection {
                 tx.send(Message::Done).chain_err(|| "channel closed")?;
                 return Ok(());
             } else {
+                if line.starts_with(&[22, 3, 1]) {
+                    // (very) naive SSL handshake detection
+                    let _ = tx.send(Message::Done);
+                    bail!("invalid request - maybe SSL-encrypted data?: {:?}", line)
+                }
                 match String::from_utf8(line) {
                     Ok(req) => tx
                         .send(Message::Request(req))
                         .chain_err(|| "channel closed")?,
                     Err(err) => {
                         let _ = tx.send(Message::Done);
-                        bail!(
-                            "invalid UTF8 {:?}: {:?}",
-                            String::from_utf8_lossy(err.as_bytes()),
-                            err
-                        )
+                        bail!("invalid UTF8: {}", err)
                     }
                 }
             }
