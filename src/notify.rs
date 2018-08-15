@@ -1,10 +1,12 @@
 use bitcoin::network::constants::Network;
 use bitcoin::network::message::NetworkMessage;
+use bitcoin::network::message_blockdata::InvType;
 use bitcoin::network::socket::Socket;
+use bitcoin::util::hash::Sha256dHash;
 
 use util;
 
-pub fn run() -> util::Channel<NetworkMessage> {
+pub fn run() -> util::Channel<Sha256dHash> {
     let chan = util::Channel::new();
     let tx = chan.sender();
 
@@ -32,17 +34,19 @@ pub fn run() -> util::Channel<NetworkMessage> {
                     break;
                 }
             };
+            debug!("recv {:?}", msg);
             match msg {
                 NetworkMessage::Alert(_) => continue, // deprecated
                 NetworkMessage::Version(_) => outgoing.push(NetworkMessage::Verack),
                 NetworkMessage::Ping(nonce) => outgoing.push(NetworkMessage::Pong(nonce)),
+                NetworkMessage::Inv(ref inventory) => {
+                    inventory
+                        .iter()
+                        .filter(|inv| inv.inv_type == InvType::Block)
+                        .for_each(|inv| tx.send(inv.hash).expect("failed to send message"));
+                }
                 _ => (),
             };
-            debug!("recv {:?}", msg);
-            if tx.send(msg).is_err() {
-                warn!("failed to connect to node");
-                return;
-            }
         }
     });
 
