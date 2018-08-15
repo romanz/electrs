@@ -58,6 +58,11 @@ $ du db/
 ```bash
 # Connect only to the local server, for better privacy
 $ ./scripts/local-electrum.bash
++ ADDR=127.0.0.1
++ PORT=50001
++ PROTOCOL=t
++ electrum --oneserver --server=127.0.0.1:50001:t
+<snip>
 ```
 
 In order to use a secure connection, TLS-terminating proxy (e.g. [hitch](https://github.com/varnish/hitch)) is recommended:
