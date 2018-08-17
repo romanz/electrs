@@ -59,7 +59,7 @@ $ cargo run --release -- -vvv --timestamp --db-dir ./db [--cookie="USER:PASSWORD
 The index database is stored here:
 ```bash
 $ du db/
-37G db/mainnet/
+38G db/mainnet/
 ```
 
 ## Electrum client
