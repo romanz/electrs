@@ -79,6 +79,15 @@ $ hitch --backend=[127.0.0.1]:50001 --frontent=[127.0.0.1]:50002 pem_file
 $ electrum --oneserver --server=127.0.0.1:50002:s
 ```
 
+## Docker
+```bash
+$ docker build -t electrs-app .
+$ docker run --network host \
+             --volume /home/roman/.bitcoin:/home/user/.bitcoin:ro \
+             --volume $PWD:/home/user \
+             --rm -i -t electrs-app
+```
+
 ## Monitoring
 
 Indexing and serving metrics are exported via [Prometheus](https://github.com/pingcap/rust-prometheus):
