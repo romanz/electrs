@@ -1,3 +1,8 @@
+# 0.3.1 (20 Aug 2018)
+
+* Reconnect to bitcoind only on transient errors
+* Poll mempool after transaction broadcasting
+
 # 0.3.0 (14 Aug 2018)
 
 * Optimize for low-memory systems
