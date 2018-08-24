@@ -227,8 +227,8 @@ impl Query {
         let mut spending_inputs = vec![];
         for t in &spending_txns {
             for input in t.txn.input.iter() {
-                if input.prev_hash == funding.txn_id
-                    && input.prev_index == funding.output_index as u32
+                if input.previous_output.txid == funding.txn_id
+                    && input.previous_output.vout == funding.output_index as u32
                 {
                     spending_inputs.push(SpendingInput {
                         txn_id: t.txn.txid(),

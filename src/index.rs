@@ -39,8 +39,8 @@ impl TxInRow {
         TxInRow {
             key: TxInKey {
                 code: b'I',
-                prev_hash_prefix: hash_prefix(&input.prev_hash[..]),
-                prev_index: input.prev_index as u16,
+                prev_hash_prefix: hash_prefix(&input.previous_output.txid.as_bytes()[..]),
+                prev_index: input.previous_output.vout as u16,
             },
             txid_prefix: hash_prefix(&txid[..]),
         }
@@ -171,7 +171,7 @@ pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) 
     let null_hash = Sha256dHash::default();
     let txid: Sha256dHash = txn.txid();
     for input in &txn.input {
-        if input.prev_hash == null_hash {
+        if input.previous_output.txid == null_hash {
             continue;
         }
         rows.push(TxInRow::new(&txid, &input).to_row());
