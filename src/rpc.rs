@@ -175,7 +175,7 @@ impl Connection {
 
     fn blockchain_address_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         let script_hash: Sha256dHash = deserialize(&script_hash).unwrap();
@@ -193,7 +193,7 @@ impl Connection {
 
     fn blockchain_address_get_balance(&self, params: &[Value]) -> Result<Value> {
         let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
@@ -219,7 +219,7 @@ impl Connection {
 
     fn blockchain_address_listunspent(&self, params: &[Value]) -> Result<Value> {
         let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_vec());
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
 
