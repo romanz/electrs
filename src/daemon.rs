@@ -282,7 +282,7 @@ impl Daemon {
                 signal.clone(),
             )?),
             message_id: Counter::new(),
-            signal,
+            signal: signal.clone(),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
@@ -302,13 +302,15 @@ impl Daemon {
         }
         let blockchain_info = daemon.getblockchaininfo()?;
         info!("{:?}", blockchain_info);
-        if blockchain_info.initialblockdownload == true {
-            bail!(ErrorKind::Connection(
-                "wait until bitcoin is synced (i.e. initialblockdownload = false)".to_owned()
-            ))
-        }
         if blockchain_info.pruned == true {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
+        }
+        loop {
+            if daemon.getblockchaininfo()?.initialblockdownload == false {
+                break;
+            }
+            warn!("wait until bitcoind is synced (i.e. initialblockdownload = false)");
+            signal.wait(Duration::from_secs(3))?;
         }
         Ok(daemon)
     }
