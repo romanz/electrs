@@ -1,3 +1,4 @@
+use bitcoin::network::constants::Network;
 use clap::{App, Arg};
 use dirs::home_dir;
 use std::fs;
@@ -6,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
 
-use daemon::{CookieGetter, Network};
+use daemon::CookieGetter;
 
 use errors::*;
 
@@ -96,7 +97,7 @@ impl Config {
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
         let network_type = match network_name {
-            "mainnet" => Network::Mainnet,
+            "mainnet" => Network::Bitcoin,
             "testnet" => Network::Testnet,
             "regtest" => Network::Regtest,
             _ => panic!("unsupported Bitcoin network: {:?}", network_name),
@@ -105,17 +106,17 @@ impl Config {
         let db_path = db_dir.join(network_name);
 
         let default_daemon_port = match network_type {
-            Network::Mainnet => 8332,
+            Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
         };
         let default_electrum_port = match network_type {
-            Network::Mainnet => 50001,
+            Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
         };
         let default_monitoring_port = match network_type {
-            Network::Mainnet => 4224,
+            Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
         };
@@ -145,7 +146,7 @@ impl Config {
                 default_dir
             });
         match network_type {
-            Network::Mainnet => (),
+            Network::Bitcoin => (),
             Network::Testnet => daemon_dir.push("testnet3"),
             Network::Regtest => daemon_dir.push("regtest"),
         }

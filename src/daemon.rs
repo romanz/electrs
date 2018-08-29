@@ -1,6 +1,7 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
+use bitcoin::network::constants::Network;
 use bitcoin::network::serialize::BitcoinHash;
 use bitcoin::network::serialize::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
@@ -19,13 +20,6 @@ use signal::Waiter;
 use util::HeaderList;
 
 use errors::*;
-
-#[derive(Debug, Copy, Clone)]
-pub enum Network {
-    Mainnet,
-    Testnet,
-    Regtest,
-}
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
     Ok(Sha256dHash::from_hex(
@@ -345,11 +339,7 @@ impl Daemon {
     }
 
     pub fn magic(&self) -> u32 {
-        match self.network {
-            Network::Mainnet => 0xD9B4BEF9,
-            Network::Testnet => 0x0709110B,
-            Network::Regtest => 0xDAB5BFFA,
-        }
+        self.network.magic()
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {
