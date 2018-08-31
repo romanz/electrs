@@ -257,7 +257,7 @@ pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBSto
     } else {
         Ok(store)
     };
-    // Enable auto compactions after bulk indexing is over.
+    // Enable auto compactions after bulk indexing and full compaction are over.
     result.map(|store| store.enable_compaction())
 }
 
