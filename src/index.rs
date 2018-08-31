@@ -154,7 +154,7 @@ impl TxRow {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct BlockKey {
+struct BlockKey {
     code: u8,
     hash: FullHash,
 }

@@ -89,7 +89,7 @@ fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Resu
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BlockchainInfo {
+struct BlockchainInfo {
     chain: String,
     blocks: u32,
     headers: u32,
@@ -99,7 +99,7 @@ pub struct BlockchainInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct NetworkInfo {
+struct NetworkInfo {
     version: u64,
     subversion: String,
 }
@@ -177,7 +177,7 @@ impl Connection {
         })
     }
 
-    pub fn reconnect(&self) -> Result<Connection> {
+    fn reconnect(&self) -> Result<Connection> {
         Connection::new(self.addr, self.cookie_getter.clone(), self.signal.clone())
     }
 
@@ -405,12 +405,12 @@ impl Daemon {
 
     // bitcoind JSONRPC API:
 
-    pub fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
+    fn getblockchaininfo(&self) -> Result<BlockchainInfo> {
         let info: Value = self.request("getblockchaininfo", json!([]))?;
         Ok(from_value(info).chain_err(|| "invalid blockchain info")?)
     }
 
-    pub fn getnetworkinfo(&self) -> Result<NetworkInfo> {
+    fn getnetworkinfo(&self) -> Result<NetworkInfo> {
         let info: Value = self.request("getnetworkinfo", json!([]))?;
         Ok(from_value(info).chain_err(|| "invalid network info")?)
     }

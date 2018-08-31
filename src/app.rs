@@ -27,9 +27,10 @@ impl App {
         }))
     }
 
-    pub fn write_store(&self) -> &store::WriteStore {
+    fn write_store(&self) -> &store::WriteStore {
         &self.store
     }
+    // TODO: use index for queries.
     pub fn read_store(&self) -> &store::ReadStore {
         &self.store
     }
