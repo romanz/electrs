@@ -12,7 +12,7 @@ pub struct Waiter {
 impl Waiter {
     pub fn new() -> Waiter {
         Waiter {
-            signal: chan_signal::notify(&[chan_signal::Signal::INT]),
+            signal: chan_signal::notify(&[chan_signal::Signal::INT, chan_signal::Signal::TERM]),
         }
     }
     pub fn wait(&self, duration: Duration) -> Result<()> {
