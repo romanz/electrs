@@ -142,3 +142,22 @@ impl Drop for DBStore {
         trace!("closing DB at {:?}", self.opts.path);
     }
 }
+
+fn full_compaction_marker() -> Row {
+    Row {
+        key: b"F".to_vec(),
+        value: b"".to_vec(),
+    }
+}
+
+pub fn full_compaction(store: DBStore) -> DBStore {
+    store.flush();
+    let store = store.compact().enable_compaction();
+    store.write(vec![full_compaction_marker()]);
+    store
+}
+
+pub fn is_fully_compacted(store: &ReadStore) -> bool {
+    let marker = store.get(&full_compaction_marker().key);
+    marker.is_some()
+}
