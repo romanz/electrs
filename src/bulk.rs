@@ -17,17 +17,10 @@ use std::thread;
 use daemon::Daemon;
 use index::{index_block, last_indexed_block, read_indexed_blockhashes};
 use metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricOpts, Metrics};
-use store::{DBStore, ReadStore, Row, WriteStore};
+use store::{DBStore, Row, WriteStore};
 use util::{spawn_thread, HeaderList, SyncChannel};
 
 use errors::*;
-
-fn finish_marker_row() -> Row {
-    Row {
-        key: b"F".to_vec(),
-        value: b"".to_vec(),
-    }
-}
 
 struct Parser {
     magic: u32,
@@ -220,50 +213,35 @@ fn start_indexer(
     })
 }
 
-pub fn index(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBStore> {
+pub fn index_blk_files(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBStore> {
     set_open_files_limit(2048); // twice the default `ulimit -n` value
-    let marker = store.get(&finish_marker_row().key);
-    debug!("full compaction marker: {:?}", marker);
-    let result = if marker.is_none() {
-        let blk_files = daemon.list_blk_files()?;
-        info!("indexing {} blk*.dat files", blk_files.len());
-        let indexed_blockhashes = read_indexed_blockhashes(&store);
-        debug!("found {} indexed blocks", indexed_blockhashes.len());
-        let parser = Parser::new(daemon, metrics, indexed_blockhashes)?;
-        let (blobs, reader) = start_reader(blk_files, parser.clone());
-        let rows_chan = SyncChannel::new(0);
-        let indexers: Vec<JoinHandle> = (0..2)
-            .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
-            .collect();
-        spawn_thread("bulk_writer", move || -> Result<DBStore> {
-            for (rows, path) in rows_chan.into_receiver() {
-                trace!("indexed {:?}: {} rows", path, rows.len());
-                store.write(rows);
-            }
-            reader
-                .join()
-                .expect("reader panicked")
-                .expect("reader failed");
+    let blk_files = daemon.list_blk_files()?;
+    info!("indexing {} blk*.dat files", blk_files.len());
+    let indexed_blockhashes = read_indexed_blockhashes(&store);
+    debug!("found {} indexed blocks", indexed_blockhashes.len());
+    let parser = Parser::new(daemon, metrics, indexed_blockhashes)?;
+    let (blobs, reader) = start_reader(blk_files, parser.clone());
+    let rows_chan = SyncChannel::new(0);
+    let indexers: Vec<JoinHandle> = (0..2)
+        .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
+        .collect();
+    Ok(spawn_thread("bulk_writer", move || -> DBStore {
+        for (rows, path) in rows_chan.into_receiver() {
+            trace!("indexed {:?}: {} rows", path, rows.len());
+            store.write(rows);
+        }
+        reader
+            .join()
+            .expect("reader panicked")
+            .expect("reader failed");
 
-            indexers.into_iter().for_each(|i| {
-                i.join()
-                    .expect("indexer panicked")
-                    .expect("indexing failed")
-            });
-            store.write(vec![parser.last_indexed_row()]);
-            full_compaction(store)
-        }).join()
-            .expect("writer panicked")
-    } else {
-        Ok(store)
-    };
-    // Enable auto compactions after bulk indexing and full compaction are over.
-    result.map(|store| store.enable_compaction())
-}
-
-pub fn full_compaction(store: DBStore) -> Result<DBStore> {
-    store.flush();
-    let store = store.compact().enable_compaction();
-    store.write(vec![finish_marker_row()]);
-    Ok(store)
+        indexers.into_iter().for_each(|i| {
+            i.join()
+                .expect("indexer panicked")
+                .expect("indexing failed")
+        });
+        store.write(vec![parser.last_indexed_row()]);
+        store
+    }).join()
+        .expect("writer panicked"))
 }

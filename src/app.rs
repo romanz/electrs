@@ -18,7 +18,6 @@ impl App {
         index: index::Index,
         daemon: daemon::Daemon,
     ) -> Result<Arc<App>> {
-        index.reload(&store);
         Ok(Arc::new(App {
             store,
             index,

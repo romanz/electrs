@@ -9,8 +9,17 @@ use std::process;
 use std::time::Duration;
 
 use electrs::{
-    app::App, bulk, config::Config, daemon::Daemon, errors::*, index::Index, metrics::Metrics,
-    query::Query, rpc::RPC, signal::Waiter, store::DBStore,
+    app::App,
+    bulk,
+    config::Config,
+    daemon::Daemon,
+    errors::*,
+    index::Index,
+    metrics::Metrics,
+    query::Query,
+    rpc::RPC,
+    signal::Waiter,
+    store::{full_compaction, is_fully_compacted, DBStore},
 };
 
 fn run_server(config: &Config) -> Result<()> {
@@ -31,10 +40,18 @@ fn run_server(config: &Config) -> Result<()> {
     let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
     let store = if config.skip_bulk_import {
         index.update(&store, &signal)?; // slower: uses JSONRPC for fetching blocks
-        bulk::full_compaction(store)
+        full_compaction(store)
     } else {
-        bulk::index(&daemon, &metrics, store) // faster, but uses more memory
-    }?;
+        // faster, but uses more memory
+        if is_fully_compacted(&store) == false {
+            let store = bulk::index_blk_files(&daemon, &metrics, store)?;
+            let store = full_compaction(store);
+            index.reload(&store); // make sure the block header index is up-to-date
+            store
+        } else {
+            store
+        }
+    }.enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon)?;
     let query = Query::new(app.clone(), &metrics);
