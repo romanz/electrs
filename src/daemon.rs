@@ -8,7 +8,7 @@ use bitcoin::util::hash::Sha256dHash;
 use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -205,20 +205,43 @@ impl Connection {
                 ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
             })?
             .chain_err(|| "failed to read status")?;
-        let mut headers = vec![];
+        let mut headers = HashMap::new();
         for line in iter {
             let line = line.chain_err(|| ErrorKind::Connection("failed to read".to_owned()))?;
             if line.is_empty() {
                 in_header = false; // next line should contain the actual response.
             } else if in_header {
-                headers.push(line);
+                let parts: Vec<&str> = line.splitn(2, ": ").collect();
+                if parts.len() == 2 {
+                    headers.insert(parts[0].to_owned(), parts[1].to_owned());
+                } else {
+                    warn!("invalid header: {:?}", line);
+                }
             } else {
                 contents = Some(line);
                 break;
             }
         }
 
-        if status == "HTTP/1.1 200 OK" {
+        let contents =
+            contents.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))?;
+        let contents_length: &str = headers
+            .get("Content-Length")
+            .chain_err(|| format!("Content-Length is missing: {:?}", headers))?;
+        let contents_length: usize = contents_length
+            .parse()
+            .chain_err(|| format!("invalid Content-Length: {:?}", contents_length))?;
+
+        let expected_length = contents_length - 1; // trailing EOL is skipped
+        if expected_length != contents.len() {
+            bail!(ErrorKind::Connection(format!(
+                "expected {} bytes, got {}",
+                expected_length,
+                contents.len()
+            )));
+        }
+
+        Ok(if status == "HTTP/1.1 200 OK" {
             contents
         } else if status == "HTTP/1.1 500 Internal Server Error" {
             warn!("HTTP status: {}", status);
@@ -230,7 +253,7 @@ impl Connection {
                 headers,
                 contents
             );
-        }.chain_err(|| ErrorKind::Connection("no reply from daemon".to_owned()))
+        })
     }
 }
 
