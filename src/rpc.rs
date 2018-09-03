@@ -212,6 +212,19 @@ impl Connection {
         )))
     }
 
+    fn blockchain_address_get_history(&self, params: &[Value]) -> Result<Value> {
+        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
+        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
+        let status = self.query.status(&script_hash[..])?;
+        Ok(json!(Value::Array(
+            status
+                .history()
+                .into_iter()
+                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
+                .collect()
+        )))
+    }
+
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
@@ -281,6 +294,7 @@ impl Connection {
             "blockchain.relayfee" => self.blockchain_relayfee(),
             "blockchain.address.subscribe" => self.blockchain_address_subscribe(&params),
             "blockchain.address.get_balance" => self.blockchain_address_get_balance(&params),
+            "blockchain.address.get_history" => self.blockchain_address_get_history(&params),
             "blockchain.address.listunspent" => self.blockchain_address_listunspent(&params),
             "blockchain.scripthash.subscribe" => self.blockchain_scripthash_subscribe(&params),
             "blockchain.scripthash.get_balance" => self.blockchain_scripthash_get_balance(&params),
