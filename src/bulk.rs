@@ -213,7 +213,12 @@ fn start_indexer(
     })
 }
 
-pub fn index_blk_files(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Result<DBStore> {
+pub fn index_blk_files(
+    daemon: &Daemon,
+    index_threads: usize,
+    metrics: &Metrics,
+    store: DBStore,
+) -> Result<DBStore> {
     set_open_files_limit(2048); // twice the default `ulimit -n` value
     let blk_files = daemon.list_blk_files()?;
     info!("indexing {} blk*.dat files", blk_files.len());
@@ -222,7 +227,7 @@ pub fn index_blk_files(daemon: &Daemon, metrics: &Metrics, store: DBStore) -> Re
     let parser = Parser::new(daemon, metrics, indexed_blockhashes)?;
     let (blobs, reader) = start_reader(blk_files, parser.clone());
     let rows_chan = SyncChannel::new(0);
-    let indexers: Vec<JoinHandle> = (0..2)
+    let indexers: Vec<JoinHandle> = (0..index_threads)
         .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
         .collect();
     Ok(spawn_thread("bulk_writer", move || -> DBStore {

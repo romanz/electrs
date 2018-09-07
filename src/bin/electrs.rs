@@ -44,7 +44,7 @@ fn run_server(config: &Config) -> Result<()> {
     } else {
         // faster, but uses more memory
         if is_fully_compacted(&store) == false {
-            let store = bulk::index_blk_files(&daemon, &metrics, store)?;
+            let store = bulk::index_blk_files(&daemon, config.bulk_index_threads, &metrics, store)?;
             let store = full_compaction(store);
             index.reload(&store); // make sure the block header index is up-to-date
             store

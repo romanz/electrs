@@ -1,6 +1,7 @@
 use bitcoin::network::constants::Network;
 use clap::{App, Arg};
 use dirs::home_dir;
+use num_cpus;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ pub struct Config {
     pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
     pub skip_bulk_import: bool,        // slower initial indexing, for low-memory systems
     pub index_batch_size: usize,       // number of blocks to index in parallel
+    pub bulk_index_threads: usize,     // number of threads to use for bulk indexing
 }
 
 impl Config {
@@ -93,6 +95,12 @@ impl Config {
                     .help("Number of blocks to get in one JSONRPC request from bitcoind")
                     .default_value("100"),
             )
+            .arg(
+                Arg::with_name("bulk_index_threads")
+                    .long("bulk-index-threads")
+                    .help("Number of threads used for bulk indexing (default: use the # of CPUs)")
+                    .default_value("0")
+            )
             .get_matches();
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
@@ -160,6 +168,10 @@ impl Config {
             stderrlog::Timestamp::Off
         });
         log.init().expect("logging initialization failed");
+        let mut bulk_index_threads = value_t_or_exit!(m, "bulk_index_threads", usize);
+        if bulk_index_threads == 0 {
+            bulk_index_threads = num_cpus::get();
+        }
         let config = Config {
             log,
             network_type,
@@ -171,6 +183,7 @@ impl Config {
             monitoring_addr,
             skip_bulk_import: m.is_present("skip_bulk_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
+            bulk_index_threads,
         };
         eprintln!("{:?}", config);
         config
