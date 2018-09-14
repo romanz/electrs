@@ -1,3 +1,12 @@
+# 0.3.2 (14 Sep 2018)
+
+* Optimize block headers processing during startup
+* Handle TCP disconnections during long RPCs
+* Use # of CPUs for bulk indexing threads
+* Update rust-bitcoin to 0.14
+* Optimize block headers processing during startup
+
+
 # 0.3.1 (20 Aug 2018)
 
 * Reconnect to bitcoind only on transient errors
