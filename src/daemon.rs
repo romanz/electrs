@@ -34,7 +34,10 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
         .as_str()
         .chain_err(|| format!("non-string header: {}", value))?;
     let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
-    Ok(deserialize(&header_bytes).chain_err(|| format!("failed to parse header {}", header_hex))?)
+    Ok(
+        deserialize(&header_bytes)
+            .chain_err(|| format!("failed to parse header {}", header_hex))?,
+    )
 }
 
 fn block_from_value(value: Value) -> Result<Block> {
@@ -203,8 +206,7 @@ impl Connection {
             .next()
             .chain_err(|| {
                 ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
-            })?
-            .chain_err(|| "failed to read status")?;
+            })?.chain_err(|| "failed to read status")?;
         let mut headers = HashMap::new();
         for line in iter {
             let line = line.chain_err(|| ErrorKind::Connection("failed to read".to_owned()))?;
@@ -544,7 +546,8 @@ impl Daemon {
             .get("fee")
             .chain_err(|| "missing fee")?
             .as_f64()
-            .chain_err(|| "non-float fee")? * 100_000_000f64) as u64;
+            .chain_err(|| "non-float fee")?
+            * 100_000_000f64) as u64;
         let vsize = entry
             .get("size")
             .chain_err(|| "missing size")?

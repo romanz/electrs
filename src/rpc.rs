@@ -39,15 +39,12 @@ fn unspent_from_status(status: &Status) -> Value {
         status
             .unspent()
             .into_iter()
-            .map(|out| {
-                json!({
+            .map(|out| json!({
                 "height": out.height,
                 "tx_pos": out.output_index,
                 "tx_hash": out.txn_id.be_hex_string(),
                 "value": out.value,
-            })
-            })
-            .collect()
+            })).collect()
     ))
 }
 

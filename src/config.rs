@@ -219,8 +219,9 @@ struct CookieFile {
 impl CookieGetter for CookieFile {
     fn get(&self) -> Result<Vec<u8>> {
         let path = self.daemon_dir.join(".cookie");
-        let contents = fs::read(&path)
-            .chain_err(|| ErrorKind::Connection(format!("failed to read cookie from {:?}", path)))?;
+        let contents = fs::read(&path).chain_err(|| {
+            ErrorKind::Connection(format!("failed to read cookie from {:?}", path))
+        })?;
         Ok(contents)
     }
 }

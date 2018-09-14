@@ -105,7 +105,8 @@ impl HeaderList {
         } else {
             self.header_by_blockhash(&prev_blockhash)
                 .expect(&format!("{} is not part of the blockchain", prev_blockhash))
-                .height() + 1
+                .height()
+                + 1
         };
         (new_height..)
             .zip(hashed_headers.into_iter())
@@ -113,8 +114,7 @@ impl HeaderList {
                 height: height,
                 hash: hashed_header.blockhash,
                 header: hashed_header.header,
-            })
-            .collect()
+            }).collect()
     }
 
     pub fn apply(&mut self, new_headers: Vec<HeaderEntry>) {
