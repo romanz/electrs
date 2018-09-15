@@ -30,6 +30,7 @@ pub trait WriteStore: Sync {
 struct Options {
     path: PathBuf,
     bulk_import: bool,
+    low_memory: bool,
 }
 
 pub struct DBStore {
@@ -43,17 +44,19 @@ impl DBStore {
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
         // db_opts.set_keep_log_file_num(10);
-        db_opts.set_max_open_files(256);
-        db_opts.set_compaction_readahead_size(1 << 20);
+        db_opts.set_max_open_files(if opts.bulk_import { 16 } else { 256 });
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(256 << 20);
         db_opts.set_write_buffer_size(256 << 20);
         db_opts.set_disable_auto_compactions(opts.bulk_import); // for initial bulk load
         db_opts.set_advise_random_on_open(!opts.bulk_import); // bulk load uses sequential I/O
+        if opts.low_memory == false {
+            db_opts.set_compaction_readahead_size(1 << 20);
+        }
 
         let mut block_opts = rocksdb::BlockBasedOptions::default();
-        block_opts.set_block_size(1 << 20);
+        block_opts.set_block_size(if opts.low_memory { 256 << 10 } else { 1 << 20 });
         DBStore {
             db: rocksdb::DB::open(&db_opts, &opts.path).unwrap(),
             opts,
@@ -61,10 +64,11 @@ impl DBStore {
     }
 
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path) -> Self {
+    pub fn open(path: &Path, low_memory: bool) -> Self {
         DBStore::open_opts(Options {
             path: path.to_path_buf(),
             bulk_import: true,
+            low_memory,
         })
     }
 

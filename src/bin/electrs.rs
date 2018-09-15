@@ -36,7 +36,7 @@ fn run_server(config: &Config) -> Result<()> {
         &metrics,
     )?;
     // Perform initial indexing from local blk*.dat block files.
-    let store = DBStore::open(&config.db_path);
+    let store = DBStore::open(&config.db_path, /*low_memory=*/ config.jsonrpc_import);
     let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
     let store = if config.jsonrpc_import {
         index.update(&store, &signal)?; // slower: uses JSONRPC for fetching blocks

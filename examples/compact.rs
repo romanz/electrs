@@ -17,7 +17,7 @@ fn run(config: Config) -> Result<()> {
             config.db_path
         );
     }
-    let store = DBStore::open(&config.db_path);
+    let store = DBStore::open(&config.db_path, /*low_memory=*/ true);
     store.compact();
     Ok(())
 }
