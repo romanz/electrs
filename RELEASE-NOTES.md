@@ -1,3 +1,8 @@
+# 0.4.0 (22 Sep 2018)
+
+* Optimize for low-memory systems by using different RocksDB settings
+* Rename `--skip_bulk_import` flag to `--jsonrpc-import`
+
 # 0.3.2 (14 Sep 2018)
 
 * Optimize block headers processing during startup
