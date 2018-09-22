@@ -2,7 +2,7 @@ use chan;
 use chan_signal;
 use std::time::Duration;
 
-use errors::*;
+use crate::errors::*;
 
 #[derive(Clone)] // so multiple threads could wait on signals
 pub struct Waiter {

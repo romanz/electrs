@@ -1,25 +1,5 @@
 #![recursion_limit = "1024"]
 
-extern crate base64;
-extern crate bincode;
-extern crate bitcoin;
-extern crate chan_signal;
-extern crate crypto;
-extern crate dirs;
-extern crate glob;
-extern crate hex;
-extern crate libc;
-extern crate lru;
-extern crate num_cpus;
-extern crate page_size;
-extern crate prometheus;
-extern crate rocksdb;
-extern crate serde;
-extern crate stderrlog;
-extern crate sysconf;
-extern crate time;
-extern crate tiny_http;
-
 #[macro_use]
 extern crate chan;
 #[macro_use]

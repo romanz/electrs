@@ -15,11 +15,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use metrics::{HistogramOpts, HistogramVec, Metrics};
-use signal::Waiter;
-use util::HeaderList;
-
-use errors::*;
+use crate::errors::*;
+use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
+use crate::signal::Waiter;
+use crate::util::HeaderList;
 
 fn parse_hash(value: &Value) -> Result<Sha256dHash> {
     Ok(Sha256dHash::from_hex(

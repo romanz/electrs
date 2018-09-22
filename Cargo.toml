@@ -9,6 +9,7 @@ repository = "https://github.com/romanz/electrs"
 keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 arrayref = "0.3"

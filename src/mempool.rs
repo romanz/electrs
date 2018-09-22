@@ -6,13 +6,14 @@ use std::iter::FromIterator;
 use std::ops::Bound;
 use std::sync::Mutex;
 
-use daemon::{Daemon, MempoolEntry};
-use index::index_transaction;
-use metrics::{Gauge, GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
-use store::{ReadStore, Row};
-use util::Bytes;
-
-use errors::*;
+use crate::daemon::{Daemon, MempoolEntry};
+use crate::errors::*;
+use crate::index::index_transaction;
+use crate::metrics::{
+    Gauge, GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics,
+};
+use crate::store::{ReadStore, Row};
+use crate::util::Bytes;
 
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
 

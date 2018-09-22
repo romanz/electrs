@@ -11,7 +11,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 
-use util;
+use crate::util;
 
 fn connect() -> Result<Socket, Error> {
     let mut sock = Socket::new(Network::Bitcoin);

@@ -13,12 +13,11 @@ use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use index::compute_script_hash;
-use metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
-use query::{Query, Status};
-use util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
-
-use errors::*;
+use crate::errors::*;
+use crate::index::compute_script_hash;
+use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
+use crate::query::{Query, Status};
+use crate::util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {

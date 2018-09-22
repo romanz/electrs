@@ -1,9 +1,7 @@
 use bitcoin::util::hash::Sha256dHash;
 use std::sync::{Arc, Mutex};
 
-use {daemon, index, signal::Waiter, store};
-
-use errors::*;
+use crate::{daemon, errors::*, index, signal::Waiter, store};
 
 pub struct App {
     store: store::DBStore,

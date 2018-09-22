@@ -1,8 +1,7 @@
 use rocksdb;
-
 use std::path::{Path, PathBuf};
 
-use util::Bytes;
+use crate::util::Bytes;
 
 #[derive(Clone)]
 pub struct Row {

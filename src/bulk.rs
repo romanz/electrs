@@ -12,13 +12,12 @@ use std::sync::{
 };
 use std::thread;
 
-use daemon::Daemon;
-use index::{index_block, last_indexed_block, read_indexed_blockhashes};
-use metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricOpts, Metrics};
-use store::{DBStore, Row, WriteStore};
-use util::{spawn_thread, HeaderList, SyncChannel};
-
-use errors::*;
+use crate::daemon::Daemon;
+use crate::errors::*;
+use crate::index::{index_block, last_indexed_block, read_indexed_blockhashes};
+use crate::metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricOpts, Metrics};
+use crate::store::{DBStore, Row, WriteStore};
+use crate::util::{spawn_thread, HeaderList, SyncChannel};
 
 struct Parser {
     magic: u32,
