@@ -343,6 +343,14 @@ impl Index {
             .cloned()
     }
 
+    pub fn get_header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
+        self.headers
+            .read()
+            .unwrap()
+            .header_by_blockhash(hash)
+            .cloned()
+    }
+
     pub fn update(&self, store: &WriteStore, waiter: &Waiter) -> Result<Sha256dHash> {
         let daemon = self.daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;

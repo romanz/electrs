@@ -15,6 +15,8 @@ use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
 use util::{FullHash, HashPrefix, HeaderEntry};
+use lru_cache::LruCache;
+use std::sync::Mutex;
 
 use errors::*;
 
@@ -355,12 +357,38 @@ impl Query {
             .gettransaction_raw(tx_hash, blockhash, verbose)
     }
 
+    pub fn get_block_with_cache(&self, blockhash: &Sha256dHash, block_cache : &Mutex<LruCache<Sha256dHash,Block>> ) -> Result<Block> {
+        let mut cache = block_cache.lock().unwrap();
+        let block = match cache.get_mut(blockhash) {
+            Some(value) => {
+                debug!("HIT");
+                value.clone()
+            },
+            None => {
+                debug!("miss");
+                self.get_block(blockhash)?
+            },
+        };
+        cache.insert(blockhash.clone(), block.clone());
+        Ok(block)
+    }
+    pub fn get_block(&self, blockhash: &Sha256dHash) -> Result<Block> {
+        self.app
+            .daemon()
+            .getblock(blockhash)
+    }
+
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
         let index = self.app.index();
         heights
             .iter()
             .filter_map(|height| index.get_header(*height))
             .collect()
+    }
+
+    pub fn get_header_by_hash(&self, hash: &Sha256dHash) -> Result<HeaderEntry> {
+        let header = self.app.index().get_header_by_hash(hash);
+        Ok(header.chain_err(|| "no header found")?.clone())
     }
 
     pub fn get_best_header(&self) -> Result<HeaderEntry> {
