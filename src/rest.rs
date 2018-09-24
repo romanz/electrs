@@ -29,6 +29,7 @@ struct BlockValue {
     size: u32,
     weight: u32,
     confirmations: Option<u32>,
+    previousblockhash: String,
 }
 
 impl From<Block> for BlockValue {
@@ -43,6 +44,7 @@ impl From<Block> for BlockValue {
             weight: weight as u32,
             id: block.header.bitcoin_hash().be_hex_string(),
             confirmations: None,
+            previousblockhash: block.header.prev_blockhash.be_hex_string(),
         }
     }
 }
@@ -125,7 +127,7 @@ struct TxOutValue {
     scriptpubkey_hex: Script,
     scriptpubkey_asm: String,
     value: u64,
-    script_type: String,
+    scriptpubkey_type: String,
 }
 
 impl From<TxOut> for TxOutValue {
@@ -158,7 +160,7 @@ impl From<TxOut> for TxOutValue {
             scriptpubkey_hex: script,
             scriptpubkey_asm: (&script_asm[7..script_asm.len()-1]).to_string(),
             value,
-            script_type: script_type.to_string(),
+            scriptpubkey_type: script_type.to_string(),
         }
     }
 }
@@ -229,6 +231,24 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                     let block = query.get_block_with_cache(val.hash(), &cache)?;
                     let block_value = full_block_value_from_block(block, &query)?;
                     json_response(block_value)
+                }
+            }
+        },
+        (&Method::GET, Some(&"block-height"), Some(height), Some(&"with-txs")) => {
+            let height = height.parse::<usize>()?;
+            let vec = query.get_headers(&[height]);
+            match vec.get(0) {
+                None => return Err(StringError(format!("can't find header at height {}", height))),
+                Some(val) => {
+                    let block = query.get_block_with_cache(val.hash(), &cache)?;
+                    let block_value = full_block_value_from_block(block.clone(), &query)?;  // TODO avoid clone
+                    let mut value = BlockAndTxsValue::from(block);
+                    value.block_summary = block_value;
+                    for tx_value in value.txs.iter_mut() {
+                        tx_value.confirmations = value.block_summary.confirmations;
+                        tx_value.block_hash = Some(value.block_summary.id.clone());
+                    }
+                    json_response(value)
                 }
             }
         },
