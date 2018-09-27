@@ -269,14 +269,13 @@ impl Query {
     ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
         let mut funding = vec![];
         let mut spending = vec![];
-        for t in self.load_txns_by_prefix(
-            self.app.read_store(),
-            txids_by_script_hash(self.app.read_store(), script_hash),
-        )? {
+        let read_store = self.app.read_store();
+        let txid_prefixes = txids_by_script_hash(read_store, script_hash);
+        for t in self.load_txns_by_prefix(read_store, txid_prefixes)? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &funding {
-            if let Some(spent) = self.find_spending_input(self.app.read_store(), &funding_output)? {
+            if let Some(spent) = self.find_spending_input(read_store, &funding_output)? {
                 spending.push(spent);
             }
         }
@@ -291,10 +290,8 @@ impl Query {
         let mut funding = vec![];
         let mut spending = vec![];
         let tracker = self.tracker.read().unwrap();
-        for t in self.load_txns_by_prefix(
-            tracker.index(),
-            txids_by_script_hash(tracker.index(), script_hash),
-        )? {
+        let txid_prefixes = txids_by_script_hash(tracker.index(), script_hash);
+        for t in self.load_txns_by_prefix(tracker.index(), txid_prefixes)? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
