@@ -1,23 +1,9 @@
 language: rust
 
-env: CARGO_INCREMENTAL=0
+rust:
+  - stable
 
-cache:
-  cargo: true
-  timeout: 450
+cache: cargo
 
-stages:
-  - lint
-  - test
-
-jobs:
-  include:
-    - stage: test
-      script:
-        - cargo build
-        - cargo test
-    - stage: lint
-      before_script:
-        - rustup component add rustfmt-preview
-      script:
-        - cargo fmt --all -- --check
+script:
+  - cargo check --all
