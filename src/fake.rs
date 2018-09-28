@@ -30,6 +30,7 @@ mod tests {
             value: b"v".to_vec(),
         }]);
         store.flush();
+        // nothing was actually written
         assert!(store.get(b"").is_none());
         assert!(store.scan(b"").is_empty());
     }
