@@ -7,3 +7,5 @@ cache: cargo
 
 script:
   - cargo check --all
+  - cargo build --all
+  - cargo test --all
