@@ -254,3 +254,46 @@ where
         .spawn(f)
         .unwrap()
 }
+
+
+
+use secp256k1::{Secp256k1};
+use secp256k1::key::PublicKey;
+use bitcoin::{Script};
+use bitcoin::util::address::{Address,Payload};
+use bitcoin::util::hash::Hash160;
+use bitcoin_bech32::{WitnessProgram,u5};
+use bitcoin::network::constants::Network;
+use bitcoin_bech32::constants::Network as B32Network;
+
+// @XXX we can't use any of the Address:p2{...}h utility methods, since they expect the pre-image data, which we don't have.
+// we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
+// ideally, this should be implemented as part of the rust-bitcoin lib.
+pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
+    let payload = if script.is_p2pk() {
+        Some(Payload::Pubkey(PublicKey::from_slice(&Secp256k1::without_caps(), &script[1..66]).unwrap()))
+    } else if script.is_p2pkh() {
+        Some(Payload::PubkeyHash(Hash160::from(&script[3..23])))
+    } else if script.is_p2sh() {
+        Some(Payload::ScriptHash(Hash160::from(&script[2..22])))
+    } else if script.is_v0_p2wpkh() {
+        Some(Payload::WitnessProgram(WitnessProgram::new(u5::try_from_u8(0).expect("0<32"),
+                                                         script[2..22].to_vec(),
+                                                         to_bech_network(network)).unwrap()))
+    } else if script.is_v0_p2wsh() {
+        Some(Payload::WitnessProgram(WitnessProgram::new(u5::try_from_u8(0).expect("0<32"),
+                                                         script[2..34].to_vec(),
+                                                         to_bech_network(network)).unwrap()))
+    } else { None };
+
+    Some(Address { payload: payload?, network: *network }.to_string())
+}
+
+fn to_bech_network (network: &Network) -> B32Network {
+    match network {
+        Network::Bitcoin => B32Network::Bitcoin,
+        Network::Testnet => B32Network::Testnet,
+        Network::Regtest => B32Network::Regtest,
+    }
+}
+
