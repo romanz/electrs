@@ -14,6 +14,8 @@ $ sudo apt install clang cmake  # for building 'rust-rocksdb'
 
 First build should take ~20 minutes:
 ```bash
+$ git clone https://github.com/romanz/electrs
+$ cd electrs
 $ cargo build --release
 ```
 
@@ -54,6 +56,12 @@ $ cargo run --release -- -vvv --timestamp --db-dir ./db [--cookie="USER:PASSWORD
 2018-08-17T19:58:27 - INFO - best=000000000000000000150d26fcc38b8c3b71ae074028d1d50949ef5aa429da00 height=537218 @ 2018-08-17T16:57:50Z (14 left to index)
 2018-08-17T19:58:28 - DEBUG - applying 14 new headers from height 537205
 2018-08-17T19:58:29 - INFO - RPC server running on 127.0.0.1:50001
+```
+
+If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an Odroid HC1 with 8 cpu cores @ 2GHz, 2GB RAM, and an SSD using the following command.
+
+```bash
+$ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db [--cookie="USER:PASSWORD"]
 ```
 
 The index database is stored here:
