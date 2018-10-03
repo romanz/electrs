@@ -106,6 +106,7 @@ impl From<Transaction> for TransactionValue {
 #[derive(Serialize, Deserialize)]
 struct TxInValue {
     outpoint: OutPoint,
+    prevout: Option<TxOutValue>,
     scriptsig_hex: Script,
     scriptsig_asm: String,
 }
@@ -117,13 +118,14 @@ impl From<TxIn> for TxInValue {
 
         TxInValue {
             outpoint: txin.previous_output,
+            prevout: None, // added later
             scriptsig_asm: (&script_asm[7..script_asm.len()-1]).to_string(),
             scriptsig_hex: script,
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct TxOutValue {
     scriptpubkey_hex: Script,
     scriptpubkey_asm: String,
@@ -171,15 +173,24 @@ impl From<TxOut> for TxOutValue {
 // @XXX we should ideally set the scriptpubkey_address inside TxOutValue::from(), but it
 // cannot easily access the Network, so for now, we attach it later with mutation instead
 
-fn attach_addresses_tx(tx: &mut TransactionValue, network: &Network) {
+fn attach_tx_data(tx: &mut TransactionValue, network: &Network, query: &Arc<Query>) {
+    if !tx.is_coinbase {
+        for mut vin in tx.vin.iter_mut() {
+            let prevtx = get_tx(&query, &vin.outpoint.txid).unwrap();
+            let mut prevout = prevtx.vout[vin.outpoint.vout as usize].clone();
+            prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
+            vin.prevout = Some(prevout);
+        }
+    }
+
     for mut vout in tx.vout.iter_mut() {
         vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
     }
 }
 
-fn attach_addresses_txs(txs: &mut Vec<TransactionValue>, network: &Network) {
+fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &Arc<Query>) {
     for mut tx in txs.iter_mut() {
-        attach_addresses_tx(&mut tx, &network);
+        attach_tx_data(&mut tx, &network, &query);
     }
 }
 
@@ -268,7 +279,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                         tx_value.confirmations = value.block_summary.confirmations;
                         tx_value.block_hash = Some(value.block_summary.id.clone());
                     }
-                    attach_addresses_txs(&mut value.txs, &network);
+                    attach_txs_data(&mut value.txs, &network, &query);
                     json_response(value)
                 }
             }
@@ -289,27 +300,13 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                 tx_value.confirmations = value.block_summary.confirmations;
                 tx_value.block_hash = Some(value.block_summary.id.clone());
             }
-            attach_addresses_txs(&mut value.txs, &network);
+            attach_txs_data(&mut value.txs, &network, &query);
             json_response(value)
         },
         (&Method::GET, Some(&"tx"), Some(hash), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let tx_value = query.get_transaction(&hash,true)?;
-            let tx_hex = tx_value
-                .get("hex").and_then(|el| el.as_str())
-                .ok_or(StringError("hex not in json or not a string".to_string()))?;
-            let confirmations = tx_value
-                .get("confirmations").and_then(|el| el.as_u64())
-                .ok_or(StringError("confirmations absent or not a u64".to_string()))?;
-            let blockhash = tx_value
-                .get("blockhash").and_then(|el| el.as_str())
-                .ok_or(StringError("blockhash absent or not a string".to_string()))?;
-            let tx : Transaction = deserialize(&hex::decode(tx_hex)? )?;
-            let mut value = TransactionValue::from(tx);
-            value.confirmations = Some(confirmations as u32);
-            value.hex = Some(tx_hex.to_string());
-            value.block_hash = Some(blockhash.to_string());
-            attach_addresses_tx(&mut value, &network);
+            let mut value = get_tx(&query, &hash)?;
+            attach_tx_data(&mut value, &network, &query);
             json_response(value)
         },
         _ => {
@@ -329,6 +326,27 @@ fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> 
         .header("Content-type","application/json")
         .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(value)).unwrap())
+}
+
+fn get_tx(query: &Arc<Query>, hash: &Sha256dHash) -> Result<TransactionValue, StringError> {
+    let tx_value = query.get_transaction(&hash,true)?;
+    let tx_hex = tx_value
+        .get("hex").ok_or(StringError("hex not in tx json".to_string()))?
+        .as_str().ok_or(StringError("hex not a string".to_string()))?;
+    let confirmations = tx_value
+        .get("confirmations").ok_or(StringError("confirmations not in tx json".to_string()))?
+        .as_u64().ok_or(StringError("confirmations not a u64".to_string()))?;
+    let blockhash = tx_value
+        .get("blockhash").ok_or(StringError("blockhash not in tx json".to_string()))?
+        .as_str().ok_or(StringError("blockhash not a string".to_string()))?;
+    let tx : Transaction = deserialize(&hex::decode(tx_hex)? )?;
+
+    let mut value = TransactionValue::from(tx);
+    value.confirmations = Some(confirmations as u32);
+    value.hex = Some(tx_hex.to_string());
+    value.block_hash = Some(blockhash.to_string());
+
+    Ok(value)
 }
 
 fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32, block_cache : &Mutex<LruCache<Sha256dHash,Block>>)
