@@ -332,18 +332,23 @@ fn get_tx(query: &Arc<Query>, hash: &Sha256dHash) -> Result<TransactionValue, St
     let tx_hex = tx_value
         .get("hex").ok_or(StringError("hex not in tx json".to_string()))?
         .as_str().ok_or(StringError("hex not a string".to_string()))?;
-    let confirmations = tx_value
-        .get("confirmations").ok_or(StringError("confirmations not in tx json".to_string()))?
-        .as_u64().ok_or(StringError("confirmations not a u64".to_string()))?;
-    let blockhash = tx_value
-        .get("blockhash").ok_or(StringError("blockhash not in tx json".to_string()))?
-        .as_str().ok_or(StringError("blockhash not a string".to_string()))?;
+
+    let confirmations = match tx_value.get("confirmations") {
+        Some(confs) => Some(confs.as_u64().ok_or(StringError("confirmations not a u64".to_string()))? as u32),
+        None => None
+    };
+
+    let blockhash = match tx_value.get("blockhash") {
+        Some(hash) => Some(hash.as_str().ok_or(StringError("blockhash not a string".to_string()))?.to_string()),
+        None => None
+    };
+
     let tx : Transaction = deserialize(&hex::decode(tx_hex)? )?;
 
     let mut value = TransactionValue::from(tx);
-    value.confirmations = Some(confirmations as u32);
+    value.confirmations = confirmations;
     value.hex = Some(tx_hex.to_string());
-    value.block_hash = Some(blockhash.to_string());
+    value.block_hash = blockhash;
 
     Ok(value)
 }
