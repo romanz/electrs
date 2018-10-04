@@ -79,7 +79,6 @@ struct TransactionValue {
     block_hash: Option<String>,
     size: u32,
     weight: u32,
-    is_coinbase: bool,
 }
 
 impl From<Transaction> for TransactionValue {
@@ -87,7 +86,6 @@ impl From<Transaction> for TransactionValue {
         let vin = tx.input.iter().map(|el| TxInValue::from(el.clone())).collect();
         let vout = tx.output.iter().map(|el| TxOutValue::from(el.clone())).collect();
         let bytes = serialize(&tx).unwrap();
-        let is_coinbase = tx.is_coin_base();
 
         TransactionValue {
             txid: tx.txid(),
@@ -98,7 +96,6 @@ impl From<Transaction> for TransactionValue {
             block_hash: None,
             size: bytes.len() as u32,
             weight: tx.get_weight() as u32,
-            is_coinbase,
         }
     }
 }
@@ -109,6 +106,7 @@ struct TxInValue {
     prevout: Option<TxOutValue>,
     scriptsig_hex: Script,
     scriptsig_asm: String,
+    is_coinbase: bool,
 }
 
 impl From<TxIn> for TxInValue {
@@ -121,6 +119,7 @@ impl From<TxIn> for TxInValue {
             prevout: None, // added later
             scriptsig_asm: (&script_asm[7..script_asm.len()-1]).to_string(),
             scriptsig_hex: script,
+            is_coinbase: txin.previous_output.is_null(),
         }
     }
 }
@@ -174,8 +173,8 @@ impl From<TxOut> for TxOutValue {
 // cannot easily access the Network, so for now, we attach it later with mutation instead
 
 fn attach_tx_data(tx: &mut TransactionValue, network: &Network, query: &Arc<Query>) {
-    if !tx.is_coinbase {
-        for mut vin in tx.vin.iter_mut() {
+    for mut vin in tx.vin.iter_mut() {
+        if !vin.is_coinbase {
             let prevtx = get_tx(&query, &vin.outpoint.txid).unwrap();
             let mut prevout = prevtx.vout[vin.outpoint.vout as usize].clone();
             prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
