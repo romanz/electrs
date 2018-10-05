@@ -254,33 +254,9 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
         },
         (&Method::GET, Some(&"block-height"), Some(height), None) => {
             let height = height.parse::<usize>()?;
-            let vec = query.get_headers(&[height]);
-            match vec.get(0) {
-                None => return Err(StringError(format!("can't find header at height {}", height))),
-                Some(val) => {
-                    let block = query.get_block_with_cache(val.hash(), &cache)?;
-                    let block_value = full_block_value_from_block(block, &query)?;
-                    json_response(block_value)
-                }
-            }
-        },
-        (&Method::GET, Some(&"block-height"), Some(height), Some(&"with-txs")) => {
-            let height = height.parse::<usize>()?;
-            let vec = query.get_headers(&[height]);
-            match vec.get(0) {
-                None => return Err(StringError(format!("can't find header at height {}", height))),
-                Some(val) => {
-                    let block = query.get_block_with_cache(val.hash(), &cache)?;
-                    let block_value = full_block_value_from_block(block.clone(), &query)?;  // TODO avoid clone
-                    let mut value = BlockAndTxsValue::from(block);
-                    value.block_summary = block_value;
-                    for tx_value in value.txs.iter_mut() {
-                        tx_value.confirmations = value.block_summary.confirmations;
-                        tx_value.block_hash = Some(value.block_summary.id.clone());
-                    }
-                    attach_txs_data(&mut value.txs, &network, &query);
-                    json_response(value)
-                }
+            match query.get_headers(&[height]).get(0) {
+                None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
+                Some(val) => Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", val.hash())))
             }
         },
         (&Method::GET, Some(&"block"), Some(hash), None) => {
@@ -334,6 +310,16 @@ fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> 
         .header("Content-type","application/json")
         .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(value)).unwrap())
+}
+
+fn redirect(status: StatusCode, path: String) -> Response<Body> {
+    Response::builder()
+        .status(status)
+        .header("Location", path.clone())
+        .header("Content-Type", "text/plain")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(Body::from(format!("See {}\n", path)))
+        .unwrap()
 }
 
 fn get_tx(query: &Arc<Query>, hash: &Sha256dHash) -> Result<TransactionValue, StringError> {
