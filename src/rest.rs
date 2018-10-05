@@ -5,7 +5,7 @@ use config::Config;
 use bitcoin::{Block,TxIn,TxOut,OutPoint,Transaction};
 use errors;
 use hex::{self, FromHexError};
-use hyper::{Body, Response, Server, Method,Request};
+use hyper::{Body, Response, Server, Method, Request, StatusCode};
 use hyper::service::service_fn_ok;
 use hyper::rt::{self, Future};
 use lru_cache::LruCache;
@@ -245,7 +245,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                     let height = height.parse::<usize>()?;
                     let headers = query.get_headers(&[height]);
                     match headers.get(0) {
-                        None => Err(StringError(format!("can't find header at height {}", height))),
+                        None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
                         Some(from_header) => blocks(&query,  Some(&from_header), limit, &cache)
                     }
                 },
@@ -314,9 +314,18 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
     }
 }
 
+fn http_message(status: StatusCode, message: String) -> Response<Body> {
+    Response::builder()
+        .status(status)
+        .header("Content-Type", "text/plain")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(Body::from(message))
+        .unwrap()
+}
+
 fn bad_request() -> Response<Body> {
     // TODO should handle hyper unwrap but it's Error type is private, not sure
-    Response::builder().status(400).body(Body::from("")).unwrap()
+    http_message(StatusCode::BAD_REQUEST, "400 Bad Request".to_string())
 }
 
 fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> {
