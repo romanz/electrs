@@ -268,6 +268,17 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
         (&Method::GET, Some(&"block"), Some(hash), Some(&"with-txs")) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let block = query.get_block_with_cache(&hash, &cache)?;
+
+            // @TODO optimization: skip deserializing transactions outside of range
+            let start = (query_params.get("start_index")
+                .map_or(0u32, |el| el.parse().unwrap_or(0))
+                .max(0u32) as usize).min(block.txdata.len());
+            let limit = query_params.get("limit")
+                .map_or(10u32,|el| el.parse().unwrap_or(10u32) )
+                .min(50u32) as usize;
+            let end = (start+limit).min(block.txdata.len());
+            let block = Block { header: block.header, txdata: block.txdata[start..end].to_vec() };
+
             let block_value = full_block_value_from_block(block.clone(), &query)?;  // TODO avoid clone
             let mut value = BlockAndTxsValue::from(block);
             value.block_summary = block_value;
