@@ -1,5 +1,5 @@
 use bitcoin::util::hash::{Sha256dHash,HexError};
-use bitcoin::network::serialize::{serialize,deserialize};
+use bitcoin::network::serialize::serialize;
 use bitcoin::{Script,network,BitcoinHash};
 use config::Config;
 use bitcoin::{Block,TxIn,TxOut,OutPoint,Transaction};
@@ -12,7 +12,7 @@ use lru_cache::LruCache;
 use query::Query;
 use serde_json;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap,BTreeMap};
 use std::error::Error;
 use std::num::ParseIntError;
 use std::thread;
@@ -74,9 +74,7 @@ struct TransactionValue {
     txid: Sha256dHash,
     vin: Vec<TxInValue>,
     vout: Vec<TxOutValue>,
-    confirmations: Option<u32>,
-    hex: Option<String>,
-    block_hash: Option<String>,
+    hex: String,
     size: u32,
     weight: u32,
 }
@@ -91,10 +89,8 @@ impl From<Transaction> for TransactionValue {
             txid: tx.txid(),
             vin,
             vout,
-            confirmations: None,
-            hex: None,
-            block_hash: None,
             size: bytes.len() as u32,
+            hex: hex::encode(bytes),
             weight: tx.get_weight() as u32,
         }
     }
@@ -169,29 +165,45 @@ impl From<TxOut> for TxOutValue {
     }
 }
 
-// @XXX we should ideally set the scriptpubkey_address inside TxOutValue::from(), but it
-// cannot easily access the Network, so for now, we attach it later with mutation instead
 
-fn attach_tx_data(tx: &mut TransactionValue, network: &Network, query: &Arc<Query>) {
-    for mut vin in tx.vin.iter_mut() {
-        if !vin.is_coinbase {
-            let prevtx = get_tx(&query, &vin.outpoint.txid).unwrap();
-            let mut prevout = prevtx.vout[vin.outpoint.vout as usize].clone();
-            prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
-            vin.prevout = Some(prevout);
-        }
-    }
-
-    for mut vout in tx.vout.iter_mut() {
-        vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
-    }
+fn attach_tx_data(tx: TransactionValue, network: &Network, query: &Arc<Query>) -> TransactionValue {
+    let mut txs = vec![tx];
+    attach_txs_data(&mut txs, network, query);
+    txs.remove(0)
 }
 
 fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &Arc<Query>) {
+    // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
+    let mut lookups: BTreeMap<Sha256dHash, Vec<(u32, &mut TxInValue)>> = BTreeMap::new();
+    // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
+    // locality from empirical test up to 2 or 3 times faster
+
     for mut tx in txs.iter_mut() {
-        attach_tx_data(&mut tx, &network, &query);
+        // collect lookups
+        for mut vin in tx.vin.iter_mut() {
+            if !vin.is_coinbase {
+                lookups.entry(vin.outpoint.txid).or_insert(vec![]).push((vin.outpoint.vout, vin));
+            }
+        }
+        // attach encoded address (should ideally happen in TxOutValue::from(), but it cannot
+        // easily access the network)
+        for mut vout in tx.vout.iter_mut() {
+            vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
+        }
     }
+
+    // fetch prevtxs and attach prevouts to nextins
+    for (prev_txid, prev_vouts) in lookups {
+        let prevtx = query.txstore_get(&prev_txid).unwrap();
+        for (prev_out_idx, ref mut nextin) in prev_vouts {
+            let mut prevout = TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
+            prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
+            nextin.prevout = Some(prevout);
+        }
+    }
+
 }
+
 
 pub fn run_server(config: &Config, query: Arc<Query>) {
     let addr = ([127, 0, 0, 1], 3000).into();  // TODO take from config
@@ -278,21 +290,17 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                 .min(50u32) as usize;
             let end = (start+limit).min(block.txdata.len());
             let block = Block { header: block.header, txdata: block.txdata[start..end].to_vec() };
-
             let block_value = full_block_value_from_block(block.clone(), &query)?;  // TODO avoid clone
             let mut value = BlockAndTxsValue::from(block);
             value.block_summary = block_value;
-            for tx_value in value.txs.iter_mut() {
-                tx_value.confirmations = value.block_summary.confirmations;
-                tx_value.block_hash = Some(value.block_summary.id.clone());
-            }
-            attach_txs_data(&mut value.txs, &network, &query);
+            attach_txs_data(&mut value.txs, network, query);
             json_response(value)
         },
         (&Method::GET, Some(&"tx"), Some(hash), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let mut value = get_tx(&query, &hash)?;
-            attach_tx_data(&mut value, &network, &query);
+            let transaction = query.txstore_get(&hash)?;
+            let mut value = TransactionValue::from(transaction);
+            let value = attach_tx_data(value, network, query);
             json_response(value)
         },
         _ => {
@@ -331,32 +339,6 @@ fn redirect(status: StatusCode, path: String) -> Response<Body> {
         .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(format!("See {}\n", path)))
         .unwrap()
-}
-
-fn get_tx(query: &Arc<Query>, hash: &Sha256dHash) -> Result<TransactionValue, StringError> {
-    let tx_value = query.get_transaction(&hash,true)?;
-    let tx_hex = tx_value
-        .get("hex").ok_or(StringError("hex not in tx json".to_string()))?
-        .as_str().ok_or(StringError("hex not a string".to_string()))?;
-
-    let confirmations = match tx_value.get("confirmations") {
-        Some(confs) => Some(confs.as_u64().ok_or(StringError("confirmations not a u64".to_string()))? as u32),
-        None => None
-    };
-
-    let blockhash = match tx_value.get("blockhash") {
-        Some(hash) => Some(hash.as_str().ok_or(StringError("blockhash not a string".to_string()))?.to_string()),
-        None => None
-    };
-
-    let tx : Transaction = deserialize(&hex::decode(tx_hex)? )?;
-
-    let mut value = TransactionValue::from(tx);
-    value.confirmations = confirmations;
-    value.hex = Some(tx_hex.to_string());
-    value.block_hash = blockhash;
-
-    Ok(value)
 }
 
 fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32, block_cache : &Mutex<LruCache<Sha256dHash,Block>>)

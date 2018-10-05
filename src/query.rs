@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use app::App;
-use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
+use index::{compute_script_hash, TxInRow, TxOutRow, TxRow, RawTxRow};
 use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
@@ -128,6 +128,12 @@ fn txrow_by_txid(store: &ReadStore, txid: &Sha256dHash) -> Option<TxRow> {
     let key = TxRow::filter_full(&txid);
     let value = store.get(&key)?;
     Some(TxRow::from_row(&Row { key, value }))
+}
+
+fn rawtxrow_by_txid(store: &ReadStore, txid: &Sha256dHash) -> Option<RawTxRow> {
+    let key = RawTxRow::filter_full(&txid);
+    let value = store.get(&key)?;
+    Some(RawTxRow::from_row(&Row { key, value }))
 }
 
 fn txrows_by_prefix(store: &ReadStore, txid_prefix: &HashPrefix) -> Vec<TxRow> {
@@ -349,7 +355,19 @@ impl Query {
         self.app.daemon().gettransaction(tx_hash, blockhash)
     }
 
+    // Read from txstore, fallback to reading from bitcoind rpc
+    pub fn txstore_get(&self, txid: &Sha256dHash) -> Result<Transaction> {
+        match rawtxrow_by_txid(self.app.read_store(), txid) {
+            Some(row) => Ok(deserialize(&row.rawtx).chain_err(|| "cannot parse tx")?),
+            None => {
+                debug!("missing tx {} in txstore, asking node", txid);
+                self.app.daemon().gettransaction(txid, self.lookup_confirmed_blockhash(txid, None)?)
+            }
+        }
+    }
+
     // Public API for transaction retrieval (for Electrum RPC)
+    // Fetched from bitcoind, includes tx confirmation information (number of confirmations and block hash)
     pub fn get_transaction(&self, tx_hash: &Sha256dHash, verbose: bool) -> Result<Value> {
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, /*block_height*/ None)?;
         self.app

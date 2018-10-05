@@ -153,6 +153,46 @@ impl TxRow {
     }
 }
 
+pub struct RawTxRow {
+    pub key: TxKey,
+    pub rawtx: Bytes,
+}
+
+impl RawTxRow {
+    pub fn new(txid: &Sha256dHash, rawtx: Bytes) -> RawTxRow {
+        RawTxRow {
+            key: TxKey {
+                code: b't',
+                txid: full_hash(&txid[..]),
+            },
+            rawtx: rawtx,
+        }
+    }
+
+    pub fn filter_prefix(txid_prefix: &HashPrefix) -> Bytes {
+        [b"t", &txid_prefix[..]].concat()
+    }
+
+    pub fn filter_full(txid: &Sha256dHash) -> Bytes {
+        [b"t", &txid[..]].concat()
+    }
+
+    pub fn to_row(&self) -> Row {
+        Row {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: bincode::serialize(&self.rawtx).unwrap(),
+        }
+    }
+
+    pub fn from_row(row: &Row) -> RawTxRow {
+        RawTxRow {
+            key: bincode::deserialize(&row.key).expect("failed to parse TxKey for RawTx"),
+            rawtx: bincode::deserialize(&row.value).expect("failed to parse rawtx"),
+        }
+    }
+}
+
+
 #[derive(Serialize, Deserialize)]
 struct BlockKey {
     code: u8,
@@ -181,6 +221,7 @@ pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) 
     }
     // Persist transaction ID and confirmed height
     rows.push(TxRow::new(&txid, height as u32).to_row());
+    rows.push(RawTxRow::new(&txid, serialize(txn).unwrap()).to_row()); // @TODO avoid re-serialization
 }
 
 pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
