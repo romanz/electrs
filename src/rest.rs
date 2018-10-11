@@ -32,7 +32,7 @@ struct BlockValue {
     size: u32,
     weight: u32,
     confirmations: Option<u32>,
-    previousblockhash: String,
+    previousblockhash: Option<String>,
 }
 
 impl From<Block> for BlockValue {
@@ -47,7 +47,8 @@ impl From<Block> for BlockValue {
             weight: weight as u32,
             id: block.header.bitcoin_hash().be_hex_string(),
             confirmations: None,
-            previousblockhash: block.header.prev_blockhash.be_hex_string(),
+            previousblockhash: if &block.header.prev_blockhash[..] != &[0u8;32][..] { Some(block.header.prev_blockhash.be_hex_string()) }
+                               else { None },
         }
     }
 }
