@@ -58,7 +58,6 @@ struct TransactionValue {
     txid: Sha256dHash,
     vin: Vec<TxInValue>,
     vout: Vec<TxOutValue>,
-    hex: String,
     size: u32,
     weight: u32,
 }
@@ -74,7 +73,6 @@ impl From<Transaction> for TransactionValue {
             vin,
             vout,
             size: bytes.len() as u32,
-            hex: hex::encode(bytes),
             weight: tx.get_weight() as u32,
         }
     }
@@ -286,6 +284,13 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
             let mut value = TransactionValue::from(transaction);
             let value = attach_tx_data(value, network, query);
             json_response(value)
+        },
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex")) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            match query.txstore_get_raw(&hash) {
+                Some(rawtx) => Ok(http_message(StatusCode::OK, hex::encode(rawtx))),
+                None => Ok(http_message(StatusCode::NOT_FOUND, "Not Found".to_string())),
+            }
         },
         _ => {
             Err(StringError(format!("endpoint does not exist {:?}",uri.path())))
