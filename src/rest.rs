@@ -8,7 +8,6 @@ use hex::{self, FromHexError};
 use hyper::{Body, Response, Server, Method, Request, StatusCode};
 use hyper::service::service_fn_ok;
 use hyper::rt::{self, Future};
-use lru_cache::LruCache;
 use query::Query;
 use serde_json;
 use serde::Serialize;
@@ -16,7 +15,7 @@ use std::collections::{HashMap,BTreeMap};
 use std::error::Error;
 use std::num::ParseIntError;
 use std::thread;
-use std::sync::{Arc,Mutex};
+use std::sync::Arc;
 use url::form_urlencoded;
 use bitcoin::network::constants::Network;
 use util::{HeaderEntry,script_to_address};
@@ -191,17 +190,14 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
     let addr = ([127, 0, 0, 1], 3000).into();  // TODO take from config
     info!("REST server running on {}", addr);
 
-    let cache = Arc::new(Mutex::new(LruCache::new(100)));
-
     let network = config.network_type;
 
     let new_service = move || {
 
         let query = query.clone();
-        let cache = cache.clone();
 
         service_fn_ok(move |req: Request<Body>| {
-            match handle_request(req,&query,&cache,&network) {
+            match handle_request(req,&query,&network) {
                 Ok(response) => response,
                 Err(e) => {
                     warn!("{:?}",e);
@@ -220,7 +216,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
     });
 }
 
-fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruCache<Sha256dHash, Block>>>, network: &Network) -> Result<Response<Body>, StringError> {
+fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> Result<Response<Body>, StringError> {
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
@@ -240,10 +236,10 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
                     let headers = query.get_headers(&[height]);
                     match headers.get(0) {
                         None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
-                        Some(from_header) => blocks(&query,  Some(&from_header), limit, &cache)
+                        Some(from_header) => blocks(&query,  Some(&from_header), limit)
                     }
                 },
-                None => blocks(&query,  None, limit, &cache),
+                None => blocks(&query,  None, limit),
             }
         },
         (&Method::GET, Some(&"block-height"), Some(height), None) => {
@@ -255,13 +251,13 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, cache: &Arc<Mutex<LruC
         },
         (&Method::GET, Some(&"block"), Some(hash), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let block = query.get_block_with_cache(&hash, &cache)?;
+            let block = query.get_block(&hash)?;
             let block_value = full_block_value_from_block(block, &query)?;
             json_response(block_value)
         },
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs")) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let block = query.get_block_with_cache(&hash, &cache)?;
+            let block = query.get_block(&hash)?;
 
             // @TODO optimization: skip deserializing transactions outside of range
             let mut start = query_params.get("start_index")
@@ -330,7 +326,7 @@ fn redirect(status: StatusCode, path: String) -> Response<Body> {
         .unwrap()
 }
 
-fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32, block_cache : &Mutex<LruCache<Sha256dHash,Block>>)
+fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32)
     -> Result<Response<Body>,StringError> {
     let best_header  = query.get_best_header()?;
     let mut values = Vec::new();
@@ -340,7 +336,7 @@ fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32, blo
     };
     let zero = [0u8;32];
     for _ in 0..limit {
-        let block : Block = query.get_block_with_cache(&current_hash, block_cache)?;
+        let block : Block = query.get_block(&current_hash)?;
         current_hash = block.header.prev_blockhash.clone();
         let block_value = full_block_value_from_block(block, query)?;
         values.push(block_value);

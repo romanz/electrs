@@ -15,8 +15,6 @@ use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
 use util::{FullHash, HashPrefix, HeaderEntry, Bytes};
-use lru_cache::LruCache;
-use std::sync::Mutex;
 
 use errors::*;
 
@@ -380,21 +378,6 @@ impl Query {
             .gettransaction_raw(tx_hash, blockhash, verbose)
     }
 
-    pub fn get_block_with_cache(&self, blockhash: &Sha256dHash, block_cache : &Mutex<LruCache<Sha256dHash,Block>> ) -> Result<Block> {
-        let mut cache = block_cache.lock().unwrap();
-        let block = match cache.get_mut(blockhash) {
-            Some(value) => {
-                debug!("HIT");
-                value.clone()
-            },
-            None => {
-                debug!("miss");
-                self.get_block(blockhash)?
-            },
-        };
-        cache.insert(blockhash.clone(), block.clone());
-        Ok(block)
-    }
     pub fn get_block(&self, blockhash: &Sha256dHash) -> Result<Block> {
         self.app
             .daemon()
