@@ -56,6 +56,7 @@ struct TransactionValue {
     vout: Vec<TxOutValue>,
     size: u32,
     weight: u32,
+    fee: Option<u64>,
 }
 
 impl From<Transaction> for TransactionValue {
@@ -70,11 +71,12 @@ impl From<Transaction> for TransactionValue {
             vout,
             size: bytes.len() as u32,
             weight: tx.get_weight() as u32,
+            fee: None, // added later
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct TxInValue {
     outpoint: OutPoint,
     prevout: Option<TxOutValue>,
@@ -151,37 +153,46 @@ fn attach_tx_data(tx: TransactionValue, network: &Network, query: &Arc<Query>) -
 }
 
 fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &Arc<Query>) {
-    // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
-    let mut lookups: BTreeMap<Sha256dHash, Vec<(u32, &mut TxInValue)>> = BTreeMap::new();
-    // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
-    // locality from empirical test up to 2 or 3 times faster
+    {
+        // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
+        let mut lookups: BTreeMap<Sha256dHash, Vec<(u32, &mut TxInValue)>> = BTreeMap::new();
+        // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
+        // locality from empirical test up to 2 or 3 times faster
 
-    for mut tx in txs.iter_mut() {
-        // collect lookups
-        for mut vin in tx.vin.iter_mut() {
-            if !vin.is_coinbase {
-                lookups.entry(vin.outpoint.txid).or_insert(vec![]).push((vin.outpoint.vout, vin));
+        for mut tx in txs.iter_mut() {
+            // collect lookups
+            for mut vin in tx.vin.iter_mut() {
+                if !vin.is_coinbase {
+                    lookups.entry(vin.outpoint.txid).or_insert(vec![]).push((vin.outpoint.vout, vin));
+                }
+            }
+            // attach encoded address (should ideally happen in TxOutValue::from(), but it cannot
+            // easily access the network)
+            for mut vout in tx.vout.iter_mut() {
+                vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
             }
         }
-        // attach encoded address (should ideally happen in TxOutValue::from(), but it cannot
-        // easily access the network)
-        for mut vout in tx.vout.iter_mut() {
-            vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
+
+        // fetch prevtxs and attach prevouts to nextins
+        for (prev_txid, prev_vouts) in lookups {
+            let prevtx = query.txstore_get(&prev_txid).unwrap();
+            for (prev_out_idx, ref mut nextin) in prev_vouts {
+                let mut prevout = TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
+                prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
+                nextin.prevout = Some(prevout);
+            }
         }
     }
 
-    // fetch prevtxs and attach prevouts to nextins
-    for (prev_txid, prev_vouts) in lookups {
-        let prevtx = query.txstore_get(&prev_txid).unwrap();
-        for (prev_out_idx, ref mut nextin) in prev_vouts {
-            let mut prevout = TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
-            prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
-            nextin.prevout = Some(prevout);
-        }
-    }
+    // attach tx fee
+    for mut tx in txs.iter_mut() {
+        if tx.vin.iter().any(|vin| vin.prevout.is_none()) { continue; }
 
+        let total_in: u64 = tx.vin.iter().map(|vin| vin.clone().prevout.unwrap().value).sum();
+        let total_out: u64 = tx.vout.iter().map(|vout| vout.value).sum();
+        tx.fee = Some(total_in - total_out);
+    }
 }
-
 
 pub fn run_server(config: &Config, query: Arc<Query>) {
     let addr = ([127, 0, 0, 1], 3000).into();  // TODO take from config
