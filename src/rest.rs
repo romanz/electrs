@@ -300,13 +300,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex")) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            match query.txstore_get_raw(&hash) {
-                Some(rawtx) => Ok(http_message(StatusCode::OK, hex::encode(rawtx))),
-                None => Ok(http_message(StatusCode::NOT_FOUND, "Not Found".to_string())),
-            }
+            let rawtx = query.txstore_get_raw(&hash)?;
+            Ok(http_message(StatusCode::OK, hex::encode(rawtx)))
         },
         _ => {
-            Err(StringError(format!("endpoint does not exist {:?}",uri.path())))
+            Err(StringError(format!("endpoint does not exist {:?}", uri.path())))
         }
     }
 }
