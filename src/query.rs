@@ -15,7 +15,7 @@ use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
-use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta};
+use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta, BlockStatus};
 
 use errors::*;
 
@@ -414,6 +414,21 @@ impl Query {
     pub fn get_best_header(&self) -> Result<HeaderEntry> {
         let last_header = self.app.index().best_header();
         Ok(last_header.chain_err(|| "no headers indexed")?.clone())
+    }
+
+    pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
+        // get_header_by_hash looks up the height first, then fetches the header by that.
+        // if the block is no longer the best block at this height, it'll return None.
+        match self.app.index().get_header_by_hash(hash) {
+            Some(header) => BlockStatus {
+                in_best_chain: true,
+                next_best: self.app.index().get_header(header.height() + 1).map(|h| h.hash().clone())
+            },
+            None => BlockStatus {
+                in_best_chain: false,
+                next_best: None,
+            },
+        }
     }
 
     pub fn get_merkle_proof(

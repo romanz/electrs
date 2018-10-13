@@ -28,6 +28,12 @@ pub fn full_hash(hash: &[u8]) -> FullHash {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct BlockStatus {
+    pub in_best_chain: bool,
+    pub next_best: Option<Sha256dHash>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct BlockMeta {
     pub tx_count: u32,
     pub size: u32,

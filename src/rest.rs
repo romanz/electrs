@@ -252,6 +252,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let block_value = BlockValue::from(blockhm);
             json_response(block_value)
         },
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"status")) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let status = query.get_block_status(&hash);
+            json_response(status)
+        },
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs")) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let block = query.get_block(&hash)?;
