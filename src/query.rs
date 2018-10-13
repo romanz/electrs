@@ -416,6 +416,10 @@ impl Query {
         Ok(last_header.chain_err(|| "no headers indexed")?.clone())
     }
 
+    pub fn get_best_header_hash(&self) -> Sha256dHash {
+        self.app.index().best_header_hash()
+    }
+
     pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
         // get_header_by_hash looks up the height first, then fetches the header by that.
         // if the block is no longer the best block at this height, it'll return None.

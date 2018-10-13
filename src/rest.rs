@@ -250,6 +250,10 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
                 None => blocks(&query,  None, limit),
             }
         },
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), None) => {
+            let best_header_hash = query.get_best_header_hash();
+            Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", best_header_hash)))
+        },
         (&Method::GET, Some(&"block-height"), Some(height), None) => {
             let height = height.parse::<usize>()?;
             match query.get_headers(&[height]).get(0) {

@@ -391,6 +391,10 @@ impl Index {
         headers.header_by_blockhash(headers.tip()).cloned()
     }
 
+    pub fn best_header_hash(&self) -> Sha256dHash {
+        self.headers.read().unwrap().tip().clone()
+    }
+
     pub fn get_header(&self, height: usize) -> Option<HeaderEntry> {
         self.headers
             .read()
