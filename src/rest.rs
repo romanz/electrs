@@ -2,7 +2,7 @@ use bitcoin::util::hash::{Sha256dHash,HexError};
 use bitcoin::network::serialize::serialize;
 use bitcoin::{Script,network,BitcoinHash};
 use config::Config;
-use bitcoin::{Block,TxIn,TxOut,OutPoint,Transaction};
+use bitcoin::{TxIn,TxOut,OutPoint,Transaction};
 use errors;
 use hex::{self, FromHexError};
 use hyper::{Body, Response, Server, Method, Request, StatusCode};
@@ -18,35 +18,32 @@ use std::thread;
 use std::sync::Arc;
 use url::form_urlencoded;
 use bitcoin::network::constants::Network;
-use util::{HeaderEntry,script_to_address};
+use util::{HeaderEntry, BlockHeaderMeta, script_to_address};
 
 const TX_LIMIT: usize = 50;
 
 #[derive(Serialize, Deserialize)]
 struct BlockValue {
     id: String,
-    height: Option<u32>,
+    height: u32,
     timestamp: u32,
     tx_count: u32,
     size: u32,
     weight: u32,
-    confirmations: Option<u32>,
     previousblockhash: Option<String>,
 }
 
-impl From<Block> for BlockValue {
-    fn from(block: Block) -> Self {
-        let weight : u64 = block.txdata.iter().fold(0, |sum, val| sum + val.get_weight());
-        let serialized_block = serialize(&block).unwrap();
+impl From<BlockHeaderMeta> for BlockValue {
+    fn from(blockhm: BlockHeaderMeta) -> Self {
+        let header = blockhm.header_entry.header();
         BlockValue {
-            height: None,
-            timestamp: block.header.time,
-            tx_count: block.txdata.len() as u32,
-            size: serialized_block.len() as u32,
-            weight: weight as u32,
-            id: block.header.bitcoin_hash().be_hex_string(),
-            confirmations: None,
-            previousblockhash: if &block.header.prev_blockhash[..] != &[0u8;32][..] { Some(block.header.prev_blockhash.be_hex_string()) }
+            id: header.bitcoin_hash().be_hex_string(),
+            height: blockhm.header_entry.height() as u32,
+            timestamp: header.time,
+            tx_count: blockhm.meta.tx_count,
+            size: blockhm.meta.size,
+            weight: blockhm.meta.weight,
+            previousblockhash: if &header.prev_blockhash != &Sha256dHash::default() { Some(header.prev_blockhash.be_hex_string()) }
                                else { None },
         }
     }
@@ -251,8 +248,8 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
         },
         (&Method::GET, Some(&"block"), Some(hash), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let block = query.get_block(&hash)?;
-            let block_value = full_block_value_from_block(block, &query)?;
+            let blockhm = query.get_block_header_with_meta(&hash)?;
+            let block_value = BlockValue::from(blockhm);
             json_response(block_value)
         },
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs")) => {
@@ -336,25 +333,15 @@ fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32)
     };
     let zero = [0u8;32];
     for _ in 0..limit {
-        let block : Block = query.get_block(&current_hash)?;
-        current_hash = block.header.prev_blockhash.clone();
-        let block_value = full_block_value_from_block(block, query)?;
-        values.push(block_value);
+        let blockhm = query.get_block_header_with_meta(&current_hash)?;
+        current_hash = blockhm.header_entry.header().prev_blockhash.clone();
+        values.push(BlockValue::from(blockhm));
+
         if &current_hash[..] == &zero[..] {
             break;
         }
     }
     json_response(values)
-}
-
-fn full_block_value_from_block(block: Block, query: &Query) -> Result<BlockValue,StringError> {
-    let best_header  = query.get_best_header()?;
-    let block_header = query.get_header_by_hash(&block.header.bitcoin_hash())?;
-    let mut block_value = BlockValue::from(block);
-    let block_height = block_header.height() as u32;
-    block_value.confirmations=Some(best_header.height() as u32 - block_height + 1);
-    block_value.height=Some(block_height);
-    Ok(block_value)
 }
 
 #[derive(Debug)]

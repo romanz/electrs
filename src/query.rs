@@ -7,6 +7,7 @@ use crypto::sha2::Sha256;
 use lru::LruCache;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
+use bincode;
 
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow, RawTxRow};
@@ -14,7 +15,7 @@ use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
-use util::{FullHash, HashPrefix, HeaderEntry, Bytes};
+use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta};
 
 use errors::*;
 
@@ -164,6 +165,13 @@ fn txids_by_funding_output(
 
 pub struct TransactionCache {
     map: Mutex<LruCache<Sha256dHash, Transaction>>,
+}
+
+pub fn get_block_meta(store: &ReadStore, blockhash: &Sha256dHash) -> Option<BlockMeta> {
+    let key = [b"M", &blockhash[..]].concat();
+    let value = store.get(&key)?;
+    let meta: BlockMeta = bincode::deserialize(&value).unwrap();
+    Some(meta)
 }
 
 impl TransactionCache {
@@ -382,6 +390,12 @@ impl Query {
         self.app
             .daemon()
             .getblock(blockhash)
+    }
+
+    pub fn get_block_header_with_meta(&self, blockhash: &Sha256dHash) -> Result<BlockHeaderMeta> {
+        let header_entry = self.get_header_by_hash(blockhash)?;
+        let meta = get_block_meta(self.app.read_store(), blockhash).ok_or("cannot load block meta")?;
+        Ok(BlockHeaderMeta { header_entry, meta })
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {

@@ -17,6 +17,7 @@ use store::{ReadStore, Row, WriteStore};
 use util::{
     full_hash, hash_prefix, spawn_thread, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
     HeaderMap, SyncChannel, HASH_PREFIX_LEN,
+    BlockMeta,
 };
 
 use errors::*;
@@ -238,6 +239,20 @@ pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
         }).unwrap(),
         value: serialize(&block.header).unwrap(),
     });
+
+    // Persist block metadata (size, number of txs and sum of txs weight)
+    let blockmeta = BlockMeta::from(block);
+    rows.push(Row {
+        key: bincode::serialize(&BlockKey {
+            code: b'M',
+            hash: full_hash(&blockhash[..]),
+        }).unwrap(),
+        value: bincode::serialize(&blockmeta).unwrap(),
+    });
+    // @XXX block metadata could be saved alongside the header and added
+    // into the HeaderList structure, which would be more efficient but
+    // require more invasive changes in electrs internals.
+
     rows
 }
 
