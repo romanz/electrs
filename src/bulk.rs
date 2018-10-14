@@ -149,7 +149,7 @@ fn load_headers(daemon: &Daemon) -> Result<HeaderList> {
     let tip = daemon.getbestblockhash()?;
     let mut headers = HeaderList::empty();
     let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
-    headers.apply(new_headers);
+    headers.apply(new_headers, tip);
     Ok(headers)
 }
 
