@@ -27,6 +27,31 @@ pub fn full_hash(hash: &[u8]) -> FullHash {
     array_ref![hash, 0, HASH_LEN].clone()
 }
 
+
+#[derive(Serialize, Deserialize)]
+pub struct TransactionStatus {
+    pub confirmed: bool,
+    pub block_height: Option<u32>,
+    pub block_hash: Option<Sha256dHash>,
+}
+
+impl TransactionStatus {
+    pub fn unconfirmed() -> Self {
+        TransactionStatus {
+            confirmed: false,
+            block_height: None,
+            block_hash: None,
+        }
+    }
+    pub fn confirmed(header: &HeaderEntry) -> Self {
+        TransactionStatus {
+            confirmed: true,
+            block_height: Some(header.height() as u32),
+            block_hash: Some(header.hash().clone()),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct BlockStatus {
     pub in_best_chain: bool,

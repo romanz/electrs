@@ -303,6 +303,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let rawtx = query.txstore_get_raw(&hash)?;
             Ok(http_message(StatusCode::OK, hex::encode(rawtx)))
         },
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"status")) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let status = query.get_tx_status(&hash)?;
+            json_response(status)
+        },
         _ => {
             Err(StringError(format!("endpoint does not exist {:?}", uri.path())))
         }

@@ -16,7 +16,7 @@ use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
-use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta, BlockStatus};
+use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta, BlockStatus, TransactionStatus};
 
 use errors::*;
 
@@ -443,6 +443,21 @@ impl Query {
                 next_best: None,
             },
         }
+    }
+
+    pub fn get_tx_status(&self, tx_hash: &Sha256dHash) -> Result<TransactionStatus> {
+        // try fetching the height/hash of the block seen to confirm the tx
+        let (height, blockhash) = match txrow_by_txid(self.app.read_store(), &tx_hash) {
+            None => return Ok(TransactionStatus::unconfirmed()),
+            Some(txrow) => (txrow.height, txrow.blockhash),
+        };
+
+        // fetch the block header at the recorded confirmation height
+        let header = self.app.index().get_header(height as usize).chain_err(|| "invalid block height for tx")?;
+
+        // the block at confirmation height is not the one containing the tx, must've reorged!
+        if header.hash() != &blockhash { Ok(TransactionStatus::unconfirmed()) }
+        else { Ok(TransactionStatus::confirmed(&header)) }
     }
 
     pub fn get_merkle_proof(
