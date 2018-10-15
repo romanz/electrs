@@ -1,6 +1,6 @@
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::deserialize;
+use bitcoin::network::serialize::{serialize,deserialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -8,7 +8,6 @@ use lru::LruCache;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use bincode;
-use hex;
 
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow, RawTxRow};
@@ -356,35 +355,22 @@ impl Query {
         Ok(blockhash)
     }
 
-    // Internal API for transaction retrieval
+    // Internal API for transaction retrieval (uses bitcoind)
     fn load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
         self.app.daemon().gettransaction(tx_hash, blockhash)
     }
 
-    // Read from txstore, fallback to reading from bitcoind rpc
-    pub fn txstore_get(&self, txid: &Sha256dHash) -> Result<Transaction> {
-        match rawtxrow_by_txid(self.app.read_store(), txid) {
-            Some(row) => Ok(deserialize(&row.rawtx).chain_err(|| "cannot parse tx")?),
-            None => {
-                debug!("missing tx {} in txstore, asking node for mempool tx", txid);
-                self.app.daemon().gettransaction(txid, None)
-            }
-        }
+    // Get transaction from txstore or the in-memory mempool Tracker
+    pub fn tx_get(&self, txid: &Sha256dHash) -> Option<Transaction> {
+        rawtxrow_by_txid(self.app.read_store(), txid).map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
+            .or_else(|| self.tracker.read().unwrap().get_txn(&txid))
     }
 
-    // Get raw transaction from txstore, fallback to reading from bitcoind rpc
-    pub fn txstore_get_raw(&self, txid: &Sha256dHash) -> Result<Bytes> {
-        match rawtxrow_by_txid(self.app.read_store(), txid) {
-            Some(row) => Ok(row.rawtx),
-            None => {
-                debug!("missing tx {} in txstore, asking node for mempool tx", txid);
-                let value = self.app.daemon().gettransaction_raw(txid, None, false).chain_err(|| "cannot find tx")?;
-                let tx_hex = value.as_str().chain_err(|| "non-string tx")?;
-                let tx_bytes = hex::decode(tx_hex).chain_err(|| "non-hex tx")?;
-                Ok(tx_bytes)
-            }
-        }
+    // Get raw transaction from txstore or the in-memory mempool Tracker
+    pub fn tx_get_raw(&self, txid: &Sha256dHash) -> Option<Bytes> {
+        rawtxrow_by_txid(self.app.read_store(), txid).map(|row| row.rawtx)
+            .or_else(|| self.tracker.read().unwrap().get_txn(&txid).map(|tx| serialize(&tx).expect("cannot serialize tx from mempool")))
     }
 
     // Public API for transaction retrieval (for Electrum RPC)

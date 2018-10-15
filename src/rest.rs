@@ -175,7 +175,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &A
 
         // fetch prevtxs and attach prevouts to nextins
         for (prev_txid, prev_vouts) in lookups {
-            let prevtx = query.txstore_get(&prev_txid).unwrap();
+            let prevtx = query.tx_get(&prev_txid).unwrap();
             for (prev_out_idx, ref mut nextin) in prev_vouts {
                 let mut prevout = TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
                 prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
@@ -293,14 +293,14 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
         },
         (&Method::GET, Some(&"tx"), Some(hash), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let transaction = query.txstore_get(&hash)?;
+            let transaction = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
             let mut value = TransactionValue::from(transaction);
             let value = attach_tx_data(value, network, query);
             json_response(value)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex")) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let rawtx = query.txstore_get_raw(&hash)?;
+            let rawtx = query.tx_get_raw(&hash).ok_or(StringError("cannot find tx".to_string()))?;
             Ok(http_message(StatusCode::OK, hex::encode(rawtx)))
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status")) => {
