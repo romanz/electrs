@@ -230,10 +230,12 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
     info!("path {:?}", path);
     match (req.method(), path.get(0), path.get(1), path.get(2), path.get(3)) {
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), None, None) => {
-            let best_header_hash = query.get_best_header_hash();
-            Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", best_header_hash)))
-        },
+        (&Method::GET, Some(&"tip"), Some(&"hash"), None, None) =>
+            Ok(http_message(StatusCode::OK, query.get_best_header_hash().be_hex_string())),
+
+        (&Method::GET, Some(&"tip"), Some(&"height"), None, None) =>
+            Ok(http_message(StatusCode::OK, query.get_best_height().to_string())),
+
         (&Method::GET, Some(&"blocks"), start_height, None, None) => {
             let start_height = start_height.and_then(|height| height.parse::<usize>().ok());
             blocks(&query, start_height)

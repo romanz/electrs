@@ -392,6 +392,10 @@ impl Index {
         *headers = read_indexed_headers(store);
     }
 
+    pub fn best_height(&self) -> usize {
+        self.headers.read().unwrap().len() - 1
+    }
+
     pub fn best_header(&self) -> Option<HeaderEntry> {
         let headers = self.headers.read().unwrap();
         headers.header_by_blockhash(headers.tip()).cloned()
