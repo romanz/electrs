@@ -52,6 +52,8 @@ impl From<BlockHeaderMeta> for BlockValue {
 #[derive(Serialize, Deserialize)]
 struct TransactionValue {
     txid: Sha256dHash,
+    version: u32,
+    locktime: u32,
     vin: Vec<TxInValue>,
     vout: Vec<TxOutValue>,
     size: u32,
@@ -67,6 +69,8 @@ impl From<Transaction> for TransactionValue {
 
         TransactionValue {
             txid: tx.txid(),
+            version: tx.version,
+            locktime: tx.lock_time,
             vin,
             vout,
             size: bytes.len() as u32,
