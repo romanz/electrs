@@ -11,16 +11,16 @@ use hyper::rt::{self, Future};
 use query::Query;
 use serde_json;
 use serde::Serialize;
-use std::collections::{HashMap,BTreeMap};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::ParseIntError;
 use std::thread;
 use std::sync::Arc;
-use url::form_urlencoded;
 use bitcoin::network::constants::Network;
-use util::{HeaderEntry, BlockHeaderMeta, script_to_address};
+use util::{BlockHeaderMeta, script_to_address};
 
 const TX_LIMIT: usize = 50;
+const BLOCK_LIMIT: usize = 10;
 
 #[derive(Serialize, Deserialize)]
 struct BlockValue {
@@ -228,82 +228,66 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
-    let query_params = match uri.query() {
-        Some(value) => form_urlencoded::parse(&value.as_bytes()).into_owned().collect::<HashMap<String, String>>(),
-        None => HashMap::new(),
-    };
-    info!("path {:?} params {:?}", path, query_params);
-    match (req.method(), path.get(0), path.get(1), path.get(2)) {
-        (&Method::GET, Some(&"blocks"), None, None) => {
-            let limit = query_params.get("limit")
-                .map_or(10u32,|el| el.parse().unwrap_or(10u32) )
-                .min(30u32);
-            match query_params.get("start_height") {
-                Some(height) => {
-                    let height = height.parse::<usize>()?;
-                    let headers = query.get_headers(&[height]);
-                    match headers.get(0) {
-                        None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
-                        Some(from_header) => blocks(&query,  Some(&from_header), limit)
-                    }
-                },
-                None => blocks(&query,  None, limit),
-            }
-        },
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), None) => {
+    info!("path {:?}", path);
+    match (req.method(), path.get(0), path.get(1), path.get(2), path.get(3)) {
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), None, None) => {
             let best_header_hash = query.get_best_header_hash();
             Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", best_header_hash)))
         },
-        (&Method::GET, Some(&"block-height"), Some(height), None) => {
+        (&Method::GET, Some(&"blocks"), start_height, None, None) => {
+            let start_height = start_height.and_then(|height| height.parse::<usize>().ok());
+            blocks(&query, start_height)
+        },
+        (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
             match query.get_headers(&[height]).get(0) {
                 None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
                 Some(val) => Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", val.hash())))
             }
         },
-        (&Method::GET, Some(&"block"), Some(hash), None) => {
+        (&Method::GET, Some(&"block"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let blockhm = query.get_block_header_with_meta(&hash)?;
             let block_value = BlockValue::from(blockhm);
             json_response(block_value)
         },
-        (&Method::GET, Some(&"block"), Some(hash), Some(&"status")) => {
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.get_block_status(&hash);
             json_response(status)
         },
-        (&Method::GET, Some(&"block"), Some(hash), Some(&"txs")) => {
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let block = query.get_block(&hash)?;
 
             // @TODO optimization: skip deserializing transactions outside of range
-            let mut start = query_params.get("start_index")
+            let start_index = start_index
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
                 .max(0u32) as usize;
 
-            if start >= block.txdata.len() {
+            if start_index >= block.txdata.len() {
                 return Ok(http_message(StatusCode::NOT_FOUND, "start index out of range".to_string()));
-            } else if start % TX_LIMIT != 0 {
+            } else if start_index % TX_LIMIT != 0 {
                 return Ok(http_message(StatusCode::BAD_REQUEST, format!("start index must be a multipication of {}", TX_LIMIT)));
             }
 
-            let mut txs = block.txdata.iter().skip(start).take(TX_LIMIT).map(|tx| TransactionValue::from(tx.clone())).collect();
+            let mut txs = block.txdata.iter().skip(start_index).take(TX_LIMIT).map(|tx| TransactionValue::from(tx.clone())).collect();
             attach_txs_data(&mut txs, network, query);
             json_response(txs)
         },
-        (&Method::GET, Some(&"tx"), Some(hash), None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let transaction = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
             let mut value = TransactionValue::from(transaction);
             let value = attach_tx_data(value, network, query);
             json_response(value)
         },
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex")) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let rawtx = query.tx_get_raw(&hash).ok_or(StringError("cannot find tx".to_string()))?;
             Ok(http_message(StatusCode::OK, hex::encode(rawtx)))
         },
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"status")) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.get_tx_status(&hash)?;
             json_response(status)
@@ -346,16 +330,17 @@ fn redirect(status: StatusCode, path: String) -> Response<Body> {
         .unwrap()
 }
 
-fn blocks(query: &Arc<Query>, from_header: Option<&HeaderEntry>, limit: u32)
+fn blocks(query: &Arc<Query>, start_height: Option<usize>)
     -> Result<Response<Body>,StringError> {
-    let best_header  = query.get_best_header()?;
+
     let mut values = Vec::new();
-    let mut current_hash = match from_header {
-        None => best_header.hash().clone(),
-        Some(value) => value.hash().clone(),
+    let mut current_hash = match start_height {
+        Some(height) => query.get_headers(&[height]).get(0).ok_or(StringError("cannot find block".to_string()))?.hash().clone(),
+        None => query.get_best_header()?.hash().clone(),
     };
+
     let zero = [0u8;32];
-    for _ in 0..limit {
+    for _ in 0..BLOCK_LIMIT {
         let blockhm = query.get_block_header_with_meta(&current_hash)?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
         values.push(BlockValue::from(blockhm));
