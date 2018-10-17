@@ -14,17 +14,19 @@ use errors::*;
 
 #[derive(Debug)]
 pub struct Config {
+    // See below for the documentation of each field:
     pub log: stderrlog::StdErrLog,
-    pub network_type: Network,         // bitcoind JSONRPC endpoint
-    pub db_path: PathBuf,              // RocksDB directory path
-    pub daemon_dir: PathBuf,           // Bitcoind data directory
-    pub daemon_rpc_addr: SocketAddr,   // for connecting Bitcoind JSONRPC
-    pub cookie: Option<String>,        // for bitcoind JSONRPC authentication ("USER:PASSWORD")
-    pub electrum_rpc_addr: SocketAddr, // for serving Electrum clients
-    pub monitoring_addr: SocketAddr,   // for Prometheus monitoring
-    pub jsonrpc_import: bool,          // slower initial indexing, for low-memory systems
-    pub index_batch_size: usize,       // number of blocks to index in parallel
-    pub bulk_index_threads: usize,     // number of threads to use for bulk indexing
+    pub network_type: Network,
+    pub db_path: PathBuf,
+    pub daemon_dir: PathBuf,
+    pub daemon_rpc_addr: SocketAddr,
+    pub cookie: Option<String>,
+    pub electrum_rpc_addr: SocketAddr,
+    pub monitoring_addr: SocketAddr,
+    pub jsonrpc_import: bool,
+    pub index_batch_size: usize,
+    pub bulk_index_threads: usize,
+    pub tx_cache_size: usize,
 }
 
 impl Config {
@@ -100,6 +102,12 @@ impl Config {
                     .long("bulk-index-threads")
                     .help("Number of threads used for bulk indexing (default: use the # of CPUs)")
                     .default_value("0")
+            )
+            .arg(
+                Arg::with_name("tx_cache_size")
+                    .long("tx-cache-size")
+                    .help("Number of transactions to keep in for query LRU cache")
+                    .default_value("10000")  // should be enough for a small wallet.
             )
             .get_matches();
 
@@ -184,6 +192,7 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
+            tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
         };
         eprintln!("{:?}", config);
         config

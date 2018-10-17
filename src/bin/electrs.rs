@@ -16,7 +16,7 @@ use electrs::{
     errors::*,
     index::Index,
     metrics::Metrics,
-    query::Query,
+    query::{Query, TransactionCache},
     rpc::RPC,
     signal::Waiter,
     store::{full_compaction, is_fully_compacted, DBStore},
@@ -54,7 +54,8 @@ fn run_server(config: &Config) -> Result<()> {
     }.enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon)?;
-    let query = Query::new(app.clone(), &metrics);
+    let tx_cache = TransactionCache::new(config.tx_cache_size);
+    let query = Query::new(app.clone(), &metrics, tx_cache);
 
     let mut server = None; // Electrum RPC server
     loop {

@@ -4,8 +4,9 @@ use bitcoin::network::serialize::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use lru::LruCache;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
@@ -155,14 +156,14 @@ fn txids_by_funding_output(
         .collect()
 }
 
-struct TransactionCache {
-    map: RwLock<HashMap<Sha256dHash, Transaction>>,
+pub struct TransactionCache {
+    map: Mutex<LruCache<Sha256dHash, Transaction>>,
 }
 
 impl TransactionCache {
-    fn new() -> TransactionCache {
+    pub fn new(capacity: usize) -> TransactionCache {
         TransactionCache {
-            map: RwLock::new(HashMap::new()),
+            map: Mutex::new(LruCache::new(capacity)),
         }
     }
 
@@ -170,11 +171,11 @@ impl TransactionCache {
     where
         F: FnOnce() -> Result<Transaction>,
     {
-        if let Some(txn) = self.map.read().unwrap().get(txid) {
+        if let Some(txn) = self.map.lock().unwrap().get(txid) {
             return Ok(txn.clone());
         }
         let txn = load_txn_func()?;
-        self.map.write().unwrap().insert(*txid, txn.clone());
+        self.map.lock().unwrap().put(*txid, txn.clone());
         Ok(txn)
     }
 }
@@ -186,11 +187,11 @@ pub struct Query {
 }
 
 impl Query {
-    pub fn new(app: Arc<App>, metrics: &Metrics) -> Arc<Query> {
+    pub fn new(app: Arc<App>, metrics: &Metrics, tx_cache: TransactionCache) -> Arc<Query> {
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new(metrics)),
-            tx_cache: TransactionCache::new(),
+            tx_cache,
         })
     }
 

@@ -9,6 +9,7 @@ extern crate dirs;
 extern crate glob;
 extern crate hex;
 extern crate libc;
+extern crate lru;
 extern crate num_cpus;
 extern crate page_size;
 extern crate prometheus;
