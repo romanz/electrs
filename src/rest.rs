@@ -244,7 +244,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let height = height.parse::<usize>()?;
             match query.get_headers(&[height]).get(0) {
                 None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
-                Some(val) => Ok(redirect(StatusCode::TEMPORARY_REDIRECT, format!("/block/{}", val.hash())))
+                Some(val) => Ok(http_message(StatusCode::OK, val.hash().be_hex_string()))
             }
         },
         (&Method::GET, Some(&"block"), Some(hash), None, None) => {
@@ -320,16 +320,6 @@ fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> 
         .header("Content-type","application/json")
         .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(value)).unwrap())
-}
-
-fn redirect(status: StatusCode, path: String) -> Response<Body> {
-    Response::builder()
-        .status(status)
-        .header("Location", path.clone())
-        .header("Content-Type", "text/plain")
-        .header("Access-Control-Allow-Origin", "*")
-        .body(Body::from(format!("See {}\n", path)))
-        .unwrap()
 }
 
 fn blocks(query: &Arc<Query>, start_height: Option<usize>)
