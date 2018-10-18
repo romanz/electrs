@@ -86,6 +86,7 @@ struct TxInValue {
     prevout: Option<TxOutValue>,
     scriptsig_hex: Script,
     scriptsig_asm: String,
+    witness: Option<Vec<String>>,
     is_coinbase: bool,
 }
 
@@ -93,12 +94,14 @@ impl From<TxIn> for TxInValue {
     fn from(txin: TxIn) -> Self {
         let script = txin.script_sig;
         let script_asm = format!("{:?}",script);
+        let witness = if txin.witness.len() > 0 { Some(txin.witness.iter().map(|w| hex::encode(w)).collect()) } else { None };
 
         TxInValue {
             outpoint: txin.previous_output,
             prevout: None, // added later
             scriptsig_asm: (&script_asm[7..script_asm.len()-1]).to_string(),
             scriptsig_hex: script,
+            witness: witness,
             is_coinbase: txin.previous_output.is_null(),
         }
     }
