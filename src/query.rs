@@ -5,8 +5,9 @@ use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use lru::LruCache;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::sync::{Arc, Mutex, RwLock};
+use std::cmp::Ordering;
 use bincode;
 
 use app::App;
@@ -20,6 +21,7 @@ use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta,
 use errors::*;
 
 pub struct FundingOutput {
+    pub txn: TxnHeight,
     pub txn_id: Sha256dHash,
     pub height: u32,
     pub output_index: usize,
@@ -29,6 +31,7 @@ pub struct FundingOutput {
 type OutPoint = (Sha256dHash, usize); // (txid, output_index)
 
 struct SpendingInput {
+    txn: TxnHeight,
     txn_id: Sha256dHash,
     height: u32,
     funding_output: OutPoint,
@@ -77,6 +80,19 @@ impl Status {
         txns
     }
 
+    pub fn history_txs(&self) -> Vec<&TxnHeight> {
+        let mut txns_map = BTreeMap::<Sha256dHash, &TxnHeight>::new();
+        for f in self.funding() {
+            txns_map.insert(f.txn_id, &f.txn);
+        }
+        for s in self.spending() {
+            txns_map.insert(s.txn_id, &s.txn);
+        }
+        let mut txns: Vec<&TxnHeight> = txns_map.into_iter().map(|item| item.1).collect();
+        txns.sort_by(|a, b| if a.height == 0 { Ordering::Less } else { b.height.cmp(&a.height) });
+        txns
+    }
+
     pub fn unspent(&self) -> Vec<&FundingOutput> {
         let mut outputs_map = HashMap::<OutPoint, &FundingOutput>::new();
         for f in self.funding() {
@@ -112,9 +128,12 @@ impl Status {
     }
 }
 
-struct TxnHeight {
-    txn: Transaction,
-    height: u32,
+
+#[derive(Clone)]
+pub struct TxnHeight {
+    pub txn: Transaction,
+    pub height: u32,
+    pub blockhash: Sha256dHash,
 }
 
 fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
@@ -181,7 +200,7 @@ impl TransactionCache {
         }
     }
 
-    fn get_or_else<F>(&self, txid: &Sha256dHash, load_txn_func: F) -> Result<Transaction>
+    fn _get_or_else<F>(&self, txid: &Sha256dHash, load_txn_func: F) -> Result<Transaction>
     where
         F: FnOnce() -> Result<Transaction>,
     {
@@ -218,12 +237,11 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn = self
-                    .tx_cache
-                    .get_or_else(&txid, || self.load_txn(&txid, tx_row.height))?;
+                let txn = self.tx_get(&txid).chain_err(|| "cannot locate tx")?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
+                    blockhash: tx_row.blockhash,
                 })
             }
         }
@@ -246,6 +264,7 @@ impl Query {
                     && input.previous_output.vout == funding.output_index as u32
                 {
                     spending_inputs.push(SpendingInput {
+                        txn: t.clone(),
                         txn_id: t.txn.txid(),
                         height: t.height,
                         funding_output: (funding.txn_id, funding.output_index),
@@ -268,6 +287,7 @@ impl Query {
         for (index, output) in t.txn.output.iter().enumerate() {
             if compute_script_hash(&output.script_pubkey[..]) == script_hash {
                 result.push(FundingOutput {
+                    txn: t.clone(),
                     txn_id: txn_id,
                     height: t.height,
                     output_index: index,
@@ -356,7 +376,7 @@ impl Query {
     }
 
     // Internal API for transaction retrieval (uses bitcoind)
-    fn load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
+    fn _load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
         self.app.daemon().gettransaction(tx_hash, blockhash)
     }
