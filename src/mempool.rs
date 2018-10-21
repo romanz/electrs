@@ -4,7 +4,7 @@ use hex;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::FromIterator;
 use std::ops::Bound;
-use std::sync::{Mutex, RwLock};
+use std::sync::Mutex;
 
 use daemon::{Daemon, MempoolEntry};
 use index::index_transaction;
@@ -17,34 +17,33 @@ use errors::*;
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
 
 struct MempoolStore {
-    map: RwLock<BTreeMap<Bytes, Vec<Bytes>>>,
+    map: BTreeMap<Bytes, Vec<Bytes>>,
 }
 
 impl MempoolStore {
     fn new() -> MempoolStore {
         MempoolStore {
-            map: RwLock::new(BTreeMap::new()),
+            map: BTreeMap::new(),
         }
     }
 
     fn add(&mut self, tx: &Transaction) {
-        let mut map = self.map.write().unwrap();
         let mut rows = vec![];
         index_transaction(tx, 0, &mut rows);
         for row in rows {
             let (key, value) = row.into_pair();
-            map.entry(key).or_insert(vec![]).push(value);
+            self.map.entry(key).or_insert(vec![]).push(value);
         }
     }
 
     fn remove(&mut self, tx: &Transaction) {
-        let mut map = self.map.write().unwrap();
         let mut rows = vec![];
         index_transaction(tx, 0, &mut rows);
         for row in rows {
             let (key, value) = row.into_pair();
             let no_values_left = {
-                let values = map
+                let values = self
+                    .map
                     .get_mut(&key)
                     .expect(&format!("missing key {} in mempool", hex::encode(&key)));
                 let last_value = values
@@ -61,7 +60,7 @@ impl MempoolStore {
                 values.is_empty()
             };
             if no_values_left {
-                map.remove(&key).unwrap();
+                self.map.remove(&key).unwrap();
             }
         }
     }
@@ -69,12 +68,12 @@ impl MempoolStore {
 
 impl ReadStore for MempoolStore {
     fn get(&self, key: &[u8]) -> Option<Bytes> {
-        let map = self.map.read().unwrap();
-        Some(map.get(key)?.last()?.to_vec())
+        Some(self.map.get(key)?.last()?.to_vec())
     }
     fn scan(&self, prefix: &[u8]) -> Vec<Row> {
-        let map = self.map.read().unwrap();
-        let range = map.range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
+        let range = self
+            .map
+            .range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
         let mut rows = vec![];
         for (key, values) in range {
             if !key.starts_with(prefix) {
