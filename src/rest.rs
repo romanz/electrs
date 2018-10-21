@@ -235,7 +235,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
                 Ok(response) => response,
                 Err(e) => {
                     warn!("{:?}",e);
-                    bad_request()
+                    http_message(StatusCode::BAD_REQUEST, e.0)
                 },
             }
         })
@@ -362,11 +362,6 @@ fn http_message(status: StatusCode, message: String) -> Response<Body> {
         .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(message))
         .unwrap()
-}
-
-fn bad_request() -> Response<Body> {
-    // TODO should handle hyper unwrap but it's Error type is private, not sure
-    http_message(StatusCode::BAD_REQUEST, "400 Bad Request".to_string())
 }
 
 fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> {
