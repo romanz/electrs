@@ -233,6 +233,11 @@ impl Query {
         store: &ReadStore,
         prefixes: Vec<HashPrefix>,
     ) -> Result<Vec<TxnHeight>> {
+
+        if prefixes.len() > 30 {
+            bail!("Address has too many transactions.");
+        }
+
         let mut txns = vec![];
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
@@ -340,11 +345,11 @@ impl Query {
 
     pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
         let confirmed = self
-            .confirmed_status(script_hash)
-            .chain_err(|| "failed to get confirmed status")?;
+            .confirmed_status(script_hash)?;
+            //.chain_err(|| "failed to get confirmed status")?;
         let mempool = self
-            .mempool_status(script_hash, &confirmed.0)
-            .chain_err(|| "failed to get mempool status")?;
+            .mempool_status(script_hash, &confirmed.0)?;
+            //.chain_err(|| "failed to get mempool status")?;
         Ok(Status { confirmed, mempool })
     }
 
