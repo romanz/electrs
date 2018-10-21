@@ -66,6 +66,10 @@ impl Status {
         calc_balance(&self.mempool)
     }
 
+    pub fn total_received(&self) -> i64 {
+        self.funding().map(|output| output.value as i64).sum()
+    }
+
     pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
         let mut txns_map = HashMap::<Sha256dHash, i32>::new();
         for f in self.funding() {

@@ -308,7 +308,8 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let status = query.status(&script_hash[..])?;
             // @TODO create new AddressStatsValue struct?
             json_response(json!({ "address": address, "tx_count": status.history().len(),
-                                  "confirmed_balance": status.confirmed_balance(), "mempool_balance": status.mempool_balance(), }))
+                                  "confirmed_balance": status.confirmed_balance(), "mempool_balance": status.mempool_balance(),
+                                  "total_received": status.total_received(), }))
         },
         (&Method::GET, Some(&"address"), Some(address), Some(&"txs"), start_index) => {
             let start_index = start_index
