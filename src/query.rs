@@ -20,6 +20,7 @@ use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta,
 
 use errors::*;
 
+#[derive(Clone)]
 pub struct FundingOutput {
     pub txn: TxnHeight,
     pub txn_id: Sha256dHash,
