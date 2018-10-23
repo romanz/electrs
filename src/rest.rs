@@ -304,7 +304,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             json_response(txs)
         },
         (&Method::GET, Some(&"address"), Some(address), None, None) => {
-            let script_hash = address_to_scripthash(address)?;
+            let script_hash = address_to_scripthash(address, &network)?;
             let status = query.status(&script_hash[..])?;
             // @TODO create new AddressStatsValue struct?
             json_response(json!({ "address": address, "tx_count": status.history().len(),
@@ -316,7 +316,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
                 .max(0u32) as usize;
 
-            let script_hash = address_to_scripthash(address)?;
+            let script_hash = address_to_scripthash(address, &network)?;
             let status = query.status(&script_hash[..])?;
             let txs = status.history_txs();
 
@@ -395,8 +395,11 @@ fn blocks(query: &Arc<Query>, start_height: Option<usize>)
     json_response(values)
 }
 
-fn address_to_scripthash(addr: &str) -> Result<FullHash, StringError> {
+fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, StringError> {
     let addr = Address::from_str(addr)?;
+    if addr.network != *network && !(addr.network == Network::Testnet && *network == Network::Regtest) {
+        return Err(StringError("Address on invalid network".to_string()))
+    }
     Ok(compute_script_hash(&addr.script_pubkey().into_bytes()))
 }
 
