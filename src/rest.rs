@@ -107,6 +107,7 @@ struct TxInValue {
     scriptsig_asm: String,
     witness: Option<Vec<String>>,
     is_coinbase: bool,
+    sequence: u32,
 }
 
 impl From<TxIn> for TxInValue {
@@ -122,6 +123,7 @@ impl From<TxIn> for TxInValue {
             scriptsig_hex: script,
             witness: witness,
             is_coinbase: txin.previous_output.is_null(),
+            sequence: txin.sequence,
         }
     }
 }
