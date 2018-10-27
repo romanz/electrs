@@ -22,21 +22,33 @@ use errors::*;
 
 #[derive(Clone)]
 pub struct FundingOutput {
-    pub txn: TxnHeight,
+    pub txn: Option<TxnHeight>,
     pub txn_id: Sha256dHash,
     pub height: u32,
     pub output_index: usize,
     pub value: u64,
 }
 
+impl From<OutPoint> for FundingOutput {
+    fn from(out: OutPoint) -> Self {
+        FundingOutput {
+            txn_id: out.0,
+            output_index: out.1,
+            txn: None,
+            height: 0,
+            value: 0,
+        }
+    }
+}
 type OutPoint = (Sha256dHash, usize); // (txid, output_index)
 
-struct SpendingInput {
-    txn: TxnHeight,
-    txn_id: Sha256dHash,
-    height: u32,
-    funding_output: OutPoint,
-    value: u64,
+pub struct SpendingInput {
+    pub txn: Option<TxnHeight>,
+    pub txn_id: Sha256dHash,
+    pub height: u32,
+    pub input_index: usize,
+    pub funding_output: OutPoint,
+    pub value: u64,
 }
 
 pub struct Status {
@@ -88,10 +100,10 @@ impl Status {
     pub fn history_txs(&self) -> Vec<&TxnHeight> {
         let mut txns_map = BTreeMap::<Sha256dHash, &TxnHeight>::new();
         for f in self.funding() {
-            txns_map.insert(f.txn_id, &f.txn);
+            txns_map.insert(f.txn_id, &f.txn.as_ref().unwrap());
         }
         for s in self.spending() {
-            txns_map.insert(s.txn_id, &s.txn);
+            txns_map.insert(s.txn_id, &s.txn.as_ref().unwrap());
         }
         let mut txns: Vec<&TxnHeight> = txns_map.into_iter().map(|item| item.1).collect();
         txns.sort_by(|a, b| if a.height == 0 { Ordering::Less } else { b.height.cmp(&a.height) });
@@ -269,14 +281,15 @@ impl Query {
         )?;
         let mut spending_inputs = vec![];
         for t in &spending_txns {
-            for input in t.txn.input.iter() {
+            for (input_index, input) in t.txn.input.iter().enumerate() {
                 if input.previous_output.txid == funding.txn_id
                     && input.previous_output.vout == funding.output_index as u32
                 {
                     spending_inputs.push(SpendingInput {
-                        txn: t.clone(),
+                        txn: Some(t.clone()),
                         txn_id: t.txn.txid(),
                         height: t.height,
+                        input_index: input_index,
                         funding_output: (funding.txn_id, funding.output_index),
                         value: funding.value,
                     })
@@ -297,7 +310,7 @@ impl Query {
         for (index, output) in t.txn.output.iter().enumerate() {
             if compute_script_hash(&output.script_pubkey[..]) == script_hash {
                 result.push(FundingOutput {
-                    txn: t.clone(),
+                    txn: Some(t.clone()),
                     txn_id: txn_id,
                     height: t.height,
                     output_index: index,
@@ -356,6 +369,19 @@ impl Query {
             .mempool_status(script_hash, &confirmed.0)?;
             //.chain_err(|| "failed to get mempool status")?;
         Ok(Status { confirmed, mempool })
+    }
+
+    pub fn find_spending_by_outpoint(&self, outpoint: OutPoint) -> Result<Option<SpendingInput>> {
+        let funding_output = FundingOutput::from(outpoint);
+        let read_store = self.app.read_store();
+        let tracker = self.tracker.read().unwrap();
+        Ok(if let Some(spent) = self.find_spending_input(read_store, &funding_output)? {
+            Some(spent)
+        }  else if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output)? {
+            Some(spent)
+        } else {
+            None
+        })
     }
 
     fn lookup_confirmed_blockhash(

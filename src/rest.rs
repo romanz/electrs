@@ -9,7 +9,7 @@ use hex::{self, FromHexError};
 use hyper::{Body, Response, Server, Method, Request, StatusCode};
 use hyper::service::service_fn_ok;
 use hyper::rt::{self, Future};
-use query::{Query, TxnHeight, FundingOutput};
+use query::{Query, TxnHeight, FundingOutput, SpendingInput};
 use serde_json;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -182,8 +182,8 @@ struct UtxoValue {
 }
 impl From<FundingOutput> for UtxoValue {
     fn from(out: FundingOutput) -> Self {
-        let FundingOutput { txn: t, txn_id, output_index, value, .. } = out;
-        let TxnHeight { height, blockhash, .. } = t;
+        let FundingOutput { txn, txn_id, output_index, value, .. } = out;
+        let TxnHeight { height, blockhash, .. } = txn.unwrap(); // we should never get a FundingOutput without a txn here
 
         UtxoValue {
             txid: txn_id,
@@ -198,7 +198,40 @@ impl From<FundingOutput> for UtxoValue {
     }
 }
 
+#[derive(Serialize)]
+struct SpendingValue {
+    spent: bool,
+    txid: Option<Sha256dHash>,
+    vin: Option<u32>,
+    status: Option<TransactionStatus>,
+}
+impl From<SpendingInput> for SpendingValue {
+    fn from(out: SpendingInput) -> Self {
+        let SpendingInput { txn, txn_id, input_index, .. } = out;
+        let TxnHeight { height, blockhash, .. } = txn.unwrap(); // we should never get a SpendingInput without a txn here
 
+        SpendingValue {
+            spent: true,
+            txid: Some(txn_id),
+            vin: Some(input_index as u32),
+            status: Some(if height != 0 {
+              TransactionStatus { confirmed: true, block_height: Some(height), block_hash: Some(blockhash) }
+            } else {
+              TransactionStatus::unconfirmed()
+            })
+        }
+    }
+}
+impl Default for SpendingValue {
+    fn default() -> Self {
+        SpendingValue {
+            spent: false,
+            txid: None,
+            vin: None,
+            status: None,
+        }
+    }
+}
 
 fn attach_tx_data(tx: TransactionValue, network: &Network, query: &Arc<Query>) -> TransactionValue {
     let mut txs = vec![tx];
@@ -384,6 +417,25 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.get_tx_status(&hash)?;
             json_response(status)
+        },
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let outpoint = (hash, index.parse::<usize>()?);
+            let spend = query.find_spending_by_outpoint(outpoint)?
+                .map_or_else(|| SpendingValue::default(), |spend| SpendingValue::from(spend));
+            json_response(spend)
+        },
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            // optimize: avoid fetching the entire tx just for the vout count
+            let out_count = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?.output.len();
+            let mut spends = vec![];
+            for output_index in 0..out_count {
+                 let spend = query.find_spending_by_outpoint((hash, output_index))?
+                    .map_or_else(|| SpendingValue::default(), |spend| SpendingValue::from(spend));
+                 spends.push(spend)
+            }
+            json_response(spends)
         },
         _ => {
             Err(StringError(format!("endpoint does not exist {:?}", uri.path())))
