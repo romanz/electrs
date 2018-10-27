@@ -20,6 +20,8 @@ use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta,
 
 use errors::*;
 
+const FUNDING_TXN_LIMIT: usize = 100;
+
 #[derive(Clone)]
 pub struct FundingOutput {
     pub txn: Option<TxnHeight>,
@@ -183,6 +185,7 @@ fn txids_by_script_hash(store: &ReadStore, script_hash: &[u8]) -> Vec<HashPrefix
     store
         .scan(&TxOutRow::filter(script_hash))
         .iter()
+        .take(FUNDING_TXN_LIMIT+1)
         .map(|row| TxOutRow::from_row(row).txid_prefix)
         .collect()
 }
@@ -251,7 +254,7 @@ impl Query {
         prefixes: Vec<HashPrefix>,
     ) -> Result<Vec<TxnHeight>> {
 
-        if prefixes.len() > 30 {
+        if prefixes.len() > FUNDING_TXN_LIMIT {
             bail!("Sorry! Addresses with large number of transactions aren't currently supported.");
         }
 
