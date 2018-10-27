@@ -387,6 +387,18 @@ impl Query {
         })
     }
 
+    pub fn find_spending_for_funding_tx(&self, tx: Transaction) -> Result<Vec<Option<SpendingInput>>> {
+        let txid = tx.txid();
+        let mut spends = vec![];
+        for (output_index, output) in tx.output.iter().enumerate() {
+             let spend = if !output.script_pubkey.is_provably_unspendable() {
+                 self.find_spending_by_outpoint((txid, output_index))?
+             } else { None };
+             spends.push(spend)
+         }
+        Ok(spends)
+    }
+
     fn lookup_confirmed_blockhash(
         &self,
         tx_hash: &Sha256dHash,

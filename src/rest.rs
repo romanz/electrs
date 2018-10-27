@@ -427,14 +427,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            // optimize: avoid fetching the entire tx just for the vout count
-            let out_count = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?.output.len();
-            let mut spends = vec![];
-            for output_index in 0..out_count {
-                 let spend = query.find_spending_by_outpoint((hash, output_index))?
-                    .map_or_else(|| SpendingValue::default(), |spend| SpendingValue::from(spend));
-                 spends.push(spend)
-            }
+            let tx = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
+            let spends: Vec<SpendingValue> = query.find_spending_for_funding_tx(tx)?
+                .into_iter()
+                .map(|spend| spend.map_or_else(|| SpendingValue::default(), |spend| SpendingValue::from(spend)))
+                .collect();
             json_response(spends)
         },
         _ => {
