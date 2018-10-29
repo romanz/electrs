@@ -12,7 +12,7 @@ use daemon::CookieGetter;
 
 use errors::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     // See below for the documentation of each field:
     pub log: stderrlog::StdErrLog,

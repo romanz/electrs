@@ -233,13 +233,13 @@ impl Default for SpendingValue {
     }
 }
 
-fn attach_tx_data(tx: TransactionValue, network: &Network, query: &Arc<Query>) -> TransactionValue {
+fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Arc<Query>) -> TransactionValue {
     let mut txs = vec![tx];
-    attach_txs_data(&mut txs, network, query);
+    attach_txs_data(&mut txs, config, query);
     txs.remove(0)
 }
 
-fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &Arc<Query>) {
+fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc<Query>) {
     {
         // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
         let mut lookups: BTreeMap<Sha256dHash, Vec<(u32, &mut TxInValue)>> = BTreeMap::new();
@@ -256,7 +256,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &A
             // attach encoded address (should ideally happen in TxOutValue::from(), but it cannot
             // easily access the network)
             for mut vout in tx.vout.iter_mut() {
-                vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &network);
+                vout.scriptpubkey_address = script_to_address(&vout.scriptpubkey_hex, &config.network_type);
             }
         }
 
@@ -265,7 +265,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, network: &Network, query: &A
             let prevtx = query.tx_get(&prev_txid).unwrap();
             for (prev_out_idx, ref mut nextin) in prev_vouts {
                 let mut prevout = TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
-                prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &network);
+                prevout.scriptpubkey_address = script_to_address(&prevout.scriptpubkey_hex, &config.network_type);
                 nextin.prevout = Some(prevout);
             }
         }
@@ -285,14 +285,15 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
     let addr = ([127, 0, 0, 1], 3000).into();  // TODO take from config
     info!("REST server running on {}", addr);
 
-    let network = config.network_type;
+    let config = Arc::new(config.clone());
 
     let new_service = move || {
 
         let query = query.clone();
+        let config = config.clone();
 
         service_fn_ok(move |req: Request<Body>| {
-            match handle_request(req,&query,&network) {
+            match handle_request(req,&query,&config) {
                 Ok(response) => response,
                 Err(e) => {
                     warn!("{:?}",e);
@@ -311,7 +312,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
     });
 }
 
-fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> Result<Response<Body>, StringError> {
+fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Result<Response<Body>, StringError> {
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
@@ -361,11 +362,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             }
 
             let mut txs = block.txdata.iter().skip(start_index).take(TX_LIMIT).map(|tx| TransactionValue::from(tx.clone())).collect();
-            attach_txs_data(&mut txs, network, query);
+            attach_txs_data(&mut txs, config, query);
             json_response(txs)
         },
         (&Method::GET, Some(&"address"), Some(address), None, None) => {
-            let script_hash = address_to_scripthash(address, &network)?;
+            let script_hash = address_to_scripthash(address, &config.network_type)?;
             let status = query.status(&script_hash[..])?;
             // @TODO create new AddressStatsValue struct?
             json_response(json!({ "address": address, "tx_count": status.history().len(),
@@ -377,7 +378,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
                 .max(0u32) as usize;
 
-            let script_hash = address_to_scripthash(address, &network)?;
+            let script_hash = address_to_scripthash(address, &config.network_type)?;
             let status = query.status(&script_hash[..])?;
             let txs = status.history_txs();
 
@@ -390,12 +391,12 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             }
 
             let mut txs = txs.iter().skip(start_index).take(TX_LIMIT).map(|t| TransactionValue::from((*t).clone())).collect();
-            attach_txs_data(&mut txs, network, query);
+            attach_txs_data(&mut txs, config, query);
 
             json_response(txs)
         },
         (&Method::GET, Some(&"address"), Some(address), Some(&"utxo"), None) => {
-            let script_hash = address_to_scripthash(address, &network)?;
+            let script_hash = address_to_scripthash(address, &config.network_type)?;
             let status = query.status(&script_hash[..])?;
             let utxos: Vec<UtxoValue> = status.unspent().into_iter().map(|o| UtxoValue::from(o.clone())).collect();
             // @XXX no paging, but query.status() is limited to 30 funding txs
@@ -405,7 +406,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, network: &Network) -> 
             let hash = Sha256dHash::from_hex(hash)?;
             let transaction = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
             let mut value = TransactionValue::from(transaction);
-            let value = attach_tx_data(value, network, query);
+            let value = attach_tx_data(value, config, query);
             json_response(value)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
