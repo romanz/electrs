@@ -61,7 +61,14 @@ fn run_server(config: &Config) -> Result<()> {
     loop {
         app.update(&signal)?;
         query.update_mempool()?;
-        server.get_or_insert_with(|| rest::run_server(&config, query.clone()));
+
+        if server.is_none() {
+            if app.daemon().getblockchaininfo()?.verificationprogress == 1.0 {
+                server = Some(rest::run_server(&config, query.clone()));
+            } else {
+                warn!("bitcoind not fully synced waiting");
+            }
+        }
 
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
             info!("stopping server: {}", err);
