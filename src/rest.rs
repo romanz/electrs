@@ -445,7 +445,6 @@ fn http_message(status: StatusCode, message: String) -> Response<Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "text/plain")
-        .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(message))
         .unwrap()
 }
@@ -454,7 +453,6 @@ fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> 
     let value = serde_json::to_string(&value)?;
     Ok(Response::builder()
         .header("Content-type","application/json")
-        .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(value)).unwrap())
 }
 
