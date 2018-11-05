@@ -370,7 +370,8 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             let script_hash = address_to_scripthash(address, &config.network_type)?;
             match query.status(&script_hash[..]) {
                 Ok(status) => json_response(json!({
-                    "address": address, "tx_count": status.history().len(),
+                    "address": address,
+                    "tx_count": status.history().len(),
                     "confirmed_balance": status.confirmed_balance(),
                     "mempool_balance": status.mempool_balance(),
                     "total_received": status.total_received(),
