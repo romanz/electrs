@@ -255,7 +255,7 @@ impl Query {
     ) -> Result<Vec<TxnHeight>> {
 
         if prefixes.len() > FUNDING_TXN_LIMIT {
-            bail!("Sorry! Addresses with large number of transactions aren't currently supported.");
+            bail!("Too many txs");
         }
 
         let mut txns = vec![];

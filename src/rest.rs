@@ -297,7 +297,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
                 Ok(response) => response,
                 Err(e) => {
                     warn!("{:?}",e);
-                    http_message(StatusCode::BAD_REQUEST, e.0)
+                    http_message(e.0, e.1)
                 },
             }
         })
@@ -312,7 +312,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
     });
 }
 
-fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Result<Response<Body>, StringError> {
+fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
@@ -331,7 +331,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
         (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
             match query.get_headers(&[height]).get(0) {
-                None => Ok(http_message(StatusCode::NOT_FOUND, format!("can't find header at height {}", height))),
+                None => Err(HttpError::not_found("Block not found".to_string())),
                 Some(val) => Ok(http_message(StatusCode::OK, val.hash().be_hex_string()))
             }
         },
@@ -356,9 +356,9 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
                 .max(0u32) as usize;
 
             if start_index >= block.txdata.len() {
-                return Ok(http_message(StatusCode::NOT_FOUND, "start index out of range".to_string()));
+                bail!(HttpError::not_found("start index out of range".to_string()));
             } else if start_index % TX_LIMIT != 0 {
-                return Ok(http_message(StatusCode::BAD_REQUEST, format!("start index must be a multipication of {}", TX_LIMIT)));
+                bail!(HttpError::from(format!("start index must be a multipication of {}", TX_LIMIT)));
             }
 
             let mut txs = block.txdata.iter().skip(start_index).take(TX_LIMIT).map(|tx| TransactionValue::from(tx.clone())).collect();
@@ -385,9 +385,9 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             if txs.len() == 0 {
                 return json_response(json!([]));
             } else if start_index >= txs.len() {
-                return Ok(http_message(StatusCode::NOT_FOUND, "start index out of range".to_string()));
+                bail!(HttpError::not_found("start index out of range".to_string()));
             } else if start_index % TX_LIMIT != 0 {
-                return Ok(http_message(StatusCode::BAD_REQUEST, format!("start index must be a multipication of {}", TX_LIMIT)));
+                bail!(HttpError::from(format!("start index must be a multipication of {}", TX_LIMIT)));
             }
 
             let mut txs = txs.iter().skip(start_index).take(TX_LIMIT).map(|t| TransactionValue::from((*t).clone())).collect();
@@ -404,14 +404,14 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
         },
         (&Method::GET, Some(&"tx"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let transaction = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
+            let transaction = query.tx_get(&hash).ok_or(HttpError::not_found("Transaction not found".to_string()))?;
             let mut value = TransactionValue::from(transaction);
             let value = attach_tx_data(value, config, query);
             json_response(value)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let rawtx = query.tx_get_raw(&hash).ok_or(StringError("cannot find tx".to_string()))?;
+            let rawtx = query.tx_get_raw(&hash).ok_or(HttpError::not_found("Transaction not found".to_string()))?;
             Ok(http_message(StatusCode::OK, hex::encode(rawtx)))
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None) => {
@@ -428,7 +428,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let tx = query.tx_get(&hash).ok_or(StringError("cannot find tx".to_string()))?;
+            let tx = query.tx_get(&hash).ok_or(HttpError::not_found("Transaction not found".to_string()))?;
             let spends: Vec<SpendingValue> = query.find_spending_for_funding_tx(tx)?
                 .into_iter()
                 .map(|spend| spend.map_or_else(|| SpendingValue::default(), |spend| SpendingValue::from(spend)))
@@ -436,7 +436,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             json_response(spends)
         },
         _ => {
-            Err(StringError(format!("endpoint does not exist {:?}", uri.path())))
+            Err(HttpError::not_found(format!("endpoint does not exist {:?}", uri.path())))
         }
     }
 }
@@ -449,7 +449,7 @@ fn http_message(status: StatusCode, message: String) -> Response<Body> {
         .unwrap()
 }
 
-fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> {
+fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,HttpError> {
     let value = serde_json::to_string(&value)?;
     Ok(Response::builder()
         .header("Content-type","application/json")
@@ -457,11 +457,11 @@ fn json_response<T: Serialize>(value : T) -> Result<Response<Body>,StringError> 
 }
 
 fn blocks(query: &Arc<Query>, start_height: Option<usize>)
-    -> Result<Response<Body>,StringError> {
+    -> Result<Response<Body>,HttpError> {
 
     let mut values = Vec::new();
     let mut current_hash = match start_height {
-        Some(height) => query.get_headers(&[height]).get(0).ok_or(StringError("cannot find block".to_string()))?.hash().clone(),
+        Some(height) => query.get_headers(&[height]).get(0).ok_or(HttpError::not_found("Block not found".to_string()))?.hash().clone(),
         None => query.get_best_header()?.hash().clone(),
     };
 
@@ -478,46 +478,69 @@ fn blocks(query: &Arc<Query>, start_height: Option<usize>)
     json_response(values)
 }
 
-fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, StringError> {
+fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
     let addr = Address::from_str(addr)?;
     if addr.network != *network && !(addr.network == Network::Testnet && *network == Network::Regtest) {
-        return Err(StringError("Address on invalid network".to_string()))
+        bail!(HttpError::from("Address on invalid network".to_string()))
     }
     Ok(compute_script_hash(&addr.script_pubkey().into_bytes()))
 }
 
 #[derive(Debug)]
-struct StringError(String);
+struct HttpError(StatusCode, String);
 
-// TODO boilerplate conversion, use macros or other better error handling
-impl From<ParseIntError> for StringError {
-    fn from(e: ParseIntError) -> Self {
-        StringError(e.description().to_string())
+impl HttpError {
+    fn not_found(msg: String) -> Self {
+        HttpError(StatusCode::NOT_FOUND, msg)
+    }
+    fn generic() -> Self {
+        HttpError::from("We encountered an error. Please try again later.".to_string())
     }
 }
-impl From<HexError> for StringError {
-    fn from(e: HexError) -> Self {
-        StringError(e.description().to_string())
+
+impl From<String> for HttpError {
+    fn from(msg: String) -> Self {
+        HttpError(StatusCode::BAD_REQUEST, msg)
     }
 }
-impl From<FromHexError> for StringError {
-    fn from(e: FromHexError) -> Self {
-        StringError(e.description().to_string())
+impl From<ParseIntError> for HttpError {
+    fn from(_e: ParseIntError) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::from("Invalid number".to_string())
     }
 }
-impl From<errors::Error> for StringError {
+impl From<HexError> for HttpError {
+    fn from(_e: HexError) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::from("Invalid hex string".to_string())
+    }
+}
+impl From<FromHexError> for HttpError {
+    fn from(_e: FromHexError) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::from("Invalid hex string".to_string())
+    }
+}
+impl From<errors::Error> for HttpError {
     fn from(e: errors::Error) -> Self {
-        StringError(e.description().to_string())
+        warn!("errors::Error: {:?}", e);
+        match e.description().to_string().as_ref() {
+            "getblock RPC error: {\"code\":-5,\"message\":\"Block not found\"}" => HttpError::not_found("Block not found".to_string()),
+            "Too many txs" => HttpError(StatusCode::TOO_MANY_REQUESTS, "Sorry! Addresses with large number of transactions aren\'t currently supported.".to_string()),
+            _ => HttpError::generic()
+        }
     }
 }
-impl From<serde_json::Error> for StringError {
-    fn from(e: serde_json::Error) -> Self {
-        StringError(e.description().to_string())
+impl From<serde_json::Error> for HttpError {
+    fn from(_e: serde_json::Error) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::generic()
     }
 }
-impl From<network::serialize::Error> for StringError {
-    fn from(e: network::serialize::Error) -> Self {
-        StringError(e.description().to_string())
+impl From<network::serialize::Error> for HttpError {
+    fn from(_e: network::serialize::Error) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::generic()
     }
 }
 
@@ -525,7 +548,7 @@ impl From<network::serialize::Error> for StringError {
 #[cfg(test)]
 mod tests {
     use serde_json::Value;
-    use rest::StringError;
+    use rest::HttpError;
     use std::collections::HashMap;
 
     #[test]
@@ -568,14 +591,14 @@ mod tests {
         let v : Value = json!({ "confirmations": 10 });
 
         let confirmations = v.get("confirmations").and_then(|el| el.as_u64())
-            .ok_or(StringError("confirmations absent or not a u64".to_string()))
+            .ok_or(HttpError::from("confirmations absent or not a u64".to_string()))
             .unwrap();
 
         assert_eq!(10, confirmations);
 
         let err = v
             .get("notexist").and_then(|el| el.as_u64())
-            .ok_or(StringError("notexist absent or not a u64".to_string()));
+            .ok_or(HttpError::from("notexist absent or not a u64".to_string()));
 
         assert!(err.is_err());
     }
