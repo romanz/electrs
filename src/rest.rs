@@ -366,12 +366,22 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             json_response(txs)
         },
         (&Method::GET, Some(&"address"), Some(address), None, None) => {
-            let script_hash = address_to_scripthash(address, &config.network_type)?;
-            let status = query.status(&script_hash[..])?;
             // @TODO create new AddressStatsValue struct?
-            json_response(json!({ "address": address, "tx_count": status.history().len(),
-                                  "confirmed_balance": status.confirmed_balance(), "mempool_balance": status.mempool_balance(),
-                                  "total_received": status.total_received(), }))
+            let script_hash = address_to_scripthash(address, &config.network_type)?;
+            match query.status(&script_hash[..]) {
+                Ok(status) => json_response(json!({
+                    "address": address, "tx_count": status.history().len(),
+                    "confirmed_balance": status.confirmed_balance(),
+                    "mempool_balance": status.mempool_balance(),
+                    "total_received": status.total_received(),
+                })),
+
+                // if the address has too many txs, just return the address with no additional info (but no error)
+                Err(errors::Error(errors::ErrorKind::Msg(ref msg), _)) if *msg == "Too many txs".to_string() =>
+                    json_response(json!({ "address": address })),
+
+                Err(err) => bail!(err)
+            }
         },
         (&Method::GET, Some(&"address"), Some(address), Some(&"txs"), start_index) => {
             let start_index = start_index
