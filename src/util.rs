@@ -324,7 +324,7 @@ use bitcoin_bech32::constants::Network as B32Network;
 // we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
 // ideally, this should be implemented as part of the rust-bitcoin lib.
 pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
-    let if script.is_p2pkh() {
+    let payload = if script.is_p2pkh() {
         Some(Payload::PubkeyHash(Hash160::from(&script[3..23])))
     } else if script.is_p2sh() {
         Some(Payload::ScriptHash(Hash160::from(&script[2..22])))
