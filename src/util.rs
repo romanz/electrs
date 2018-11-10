@@ -1,6 +1,6 @@
 use bitcoin::blockdata::block::{Block, BlockHeader};
-use bitcoin::network::serialize::{BitcoinHash, serialize};
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin::consensus::encode::serialize;
+use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
@@ -75,7 +75,7 @@ impl<'a> From<&'a Block> for BlockMeta {
     fn from(block: &'a Block) -> BlockMeta {
         BlockMeta {
             tx_count: block.txdata.len() as u32,
-            size: serialize(block).unwrap().len() as u32,
+            size: serialize(block).len() as u32,
             weight: block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
         }
     }

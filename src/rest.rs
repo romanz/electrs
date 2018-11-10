@@ -1,6 +1,6 @@
 use bitcoin::util::hash::{Sha256dHash,HexError};
-use bitcoin::network::serialize::serialize;
-use bitcoin::{Script,network,BitcoinHash};
+use bitcoin::consensus::encode::{self, serialize};
+use bitcoin::{Script, BitcoinHash};
 use config::Config;
 use bitcoin::{TxIn,TxOut,Transaction};
 use bitcoin::util::address::Address;
@@ -80,7 +80,7 @@ impl From<Transaction> for TransactionValue {
     fn from(tx: Transaction) -> Self {
         let vin = tx.input.iter().map(|el| TxInValue::from(el.clone())).collect();
         let vout = tx.output.iter().map(|el| TxOutValue::from(el.clone())).collect();
-        let bytes = serialize(&tx).unwrap();
+        let bytes = serialize(&tx);
 
         TransactionValue {
             txid: tx.txid(),
@@ -594,8 +594,8 @@ impl From<serde_json::Error> for HttpError {
         HttpError::generic()
     }
 }
-impl From<network::serialize::Error> for HttpError {
-    fn from(_e: network::serialize::Error) -> Self {
+impl From<encode::Error> for HttpError {
+    fn from(_e: encode::Error) -> Self {
         //HttpError::from(e.description().to_string())
         HttpError::generic()
     }

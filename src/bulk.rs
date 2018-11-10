@@ -1,8 +1,6 @@
 use bitcoin::blockdata::block::Block;
-use bitcoin::network::serialize::BitcoinHash;
-use bitcoin::network::serialize::SimpleDecoder;
-use bitcoin::network::serialize::{deserialize, RawDecoder};
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin::consensus::encode::{deserialize, Decodable};
+use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use libc;
 use std::collections::HashSet;
 use std::fs;
@@ -118,11 +116,9 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
     let mut blocks = vec![];
     let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
-        let mut decoder = RawDecoder::new(cursor);
-        match decoder.read_u32() {
+        match u32::consensus_decode(&mut cursor) {
             Ok(value) => {
                 if magic != value {
-                    cursor = decoder.into_inner();
                     cursor
                         .seek(SeekFrom::Current(-3))
                         .expect("failed to seek back");
@@ -131,9 +127,7 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
             }
             Err(_) => break, // EOF
         };
-        let block_size = decoder.read_u32().chain_err(|| "no block size")?;
-        cursor = decoder.into_inner();
-
+        let block_size = u32::consensus_decode(&mut cursor).chain_err(|| "no block size")?;
         let start = cursor.position() as usize;
         cursor
             .seek(SeekFrom::Current(block_size as i64))

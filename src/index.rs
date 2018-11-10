@@ -1,8 +1,8 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
-use bitcoin::network::serialize::BitcoinHash;
-use bitcoin::network::serialize::{deserialize, serialize};
+use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::util::hash::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -227,7 +227,7 @@ pub fn index_transaction(txn: &Transaction, height: usize, blockhash: &Sha256dHa
     }
     // Persist transaction ID and confirmed height
     rows.push(TxRow::new(&txid, height as u32, blockhash).to_row());
-    rows.push(RawTxRow::new(&txid, serialize(txn).unwrap()).to_row()); // @TODO avoid re-serialization
+    rows.push(RawTxRow::new(&txid, serialize(txn)).to_row()); // @TODO avoid re-serialization
 }
 
 pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
@@ -243,7 +243,7 @@ pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
             code: b'B',
             hash: full_hash(&blockhash[..]),
         }).unwrap(),
-        value: serialize(&block.header).unwrap(),
+        value: serialize(&block.header),
     });
 
     // Persist block metadata (size, number of txs and sum of txs weight)
@@ -276,7 +276,7 @@ pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
     // Store last indexed block (i.e. all previous blocks were indexed)
     Row {
         key: b"L".to_vec(),
-        value: serialize(blockhash).unwrap(),
+        value: serialize(blockhash),
     }
 }
 

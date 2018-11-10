@@ -1,6 +1,6 @@
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::{serialize,deserialize};
+use bitcoin::consensus::encode::{serialize, deserialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -450,7 +450,7 @@ impl Query {
     // Get raw transaction from txstore or the in-memory mempool Tracker
     pub fn tx_get_raw(&self, txid: &Sha256dHash) -> Option<Bytes> {
         rawtxrow_by_txid(self.app.read_store(), txid).map(|row| row.rawtx)
-            .or_else(|| self.tracker.read().unwrap().get_txn(&txid).map(|tx| serialize(&tx).expect("cannot serialize tx from mempool")))
+            .or_else(|| self.tracker.read().unwrap().get_txn(&txid).map(|tx| serialize(&tx)))
     }
 
     // Public API for transaction retrieval (for Electrum RPC)
