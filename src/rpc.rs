@@ -1,5 +1,5 @@
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::{deserialize, serialize};
+use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::address::Address;
 use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
@@ -99,7 +99,7 @@ impl Connection {
 
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
         let entry = self.query.get_best_header()?;
-        let hex_header = hex::encode(serialize(entry.header()).unwrap());
+        let hex_header = hex::encode(serialize(entry.header()));
         let result = json!({"hex": hex_header, "height": entry.height()});
         self.last_header_entry = Some(entry);
         Ok(result)
@@ -133,7 +133,7 @@ impl Connection {
             .query
             .get_headers(&heights)
             .into_iter()
-            .map(|entry| hex::encode(&serialize(entry.header()).unwrap()))
+            .map(|entry| hex::encode(&serialize(entry.header())))
             .collect();
         Ok(json!({
             "count": headers.len(),
@@ -330,7 +330,7 @@ impl Connection {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
                 *last_entry = entry;
-                let hex_header = hex::encode(serialize(last_entry.header()).unwrap());
+                let hex_header = hex::encode(serialize(last_entry.header()));
                 let header = json!({"hex": hex_header, "height": last_entry.height()});
                 result.push(json!({
                     "jsonrpc": "2.0",

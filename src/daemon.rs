@@ -1,9 +1,9 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::Transaction;
+use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::network::constants::Network;
-use bitcoin::network::serialize::BitcoinHash;
-use bitcoin::network::serialize::{deserialize, serialize};
+use bitcoin::util::hash::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use glob;
 use hex;
@@ -557,7 +557,7 @@ impl Daemon {
     }
 
     pub fn broadcast(&self, tx: &Transaction) -> Result<Sha256dHash> {
-        let tx = hex::encode(serialize(tx).unwrap());
+        let tx = hex::encode(serialize(tx));
         let txid = self.request("sendrawtransaction", json!([tx]))?;
         Ok(
             Sha256dHash::from_hex(txid.as_str().chain_err(|| "non-string txid")?)

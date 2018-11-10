@@ -1,8 +1,8 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
-use bitcoin::network::serialize::BitcoinHash;
-use bitcoin::network::serialize::{deserialize, serialize};
+use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::util::hash::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -195,7 +195,7 @@ pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
             code: b'B',
             hash: full_hash(&blockhash[..]),
         }).unwrap(),
-        value: serialize(&block.header).unwrap(),
+        value: serialize(&block.header),
     });
     rows
 }
@@ -204,7 +204,7 @@ pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
     // Store last indexed block (i.e. all previous blocks were indexed)
     Row {
         key: b"L".to_vec(),
-        value: serialize(blockhash).unwrap(),
+        value: serialize(blockhash),
     }
 }
 

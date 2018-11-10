@@ -1,6 +1,6 @@
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::network::serialize::deserialize;
+use bitcoin::consensus::encode::deserialize;
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;

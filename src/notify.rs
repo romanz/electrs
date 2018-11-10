@@ -1,3 +1,5 @@
+// TODO: network::socket::Socket needs to be reimplemented.
+
 use bitcoin::network::constants::Network;
 use bitcoin::network::message::NetworkMessage;
 use bitcoin::network::message_blockdata::InvType;
