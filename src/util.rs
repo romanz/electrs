@@ -311,8 +311,6 @@ where
 
 
 
-use secp256k1::{Secp256k1};
-use secp256k1::key::PublicKey;
 use bitcoin::{Script};
 use bitcoin::util::address::{Address,Payload};
 use bitcoin::util::hash::Hash160;
