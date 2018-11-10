@@ -537,7 +537,7 @@ impl From<errors::Error> for HttpError {
         warn!("errors::Error: {:?}", e);
         match e.description().to_string().as_ref() {
             "getblock RPC error: {\"code\":-5,\"message\":\"Block not found\"}" => HttpError::not_found("Block not found".to_string()),
-            "Too many txs" => HttpError(StatusCode::TOO_MANY_REQUESTS, "Sorry! Addresses with large number of transactions aren\'t currently supported.".to_string()),
+            "Too many txs" => HttpError(StatusCode::TOO_MANY_REQUESTS, "Sorry! Addresses with a large number of transactions aren\'t currently supported.".to_string()),
             _ => HttpError::generic()
         }
     }
