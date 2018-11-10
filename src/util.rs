@@ -347,3 +347,7 @@ fn to_bech_network (network: &Network) -> B32Network {
     }
 }
 
+pub fn get_script_asm(script: &Script) -> String {
+    let asm = format!("{:?}", script);
+    (&asm[7..asm.len()-1]).to_string()
+}
