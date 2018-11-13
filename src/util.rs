@@ -31,7 +31,7 @@ pub fn full_hash(hash: &[u8]) -> FullHash {
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {
     pub confirmed: bool,
-    pub block_height: Option<u32>,
+    pub block_height: Option<usize>,
     pub block_hash: Option<Sha256dHash>,
 }
 
@@ -46,7 +46,7 @@ impl TransactionStatus {
     pub fn confirmed(header: &HeaderEntry) -> Self {
         TransactionStatus {
             confirmed: true,
-            block_height: Some(header.height() as u32),
+            block_height: Some(header.height()),
             block_hash: Some(header.hash().clone()),
         }
     }
@@ -55,6 +55,7 @@ impl TransactionStatus {
 #[derive(Serialize, Deserialize)]
 pub struct BlockStatus {
     pub in_best_chain: bool,
+    pub height: Option<usize>,
     pub next_best: Option<Sha256dHash>,
 }
 

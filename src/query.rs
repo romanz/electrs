@@ -497,10 +497,12 @@ impl Query {
         match self.app.index().get_header_by_hash(hash) {
             Some(header) => BlockStatus {
                 in_best_chain: true,
+                height: Some(header.height()),
                 next_best: self.app.index().get_header(header.height() + 1).map(|h| h.hash().clone())
             },
             None => BlockStatus {
                 in_best_chain: false,
+                height: None,
                 next_best: None,
             },
         }
