@@ -282,7 +282,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc
 }
 
 pub fn run_server(config: &Config, query: Arc<Query>) {
-    let addr = ([127, 0, 0, 1], 3000).into();  // TODO take from config
+    let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 
     let config = Arc::new(config.clone());

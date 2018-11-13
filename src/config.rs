@@ -22,6 +22,7 @@ pub struct Config {
     pub daemon_rpc_addr: SocketAddr,
     pub cookie: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
+    pub http_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
     pub index_batch_size: usize,
@@ -72,6 +73,12 @@ impl Config {
                 Arg::with_name("electrum_rpc_addr")
                     .long("electrum-rpc-addr")
                     .help("Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("http_addr")
+                    .long("http-addr")
+                    .help("HTTP server 'addr:port' to listen on (default: '127.0.0.1:3000' for mainnet, '127.0.0.1:3001' for testnet and '127.0.0.1:3002' for regtest)")
                     .takes_value(true),
             )
             .arg(
@@ -131,6 +138,11 @@ impl Config {
             Network::Testnet => 60001,
             Network::Regtest => 60401,
         };
+        let default_http_port = match network_type {
+            Network::Bitcoin => 3000,
+            Network::Testnet => 3001,
+            Network::Regtest => 3002,
+        };
         let default_monitoring_port = match network_type {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
@@ -147,6 +159,11 @@ impl Config {
             .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port))
             .parse()
             .expect("invalid Electrum RPC address");
+        let http_addr: SocketAddr = m
+            .value_of("http_addr")
+            .unwrap_or(&format!("127.0.0.1:{}", default_http_port))
+            .parse()
+            .expect("invalid HTTP server address");
         let monitoring_addr: SocketAddr = m
             .value_of("monitoring_addr")
             .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port))
@@ -188,6 +205,7 @@ impl Config {
             daemon_rpc_addr,
             cookie,
             electrum_rpc_addr,
+            http_addr,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
