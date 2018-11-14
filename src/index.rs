@@ -259,6 +259,16 @@ pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
     // into the HeaderList structure, which would be more efficient but
     // require more invasive changes in electrs internals.
 
+    // Persist list of txids in block
+    let txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
+    rows.push(Row {
+        key: bincode::serialize(&BlockKey {
+            code: b'X',
+            hash: full_hash(&blockhash[..]),
+        }).unwrap(),
+        value: bincode::serialize(&txids).unwrap(),
+    });
+
     rows
 }
 

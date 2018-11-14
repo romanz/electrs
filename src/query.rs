@@ -213,6 +213,13 @@ pub fn get_block_meta(store: &ReadStore, blockhash: &Sha256dHash) -> Option<Bloc
     Some(meta)
 }
 
+pub fn get_block_txids(store: &ReadStore, blockhash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
+    let key = [b"X", &blockhash[..]].concat();
+    let value = store.get(&key)?;
+    let txids: Vec<Sha256dHash> = bincode::deserialize(&value).unwrap();
+    Some(txids)
+}
+
 impl TransactionCache {
     pub fn new(capacity: usize) -> TransactionCache {
         TransactionCache {
@@ -465,6 +472,10 @@ impl Query {
         Ok(BlockHeaderMeta { header_entry, meta })
     }
 
+    pub fn get_block_txids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
+        Ok(get_block_txids(self.app.read_store(), blockhash).ok_or("cannot load block txids")?)
+    }
+
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
         let index = self.app.index();
         heights
@@ -533,8 +544,8 @@ impl Query {
             .index()
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;
-        let block: Block = self.app.daemon().getblock(&header_entry.hash())?;
-        let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
+        let mut txids = self.get_block_txids(&header_entry.hash())
+            .chain_err(|| format!("missing txids for block #{}", height))?;
         let pos = txids
             .iter()
             .position(|txid| txid == tx_hash)

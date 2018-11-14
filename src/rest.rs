@@ -360,6 +360,11 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             let ttl = ttl_by_depth(status.height, query);
             json_response(status, ttl)
         },
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let txids = query.get_block_txids(&hash).map_err(|_| HttpError::not_found("Block not found".to_string()))?;
+            json_response(txids, TTL_LONG)
+        },
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let block = query.get_block(&hash)?;
@@ -449,6 +454,14 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             let status = query.get_tx_status(&hash)?;
             let ttl = ttl_by_depth(status.block_height, query);
             json_response(status, ttl)
+        },
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkle-proof"), None) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let status = query.get_tx_status(&hash)?;
+            if !status.confirmed { bail!("Transaction is unconfirmed".to_string()) };
+            let proof = query.get_merkle_proof(&hash, status.block_height.unwrap())?;
+            let ttl = ttl_by_depth(status.block_height, query);
+            json_response(proof, ttl)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
             let hash = Sha256dHash::from_hex(hash)?;
