@@ -537,15 +537,10 @@ impl Query {
     pub fn get_merkle_proof(
         &self,
         tx_hash: &Sha256dHash,
-        height: usize,
+        block_hash: &Sha256dHash,
     ) -> Result<(Vec<Sha256dHash>, usize)> {
-        let header_entry = self
-            .app
-            .index()
-            .get_header(height)
-            .chain_err(|| format!("missing block #{}", height))?;
-        let mut txids = self.get_block_txids(&header_entry.hash())
-            .chain_err(|| format!("missing txids for block #{}", height))?;
+        let mut txids = self.get_block_txids(&block_hash)
+            .chain_err(|| format!("missing txids for block #{}", block_hash))?;
         let pos = txids
             .iter()
             .position(|txid| txid == tx_hash)

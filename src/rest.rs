@@ -459,7 +459,7 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.get_tx_status(&hash)?;
             if !status.confirmed { bail!("Transaction is unconfirmed".to_string()) };
-            let proof = query.get_merkle_proof(&hash, status.block_height.unwrap())?;
+            let proof = query.get_merkle_proof(&hash, &status.block_hash.unwrap())?;
             let ttl = ttl_by_depth(status.block_height, query);
             json_response(proof, ttl)
         },

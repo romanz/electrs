@@ -272,9 +272,10 @@ impl Connection {
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
         let height = usize_from_value(params.get(1), "height")?;
+        let header = self.query.get_headers(&vec![height]).pop().chain_err(|| "block not found")?;
         let (merkle, pos) = self
             .query
-            .get_merkle_proof(&tx_hash, height)
+            .get_merkle_proof(&tx_hash, &header.hash())
             .chain_err(|| "cannot create merkle proof")?;
         let merkle: Vec<String> = merkle
             .into_iter()
