@@ -367,20 +367,20 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
         },
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let block = query.get_block(&hash)?;
+            let txids = query.get_block_txids(&hash).map_err(|_| HttpError::not_found("Block not found".to_string()))?;
 
-            // @TODO optimization: skip deserializing transactions outside of range
             let start_index = start_index
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
                 .max(0u32) as usize;
-
-            if start_index >= block.txdata.len() {
+            if start_index >= txids.len() {
                 bail!(HttpError::not_found("start index out of range".to_string()));
             } else if start_index % TX_LIMIT != 0 {
                 bail!(HttpError::from(format!("start index must be a multipication of {}", TX_LIMIT)));
             }
 
-            let mut txs = block.txdata.iter().skip(start_index).take(TX_LIMIT).map(|tx| TransactionValue::from(tx.clone())).collect();
+            let mut txs = txids.iter().skip(start_index).take(TX_LIMIT)
+                .map(|txid| query.tx_get(&txid).map(TransactionValue::from).ok_or("missing tx".to_string()))
+                .collect::<Result<Vec<TransactionValue>, _>>()?;
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         },
