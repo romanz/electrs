@@ -430,14 +430,19 @@ fn handle_request(req: Request<Body>, query: &Arc<Query>, config: &Config) -> Re
         (&Method::GET, Some(&"tx"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let transaction = query.tx_get(&hash).ok_or(HttpError::not_found("Transaction not found".to_string()))?;
+            let status = query.get_tx_status(&hash)?;
+            let ttl = ttl_by_depth(status.block_height, query);
+
             let mut value = TransactionValue::from(transaction);
+            value.status = Some(status);
             let value = attach_tx_data(value, config, query);
-            json_response(value, TTL_LONG)
+            json_response(value, ttl)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let rawtx = query.tx_get_raw(&hash).ok_or(HttpError::not_found("Transaction not found".to_string()))?;
-            http_message(StatusCode::OK, hex::encode(rawtx), TTL_LONG)
+            let ttl = ttl_by_depth(query.get_tx_status(&hash)?.block_height, query);
+            http_message(StatusCode::OK, hex::encode(rawtx), ttl)
         },
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
