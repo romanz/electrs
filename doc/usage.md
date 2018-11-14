@@ -83,7 +83,7 @@ $ ./scripts/local-electrum.bash
 
 In order to use a secure connection, TLS-terminating proxy (e.g. [hitch](https://github.com/varnish/hitch)) is recommended:
 ```bash
-$ hitch --backend=[127.0.0.1]:50001 --frontent=[127.0.0.1]:50002 pem_file
+$ hitch --backend=[127.0.0.1]:50001 --frontend=[127.0.0.1]:50002 pem_file
 $ electrum --oneserver --server=127.0.0.1:50002:s
 ```
 
