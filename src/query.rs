@@ -108,7 +108,9 @@ impl Status {
             txns_map.insert(s.txn_id, &s.txn.as_ref().unwrap());
         }
         let mut txns: Vec<&TxnHeight> = txns_map.into_iter().map(|item| item.1).collect();
-        txns.sort_by(|a, b| if a.height == 0 { Ordering::Less } else { b.height.cmp(&a.height) });
+        txns.sort_by(|a, b| if a.height == 0 { Ordering::Less }
+                            else if b.height == 0 { Ordering::Greater }
+                            else { b.height.cmp(&a.height) });
         txns
     }
 
