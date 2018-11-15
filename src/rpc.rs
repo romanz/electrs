@@ -2,6 +2,8 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::address::Address;
 use bitcoin::util::hash::Sha256dHash;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Number, Value};
@@ -14,9 +16,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use index::compute_script_hash;
+use mempool::MEMPOOL_HEIGHT;
 use metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use query::{Query, Status};
-use util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
+use util::{spawn_thread, Channel, FullHash, HeaderEntry, SyncChannel};
 
 use errors::*;
 
@@ -46,6 +49,35 @@ fn unspent_from_status(status: &Status) -> Value {
                 "value": out.value,
             })).collect()
     ))
+}
+
+fn sorted_history(status: &Status) -> Vec<(Sha256dHash, u32)> {
+    let mut txns = status.unsorted_history();
+    for txn in &mut txns {
+        if txn.1 == MEMPOOL_HEIGHT {
+            txn.1 = 0;
+        }
+    }
+    txns.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    txns
+}
+
+/// Used by Electrum RPC (see https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
+pub fn electrum_hash(status: &Status) -> Option<FullHash> {
+    let txns = sorted_history(&status);
+    if txns.is_empty() {
+        None
+    } else {
+        let mut hash = FullHash::default();
+        let mut sha2 = Sha256::new();
+        for (txn_id, height) in txns {
+            // TODO: height should be -1, if this tx has an unconfirmed input.
+            let part = format!("{}:{}:", txn_id.be_hex_string(), height);
+            sha2.input(part.as_bytes());
+        }
+        sha2.result(&mut hash);
+        Some(hash)
+    }
 }
 
 fn address_from_value(val: Option<&Value>) -> Result<Address> {
@@ -165,7 +197,7 @@ impl Connection {
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
-        let result = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+        let result = electrum_hash(&status).map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
     }
@@ -174,7 +206,7 @@ impl Connection {
         let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
         let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
-        let result = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+        let result = electrum_hash(&status).map_or(Value::Null, |h| json!(hex::encode(h)));
         let script_hash: Sha256dHash = deserialize(&script_hash).unwrap();
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
@@ -201,10 +233,9 @@ impl Connection {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
-            status
-                .history()
+            sorted_history(&status)
                 .into_iter()
-                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
+                .map(|item| json!({"tx_hash": item.0.be_hex_string(), "height": item.1}))
                 .collect()
         )))
     }
@@ -214,10 +245,9 @@ impl Connection {
         let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
-            status
-                .history()
+            sorted_history(&status)
                 .into_iter()
-                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
+                .map(|item| json!({"tx_hash": item.0.be_hex_string(), "height": item.1}))
                 .collect()
         )))
     }
@@ -340,7 +370,8 @@ impl Connection {
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let status = self.query.status(&script_hash[..])?;
-            let new_status_hash = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+            let new_status_hash =
+                electrum_hash(&status).map_or(Value::Null, |h| json!(hex::encode(h)));
             if new_status_hash == *status_hash {
                 continue;
             }

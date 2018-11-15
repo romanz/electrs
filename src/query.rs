@@ -2,19 +2,17 @@ use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::util::hash::Sha256dHash;
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
 use lru::LruCache;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
-use mempool::{Tracker, MEMPOOL_HEIGHT};
+use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
-use util::{FullHash, HashPrefix, HeaderEntry};
+use util::{HashPrefix, HeaderEntry};
 
 use errors::*;
 
@@ -62,17 +60,14 @@ impl Status {
         calc_balance(&self.mempool)
     }
 
-    pub fn history(&self) -> Vec<(u32, Sha256dHash)> {
-        let mut txns_map = HashMap::<Sha256dHash, u32>::new();
+    pub fn unsorted_history(&self) -> Vec<(Sha256dHash, u32)> {
+        let mut txns = Vec::new();
         for f in self.funding() {
-            txns_map.insert(f.txn_id, f.height);
+            txns.push((f.txn_id, f.height));
         }
         for s in self.spending() {
-            txns_map.insert(s.txn_id, s.height);
+            txns.push((s.txn_id, s.height));
         }
-        let mut txns: Vec<(u32, Sha256dHash)> =
-            txns_map.into_iter().map(|item| (item.1, item.0)).collect();
-        txns.sort_unstable();
         txns
     }
 
@@ -92,25 +87,6 @@ impl Status {
             .collect::<Vec<&FundingOutput>>();
         outputs.sort_unstable_by_key(|out| out.height);
         outputs
-    }
-
-    /// Used by Electrum RPC (see https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
-    pub fn electrum_hash(&self) -> Option<FullHash> {
-        let txns = self.history();
-        if txns.is_empty() {
-            None
-        } else {
-            let mut hash = FullHash::default();
-            let mut sha2 = Sha256::new();
-            for (height, txn_id) in txns {
-                // TODO: height should be -1, if this tx has an unconfirmed input.
-                let height = if height == MEMPOOL_HEIGHT { 0 } else { height };
-                let part = format!("{}:{}:", txn_id.be_hex_string(), height);
-                sha2.input(part.as_bytes());
-            }
-            sha2.result(&mut hash);
-            Some(hash)
-        }
     }
 }
 
