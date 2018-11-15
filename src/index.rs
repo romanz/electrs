@@ -15,9 +15,8 @@ use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, Metri
 use signal::Waiter;
 use store::{ReadStore, Row, WriteStore};
 use util::{
-    full_hash, hash_prefix, spawn_thread, Bytes, FullHash, HashPrefix, HeaderEntry, HeaderList,
-    HeaderMap, SyncChannel, HASH_PREFIX_LEN,
-    BlockMeta,
+    full_hash, hash_prefix, spawn_thread, BlockMeta, Bytes, FullHash, HashPrefix, HeaderEntry,
+    HeaderList, HeaderMap, SyncChannel, HASH_PREFIX_LEN,
 };
 
 use errors::*;
@@ -150,7 +149,8 @@ impl TxRow {
     }
 
     pub fn from_row(row: &Row) -> TxRow {
-        let (height, blockhash): (u32, Sha256dHash) = bincode::deserialize(&row.value).expect("failed to parse tx row");
+        let (height, blockhash): (u32, Sha256dHash) =
+            bincode::deserialize(&row.value).expect("failed to parse tx row");
         TxRow {
             key: bincode::deserialize(&row.key).expect("failed to parse TxKey"),
             height: height,
@@ -198,7 +198,6 @@ impl RawTxRow {
     }
 }
 
-
 #[derive(Serialize, Deserialize)]
 struct BlockKey {
     code: u8,
@@ -213,7 +212,12 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     hash
 }
 
-pub fn index_transaction(txn: &Transaction, height: usize, blockhash: &Sha256dHash, rows: &mut Vec<Row>) {
+pub fn index_transaction(
+    txn: &Transaction,
+    height: usize,
+    blockhash: &Sha256dHash,
+    rows: &mut Vec<Row>,
+) {
     let null_hash = Sha256dHash::default();
     let txid: Sha256dHash = txn.txid();
     for input in &txn.input {

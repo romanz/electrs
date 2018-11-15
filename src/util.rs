@@ -27,7 +27,6 @@ pub fn full_hash(hash: &[u8]) -> FullHash {
     array_ref![hash, 0, HASH_LEN].clone()
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {
     pub confirmed: bool,
@@ -80,7 +79,6 @@ impl<'a> From<&'a Block> for BlockMeta {
         }
     }
 }
-
 
 #[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
@@ -310,14 +308,12 @@ where
         .unwrap()
 }
 
-
-
-use bitcoin::{Script};
-use bitcoin::util::address::{Address,Payload};
-use bitcoin::util::hash::Hash160;
-use bitcoin_bech32::{WitnessProgram,u5};
 use bitcoin::network::constants::Network;
+use bitcoin::util::address::{Address, Payload};
+use bitcoin::util::hash::Hash160;
+use bitcoin::Script;
 use bitcoin_bech32::constants::Network as B32Network;
+use bitcoin_bech32::{u5, WitnessProgram};
 
 // @XXX we can't use any of the Address:p2{...}h utility methods, since they expect the pre-image data, which we don't have.
 // we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
@@ -328,19 +324,34 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
     } else if script.is_p2sh() {
         Some(Payload::ScriptHash(Hash160::from(&script[2..22])))
     } else if script.is_v0_p2wpkh() {
-        Some(Payload::WitnessProgram(WitnessProgram::new(u5::try_from_u8(0).expect("0<32"),
-                                                         script[2..22].to_vec(),
-                                                         to_bech_network(network)).unwrap()))
+        Some(Payload::WitnessProgram(
+            WitnessProgram::new(
+                u5::try_from_u8(0).expect("0<32"),
+                script[2..22].to_vec(),
+                to_bech_network(network),
+            ).unwrap(),
+        ))
     } else if script.is_v0_p2wsh() {
-        Some(Payload::WitnessProgram(WitnessProgram::new(u5::try_from_u8(0).expect("0<32"),
-                                                         script[2..34].to_vec(),
-                                                         to_bech_network(network)).unwrap()))
-    } else { None };
+        Some(Payload::WitnessProgram(
+            WitnessProgram::new(
+                u5::try_from_u8(0).expect("0<32"),
+                script[2..34].to_vec(),
+                to_bech_network(network),
+            ).unwrap(),
+        ))
+    } else {
+        None
+    };
 
-    Some(Address { payload: payload?, network: *network }.to_string())
+    Some(
+        Address {
+            payload: payload?,
+            network: *network,
+        }.to_string(),
+    )
 }
 
-fn to_bech_network (network: &Network) -> B32Network {
+fn to_bech_network(network: &Network) -> B32Network {
     match network {
         Network::Bitcoin => B32Network::Bitcoin,
         Network::Testnet => B32Network::Testnet,
@@ -350,5 +361,5 @@ fn to_bech_network (network: &Network) -> B32Network {
 
 pub fn get_script_asm(script: &Script) -> String {
     let asm = format!("{:?}", script);
-    (&asm[7..asm.len()-1]).to_string()
+    (&asm[7..asm.len() - 1]).to_string()
 }

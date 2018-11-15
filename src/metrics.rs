@@ -102,7 +102,11 @@ struct Stats {
 
 fn parse_stats() -> Result<Stats> {
     if cfg!(target_os = "macos") {
-        return Ok(Stats { utime: 0f64, rss: 0u64, fds: 0usize });
+        return Ok(Stats {
+            utime: 0f64,
+            rss: 0u64,
+            fds: 0usize,
+        });
     }
     let value = fs::read_to_string("/proc/self/stat").chain_err(|| "failed to read stats")?;
     let parts: Vec<&str> = value.split_whitespace().collect();

@@ -4,10 +4,10 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 
+use electrs::rest;
 use error_chain::ChainedError;
 use std::process;
 use std::time::Duration;
-use electrs::rest;
 
 use electrs::{
     app::App,

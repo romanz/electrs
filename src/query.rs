@@ -1,22 +1,25 @@
+use bincode;
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::consensus::encode::{serialize, deserialize};
+use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use lru::LruCache;
-use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, Mutex, RwLock};
 use std::cmp::Ordering;
-use bincode;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, RwLock};
 
 use app::App;
-use index::{compute_script_hash, TxInRow, TxOutRow, TxRow, RawTxRow};
+use index::{compute_script_hash, RawTxRow, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
-use util::{FullHash, HashPrefix, HeaderEntry, Bytes, BlockMeta, BlockHeaderMeta, BlockStatus, TransactionStatus};
+use util::{
+    BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, FullHash, HashPrefix, HeaderEntry,
+    TransactionStatus,
+};
 
 use errors::*;
 
@@ -108,9 +111,15 @@ impl Status {
             txns_map.insert(s.txn_id, &s.txn.as_ref().unwrap());
         }
         let mut txns: Vec<&TxnHeight> = txns_map.into_iter().map(|item| item.1).collect();
-        txns.sort_by(|a, b| if a.height == 0 { Ordering::Less }
-                            else if b.height == 0 { Ordering::Greater }
-                            else { b.height.cmp(&a.height) });
+        txns.sort_by(|a, b| {
+            if a.height == 0 {
+                Ordering::Less
+            } else if b.height == 0 {
+                Ordering::Greater
+            } else {
+                b.height.cmp(&a.height)
+            }
+        });
         txns
     }
 
@@ -149,7 +158,6 @@ impl Status {
     }
 }
 
-
 #[derive(Clone)]
 pub struct TxnHeight {
     pub txn: Transaction,
@@ -187,7 +195,7 @@ fn txids_by_script_hash(store: &ReadStore, script_hash: &[u8]) -> Vec<HashPrefix
     store
         .scan(&TxOutRow::filter(script_hash))
         .iter()
-        .take(FUNDING_TXN_LIMIT+1)
+        .take(FUNDING_TXN_LIMIT + 1)
         .map(|row| TxOutRow::from_row(row).txid_prefix)
         .collect()
 }
@@ -262,7 +270,6 @@ impl Query {
         store: &ReadStore,
         prefixes: Vec<HashPrefix>,
     ) -> Result<Vec<TxnHeight>> {
-
         if prefixes.len() > FUNDING_TXN_LIMIT {
             bail!("Too many txs");
         }
@@ -374,12 +381,10 @@ impl Query {
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
-        let confirmed = self
-            .confirmed_status(script_hash)?;
-            //.chain_err(|| "failed to get confirmed status")?;
-        let mempool = self
-            .mempool_status(script_hash, &confirmed.0)?;
-            //.chain_err(|| "failed to get mempool status")?;
+        let confirmed = self.confirmed_status(script_hash)?;
+        //.chain_err(|| "failed to get confirmed status")?;
+        let mempool = self.mempool_status(script_hash, &confirmed.0)?;
+        //.chain_err(|| "failed to get mempool status")?;
         Ok(Status { confirmed, mempool })
     }
 
@@ -387,24 +392,33 @@ impl Query {
         let funding_output = FundingOutput::from(outpoint);
         let read_store = self.app.read_store();
         let tracker = self.tracker.read().unwrap();
-        Ok(if let Some(spent) = self.find_spending_input(read_store, &funding_output)? {
-            Some(spent)
-        }  else if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output)? {
-            Some(spent)
-        } else {
-            None
-        })
+        Ok(
+            if let Some(spent) = self.find_spending_input(read_store, &funding_output)? {
+                Some(spent)
+            } else if let Some(spent) =
+                self.find_spending_input(tracker.index(), &funding_output)?
+            {
+                Some(spent)
+            } else {
+                None
+            },
+        )
     }
 
-    pub fn find_spending_for_funding_tx(&self, tx: Transaction) -> Result<Vec<Option<SpendingInput>>> {
+    pub fn find_spending_for_funding_tx(
+        &self,
+        tx: Transaction,
+    ) -> Result<Vec<Option<SpendingInput>>> {
         let txid = tx.txid();
         let mut spends = vec![];
         for (output_index, output) in tx.output.iter().enumerate() {
-             let spend = if !output.script_pubkey.is_provably_unspendable() {
-                 self.find_spending_by_outpoint((txid, output_index))?
-             } else { None };
-             spends.push(spend)
-         }
+            let spend = if !output.script_pubkey.is_provably_unspendable() {
+                self.find_spending_by_outpoint((txid, output_index))?
+            } else {
+                None
+            };
+            spends.push(spend)
+        }
         Ok(spends)
     }
 
@@ -443,14 +457,22 @@ impl Query {
 
     // Get transaction from txstore or the in-memory mempool Tracker
     pub fn tx_get(&self, txid: &Sha256dHash) -> Option<Transaction> {
-        rawtxrow_by_txid(self.app.read_store(), txid).map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
+        rawtxrow_by_txid(self.app.read_store(), txid)
+            .map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
             .or_else(|| self.tracker.read().unwrap().get_txn(&txid))
     }
 
     // Get raw transaction from txstore or the in-memory mempool Tracker
     pub fn tx_get_raw(&self, txid: &Sha256dHash) -> Option<Bytes> {
-        rawtxrow_by_txid(self.app.read_store(), txid).map(|row| row.rawtx)
-            .or_else(|| self.tracker.read().unwrap().get_txn(&txid).map(|tx| serialize(&tx)))
+        rawtxrow_by_txid(self.app.read_store(), txid)
+            .map(|row| row.rawtx)
+            .or_else(|| {
+                self.tracker
+                    .read()
+                    .unwrap()
+                    .get_txn(&txid)
+                    .map(|tx| serialize(&tx))
+            })
     }
 
     // Public API for transaction retrieval (for Electrum RPC)
@@ -463,14 +485,13 @@ impl Query {
     }
 
     pub fn get_block(&self, blockhash: &Sha256dHash) -> Result<Block> {
-        self.app
-            .daemon()
-            .getblock(blockhash)
+        self.app.daemon().getblock(blockhash)
     }
 
     pub fn get_block_header_with_meta(&self, blockhash: &Sha256dHash) -> Result<BlockHeaderMeta> {
         let header_entry = self.get_header_by_hash(blockhash)?;
-        let meta = get_block_meta(self.app.read_store(), blockhash).ok_or("cannot load block meta")?;
+        let meta =
+            get_block_meta(self.app.read_store(), blockhash).ok_or("cannot load block meta")?;
         Ok(BlockHeaderMeta { header_entry, meta })
     }
 
@@ -511,7 +532,11 @@ impl Query {
             Some(header) => BlockStatus {
                 in_best_chain: true,
                 height: Some(header.height()),
-                next_best: self.app.index().get_header(header.height() + 1).map(|h| h.hash().clone())
+                next_best: self
+                    .app
+                    .index()
+                    .get_header(header.height() + 1)
+                    .map(|h| h.hash().clone()),
             },
             None => BlockStatus {
                 in_best_chain: false,
@@ -529,11 +554,18 @@ impl Query {
         };
 
         // fetch the block header at the recorded confirmation height
-        let header = self.app.index().get_header(height as usize).chain_err(|| "invalid block height for tx")?;
+        let header = self
+            .app
+            .index()
+            .get_header(height as usize)
+            .chain_err(|| "invalid block height for tx")?;
 
         // the block at confirmation height is not the one containing the tx, must've reorged!
-        if header.hash() != &blockhash { Ok(TransactionStatus::unconfirmed()) }
-        else { Ok(TransactionStatus::confirmed(&header)) }
+        if header.hash() != &blockhash {
+            Ok(TransactionStatus::unconfirmed())
+        } else {
+            Ok(TransactionStatus::confirmed(&header))
+        }
     }
 
     pub fn get_merkle_proof(
@@ -541,7 +573,8 @@ impl Query {
         tx_hash: &Sha256dHash,
         block_hash: &Sha256dHash,
     ) -> Result<(Vec<Sha256dHash>, usize)> {
-        let mut txids = self.get_block_txids(&block_hash)
+        let mut txids = self
+            .get_block_txids(&block_hash)
             .chain_err(|| format!("missing txids for block #{}", block_hash))?;
         let pos = txids
             .iter()
