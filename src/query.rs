@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use app::App;
 use index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
-use mempool::Tracker;
+use mempool::{Tracker, MEMPOOL_HEIGHT};
 use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
@@ -62,15 +62,15 @@ impl Status {
         calc_balance(&self.mempool)
     }
 
-    pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
-        let mut txns_map = HashMap::<Sha256dHash, i32>::new();
+    pub fn history(&self) -> Vec<(u32, Sha256dHash)> {
+        let mut txns_map = HashMap::<Sha256dHash, u32>::new();
         for f in self.funding() {
-            txns_map.insert(f.txn_id, f.height as i32);
+            txns_map.insert(f.txn_id, f.height);
         }
         for s in self.spending() {
-            txns_map.insert(s.txn_id, s.height as i32);
+            txns_map.insert(s.txn_id, s.height);
         }
-        let mut txns: Vec<(i32, Sha256dHash)> =
+        let mut txns: Vec<(u32, Sha256dHash)> =
             txns_map.into_iter().map(|item| (item.1, item.0)).collect();
         txns.sort_unstable();
         txns
@@ -94,7 +94,8 @@ impl Status {
         outputs
     }
 
-    pub fn hash(&self) -> Option<FullHash> {
+    /// Used by Electrum RPC (see https://electrumx.readthedocs.io/en/latest/protocol-basics.html#status)
+    pub fn electrum_hash(&self) -> Option<FullHash> {
         let txns = self.history();
         if txns.is_empty() {
             None
@@ -102,6 +103,8 @@ impl Status {
             let mut hash = FullHash::default();
             let mut sha2 = Sha256::new();
             for (height, txn_id) in txns {
+                // TODO: height should be -1, if this tx has an unconfirmed input.
+                let height = if height == MEMPOOL_HEIGHT { 0 } else { height };
                 let part = format!("{}:{}:", txn_id.be_hex_string(), height);
                 sha2.input(part.as_bytes());
             }

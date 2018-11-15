@@ -165,7 +165,7 @@ impl Connection {
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
-        let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+        let result = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
     }
@@ -174,7 +174,7 @@ impl Connection {
         let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
         let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
-        let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+        let result = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         let script_hash: Sha256dHash = deserialize(&script_hash).unwrap();
         self.status_hashes.insert(script_hash, result.clone());
         Ok(result)
@@ -340,7 +340,7 @@ impl Connection {
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let status = self.query.status(&script_hash[..])?;
-            let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+            let new_status_hash = status.electrum_hash().map_or(Value::Null, |h| json!(hex::encode(h)));
             if new_status_hash == *status_hash {
                 continue;
             }
