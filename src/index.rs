@@ -167,7 +167,7 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     hash
 }
 
-pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) {
+pub fn index_transaction(txn: &Transaction, height: u32, rows: &mut Vec<Row>) {
     let null_hash = Sha256dHash::default();
     let txid: Sha256dHash = txn.txid();
     for input in &txn.input {
@@ -180,10 +180,10 @@ pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) 
         rows.push(TxOutRow::new(&txid, &output).to_row());
     }
     // Persist transaction ID and confirmed height
-    rows.push(TxRow::new(&txid, height as u32).to_row());
+    rows.push(TxRow::new(&txid, height).to_row());
 }
 
-pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
+pub fn index_block(block: &Block, height: u32) -> Vec<Row> {
     let mut rows = vec![];
     for txn in &block.txdata {
         index_transaction(&txn, height, &mut rows);
@@ -391,7 +391,7 @@ impl Index {
                     .expect(&format!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
-                let mut block_rows = index_block(block, height);
+                let mut block_rows = index_block(block, height as u32);
                 block_rows.push(last_indexed_block(&blockhash));
                 rows.extend(block_rows);
                 timer.observe_duration();
