@@ -585,7 +585,7 @@ fn handle_request(
             };
             let proof = query.get_merkle_proof(&hash, &status.block_hash.unwrap())?;
             let ttl = ttl_by_depth(status.block_height, query);
-            json_response(proof, ttl)
+            json_response(json!({ "block_height": status.block_height, "merkle": proof.0, "pos": proof.1 }), ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
             let hash = Sha256dHash::from_hex(hash)?;
