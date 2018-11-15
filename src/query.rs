@@ -3,9 +3,6 @@ use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 
@@ -16,8 +13,7 @@ use metrics::Metrics;
 use serde_json::Value;
 use store::{ReadStore, Row};
 use util::{
-    BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, FullHash, HashPrefix, HeaderEntry,
-    TransactionStatus,
+    BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HashPrefix, HeaderEntry, TransactionStatus,
 };
 
 use errors::*;
@@ -87,15 +83,15 @@ impl Status {
         self.funding().map(|output| output.value as i64).sum()
     }
 
-    pub fn history(&self) -> Vec<(i32, Sha256dHash)> {
-        let mut txns_map = HashMap::<Sha256dHash, i32>::new();
+    pub fn history(&self) -> Vec<(u32, Sha256dHash)> {
+        let mut txns_map = HashMap::<Sha256dHash, u32>::new();
         for f in self.funding() {
-            txns_map.insert(f.txn_id, f.height as i32);
+            txns_map.insert(f.txn_id, f.height);
         }
         for s in self.spending() {
-            txns_map.insert(s.txn_id, s.height as i32);
+            txns_map.insert(s.txn_id, s.height);
         }
-        let mut txns: Vec<(i32, Sha256dHash)> =
+        let mut txns: Vec<(u32, Sha256dHash)> =
             txns_map.into_iter().map(|item| (item.1, item.0)).collect();
         txns.sort_unstable();
         txns
@@ -110,15 +106,8 @@ impl Status {
             txns_map.insert(s.txn_id, &s.txn.as_ref().unwrap());
         }
         let mut txns: Vec<&TxnHeight> = txns_map.into_iter().map(|item| item.1).collect();
-        txns.sort_by(|a, b| {
-            if a.height == 0 {
-                Ordering::Less
-            } else if b.height == 0 {
-                Ordering::Greater
-            } else {
-                b.height.cmp(&a.height)
-            }
-        });
+        // Sort in reverse confirmation height order (unconfirmed txns use u32::max_value as their height):
+        txns.sort_by(|a, b| b.height.cmp(&a.height));
         txns
     }
 
@@ -138,22 +127,6 @@ impl Status {
             .collect::<Vec<&FundingOutput>>();
         outputs.sort_unstable_by_key(|out| out.height);
         outputs
-    }
-
-    pub fn hash(&self) -> Option<FullHash> {
-        let txns = self.history();
-        if txns.is_empty() {
-            None
-        } else {
-            let mut hash = FullHash::default();
-            let mut sha2 = Sha256::new();
-            for (height, txn_id) in txns {
-                let part = format!("{}:{}:", txn_id.be_hex_string(), height);
-                sha2.input(part.as_bytes());
-            }
-            sha2.result(&mut hash);
-            Some(hash)
-        }
     }
 }
 
