@@ -368,16 +368,21 @@ impl Connection {
     }
 
     fn handle_replies(&mut self) -> Result<()> {
+        let empty_params = json!([]);
         loop {
             let msg = self.chan.receiver().recv().chain_err(|| "channel closed")?;
             trace!("RPC {:?}", msg);
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    let reply = match (cmd.get("method"), cmd.get("params"), cmd.get("id")) {
+                    let reply = match (
+                        cmd.get("method"),
+                        cmd.get("params").unwrap_or_else(|| &empty_params),
+                        cmd.get("id"),
+                    ) {
                         (
                             Some(&Value::String(ref method)),
-                            Some(&Value::Array(ref params)),
+                            &Value::Array(ref params),
                             Some(&Value::Number(ref id)),
                         ) => self.handle_command(method, params, id)?,
                         _ => bail!("invalid command: {}", cmd),
