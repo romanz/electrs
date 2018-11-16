@@ -125,6 +125,17 @@ impl Connection {
         Ok(json!(self.query.get_fee_histogram()))
     }
 
+    fn blockchain_block_header(&self, params: &[Value]) -> Result<Value> {
+        let height = usize_from_value(params.get(0), "height")?;
+        let header: String = self
+            .query
+            .get_headers(&[height])
+            .into_iter()
+            .map(|entry| hex::encode(&serialize(entry.header())))
+            .collect();
+        Ok(json!(header))
+    }
+
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
         let start_height = usize_from_value(params.get(0), "start_height")?;
         let count = usize_from_value(params.get(1), "count")?;
@@ -285,6 +296,7 @@ impl Connection {
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
+            "blockchain.block.header" => self.blockchain_block_header(&params),
             "blockchain.block.headers" => self.blockchain_block_headers(&params),
             "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
