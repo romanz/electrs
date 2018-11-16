@@ -311,6 +311,7 @@ impl Connection {
             "server.banner" => self.server_banner(),
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
+            "server.ping" => Ok(Value::Null),
             "server.version" => self.server_version(),
             &_ => bail!("unknown method {} {:?}", method, params),
         };
