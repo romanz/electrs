@@ -5,10 +5,9 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use lru::LruCache;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use app::App;
 use index::{compute_script_hash, RawTxRow, TxInRow, TxOutRow, TxRow};
@@ -212,10 +211,6 @@ fn txids_by_funding_output(
         .collect()
 }
 
-pub struct TransactionCache {
-    map: Mutex<LruCache<Sha256dHash, Transaction>>,
-}
-
 pub fn get_block_meta(store: &ReadStore, blockhash: &Sha256dHash) -> Option<BlockMeta> {
     let key = [b"M", &blockhash[..]].concat();
     let value = store.get(&key)?;
@@ -230,38 +225,16 @@ pub fn get_block_txids(store: &ReadStore, blockhash: &Sha256dHash) -> Option<Vec
     Some(txids)
 }
 
-impl TransactionCache {
-    pub fn new(capacity: usize) -> TransactionCache {
-        TransactionCache {
-            map: Mutex::new(LruCache::new(capacity)),
-        }
-    }
-
-    fn _get_or_else<F>(&self, txid: &Sha256dHash, load_txn_func: F) -> Result<Transaction>
-    where
-        F: FnOnce() -> Result<Transaction>,
-    {
-        if let Some(txn) = self.map.lock().unwrap().get(txid) {
-            return Ok(txn.clone());
-        }
-        let txn = load_txn_func()?;
-        self.map.lock().unwrap().put(*txid, txn.clone());
-        Ok(txn)
-    }
-}
-
 pub struct Query {
     app: Arc<App>,
     tracker: RwLock<Tracker>,
-    tx_cache: TransactionCache,
 }
 
 impl Query {
-    pub fn new(app: Arc<App>, metrics: &Metrics, tx_cache: TransactionCache) -> Arc<Query> {
+    pub fn new(app: Arc<App>, metrics: &Metrics) -> Arc<Query> {
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new(metrics)),
-            tx_cache,
         })
     }
 
