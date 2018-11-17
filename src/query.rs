@@ -201,19 +201,21 @@ pub fn get_block_txids(store: &ReadStore, blockhash: &Sha256dHash) -> Option<Vec
 pub struct Query {
     app: Arc<App>,
     tracker: RwLock<Tracker>,
+    extended_db_enabled: bool,
 
     // monitoring
     latency: HistogramVec,
 }
 
 impl Query {
-    pub fn new(app: Arc<App>, metrics: &Metrics) -> Arc<Query> {
+    pub fn new(app: Arc<App>, extended_db_enabled: bool, metrics: &Metrics) -> Arc<Query> {
         let latency_buckets = vec![
             1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1., 2., 5., 10.,
             20., 50., 100.,
         ];
         Arc::new(Query {
             app,
+            extended_db_enabled,
             tracker: RwLock::new(Tracker::new(metrics)),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("query_latency", "Query latency (in seconds)")
@@ -240,7 +242,9 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn = self.tx_get(&txid).chain_err(|| "cannot locate tx")?;
+                let txn = self
+                    .load_txn(&txid, Some(&tx_row.blockhash))
+                    .chain_err(|| "cannot locate tx")?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
@@ -440,36 +444,67 @@ impl Query {
         Ok(blockhash)
     }
 
-    // Internal API for transaction retrieval (uses bitcoind)
-    fn _load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
-        let _timer = self.latency.with_label_values(&["_load_txn"]).start_timer();
-        let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
-        self.app.daemon().gettransaction(tx_hash, blockhash)
+    // Load transaction by txid
+    pub fn load_txn(
+        &self,
+        txid: &Sha256dHash,
+        blockhash: Option<&Sha256dHash>,
+    ) -> Result<Transaction> {
+        let _timer = self.latency.with_label_values(&["load_txn"]).start_timer();
+        if self.extended_db_enabled {
+            // fetch from our txstore or mempool tracker
+            rawtxrow_by_txid(self.app.read_store(), txid)
+                .map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
+                .or_else(|| self.tracker.read().unwrap().get_txn(&txid))
+                .chain_err(|| format!("cannot find tx {}", txid))
+        } else {
+            // fetch from bitcoind
+            let blockhash_from_index: Option<Sha256dHash> = match blockhash {
+                Some(_) => None,
+                None => self.lookup_confirmed_blockhash(txid, None)?,
+            };
+            let blockhash: Option<&Sha256dHash> = blockhash.or(blockhash_from_index.as_ref());
+            self.app.daemon().gettransaction(txid, blockhash)
+        }
     }
 
-    // Get transaction from txstore or the in-memory mempool Tracker
-    pub fn tx_get(&self, txid: &Sha256dHash) -> Option<Transaction> {
-        let _timer = self.latency.with_label_values(&["tx_get"]).start_timer();
-        rawtxrow_by_txid(self.app.read_store(), txid)
-            .map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
-            .or_else(|| self.tracker.read().unwrap().get_txn(&txid))
-    }
-
-    // Get raw transaction from txstore or the in-memory mempool Tracker
-    pub fn tx_get_raw(&self, txid: &Sha256dHash) -> Option<Bytes> {
+    // Load raw transaction by txid
+    pub fn load_raw_txn(
+        &self,
+        txid: &Sha256dHash,
+        blockhash: Option<&Sha256dHash>,
+    ) -> Result<Bytes> {
         let _timer = self
             .latency
-            .with_label_values(&["tx_get_raw"])
+            .with_label_values(&["load_raw_txn"])
             .start_timer();
-        rawtxrow_by_txid(self.app.read_store(), txid)
-            .map(|row| row.rawtx)
-            .or_else(|| {
-                self.tracker
-                    .read()
-                    .unwrap()
-                    .get_txn(&txid)
-                    .map(|tx| serialize(&tx))
-            })
+        if self.extended_db_enabled {
+            // fetch from our txstore or mempool tracker
+            Ok(rawtxrow_by_txid(self.app.read_store(), txid)
+                .map(|row| row.rawtx)
+                .or_else(|| {
+                    self.tracker
+                        .read()
+                        .unwrap()
+                        .get_txn(&txid)
+                        .map(|tx| serialize(&tx))
+                }).chain_err(|| format!("cannot find tx {}", txid))?)
+        } else {
+            // fetch from bitcoind
+            let blockhash_from_index: Option<Sha256dHash> = match blockhash {
+                Some(_) => None,
+                None => self.lookup_confirmed_blockhash(txid, None)?,
+            };
+            let blockhash: Option<&Sha256dHash> = blockhash.or(blockhash_from_index.as_ref());
+            let tx_val = self
+                .app
+                .daemon()
+                .gettransaction_raw(txid, blockhash, false)?;
+            Ok(
+                ::hex::decode(tx_val.as_str().chain_err(|| "non-string tx hex")?)
+                    .chain_err(|| "invalid hex")?,
+            )
+        }
     }
 
     // Public API for transaction retrieval (for Electrum RPC)
@@ -482,7 +517,7 @@ impl Query {
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, /*block_height*/ None)?;
         self.app
             .daemon()
-            .gettransaction_raw(tx_hash, blockhash, verbose)
+            .gettransaction_raw(tx_hash, blockhash.as_ref(), verbose)
     }
 
     pub fn get_block(&self, blockhash: &Sha256dHash) -> Result<Block> {
@@ -495,10 +530,10 @@ impl Query {
             .latency
             .with_label_values(&["get_block_header_with_meta"])
             .start_timer();
-        let header_entry = self.get_header_by_hash(blockhash)?;
-        let meta =
-            get_block_meta(self.app.read_store(), blockhash).ok_or("cannot load block meta")?;
-        Ok(BlockHeaderMeta { header_entry, meta })
+        Ok(BlockHeaderMeta {
+            header_entry: self.get_header_by_hash(blockhash)?,
+            meta: self.get_block_meta(blockhash)?,
+        })
     }
 
     pub fn get_block_txids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
@@ -506,7 +541,43 @@ impl Query {
             .latency
             .with_label_values(&["get_block_txids"])
             .start_timer();
-        Ok(get_block_txids(self.app.read_store(), blockhash).ok_or("cannot load block txids")?)
+        if self.extended_db_enabled {
+            // fetch from our blockhash=>txids index
+            get_block_txids(self.app.read_store(), blockhash)
+                .chain_err(|| "cannot load block txids")
+        } else {
+            // fetch from bitcoind
+            let block = self
+                .app
+                .daemon()
+                .getblock_raw(blockhash, 1)
+                .chain_err(|| "cannot load block")?;
+            let txids = block
+                .get("tx")
+                .chain_err(|| "block missing txids")?
+                .as_array()
+                .chain_err(|| "invalid block txids")?;
+            Ok(txids
+                .iter()
+                .map(|txid| {
+                    Sha256dHash::from_hex(txid.as_str().chain_err(|| "txid not string")?)
+                        .chain_err(|| "invalid hex")
+                }).collect::<Result<Vec<Sha256dHash>>>()?)
+        }
+    }
+
+    pub fn get_block_meta(&self, blockhash: &Sha256dHash) -> Result<BlockMeta> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_block_meta"])
+            .start_timer();
+        if self.extended_db_enabled {
+            // fetch from our blockhash=>txids index
+            get_block_meta(self.app.read_store(), blockhash).chain_err(|| "cannot load block meta")
+        } else {
+            // fetch from bitcoind
+            BlockMeta::parse_getblock(self.app.daemon().getblock_raw(blockhash, 1)?)
+        }
     }
 
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {

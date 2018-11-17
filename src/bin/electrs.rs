@@ -19,10 +19,10 @@ use electrs::{
     metrics::Metrics,
     query::Query,
     signal::Waiter,
-    store::{full_compaction, is_fully_compacted, DBStore},
+    store::{full_compaction, is_fully_compacted, verify_index_compatibility, DBStore},
 };
 
-fn run_server(config: &Config) -> Result<()> {
+fn run_server(config: Config) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
@@ -37,7 +37,10 @@ fn run_server(config: &Config) -> Result<()> {
     )?;
     // Perform initial indexing from local blk*.dat block files.
     let store = DBStore::open(&config.db_path, /*low_memory=*/ config.jsonrpc_import);
-    let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
+    let index = Index::load(&store, &daemon, &metrics, &config)?;
+
+    verify_index_compatibility(&store, &config);
+
     let store = if is_fully_compacted(&store) {
         store // initial import and full compaction are over
     } else {
@@ -46,7 +49,7 @@ fn run_server(config: &Config) -> Result<()> {
             full_compaction(store)
         } else {
             // faster, but uses more memory
-            let store = bulk::index_blk_files(&daemon, config.bulk_index_threads, &metrics, store)?;
+            let store = bulk::index_blk_files(&daemon, &config, &metrics, store)?;
             let store = full_compaction(store);
             index.reload(&store); // make sure the block header index is up-to-date
             store
@@ -54,7 +57,7 @@ fn run_server(config: &Config) -> Result<()> {
     }.enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon)?;
-    let query = Query::new(app.clone(), &metrics);
+    let query = Query::new(app.clone(), config.extended_db_enabled, &metrics);
 
     let mut server = None; // HTTP REST server
     loop {
@@ -80,7 +83,7 @@ fn run_server(config: &Config) -> Result<()> {
 
 fn main() {
     let config = Config::from_args();
-    if let Err(e) = run_server(&config) {
+    if let Err(e) = run_server(config) {
         error!("server failed: {}", e.display_chain());
         process::exit(1);
     }

@@ -28,6 +28,8 @@ pub struct Config {
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
+    pub extended_db_enabled: bool,
+    pub prevout_enabled: bool,
 }
 
 impl Config {
@@ -115,6 +117,16 @@ impl Config {
                     .long("tx-cache-size")
                     .help("Number of transactions to keep in for query LRU cache")
                     .default_value("10000")  // should be enough for a small wallet.
+            )
+            .arg(
+                Arg::with_name("light")
+                    .long("light")
+                    .help("Enable light operation mode")
+            )
+            .arg(
+                Arg::with_name("disable_prevout")
+                    .long("disable-prevout")
+                    .help("Don't attach previout output details to inputs")
             )
             .get_matches();
 
@@ -211,6 +223,8 @@ impl Config {
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
+            extended_db_enabled: !m.is_present("light"),
+            prevout_enabled: !m.is_present("disable_prevout"),
         };
         eprintln!("{:?}", config);
         config

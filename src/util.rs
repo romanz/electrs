@@ -1,6 +1,7 @@
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
+use errors::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
@@ -77,6 +78,28 @@ impl<'a> From<&'a Block> for BlockMeta {
             size: serialize(block).len() as u32,
             weight: block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
         }
+    }
+}
+
+impl BlockMeta {
+    pub fn parse_getblock(val: ::serde_json::Value) -> Result<BlockMeta> {
+        Ok(BlockMeta {
+            tx_count: val
+                .get("nTx")
+                .chain_err(|| "missing nTx")?
+                .as_f64()
+                .chain_err(|| "nTx not a number")? as u32,
+            size: val
+                .get("size")
+                .chain_err(|| "missing size")?
+                .as_f64()
+                .chain_err(|| "size not a number")? as u32,
+            weight: val
+                .get("weight")
+                .chain_err(|| "missing weight")?
+                .as_f64()
+                .chain_err(|| "weight not a number")? as u32,
+        })
     }
 }
 

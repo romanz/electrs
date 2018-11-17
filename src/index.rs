@@ -19,6 +19,8 @@ use util::{
     HeaderList, HeaderMap, SyncChannel, HASH_PREFIX_LEN,
 };
 
+use config::Config;
+
 use errors::*;
 
 #[derive(Serialize, Deserialize)]
@@ -229,16 +231,20 @@ pub fn index_transaction(
     for output in &txn.output {
         rows.push(TxOutRow::new(&txid, &output).to_row());
     }
-    // Persist transaction ID and confirmed height
+    // Persist transaction ID and confirmed height/hash
     rows.push(TxRow::new(&txid, height, blockhash).to_row());
-    rows.push(RawTxRow::new(&txid, serialize(txn)).to_row()); // @TODO avoid re-serialization
 }
 
-pub fn index_block(block: &Block, height: u32) -> Vec<Row> {
+pub fn index_block(block: &Block, height: u32, extended_db_enabled: bool) -> Vec<Row> {
     let blockhash = block.bitcoin_hash();
     let mut rows = vec![];
     for txn in &block.txdata {
         index_transaction(&txn, height, &blockhash, &mut rows);
+
+        // Persist raw transaction to txstore
+        if extended_db_enabled {
+            rows.push(RawTxRow::new(&txn.txid(), serialize(txn)).to_row()); // @TODO avoid re-serialization
+        }
     }
     let blockhash = block.bitcoin_hash();
     // Persist block hash and header
@@ -251,27 +257,28 @@ pub fn index_block(block: &Block, height: u32) -> Vec<Row> {
     });
 
     // Persist block metadata (size, number of txs and sum of txs weight)
-    let blockmeta = BlockMeta::from(block);
-    rows.push(Row {
-        key: bincode::serialize(&BlockKey {
-            code: b'M',
-            hash: full_hash(&blockhash[..]),
-        }).unwrap(),
-        value: bincode::serialize(&blockmeta).unwrap(),
-    });
-    // @XXX block metadata could be saved alongside the header and added
-    // into the HeaderList structure, which would be more efficient but
-    // require more invasive changes in electrs internals.
+    if extended_db_enabled {
+        let blockmeta = BlockMeta::from(block);
+        rows.push(Row {
+            key: bincode::serialize(&BlockKey {
+                code: b'M',
+                hash: full_hash(&blockhash[..]),
+            }).unwrap(),
+            value: bincode::serialize(&blockmeta).unwrap(),
+        });
+    }
 
     // Persist list of txids in block
-    let txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
-    rows.push(Row {
-        key: bincode::serialize(&BlockKey {
-            code: b'X',
-            hash: full_hash(&blockhash[..]),
-        }).unwrap(),
-        value: bincode::serialize(&txids).unwrap(),
-    });
+    if extended_db_enabled {
+        let txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
+        rows.push(Row {
+            key: bincode::serialize(&BlockKey {
+                code: b'X',
+                hash: full_hash(&blockhash[..]),
+            }).unwrap(),
+            value: bincode::serialize(&txids).unwrap(),
+        });
+    }
 
     rows
 }
@@ -381,6 +388,7 @@ pub struct Index {
     daemon: Daemon,
     stats: Stats,
     batch_size: usize,
+    extended_db_enabled: bool,
 }
 
 impl Index {
@@ -388,7 +396,7 @@ impl Index {
         store: &ReadStore,
         daemon: &Daemon,
         metrics: &Metrics,
-        batch_size: usize,
+        config: &Config,
     ) -> Result<Index> {
         let stats = Stats::new(metrics);
         let headers = read_indexed_headers(store);
@@ -397,7 +405,8 @@ impl Index {
             headers: RwLock::new(headers),
             daemon: daemon.reconnect()?,
             stats,
-            batch_size,
+            batch_size: config.index_batch_size,
+            extended_db_enabled: config.extended_db_enabled,
         })
     }
 
@@ -483,7 +492,7 @@ impl Index {
                     .expect(&format!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
-                let mut block_rows = index_block(block, height as u32);
+                let mut block_rows = index_block(block, height as u32, self.extended_db_enabled);
                 block_rows.push(last_indexed_block(&blockhash));
                 rows.extend(block_rows);
                 timer.observe_duration();

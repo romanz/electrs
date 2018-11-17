@@ -475,6 +475,10 @@ impl Daemon {
         Ok(block)
     }
 
+    pub fn getblock_raw(&self, blockhash: &Sha256dHash, verbose: u32) -> Result<Value> {
+        self.request("getblock", json!([blockhash.be_hex_string(), verbose]))
+    }
+
     pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
         let params_list: Vec<Value> = blockhashes
             .iter()
@@ -491,7 +495,7 @@ impl Daemon {
     pub fn gettransaction(
         &self,
         txhash: &Sha256dHash,
-        blockhash: Option<Sha256dHash>,
+        blockhash: Option<&Sha256dHash>,
     ) -> Result<Transaction> {
         let mut args = json!([txhash.be_hex_string(), /*verbose=*/ false]);
         if let Some(blockhash) = blockhash {
@@ -505,7 +509,7 @@ impl Daemon {
     pub fn gettransaction_raw(
         &self,
         txhash: &Sha256dHash,
-        blockhash: Option<Sha256dHash>,
+        blockhash: Option<&Sha256dHash>,
         verbose: bool,
     ) -> Result<Value> {
         let mut args = json!([txhash.be_hex_string(), verbose]);

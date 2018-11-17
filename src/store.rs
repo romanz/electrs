@@ -1,8 +1,12 @@
+use bincode;
 use rocksdb;
 
 use std::path::{Path, PathBuf};
 
+use config::Config;
 use util::Bytes;
+
+const DB_VERSION: u32 = 1;
 
 #[derive(Clone)]
 pub struct Row {
@@ -197,4 +201,19 @@ pub fn full_compaction(store: DBStore) -> DBStore {
 pub fn is_fully_compacted(store: &ReadStore) -> bool {
     let marker = store.get(&full_compaction_marker().key);
     marker.is_some()
+}
+
+pub fn verify_index_compatibility(store: &DBStore, config: &Config) {
+    let compatibility_bytes =
+        bincode::serialize(&(config.network_type, DB_VERSION, config.extended_db_enabled)).unwrap();
+
+    match store.get(b"C") {
+        None => store.write(vec![Row {
+            key: b"C".to_vec(),
+            value: compatibility_bytes,
+        }]),
+        Some(x) => if x != compatibility_bytes {
+            panic!("Incompatible database found. Changing --light mode requires a reindex.");
+        },
+    }
 }
