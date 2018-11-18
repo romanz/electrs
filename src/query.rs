@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use app::App;
 use index::{compute_script_hash, RawTxRow, TxInRow, TxOutRow, TxRow};
 use mempool::Tracker;
-use metrics::Metrics;
+use metrics::{HistogramOpts, HistogramVec, Metrics};
 use serde_json::Value;
 use store::{ReadStore, Row};
 use util::{
@@ -225,13 +225,25 @@ pub fn get_block_txids(store: &ReadStore, blockhash: &Sha256dHash) -> Option<Vec
 pub struct Query {
     app: Arc<App>,
     tracker: RwLock<Tracker>,
+
+    // monitoring
+    latency: HistogramVec,
 }
 
 impl Query {
     pub fn new(app: Arc<App>, metrics: &Metrics) -> Arc<Query> {
+        let latency_buckets = vec![
+            1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1., 2., 5., 10.,
+            20., 50., 100.,
+        ];
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new(metrics)),
+            latency: metrics.histogram_vec(
+                HistogramOpts::new("query_latency", "Query latency (in seconds)")
+                    .buckets(latency_buckets),
+                &["type"],
+            ),
         })
     }
 
@@ -241,6 +253,10 @@ impl Query {
         prefixes: Vec<HashPrefix>,
     ) -> Result<Vec<TxnHeight>> {
         let mut txns = vec![];
+        let _timer = self
+            .latency
+            .with_label_values(&["load_txns_by_prefix"])
+            .start_timer();
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, &txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
@@ -260,6 +276,10 @@ impl Query {
         store: &ReadStore,
         funding: &FundingOutput,
     ) -> Result<Option<SpendingInput>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["find_spending_input"])
+            .start_timer();
         let spending_txns: Vec<TxnHeight> = self.load_txns_by_prefix(
             store,
             txids_by_funding_output(store, &funding.txn_id, funding.output_index),
@@ -290,6 +310,10 @@ impl Query {
     }
 
     fn find_funding_outputs(&self, t: &TxnHeight, script_hash: &[u8]) -> Vec<FundingOutput> {
+        let _timer = self
+            .latency
+            .with_label_values(&["find_funding_outputs"])
+            .start_timer();
         let mut result = vec![];
         let txn_id = t.txn.txid();
         for (index, output) in t.txn.output.iter().enumerate() {
@@ -310,6 +334,10 @@ impl Query {
         &self,
         script_hash: &[u8],
     ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
+        let _timer = self
+            .latency
+            .with_label_values(&["confirmed_status"])
+            .start_timer();
         let mut funding = vec![];
         let mut spending = vec![];
         let read_store = self.app.read_store();
@@ -330,6 +358,10 @@ impl Query {
         script_hash: &[u8],
         confirmed_funding: &[FundingOutput],
     ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
+        let _timer = self
+            .latency
+            .with_label_values(&["mempool_status"])
+            .start_timer();
         let mut funding = vec![];
         let mut spending = vec![];
         let tracker = self.tracker.read().unwrap();
@@ -347,6 +379,7 @@ impl Query {
     }
 
     pub fn status(&self, script_hash: &[u8]) -> Result<Status> {
+        let _timer = self.latency.with_label_values(&["status"]).start_timer();
         let confirmed = self.confirmed_status(script_hash)?;
         //.chain_err(|| "failed to get confirmed status")?;
         let mempool = self.mempool_status(script_hash, &confirmed.0)?;
@@ -355,6 +388,10 @@ impl Query {
     }
 
     pub fn find_spending_by_outpoint(&self, outpoint: OutPoint) -> Result<Option<SpendingInput>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["find_spending_by_outpoint"])
+            .start_timer();
         let funding_output = FundingOutput::from(outpoint);
         let read_store = self.app.read_store();
         let tracker = self.tracker.read().unwrap();
@@ -375,6 +412,10 @@ impl Query {
         &self,
         tx: Transaction,
     ) -> Result<Vec<Option<SpendingInput>>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["find_spending_for_funding_tx"])
+            .start_timer();
         let txid = tx.txid();
         let mut spends = vec![];
         for (output_index, output) in tx.output.iter().enumerate() {
@@ -393,6 +434,10 @@ impl Query {
         tx_hash: &Sha256dHash,
         block_height: Option<u32>,
     ) -> Result<Option<Sha256dHash>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["lookup_confirmed_blockhash"])
+            .start_timer();
         let blockhash = if self.tracker.read().unwrap().get_txn(&tx_hash).is_some() {
             None // found in mempool (as unconfirmed transaction)
         } else {
@@ -417,12 +462,14 @@ impl Query {
 
     // Internal API for transaction retrieval (uses bitcoind)
     fn _load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
+        let _timer = self.latency.with_label_values(&["_load_txn"]).start_timer();
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
         self.app.daemon().gettransaction(tx_hash, blockhash)
     }
 
     // Get transaction from txstore or the in-memory mempool Tracker
     pub fn tx_get(&self, txid: &Sha256dHash) -> Option<Transaction> {
+        let _timer = self.latency.with_label_values(&["tx_get"]).start_timer();
         rawtxrow_by_txid(self.app.read_store(), txid)
             .map(|row| deserialize(&row.rawtx).expect("cannot parse tx from txstore"))
             .or_else(|| self.tracker.read().unwrap().get_txn(&txid))
@@ -430,6 +477,10 @@ impl Query {
 
     // Get raw transaction from txstore or the in-memory mempool Tracker
     pub fn tx_get_raw(&self, txid: &Sha256dHash) -> Option<Bytes> {
+        let _timer = self
+            .latency
+            .with_label_values(&["tx_get_raw"])
+            .start_timer();
         rawtxrow_by_txid(self.app.read_store(), txid)
             .map(|row| row.rawtx)
             .or_else(|| {
@@ -444,6 +495,10 @@ impl Query {
     // Public API for transaction retrieval (for Electrum RPC)
     // Fetched from bitcoind, includes tx confirmation information (number of confirmations and block hash)
     pub fn get_transaction(&self, tx_hash: &Sha256dHash, verbose: bool) -> Result<Value> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_transaction"])
+            .start_timer();
         let blockhash = self.lookup_confirmed_blockhash(tx_hash, /*block_height*/ None)?;
         self.app
             .daemon()
@@ -451,10 +506,15 @@ impl Query {
     }
 
     pub fn get_block(&self, blockhash: &Sha256dHash) -> Result<Block> {
+        let _timer = self.latency.with_label_values(&["get_block"]).start_timer();
         self.app.daemon().getblock(blockhash)
     }
 
     pub fn get_block_header_with_meta(&self, blockhash: &Sha256dHash) -> Result<BlockHeaderMeta> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_block_header_with_meta"])
+            .start_timer();
         let header_entry = self.get_header_by_hash(blockhash)?;
         let meta =
             get_block_meta(self.app.read_store(), blockhash).ok_or("cannot load block meta")?;
@@ -462,6 +522,10 @@ impl Query {
     }
 
     pub fn get_block_txids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_block_txids"])
+            .start_timer();
         Ok(get_block_txids(self.app.read_store(), blockhash).ok_or("cannot load block txids")?)
     }
 
@@ -492,6 +556,10 @@ impl Query {
     }
 
     pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_block_status"])
+            .start_timer();
         // get_header_by_hash looks up the height first, then fetches the header by that.
         // if the block is no longer the best block at this height, it'll return None.
         match self.app.index().get_header_by_hash(hash) {
@@ -513,6 +581,10 @@ impl Query {
     }
 
     pub fn get_tx_status(&self, tx_hash: &Sha256dHash) -> Result<TransactionStatus> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_tx_status"])
+            .start_timer();
         // try fetching the height/hash of the block seen to confirm the tx
         let (height, blockhash) = match txrow_by_txid(self.app.read_store(), &tx_hash) {
             None => return Ok(TransactionStatus::unconfirmed()),
@@ -539,6 +611,10 @@ impl Query {
         tx_hash: &Sha256dHash,
         block_hash: &Sha256dHash,
     ) -> Result<(Vec<Sha256dHash>, usize)> {
+        let _timer = self
+            .latency
+            .with_label_values(&["get_merkle_proof"])
+            .start_timer();
         let mut txids = self
             .get_block_txids(&block_hash)
             .chain_err(|| format!("missing txids for block #{}", block_hash))?;
