@@ -90,6 +90,7 @@ fn handle_request(
     prometheus::TextEncoder::new()
         .encode(&reg.gather(), &mut buffer)
         .unwrap();
+    trace!("metrics: {:?} -> {} bytes", request, buffer.len());
     let response = tiny_http::Response::from_data(buffer);
     request.respond(response)
 }
