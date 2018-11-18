@@ -51,7 +51,6 @@ pub mod mempool;
 pub mod metrics;
 pub mod query;
 pub mod rest;
-pub mod rpc;
 pub mod signal;
 pub mod store;
 pub mod util;
