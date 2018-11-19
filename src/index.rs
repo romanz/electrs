@@ -214,7 +214,7 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
 
 pub fn index_transaction(
     txn: &Transaction,
-    height: usize,
+    height: u32,
     blockhash: &Sha256dHash,
     rows: &mut Vec<Row>,
 ) {
@@ -230,11 +230,11 @@ pub fn index_transaction(
         rows.push(TxOutRow::new(&txid, &output).to_row());
     }
     // Persist transaction ID and confirmed height
-    rows.push(TxRow::new(&txid, height as u32, blockhash).to_row());
+    rows.push(TxRow::new(&txid, height, blockhash).to_row());
     rows.push(RawTxRow::new(&txid, serialize(txn)).to_row()); // @TODO avoid re-serialization
 }
 
-pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
+pub fn index_block(block: &Block, height: u32) -> Vec<Row> {
     let blockhash = block.bitcoin_hash();
     let mut rows = vec![];
     for txn in &block.txdata {
@@ -483,7 +483,7 @@ impl Index {
                     .expect(&format!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
-                let mut block_rows = index_block(block, height);
+                let mut block_rows = index_block(block, height as u32);
                 block_rows.push(last_indexed_block(&blockhash));
                 rows.extend(block_rows);
                 timer.observe_duration();
