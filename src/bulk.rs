@@ -92,7 +92,7 @@ impl Parser {
                     .expect("indexed_blockhashes")
                     .insert(blockhash.clone())
                 {
-                    rows.extend(index_block(&block, header.height()));
+                    rows.extend(index_block(&block, header.height() as u32));
                     self.block_count.with_label_values(&["indexed"]).inc();
                 } else {
                     self.block_count.with_label_values(&["duplicate"]).inc();
