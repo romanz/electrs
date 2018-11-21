@@ -5,6 +5,7 @@ use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
 use bitcoin::{Transaction, TxIn, TxOut};
 use config::Config;
+use mempool::MEMPOOL_HEIGHT;
 use errors;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future};
@@ -115,7 +116,7 @@ impl From<TxnHeight> for TransactionValue {
             blockhash,
         } = t;
         let mut value = TransactionValue::from(txn);
-        value.status = Some(if height != 0 {
+        value.status = Some(if height != MEMPOOL_HEIGHT {
             TransactionStatus {
                 confirmed: true,
                 block_height: Some(height as usize),
@@ -231,7 +232,7 @@ impl From<FundingOutput> for UtxoValue {
             txid: txn_id,
             vout: output_index as u32,
             value: value,
-            status: if height != 0 {
+            status: if height != MEMPOOL_HEIGHT {
                 TransactionStatus {
                     confirmed: true,
                     block_height: Some(height as usize),
@@ -252,13 +253,13 @@ struct SpendingValue {
     status: Option<TransactionStatus>,
 }
 impl From<SpendingInput> for SpendingValue {
-    fn from(out: SpendingInput) -> Self {
+    fn from(spend: SpendingInput) -> Self {
         let SpendingInput {
             txn,
             txn_id,
             input_index,
             ..
-        } = out;
+        } = spend;
         let TxnHeight {
             height, blockhash, ..
         } = txn.unwrap(); // we should never get a SpendingInput without a txn here
@@ -267,7 +268,7 @@ impl From<SpendingInput> for SpendingValue {
             spent: true,
             txid: Some(txn_id),
             vin: Some(input_index as u32),
-            status: Some(if height != 0 {
+            status: Some(if height != MEMPOOL_HEIGHT {
                 TransactionStatus {
                     confirmed: true,
                     block_height: Some(height as usize),
