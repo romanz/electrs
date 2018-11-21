@@ -1,0 +1,21 @@
+#!/bin/bash
+
+CARGO_FMT="cargo +stable fmt --all"
+
+$CARGO_FMT --version &>/dev/null
+if [ $? != 0 ]; then
+    printf "[pre_commit] \033[0;31merror\033[0m: \"$CARGO_FMT\" not available?\n"
+    exit 1
+fi
+
+$CARGO_FMT -- --check
+result=$?
+
+printf "[pre_commit] $CARGO_FMT → "
+if [ $result != 0 ]; then
+    printf "\033[0;31merror\033[0m \n"
+else
+    printf "\033[0;32mOK\033[0m \n"
+fi
+
+exit $result
