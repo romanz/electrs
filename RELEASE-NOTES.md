@@ -1,3 +1,9 @@
+# 0.4.2 (22 Nov 2018)
+
+* Update to rust-bitcoin 0.15.1
+* Use bounded LRU cache for transaction retrieval
+* Support 'server.ping' and partially 'blockchain.block.header' Electrum RPC
+
 # 0.4.1 (14 Oct 2018)
 
 * Don't run full compaction after initial import is over (when using JSONRPC)
