@@ -87,6 +87,28 @@ $ hitch --backend=[127.0.0.1]:50001 --frontend=[127.0.0.1]:50002 pem_file
 $ electrum --oneserver --server=127.0.0.1:50002:s
 ```
 
+You can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#) by placing the following block in `nginx.conf`.
+
+```nginx
+stream {
+        upstream electrs {
+                server 127.0.0.1:50001;
+        }
+
+        server {
+                listen 50002 ssl;
+                proxy_pass electrs;
+
+                ssl_certificate /path/to/fullchain.pem;
+                ssl_certificate_key /path/to/privkey.pem;
+                ssl_session_cache shared:SSL:1m;
+                ssl_session_timeout 4h;
+                ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+                ssl_prefer_server_ciphers on;
+        }
+}
+```
+
 ## Docker
 ```bash
 $ docker build -t electrs-app .
