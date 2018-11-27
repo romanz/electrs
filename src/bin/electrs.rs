@@ -4,7 +4,6 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 
-use electrs::rest;
 use error_chain::ChainedError;
 use std::process;
 use std::time::Duration;
@@ -17,7 +16,6 @@ use electrs::{
     errors::*,
     index::Index,
     metrics::Metrics,
-    query::Query,
     signal::Waiter,
     store::{full_compaction, is_fully_compacted, verify_index_compatibility, DBStore},
 };
@@ -57,22 +55,9 @@ fn run_server(config: Config) -> Result<()> {
     }.enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon)?;
-    let query = Query::new(app.clone(), config.extended_db_enabled, &metrics);
 
-    let mut server = None; // HTTP REST server
     loop {
         app.update(&signal)?;
-        query.update_mempool()?;
-
-        if server.is_none() {
-            let info = app.daemon().getblockchaininfo()?;
-            if info.initialblockdownload == false && info.verificationprogress > 0.9999 {
-                server = Some(rest::run_server(&config, query.clone()));
-            } else {
-                warn!("bitcoind not fully synced waiting");
-            }
-        }
-
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
             info!("stopping server: {}", err);
             break;
