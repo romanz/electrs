@@ -51,3 +51,5 @@ pub mod metrics;
 pub mod signal;
 pub mod store;
 pub mod util;
+
+pub mod new_index;
