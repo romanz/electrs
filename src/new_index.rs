@@ -56,15 +56,16 @@ impl Indexer {
         let tip = daemon.getbestblockhash()?;
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
         info!("adding transactions from {} blocks", new_headers.len());
-        for blocks in fetch_blocks(&daemon, &new_headers)? {
+        for blocks in bitcoind_fetcher(&daemon, &new_headers)? {
             self.add(&(blocks?));
         }
         info!("compacting txns DB");
         self.txns_db.compact_range(None, None);
         info!("indexing history from {} blocks", new_headers.len());
-        for blocks in fetch_blocks(&daemon, &new_headers)? {
+        for blocks in bitcoind_fetcher(&daemon, &new_headers)? {
             self.index(&(blocks?));
         }
+        self.index_db.compact_range(None, None);
 
         let mut headers = headers;
         headers.apply(new_headers);
@@ -133,7 +134,7 @@ impl Indexer {
 
 type BlocksFetcher = Receiver<Result<Vec<BlockEntry>>>;
 
-fn fetch_blocks(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
+fn bitcoind_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
     new_headers.last().map(|tip| {
         info!("{:?} ({} new headers)", tip, new_headers.len());
     });
@@ -142,16 +143,18 @@ fn fetch_blocks(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFe
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
     spawn_thread("bitcoind_fetcher", move || {
-        for entry in new_headers {
-            let msg = daemon.getblock(&entry.hash()).map(|b| {
-                vec![BlockEntry {
-                    block: b,
-                    entry: entry.clone(),
-                }]
+        for entries in new_headers.chunks(100) {
+            let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
+            let msg = daemon.getblocks(&blockhashes).map(|blocks| {
+                assert_eq!(blocks.len(), entries.len());
+                blocks
+                    .into_iter()
+                    .zip(entries.into_iter())
+                    // TODO: how can we prevent this clone()?
+                    .map(|(block, entry)| BlockEntry { block, entry: entry.clone() })
+                    .collect::<Vec<BlockEntry>>()
             });
-            sender
-                .send(msg)
-                .expect(&format!("failed to send fetched block {}", entry.hash()));
+            sender.send(msg).expect("failed to send fetched blocks");
         }
     });
     Ok(chan.into_receiver())
