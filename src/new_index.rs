@@ -16,17 +16,15 @@ struct DBRow {
 // use crypto::digest::Digest;
 // use crypto::sha2::Sha256;
 use std::collections::{BTreeSet, HashMap, HashSet};
-// use std::iter::FromIterator;
-// use std::sync::RwLock;
 use std::path::Path;
+use std::sync::mpsc::Receiver;
 
 // use daemon::Daemon;
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
 use daemon::Daemon;
 use errors::*;
-use util::Bytes;
-use util::{HeaderEntry, HeaderList};
+use util::{spawn_thread, Bytes, HeaderEntry, HeaderList, SyncChannel};
 
 // use config::Config;
 
@@ -57,10 +55,16 @@ impl Indexer {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
-
-        let blocks = fetch_blocks(&daemon, &new_headers)?;
-        self.add(&blocks);
-        self.index(&blocks);
+        info!("adding transactions from {} blocks", new_headers.len());
+        for blocks in fetch_blocks(&daemon, &new_headers)? {
+            self.add(&(blocks?));
+        }
+        info!("compacting txns DB");
+        self.txns_db.compact_range(None, None);
+        info!("indexing history from {} blocks", new_headers.len());
+        for blocks in fetch_blocks(&daemon, &new_headers)? {
+            self.index(&(blocks?));
+        }
 
         let mut headers = headers;
         headers.apply(new_headers);
@@ -86,7 +90,6 @@ impl Indexer {
     fn add(&mut self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
-        debug!("adding {} rows to txns DB", rows.len());
         db_write(&self.txns_db, rows);
 
         self.added_blockhashes
@@ -103,7 +106,6 @@ impl Indexer {
             }
         }
         let rows = index_blocks(blocks, &previous_txns_map);
-        debug!("adding {} rows to index DB", rows.len());
         db_write(&self.index_db, rows);
     }
 
@@ -129,19 +131,30 @@ impl Indexer {
     }
 }
 
-fn fetch_blocks(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<Vec<BlockEntry>> {
+type BlocksFetcher = Receiver<Result<Vec<BlockEntry>>>;
+
+fn fetch_blocks(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
     new_headers.last().map(|tip| {
         info!("{:?} ({} new headers)", tip, new_headers.len());
     });
-    let mut blocks = vec![];
-    for entry in new_headers {
-        let block = daemon.getblock(&entry.hash())?;
-        blocks.push(BlockEntry {
-            block,
-            entry: entry.clone(),
-        });
-    }
-    Ok(blocks)
+    let new_headers = new_headers.to_vec();
+    let daemon = daemon.reconnect()?;
+    let chan = SyncChannel::new(1);
+    let sender = chan.sender();
+    spawn_thread("bitcoind_fetcher", move || {
+        for entry in new_headers {
+            let msg = daemon.getblock(&entry.hash()).map(|b| {
+                vec![BlockEntry {
+                    block: b,
+                    entry: entry.clone(),
+                }]
+            });
+            sender
+                .send(msg)
+                .expect(&format!("failed to send fetched block {}", entry.hash()));
+        }
+    });
+    Ok(chan.into_receiver())
 }
 
 fn db_open(path: &Path) -> rocksdb::DB {
@@ -175,6 +188,7 @@ fn db_scan(db: &rocksdb::DB, prefix: &[u8]) -> Vec<DBRow> {
 }
 
 fn db_write(db: &rocksdb::DB, mut rows: Vec<DBRow>) {
+    trace!("writing {} rows to {:?}", rows.len(), db);
     rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
     let mut batch = rocksdb::WriteBatch::default();
     for row in rows {
