@@ -551,10 +551,11 @@ impl RPC {
                         info!("[{}] disconnected peer", addr);
                     }));
                 }
-                trace!("closing RPC connections");
+                trace!("closing {} RPC connections", senders.lock().unwrap().len());
                 for sender in senders.lock().unwrap().iter() {
                     let _ = sender.send(Message::Done);
                 }
+                trace!("waiting for {} RPC handling threads", children.len());
                 for child in children {
                     let _ = child.join();
                 }
