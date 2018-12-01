@@ -474,6 +474,21 @@ impl Daemon {
         Ok(block)
     }
 
+    pub fn getblocktxids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
+        self.request(
+            "getblock",
+            json!([blockhash.be_hex_string(), /*verbose=*/ 1]),
+        )?.get("tx")
+        .chain_err(|| "block missing txids")?
+        .as_array()
+        .chain_err(|| "invalid block txids")?
+        .iter()
+        .map(|txid| {
+            Sha256dHash::from_hex(txid.as_str().chain_err(|| "txid not string")?)
+                .chain_err(|| "invalid hex")
+        }).collect::<Result<Vec<Sha256dHash>>>()
+    }
+
     pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
         let params_list: Vec<Value> = blockhashes
             .iter()

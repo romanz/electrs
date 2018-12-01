@@ -1,4 +1,3 @@
-use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::util::hash::Sha256dHash;
@@ -378,8 +377,7 @@ impl Query {
             .index()
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;
-        let block: Block = self.app.daemon().getblock(&header_entry.hash())?;
-        let mut txids: Vec<Sha256dHash> = block.txdata.iter().map(|tx| tx.txid()).collect();
+        let mut txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
         let pos = txids
             .iter()
             .position(|txid| txid == tx_hash)
