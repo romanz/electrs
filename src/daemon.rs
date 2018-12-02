@@ -483,10 +483,8 @@ impl Daemon {
         .as_array()
         .chain_err(|| "invalid block txids")?
         .iter()
-        .map(|txid| {
-            Sha256dHash::from_hex(txid.as_str().chain_err(|| "txid not string")?)
-                .chain_err(|| "invalid hex")
-        }).collect::<Result<Vec<Sha256dHash>>>()
+        .map(|txid| parse_hash(txid))
+        .collect::<Result<Vec<Sha256dHash>>>()
     }
 
     pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
