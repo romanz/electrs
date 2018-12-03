@@ -83,6 +83,7 @@ impl Indexer {
                 TxHistoryInfo::Funding(txid, ..) => txid,
                 TxHistoryInfo::Spending(txid, ..) => txid,
             }).map(|txid| deserialize(&txid).expect("failed to deserialize Sha256dHash txid"))
+            // TODO: check tx confirmation status
             .collect();
         debug!("txids: {:?}", txids);
         self.lookup_txns(&txids)
@@ -122,6 +123,7 @@ impl Indexer {
                 }
                 if rows.len() > 1 {
                     warn!("same tx {} was confirmed in >1 block", txid);
+                    // TODO: pick the one that is still confirmed
                 }
                 let row = TxRow::from_row(&rows[0]);
                 let txn: Transaction =
@@ -209,7 +211,6 @@ type FullHash = [u8; 32]; // serialized SHA256 result
 struct TxRowKey {
     code: u8,
     txid: FullHash,
-    blockhash: FullHash,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -223,14 +224,10 @@ struct TxRow {
 }
 
 impl TxRow {
-    fn new(txn: &Transaction, blockhash: &Sha256dHash) -> TxRow {
+    fn new(txn: &Transaction) -> TxRow {
         let txid = txn.txid().into_bytes();
         TxRow {
-            key: TxRowKey {
-                code: b'T',
-                txid,
-                blockhash: blockhash.to_bytes(),
-            },
+            key: TxRowKey { code: b'T', txid },
             value: TxRowValue {
                 rawtx: serialize(txn),
             },
@@ -256,22 +253,83 @@ impl TxRow {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct TxConfKey {
+    code: u8,
+    txid: FullHash,
+    blockheight: u32,
+    blockhash: FullHash,
+}
+
+struct TxConfRow {
+    key: TxConfKey,
+}
+
+impl TxConfRow {
+    fn new(txn: &Transaction, blockheight: u32, blockhash: &Sha256dHash) -> TxConfRow {
+        let txid = txn.txid().into_bytes();
+        TxConfRow {
+            key: TxConfKey {
+                code: b'C',
+                txid,
+                blockheight,
+                blockhash: blockhash.into_bytes(),
+            },
+        }
+    }
+
+    fn filter(prefix: &[u8]) -> Bytes {
+        [b"C", prefix].concat()
+    }
+
+    fn to_row(&self) -> DBRow {
+        DBRow {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: vec![],
+        }
+    }
+
+    fn from_row(row: &DBRow) -> Self {
+        TxConfRow {
+            key: bincode::deserialize(&row.key).expect("failed to parse TxConfKey"),
+        }
+    }
+}
+
 fn add_blocks(blocks: &[BlockEntry]) -> Vec<DBRow> {
     // persist individual transactions:
-    //      T{txid}{blockhash} → {rawtx}
+    //      T{txid} → {rawtx}
+    //      C{txid}{blockhash}{height} →
     //      O{txid}{index} → {txout}
     // persist block headers' and txids' rows:
     //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
     let mut rows = vec![];
     for b in blocks {
+        let blockheight = b.entry.height() as u32;
         let blockhash = b.entry.hash();
         for tx in &b.block.txdata {
-            rows.push(TxRow::new(tx, &blockhash).to_row());
-            // TODO: add O, B, X rows as well.
+            add_transaction(tx, blockheight, blockhash, &mut rows);
         }
+        // TODO: add B, X rows as well.
     }
     rows
+}
+
+fn add_transaction(
+    tx: &Transaction,
+    blockheight: u32,
+    blockhash: &Sha256dHash,
+    rows: &mut Vec<DBRow>,
+) {
+    rows.push(TxRow::new(tx).to_row());
+    rows.push(TxConfRow::new(tx, blockheight, &blockhash).to_row());
+
+    // TODO: add O rows
+    // let txid = tx.txid().into_bytes();
+    // for (txo_index, txo) in tx.output.iter().enumerate() {
+    //     rows.push(TxOutRow::new(txid, txo_index, txo).to_row());
+    // }
 }
 
 fn get_previous_txids(blocks: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
