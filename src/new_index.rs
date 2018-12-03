@@ -501,7 +501,9 @@ impl TxEdgeRow {
 
     fn from_row(row: &DBRow) -> Self {
         TxEdgeRow {
-            key: bincode::deserialize(&row.key).expect("failed to deserialize TxHistoryKey"),
+            key: bincode::deserialize(&row.key).expect("failed to deserialize TxEdgeKey"),
         }
     }
 }
+
+// TODO: add Block metadata row (# of txs, size and weight)
