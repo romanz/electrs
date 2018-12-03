@@ -373,7 +373,7 @@ fn index_transaction(
     //      H{funding-scripthash}{funding-height}F{funding-txid:vout} → ""
     //      H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout} → ""
     // persist "edges" for fast is-this-TXO-spent check
-    //      S{funding-txid:vout}{spending-txid} → ""
+    //      S{funding-txid:vout}{spending-txid:vin} → ""
     let txid = tx.txid().into_bytes();
     for (txo_index, txo) in tx.output.iter().enumerate() {
         let history = TxHistoryRow::new(
@@ -401,9 +401,10 @@ fn index_transaction(
             confirmed_height,
             TxHistoryInfo::Spending(txid, txi_index as u16, prev_txid.into_bytes(), vout as u16),
         );
-        rows.push(history.to_row())
+        rows.push(history.to_row());
 
-        // TODO: add S row as well
+        let edge = TxEdgeRow::new(prev_txid.into_bytes(), vout as u16, txid, txi_index as u16);
+        rows.push(edge.to_row());
     }
 }
 
@@ -461,11 +462,46 @@ impl TxHistoryRow {
     }
 }
 
-// #[derive(Serialize, Deserialize)]
-// struct TxEdgeKey {
-//     code: u8,
-//     funding_txid: FullHash,
-//     funding_vout: u16,
-//     spending_txid: FullHash,
-//     spending_vin: u16,
-// }
+#[derive(Serialize, Deserialize)]
+struct TxEdgeKey {
+    code: u8,
+    funding_txid: FullHash,
+    funding_vout: u16,
+    spending_txid: FullHash,
+    spending_vin: u16,
+}
+
+struct TxEdgeRow {
+    key: TxEdgeKey,
+}
+
+impl TxEdgeRow {
+    fn new(
+        funding_txid: FullHash,
+        funding_vout: u16,
+        spending_txid: FullHash,
+        spending_vin: u16,
+    ) -> Self {
+        let key = TxEdgeKey {
+            code: b'S',
+            funding_txid,
+            funding_vout,
+            spending_txid,
+            spending_vin,
+        };
+        TxEdgeRow { key }
+    }
+
+    fn to_row(&self) -> DBRow {
+        DBRow {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: vec![],
+        }
+    }
+
+    fn from_row(row: &DBRow) -> Self {
+        TxEdgeRow {
+            key: bincode::deserialize(&row.key).expect("failed to deserialize TxHistoryKey"),
+        }
+    }
+}
