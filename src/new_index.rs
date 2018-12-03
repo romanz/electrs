@@ -80,8 +80,8 @@ impl Indexer {
             .into_iter()
             .map(|db_row| TxHistoryRow::from_row(&db_row))
             .map(|history_row| match history_row.key.txinfo {
-                TxHistoryInfo::Funding(txid) => txid,
-                TxHistoryInfo::Spending(txid) => txid,
+                TxHistoryInfo::Funding(txid, ..) => txid,
+                TxHistoryInfo::Spending(txid, ..) => txid,
             }).map(|txid| deserialize(&txid).expect("failed to deserialize Sha256dHash txid"))
             .collect();
         debug!("txids: {:?}", txids);
@@ -312,20 +312,20 @@ fn index_transaction(
     rows: &mut Vec<DBRow>,
 ) {
     // persist history index:
-    //      H{funding-scripthash}{funding-height}F{funding-txid} → ""
-    //      H{funding-scripthash}{spending-height}S{spending-txid}{funding-txid} → ""
+    //      H{funding-scripthash}{funding-height}F{funding-txid:vout} → ""
+    //      H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout} → ""
     // persist "edges" for fast is-this-TXO-spent check
     //      S{funding-txid:vout}{spending-txid} → ""
     let txid = tx.txid().into_bytes();
-    for txo in &tx.output {
+    for (txo_index, txo) in tx.output.iter().enumerate() {
         let history = TxHistoryRow::new(
             &txo.script_pubkey,
             confirmed_height,
-            TxHistoryInfo::Funding(txid),
+            TxHistoryInfo::Funding(txid, txo_index as u16),
         );
         rows.push(history.to_row())
     }
-    for txi in &tx.input {
+    for (txi_index, txi) in tx.input.iter().enumerate() {
         if txi.previous_output.is_null() {
             continue;
         }
@@ -341,7 +341,7 @@ fn index_transaction(
         let history = TxHistoryRow::new(
             &out.script_pubkey,
             confirmed_height,
-            TxHistoryInfo::Spending(txid),
+            TxHistoryInfo::Spending(txid, txi_index as u16, prev_txid.into_bytes(), vout as u16),
         );
         rows.push(history.to_row())
 
@@ -359,8 +359,8 @@ fn compute_script_hash(script: &[u8]) -> FullHash {
 
 #[derive(Serialize, Deserialize)]
 enum TxHistoryInfo {
-    Funding(FullHash),  // funding txid
-    Spending(FullHash), // spending txid
+    Funding(FullHash, u16),                 // funding txid/vout
+    Spending(FullHash, u16, FullHash, u16), // spending txid/vin and previous funding txid/vout
 }
 
 #[derive(Serialize, Deserialize)]
