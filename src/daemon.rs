@@ -483,7 +483,7 @@ impl Daemon {
         .as_array()
         .chain_err(|| "invalid block txids")?
         .iter()
-        .map(|txid| parse_hash(txid))
+        .map(parse_hash)
         .collect::<Result<Vec<Sha256dHash>>>()
     }
 
