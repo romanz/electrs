@@ -2,8 +2,8 @@ use bincode;
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::script::Script;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
+use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use rocksdb;
@@ -16,7 +16,9 @@ struct DBRow {
 // use crypto::digest::Digest;
 // use crypto::sha2::Sha256;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::path::Path;
+use std::fs;
+use std::io::{Cursor, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
 // use daemon::Daemon;
@@ -46,7 +48,7 @@ impl Indexer {
     pub fn open(path: &Path) -> Self {
         Indexer {
             txns_db: db_open(&path.join("txns")),
-            index_db: db_open(&path.join("address")),
+            index_db: db_open(&path.join("history")),
             added_blockhashes: HashSet::new(),
         }
     }
@@ -56,15 +58,16 @@ impl Indexer {
         let tip = daemon.getbestblockhash()?;
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
         info!("adding transactions from {} blocks", new_headers.len());
-        for blocks in bitcoind_fetcher(&daemon, &new_headers)? {
-            self.add(&(blocks?));
+        for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
+            self.add(&blocks);
         }
         info!("compacting txns DB");
         self.txns_db.compact_range(None, None);
         info!("indexing history from {} blocks", new_headers.len());
-        for blocks in bitcoind_fetcher(&daemon, &new_headers)? {
-            self.index(&(blocks?));
+        for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
+            self.index(&blocks);
         }
+        info!("compacting history DB");
         self.index_db.compact_range(None, None);
 
         let mut headers = headers;
@@ -134,7 +137,7 @@ impl Indexer {
     }
 }
 
-type BlocksFetcher = Receiver<Result<Vec<BlockEntry>>>;
+type BlocksFetcher = Receiver<Vec<BlockEntry>>;
 
 fn bitcoind_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
     new_headers.last().map(|tip| {
@@ -144,22 +147,124 @@ fn bitcoind_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<Bloc
     let daemon = daemon.reconnect()?;
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
-    spawn_thread("bitcoind_fetcher", move || {
+    spawn_thread("bitcoind_fetcher", move || -> () {
         for entries in new_headers.chunks(100) {
             let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
-            let msg = daemon.getblocks(&blockhashes).map(|blocks| {
-                assert_eq!(blocks.len(), entries.len());
-                blocks
-                    .into_iter()
-                    .zip(entries.into_iter())
-                    // TODO: how can we prevent this clone()?
-                    .map(|(block, entry)| BlockEntry { block, entry: entry.clone() })
-                    .collect::<Vec<BlockEntry>>()
-            });
-            sender.send(msg).expect("failed to send fetched blocks");
+            let blocks = daemon
+                .getblocks(&blockhashes)
+                .expect("failed to get blocks from bitcoind");
+            // TODO: mark the fetcher is over successfully to the receiving side
+            assert_eq!(blocks.len(), entries.len());
+            let block_entries: Vec<BlockEntry> = blocks
+                .into_iter()
+                .zip(entries)
+                .map(|(block, entry)| BlockEntry {
+                    block,
+                    entry: entry.clone(), // TODO: remove this clone()
+                }).collect();
+            assert_eq!(block_entries.len(), entries.len());
+            sender
+                .send(block_entries)
+                .expect("failed to send fetched blocks");
         }
     });
     Ok(chan.into_receiver())
+}
+
+fn blkfiles_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
+    let magic = daemon.magic();
+    let blk_files = daemon.list_blk_files()?;
+
+    let chan = SyncChannel::new(1);
+    let sender = chan.sender();
+
+    let mut entry_map: HashMap<Sha256dHash, HeaderEntry> =
+        new_headers.iter().map(|h| (*h.hash(), h.clone())).collect();
+
+    let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
+    spawn_thread("bitcoind_fetcher", move || -> () {
+        for blocks in parser {
+            let block_entries: Vec<BlockEntry> = blocks
+                .into_iter()
+                .filter_map(|block| {
+                    entry_map
+                        .remove(&block.bitcoin_hash())
+                        .map(|entry| BlockEntry { block, entry })
+                }).collect();
+            trace!("fetched {} blocks", block_entries.len());
+            sender
+                .send(block_entries)
+                .expect("failed to send blocks entries from blk*.dat files");
+        }
+        assert_eq!(
+            entry_map.len(),
+            0,
+            "failed to index all blocks from blk*.dat files"
+        );
+    });
+    Ok(chan.into_receiver())
+}
+
+fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Receiver<Vec<u8>> {
+    let chan = SyncChannel::new(1);
+    let sender = chan.sender();
+
+    spawn_thread("blkfiles_reader", move || -> () {
+        for path in blk_files {
+            trace!("reading {:?}", path);
+            let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
+            sender
+                .send(blob)
+                .expect(&format!("failed to send {:?} contents", path));
+        }
+    });
+    chan.into_receiver()
+}
+
+fn blkfiles_parser(blobs: Receiver<Vec<u8>>, magic: u32) -> Receiver<Vec<Block>> {
+    let chan = SyncChannel::new(1);
+    let sender = chan.sender();
+
+    spawn_thread("blkfiles_parser", move || -> () {
+        for blob in blobs {
+            trace!("parsing {} bytes", blob.len());
+            let blocks = parse_blocks(blob, magic).expect("failed to parse blk*.dat file");
+            sender
+                .send(blocks)
+                .expect("failed to send blocks from blk*.dat file");
+        }
+    });
+    chan.into_receiver()
+}
+
+fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
+    let mut cursor = Cursor::new(&blob);
+    let mut blocks = vec![];
+    let max_pos = blob.len() as u64;
+    while cursor.position() < max_pos {
+        match u32::consensus_decode(&mut cursor) {
+            Ok(value) => {
+                if magic != value {
+                    cursor
+                        .seek(SeekFrom::Current(-3))
+                        .expect("failed to seek back");
+                    continue;
+                }
+            }
+            Err(_) => break, // EOF
+        };
+        let block_size = u32::consensus_decode(&mut cursor).chain_err(|| "no block size")?;
+        let start = cursor.position() as usize;
+        cursor
+            .seek(SeekFrom::Current(block_size as i64))
+            .chain_err(|| format!("seek {} failed", block_size))?;
+        let end = cursor.position() as usize;
+
+        let block: Block = deserialize(&blob[start..end])
+            .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
+        blocks.push(block);
+    }
+    Ok(blocks)
 }
 
 fn db_open(path: &Path) -> rocksdb::DB {

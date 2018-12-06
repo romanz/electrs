@@ -6,7 +6,6 @@ extern crate log;
 extern crate electrs;
 
 use error_chain::ChainedError;
-use std::path::Path;
 use std::process;
 use std::str::FromStr;
 
@@ -30,7 +29,7 @@ fn run_server(config: Config) -> Result<()> {
         signal.clone(),
         &metrics,
     )?;
-    let mut indexer = new_index::Indexer::open(Path::new("newindex-db"));
+    let mut indexer = new_index::Indexer::open(&config.db_path.join("newindex"));
     let headers = HeaderList::empty();
     let headers = indexer.update(&daemon, headers)?;
     info!("indexed {} blocks", headers.len());
