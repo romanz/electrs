@@ -119,9 +119,8 @@ impl Indexer {
 
     // TODO: can we pass txids as a "generic iterable"?
     fn lookup_txns(&self, txids: &BTreeSet<Sha256dHash>) -> HashMap<Sha256dHash, Transaction> {
-        // TODO: in parallel
         txids
-            .iter()
+            .par_iter()
             .map(|txid| {
                 let rows = db_scan(&self.txstore_db, &TxRow::filter(&txid[..]));
                 if rows.len() < 1 {
