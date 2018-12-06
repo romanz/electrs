@@ -12,7 +12,12 @@ use std::str::FromStr;
 use bitcoin::util::address::Address;
 
 use electrs::{
-    config::Config, daemon::Daemon, errors::*, metrics::Metrics, new_index, signal::Waiter,
+    config::Config,
+    daemon::Daemon,
+    errors::*,
+    metrics::Metrics,
+    new_index::{FetchFrom, Indexer},
+    signal::Waiter,
     util::HeaderList,
 };
 
@@ -29,10 +34,10 @@ fn run_server(config: Config) -> Result<()> {
         signal.clone(),
         &metrics,
     )?;
-    let mut indexer = new_index::Indexer::open(&config.db_path.join("newindex"));
+    let mut indexer = Indexer::open(&config.db_path.join("newindex"));
     let fetch = match config.jsonrpc_import {
-        true => new_index::FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
-        false => new_index::FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
+        true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
+        false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     let headers = HeaderList::empty();
     let headers = indexer.update(&daemon, headers, fetch)?;
