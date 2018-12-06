@@ -33,8 +33,8 @@ use util::{spawn_thread, Bytes, HeaderEntry, HeaderList, SyncChannel};
 
 pub struct Indexer {
     // TODO: should be column families
-    txns_db: rocksdb::DB,
-    index_db: rocksdb::DB,
+    txstore_db: rocksdb::DB,
+    history_db: rocksdb::DB,
 
     added_blockhashes: HashSet<Sha256dHash>,
 }
@@ -48,8 +48,8 @@ struct BlockEntry {
 impl Indexer {
     pub fn open(path: &Path) -> Self {
         Indexer {
-            txns_db: db_open(&path.join("txns")),
-            index_db: db_open(&path.join("history")),
+            txstore_db: db_open(&path.join("txstore")),
+            history_db: db_open(&path.join("history")),
             added_blockhashes: HashSet::new(),
         }
     }
@@ -64,14 +64,14 @@ impl Indexer {
             self.add(&blocks);
         }
         info!("compacting txns DB");
-        self.txns_db.compact_range(None, None);
+        self.txstore_db.compact_range(None, None);
 
         info!("indexing history from {} blocks", new_headers.len());
         for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
             self.index(&blocks);
         }
         info!("compacting history DB");
-        self.index_db.compact_range(None, None);
+        self.history_db.compact_range(None, None);
 
         let mut headers = headers;
         headers.apply(new_headers);
@@ -81,7 +81,7 @@ impl Indexer {
 
     pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, Transaction> {
         let scripthash = compute_script_hash(script.as_bytes());
-        let rows = db_scan(&self.index_db, &TxHistoryRow::filter(&scripthash[..]));
+        let rows = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]));
         let txids = rows
             .into_iter()
             .map(|db_row| TxHistoryRow::from_row(&db_row))
@@ -98,7 +98,7 @@ impl Indexer {
     fn add(&mut self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
-        db_write(&self.txns_db, rows);
+        db_write(&self.txstore_db, rows);
 
         self.added_blockhashes
             .extend(blocks.into_iter().map(|b| b.entry.hash()));
@@ -108,13 +108,13 @@ impl Indexer {
         let previous_txns_map = self.lookup_txns(&get_previous_txids(blocks));
         for b in blocks {
             let blockhash = b.entry.hash();
-            // TODO: replace by lookup into txns_db?
+            // TODO: replace by lookup into txstore_db?
             if !self.added_blockhashes.contains(&blockhash) {
                 panic!("cannot index block {} (missing from store)", blockhash);
             }
         }
         let rows = index_blocks(blocks, &previous_txns_map);
-        db_write(&self.index_db, rows);
+        db_write(&self.history_db, rows);
     }
 
     // TODO: can we pass txids as a "generic iterable"?
@@ -123,7 +123,7 @@ impl Indexer {
         txids
             .iter()
             .map(|txid| {
-                let rows = db_scan(&self.txns_db, &TxRow::filter(&txid[..]));
+                let rows = db_scan(&self.txstore_db, &TxRow::filter(&txid[..]));
                 if rows.len() < 1 {
                     panic!("missing txid {} in txns DB", txid);
                 }
