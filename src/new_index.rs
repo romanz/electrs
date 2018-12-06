@@ -189,20 +189,26 @@ fn blkfiles_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<Bloc
             let block_entries: Vec<BlockEntry> = blocks
                 .into_iter()
                 .filter_map(|block| {
+                    let blockhash = block.bitcoin_hash();
                     entry_map
-                        .remove(&block.bitcoin_hash())
+                        .remove(&blockhash)
                         .map(|entry| BlockEntry { block, entry })
+                        .or_else(|| {
+                            debug!("unknown block {}", blockhash);
+                            None
+                        })
                 }).collect();
             trace!("fetched {} blocks", block_entries.len());
             sender
                 .send(block_entries)
                 .expect("failed to send blocks entries from blk*.dat files");
         }
-        assert_eq!(
-            entry_map.len(),
-            0,
-            "failed to index all blocks from blk*.dat files"
-        );
+        if !entry_map.is_empty() {
+            panic!(
+                "failed to index {} blocks from blk*.dat files",
+                entry_map.len()
+            )
+        }
     });
     Ok(chan.into_receiver())
 }
