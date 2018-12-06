@@ -21,6 +21,7 @@ use std::fs;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
+use std::thread;
 
 // use daemon::Daemon;
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
@@ -60,16 +61,14 @@ impl Indexer {
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
 
         info!("adding transactions from {} blocks", new_headers.len());
-        for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
-            self.add(&blocks);
-        }
+        blkfiles_fetcher(&daemon, &new_headers)?.map(|blocks| self.add(&blocks));
+
         info!("compacting txns DB");
         self.txstore_db.compact_range(None, None);
 
         info!("indexing history from {} blocks", new_headers.len());
-        for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
-            self.index(&blocks);
-        }
+        blkfiles_fetcher(&daemon, &new_headers)?.map(|blocks| self.index(&blocks));
+
         info!("compacting history DB");
         self.history_db.compact_range(None, None);
 
@@ -139,9 +138,31 @@ impl Indexer {
     }
 }
 
-type BlocksFetcher = Receiver<Vec<BlockEntry>>;
+struct Fetcher<T> {
+    receiver: Receiver<T>,
+    thread: thread::JoinHandle<()>,
+}
 
-fn bitcoind_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
+impl<T> Fetcher<T> {
+    fn from(receiver: Receiver<T>, thread: thread::JoinHandle<()>) -> Self {
+        Fetcher { receiver, thread }
+    }
+
+    fn map<F>(self, mut func: F)
+    where
+        F: FnMut(T) -> (),
+    {
+        for item in self.receiver {
+            func(item);
+        }
+        self.thread.join().expect("fetcher thread panicked")
+    }
+}
+
+fn bitcoind_fetcher(
+    daemon: &Daemon,
+    new_headers: &[HeaderEntry],
+) -> Result<Fetcher<Vec<BlockEntry>>> {
     new_headers.last().map(|tip| {
         info!("{:?} ({} new headers)", tip, new_headers.len());
     });
@@ -149,31 +170,35 @@ fn bitcoind_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<Bloc
     let daemon = daemon.reconnect()?;
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
-    spawn_thread("bitcoind_fetcher", move || -> () {
-        for entries in new_headers.chunks(100) {
-            let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
-            let blocks = daemon
-                .getblocks(&blockhashes)
-                .expect("failed to get blocks from bitcoind");
-            // TODO: mark the fetcher is over successfully to the receiving side
-            assert_eq!(blocks.len(), entries.len());
-            let block_entries: Vec<BlockEntry> = blocks
-                .into_iter()
-                .zip(entries)
-                .map(|(block, entry)| BlockEntry {
-                    block,
-                    entry: entry.clone(), // TODO: remove this clone()
-                }).collect();
-            assert_eq!(block_entries.len(), entries.len());
-            sender
-                .send(block_entries)
-                .expect("failed to send fetched blocks");
-        }
-    });
-    Ok(chan.into_receiver())
+    Ok(Fetcher::from(
+        chan.into_receiver(),
+        spawn_thread("bitcoind_fetcher", move || -> () {
+            for entries in new_headers.chunks(100) {
+                let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
+                let blocks = daemon
+                    .getblocks(&blockhashes)
+                    .expect("failed to get blocks from bitcoind");
+                assert_eq!(blocks.len(), entries.len());
+                let block_entries: Vec<BlockEntry> = blocks
+                    .into_iter()
+                    .zip(entries)
+                    .map(|(block, entry)| BlockEntry {
+                        block,
+                        entry: entry.clone(), // TODO: remove this clone()
+                    }).collect();
+                assert_eq!(block_entries.len(), entries.len());
+                sender
+                    .send(block_entries)
+                    .expect("failed to send fetched blocks");
+            }
+        }),
+    ))
 }
 
-fn blkfiles_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<BlocksFetcher> {
+fn blkfiles_fetcher(
+    daemon: &Daemon,
+    new_headers: &[HeaderEntry],
+) -> Result<Fetcher<Vec<BlockEntry>>> {
     let magic = daemon.magic();
     let blk_files = daemon.list_blk_files()?;
 
@@ -184,65 +209,71 @@ fn blkfiles_fetcher(daemon: &Daemon, new_headers: &[HeaderEntry]) -> Result<Bloc
         new_headers.iter().map(|h| (*h.hash(), h.clone())).collect();
 
     let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
-    spawn_thread("bitcoind_fetcher", move || -> () {
-        for blocks in parser {
-            let block_entries: Vec<BlockEntry> = blocks
-                .into_iter()
-                .filter_map(|block| {
-                    let blockhash = block.bitcoin_hash();
-                    entry_map
-                        .remove(&blockhash)
-                        .map(|entry| BlockEntry { block, entry })
-                        .or_else(|| {
-                            debug!("unknown block {}", blockhash);
-                            None
-                        })
-                }).collect();
-            trace!("fetched {} blocks", block_entries.len());
-            sender
-                .send(block_entries)
-                .expect("failed to send blocks entries from blk*.dat files");
-        }
-        if !entry_map.is_empty() {
-            panic!(
-                "failed to index {} blocks from blk*.dat files",
-                entry_map.len()
-            )
-        }
-    });
-    Ok(chan.into_receiver())
+    Ok(Fetcher::from(
+        chan.into_receiver(),
+        spawn_thread("bitcoind_fetcher", move || -> () {
+            parser.map(|blocks| {
+                let block_entries: Vec<BlockEntry> = blocks
+                    .into_iter()
+                    .filter_map(|block| {
+                        let blockhash = block.bitcoin_hash();
+                        entry_map
+                            .remove(&blockhash)
+                            .map(|entry| BlockEntry { block, entry })
+                            .or_else(|| {
+                                debug!("unknown block {}", blockhash);
+                                None
+                            })
+                    }).collect();
+                trace!("fetched {} blocks", block_entries.len());
+                sender
+                    .send(block_entries)
+                    .expect("failed to send blocks entries from blk*.dat files");
+            });
+            if !entry_map.is_empty() {
+                panic!(
+                    "failed to index {} blocks from blk*.dat files",
+                    entry_map.len()
+                )
+            }
+        }),
+    ))
 }
 
-fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Receiver<Vec<u8>> {
+fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Fetcher<Vec<u8>> {
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
 
-    spawn_thread("blkfiles_reader", move || -> () {
-        for path in blk_files {
-            trace!("reading {:?}", path);
-            let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
-            sender
-                .send(blob)
-                .expect(&format!("failed to send {:?} contents", path));
-        }
-    });
-    chan.into_receiver()
+    Fetcher::from(
+        chan.into_receiver(),
+        spawn_thread("blkfiles_reader", move || -> () {
+            for path in blk_files {
+                trace!("reading {:?}", path);
+                let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
+                sender
+                    .send(blob)
+                    .expect(&format!("failed to send {:?} contents", path));
+            }
+        }),
+    )
 }
 
-fn blkfiles_parser(blobs: Receiver<Vec<u8>>, magic: u32) -> Receiver<Vec<Block>> {
+fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<Block>> {
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
 
-    spawn_thread("blkfiles_parser", move || -> () {
-        for blob in blobs {
-            trace!("parsing {} bytes", blob.len());
-            let blocks = parse_blocks(blob, magic).expect("failed to parse blk*.dat file");
-            sender
-                .send(blocks)
-                .expect("failed to send blocks from blk*.dat file");
-        }
-    });
-    chan.into_receiver()
+    Fetcher::from(
+        chan.into_receiver(),
+        spawn_thread("blkfiles_parser", move || -> () {
+            blobs.map(|blob| {
+                trace!("parsing {} bytes", blob.len());
+                let blocks = parse_blocks(blob, magic).expect("failed to parse blk*.dat file");
+                sender
+                    .send(blocks)
+                    .expect("failed to send blocks from blk*.dat file");
+            });
+        }),
+    )
 }
 
 fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
