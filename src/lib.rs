@@ -16,6 +16,7 @@ extern crate lru_cache;
 extern crate num_cpus;
 extern crate page_size;
 extern crate prometheus;
+extern crate rayon;
 extern crate rocksdb;
 extern crate secp256k1;
 extern crate serde;

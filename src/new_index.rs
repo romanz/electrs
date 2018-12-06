@@ -6,6 +6,7 @@ use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use rayon::prelude::*;
 use rocksdb;
 
 struct DBRow {
@@ -57,12 +58,14 @@ impl Indexer {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
+
         info!("adding transactions from {} blocks", new_headers.len());
         for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
             self.add(&blocks);
         }
         info!("compacting txns DB");
         self.txns_db.compact_range(None, None);
+
         info!("indexing history from {} blocks", new_headers.len());
         for blocks in blkfiles_fetcher(&daemon, &new_headers)? {
             self.index(&blocks);
@@ -401,7 +404,7 @@ impl TxConfRow {
     }
 }
 
-fn add_blocks(blocks: &[BlockEntry]) -> Vec<DBRow> {
+fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
@@ -409,16 +412,19 @@ fn add_blocks(blocks: &[BlockEntry]) -> Vec<DBRow> {
     // persist block headers' and txids' rows:
     //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
-    let mut rows = vec![];
-    for b in blocks {
-        let blockheight = b.entry.height() as u32;
-        let blockhash = b.entry.hash();
-        for tx in &b.block.txdata {
-            add_transaction(tx, blockheight, blockhash, &mut rows);
-        }
-        // TODO: add B, X rows as well.
-    }
-    rows
+    block_entries
+        .par_iter()
+        .map(|b| {
+            let mut rows = vec![];
+            let blockheight = b.entry.height() as u32;
+            let blockhash = b.entry.hash();
+            for tx in &b.block.txdata {
+                add_transaction(tx, blockheight, blockhash, &mut rows);
+            }
+            // TODO: add B, X rows as well.
+            rows
+        }).flatten()
+        .collect()
 }
 
 fn add_transaction(
@@ -437,8 +443,8 @@ fn add_transaction(
     // }
 }
 
-fn get_previous_txids(blocks: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
-    blocks
+fn get_previous_txids(block_entries: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
+    block_entries
         .iter()
         .flat_map(|b| {
             b.block.txdata.iter().flat_map(|tx| {
@@ -454,17 +460,20 @@ fn get_previous_txids(blocks: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
 }
 
 fn index_blocks(
-    blocks: &[BlockEntry],
+    block_entries: &[BlockEntry],
     previous_txns_map: &HashMap<Sha256dHash, Transaction>,
 ) -> Vec<DBRow> {
-    let mut rows = vec![];
-    for b in blocks {
-        for tx in &b.block.txdata {
-            let height = b.entry.height() as u32;
-            index_transaction(tx, height, previous_txns_map, &mut rows);
-        }
-    }
-    rows
+    block_entries
+        .par_iter()
+        .map(|b| {
+            let mut rows = vec![];
+            for tx in &b.block.txdata {
+                let height = b.entry.height() as u32;
+                index_transaction(tx, height, previous_txns_map, &mut rows);
+            }
+            rows
+        }).flatten()
+        .collect()
 }
 
 // TODO: return an iterator?
