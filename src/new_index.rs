@@ -45,6 +45,11 @@ struct BlockEntry {
     entry: HeaderEntry,
 }
 
+pub enum FetchFrom {
+    BITCOIND,
+    BLKFILES,
+}
+
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
     pub fn open(path: &Path) -> Self {
@@ -55,19 +60,29 @@ impl Indexer {
         }
     }
 
-    pub fn update(&mut self, daemon: &Daemon, headers: HeaderList) -> Result<HeaderList> {
+    pub fn update(
+        &mut self,
+        daemon: &Daemon,
+        headers: HeaderList,
+        fetch: FetchFrom,
+    ) -> Result<HeaderList> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
 
+        let fetcher = match fetch {
+            FetchFrom::BITCOIND => bitcoind_fetcher,
+            FetchFrom::BLKFILES => blkfiles_fetcher,
+        };
+
         info!("adding transactions from {} blocks", new_headers.len());
-        blkfiles_fetcher(&daemon, &new_headers)?.map(|blocks| self.add(&blocks));
+        fetcher(&daemon, &new_headers)?.map(|blocks| self.add(&blocks));
 
         info!("compacting txns DB");
         self.txstore_db.compact_range(None, None);
 
         info!("indexing history from {} blocks", new_headers.len());
-        blkfiles_fetcher(&daemon, &new_headers)?.map(|blocks| self.index(&blocks));
+        fetcher(&daemon, &new_headers)?.map(|blocks| self.index(&blocks));
 
         info!("compacting history DB");
         self.history_db.compact_range(None, None);

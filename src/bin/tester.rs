@@ -30,8 +30,12 @@ fn run_server(config: Config) -> Result<()> {
         &metrics,
     )?;
     let mut indexer = new_index::Indexer::open(&config.db_path.join("newindex"));
+    let fetch = match config.jsonrpc_import {
+        true => new_index::FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
+        false => new_index::FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
+    };
     let headers = HeaderList::empty();
-    let headers = indexer.update(&daemon, headers)?;
+    let headers = indexer.update(&daemon, headers, fetch)?;
     info!("indexed {} blocks", headers.len());
     let addr = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6").unwrap();
     for txid in indexer.history(&addr.script_pubkey()).keys() {
