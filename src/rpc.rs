@@ -44,7 +44,8 @@ fn unspent_from_status(status: &Status) -> Value {
                 "tx_pos": out.output_index,
                 "tx_hash": out.txn_id.be_hex_string(),
                 "value": out.value,
-            })).collect()
+            }))
+            .collect()
     ))
 }
 
@@ -492,14 +493,16 @@ impl RPC {
             for msg in notification.receiver().iter() {
                 let mut senders = senders.lock().unwrap();
                 match msg {
-                    Notification::Periodic => for sender in senders.split_off(0) {
-                        if let Err(TrySendError::Disconnected(_)) =
-                            sender.try_send(Message::PeriodicUpdate)
-                        {
-                            continue;
+                    Notification::Periodic => {
+                        for sender in senders.split_off(0) {
+                            if let Err(TrySendError::Disconnected(_)) =
+                                sender.try_send(Message::PeriodicUpdate)
+                            {
+                                continue;
+                            }
+                            senders.push(sender);
                         }
-                        senders.push(sender);
-                    },
+                    }
                     Notification::Exit => acceptor.send(None).unwrap(),
                 }
             }

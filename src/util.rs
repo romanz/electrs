@@ -113,7 +113,8 @@ impl HeaderList {
                 height: height,
                 hash: hashed_header.blockhash,
                 header: hashed_header.header,
-            }).collect()
+            })
+            .collect()
     }
 
     pub fn apply(&mut self, new_headers: Vec<HeaderEntry>) {

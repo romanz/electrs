@@ -241,6 +241,7 @@ pub fn index_blk_files(
         });
         store.write(vec![parser.last_indexed_row()]);
         store
-    }).join()
+    })
+    .join()
     .expect("writer panicked"))
 }

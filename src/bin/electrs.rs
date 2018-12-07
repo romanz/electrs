@@ -51,7 +51,8 @@ fn run_server(config: &Config) -> Result<()> {
             index.reload(&store); // make sure the block header index is up-to-date
             store
         }
-    }.enable_compaction(); // enable auto compactions before starting incremental index updates.
+    }
+    .enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size);
