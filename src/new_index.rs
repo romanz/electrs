@@ -532,12 +532,14 @@ fn index_transaction(
     //      S{funding-txid:vout}{spending-txid:vin} → ""
     let txid = tx.txid().into_bytes();
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        let history = TxHistoryRow::new(
-            &txo.script_pubkey,
-            confirmed_height,
-            TxHistoryInfo::Funding(txid, txo_index as u16),
-        );
-        rows.push(history.to_row())
+        if !txo.script_pubkey.is_provably_unspendable() {
+            let history = TxHistoryRow::new(
+                &txo.script_pubkey,
+                confirmed_height,
+                TxHistoryInfo::Funding(txid, txo_index as u16),
+            );
+            rows.push(history.to_row())
+        }
     }
     for (txi_index, txi) in tx.input.iter().enumerate() {
         if txi.previous_output.is_null() {
