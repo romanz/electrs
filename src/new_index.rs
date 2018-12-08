@@ -94,12 +94,12 @@ impl Indexer {
     }
 
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        db_get(&self.txstore_db, &BlockRow::key(b'B', hash.to_bytes()))
+        db_get(&self.txstore_db, &BlockRow::header_key(hash.to_bytes()))
             .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
-        db_get(&self.txstore_db, &BlockRow::key(b'X', hash.to_bytes()))
+        db_get(&self.txstore_db, &BlockRow::txids_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
@@ -525,14 +525,26 @@ struct BlockRow {
 }
 
 impl BlockRow {
-    fn new(code: u8, hash: FullHash, value: Bytes) -> BlockRow {
+    fn new_header(hash: FullHash, header: &BlockHeader) -> BlockRow {
         BlockRow {
-            key: BlockKey { code, hash },
-            value,
+            key: BlockKey { code: b'B', hash },
+            value: serialize(header),
         }
     }
-    fn key(code: u8, hash: FullHash) -> Bytes {
-        [&[code][..], &hash].concat()
+
+    fn new_txids(hash: FullHash, txids: &[Sha256dHash]) -> BlockRow {
+        BlockRow {
+            key: BlockKey { code: b'X', hash },
+            value: bincode::serialize(txids).unwrap(),
+        }
+    }
+
+    fn header_key(hash: FullHash) -> Bytes {
+        [b"B", &hash[..]].concat()
+    }
+
+    fn txids_key(hash: FullHash) -> Bytes {
+        [b"X", &hash[..]].concat()
     }
 
     fn to_row(self) -> DBRow {
@@ -559,8 +571,8 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
             let blockhash = b.entry.hash().to_bytes();
             let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
 
-            rows.push(BlockRow::new(b'B', blockhash, serialize(&b.block.header)).to_row());
-            rows.push(BlockRow::new(b'X', blockhash, bincode::serialize(&txids).unwrap()).to_row());
+            rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
+            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
 
             for tx in &b.block.txdata {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
