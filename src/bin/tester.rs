@@ -45,6 +45,9 @@ fn run_server(config: Config) -> Result<()> {
     for (txid, (txn, b)) in indexer.history(&addr.script_pubkey()) {
         info!("{} in {:?} --- {:?}", txid, b, txn);
     }
+
+    debug!("utxo: {:?}", indexer.utxo(&addr.script_pubkey()));
+
     Ok(())
 }
 

@@ -49,6 +49,14 @@ struct BlockEntry {
 #[derive(Debug)]
 pub struct BlockId(usize, Sha256dHash);
 
+#[derive(Debug)]
+pub struct Utxo {
+    txid: Sha256dHash,
+    vout: usize,
+    txout: TxOut,
+    confirmed: BlockId,
+}
+
 pub enum FetchFrom {
     BITCOIND,
     BLKFILES,
@@ -127,6 +135,37 @@ impl Indexer {
             .map(|(txid, txn)| (txid, (txn, txnsconf.remove(&txid).unwrap())))
             .collect()
     }
+
+    pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
+        let scripthash = compute_script_hash(script.as_bytes());
+        let mut utxosconf = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]))
+            .into_iter()
+            .map(TxHistoryRow::from_row)
+            .filter_map(|history| self.tx_confirming_block(&history.get_txid()).map(|b| (history, b)))
+            .fold(HashMap::new(), |mut utxos, (history, block)| {
+                match history.key.txinfo {
+                    TxHistoryInfo::Funding(txid, vout) =>
+                        utxos.insert((deserialize(&txid).unwrap(), vout as usize), block),
+                    TxHistoryInfo::Spending(_, _, prevtxid, prevout) =>
+                        utxos.remove(&(deserialize(&prevtxid).unwrap(), prevout as usize)),
+                };
+                // TODO: make sure funding rows are processed before spending rows on the same height
+                utxos
+            });
+
+        let txoids = utxosconf.keys().cloned().collect();
+        let txos = self.lookup_txos(&txoids);
+
+        txos.into_iter()
+            .map(|(txoid, txo)| Utxo {
+                txid: txoid.0,
+                vout: txoid.1,
+                txout: txo,
+                confirmed: utxosconf.remove(&txoid).unwrap()
+            })
+            .collect()
+    }
+
 
     fn add(&mut self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
