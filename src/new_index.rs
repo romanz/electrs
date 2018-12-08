@@ -26,9 +26,9 @@ use std::thread;
 // use daemon::Daemon;
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
-use daemon::Daemon;
-use errors::*;
-use util::{spawn_thread, Bytes, HeaderEntry, HeaderList, SyncChannel};
+use crate::daemon::Daemon;
+use crate::errors::*;
+use crate::util::{spawn_thread, Bytes, HeaderEntry, HeaderList, SyncChannel};
 
 // use config::Config;
 

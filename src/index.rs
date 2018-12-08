@@ -10,18 +10,20 @@ use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::RwLock;
 
-use daemon::Daemon;
-use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
-use signal::Waiter;
-use store::{ReadStore, Row, WriteStore};
-use util::{
+use crate::daemon::Daemon;
+use crate::metrics::{
+    Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics,
+};
+use crate::signal::Waiter;
+use crate::store::{ReadStore, Row, WriteStore};
+use crate::util::{
     full_hash, hash_prefix, spawn_thread, BlockMeta, Bytes, FullHash, HashPrefix, HeaderEntry,
     HeaderList, HeaderMap, SyncChannel, HASH_PREFIX_LEN,
 };
 
-use config::Config;
+use crate::config::Config;
 
-use errors::*;
+use crate::errors::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct TxInKey {

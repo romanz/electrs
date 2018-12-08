@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
 
-use daemon::CookieGetter;
+use crate::daemon::CookieGetter;
 
-use errors::*;
+use crate::errors::*;
 
 #[derive(Debug, Clone)]
 pub struct Config {

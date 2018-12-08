@@ -13,9 +13,9 @@ pub use prometheus::{
     IntCounterVec as CounterVec, IntGauge as Gauge, Opts as MetricOpts,
 };
 
-use util::spawn_thread;
+use crate::util::spawn_thread;
 
-use errors::*;
+use crate::errors::*;
 
 pub struct Metrics {
     reg: prometheus::Registry,

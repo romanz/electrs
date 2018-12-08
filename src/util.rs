@@ -1,7 +1,7 @@
+use crate::errors::*;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
-use errors::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;

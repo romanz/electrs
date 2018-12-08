@@ -1,5 +1,5 @@
-use store::{ReadStore, Row, WriteStore};
-use util::Bytes;
+use crate::store::{ReadStore, Row, WriteStore};
+use crate::util::Bytes;
 
 pub struct FakeStore;
 
@@ -21,8 +21,8 @@ impl WriteStore for FakeStore {
 mod tests {
     #[test]
     fn test_fakestore() {
-        use fake;
-        use store::{ReadStore, Row, WriteStore};
+        use crate::fake;
+        use crate::store::{ReadStore, Row, WriteStore};
 
         let store = fake::FakeStore {};
         store.write(vec![Row {

@@ -3,8 +3,8 @@ use rocksdb;
 
 use std::path::{Path, PathBuf};
 
-use config::Config;
-use util::Bytes;
+use crate::config::Config;
+use crate::util::Bytes;
 
 const DB_VERSION: u32 = 1;
 
