@@ -46,6 +46,9 @@ struct BlockEntry {
     entry: HeaderEntry,
 }
 
+#[derive(Debug)]
+pub struct BlockId(usize, Sha256dHash);
+
 pub enum FetchFrom {
     BITCOIND,
     BLKFILES,
@@ -107,21 +110,22 @@ impl Indexer {
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
-    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, Transaction> {
+    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction,BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
         let rows = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]));
-        let txids = rows
+        let mut txnsconf = rows
             .into_iter()
             .map(TxHistoryRow::from_row)
-            .map(|history_row| match history_row.key.txinfo {
-                TxHistoryInfo::Funding(txid, ..) => txid,
-                TxHistoryInfo::Spending(txid, ..) => txid,
-            })
-            .map(|txid| deserialize(&txid).expect("failed to deserialize Sha256dHash txid"))
-            // TODO: check tx confirmation status
-            .collect();
-        debug!("txids: {:?}", txids);
-        self.lookup_txns(&txids)
+            .map(|history| history.get_txid())
+            .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
+            .collect::<HashMap<Sha256dHash, BlockId>>();
+
+        let txids = txnsconf.keys().cloned().collect();
+        let txns = self.lookup_txns(&txids);
+
+        txns.into_iter()
+            .map(|(txid, txn)| (txid, (txn, txnsconf.remove(&txid).unwrap())))
+            .collect()
     }
 
     fn add(&mut self, blocks: &[BlockEntry]) {
@@ -177,6 +181,21 @@ impl Indexer {
     fn lookup_txo(&self, txid: &Sha256dHash, vout: usize) -> Option<TxOut> {
         db_get(&self.txstore_db, &TxOutRow::key(txid, vout))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
+    }
+
+    fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
+        db_scan(&self.txstore_db, &TxConfRow::filter(&txid[..]))
+            .into_iter()
+            .map(TxConfRow::from_row)
+            .find_map(|conf| {
+                let header = self.headers.header_by_height(conf.key.blockheight as usize)
+                    .expect("missing block header for recorded block height");
+                if &header.hash()[..] == conf.key.blockhash {
+                    Some(BlockId(header.height(), header.hash().clone()))
+                } else {
+                    None
+                }
+            })
     }
 }
 
@@ -749,6 +768,13 @@ impl TxHistoryRow {
     fn from_row(row: DBRow) -> Self {
         let key = bincode::deserialize(&row.key).expect("failed to deserialize TxHistoryKey");
         TxHistoryRow { key }
+    }
+
+    fn get_txid(&self) -> Sha256dHash {
+        deserialize(&match self.key.txinfo {
+            TxHistoryInfo::Funding(txid, ..) => txid,
+            TxHistoryInfo::Spending(txid, ..) => txid,
+        }).expect("failed to deserialize Sha256dHash txid")
     }
 }
 

@@ -42,8 +42,8 @@ fn run_server(config: Config) -> Result<()> {
     indexer.update(&daemon, fetch)?;
     info!("indexed {} blocks", indexer.headers().len());
     let addr = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6").unwrap();
-    for txid in indexer.history(&addr.script_pubkey()).keys() {
-        info!("{}", txid);
+    for (txid, (txn, b)) in indexer.history(&addr.script_pubkey()) {
+        info!("{} in {:?} --- {:?}", txid, b, txn);
     }
     Ok(())
 }
