@@ -98,7 +98,7 @@ impl Indexer {
         let rows = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]));
         let txids = rows
             .into_iter()
-            .map(|db_row| TxHistoryRow::from_row(&db_row))
+            .map(TxHistoryRow::from_row)
             .map(|history_row| match history_row.key.txinfo {
                 TxHistoryInfo::Funding(txid, ..) => txid,
                 TxHistoryInfo::Spending(txid, ..) => txid,
@@ -136,17 +136,9 @@ impl Indexer {
         txids
             .par_iter()
             .map(|txid| {
-                let rows = db_scan(&self.txstore_db, &TxRow::filter(&txid[..]));
-                if rows.len() < 1 {
-                    panic!("missing txid {} in txns DB", txid);
-                }
-                if rows.len() > 1 {
-                    warn!("same tx {} was confirmed in >1 block", txid);
-                    // TODO: pick the one that is still confirmed
-                }
-                let row = TxRow::from_row(&rows[0]);
-                let txn: Transaction =
-                    deserialize(&row.value.rawtx).expect("failed to parse Transaction");
+                let rawtx = db_get(&self.txstore_db, &TxRow::key(&txid[..]))
+                    .expect(&format!("missing txid {} in txns db", txid));
+                let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
                 assert_eq!(*txid, txn.txid());
                 (*txid, txn)
             }).collect()
@@ -364,6 +356,10 @@ fn db_write(db: &rocksdb::DB, mut rows: Vec<DBRow>) {
     db.write_opt(batch, &opts).unwrap();
 }
 
+fn db_get(db: &rocksdb::DB, key: &[u8]) -> Option<Bytes> {
+    db.get(key).unwrap().map(|v| v.to_vec())
+}
+
 type FullHash = [u8; 32]; // serialized SHA256 result
 
 #[derive(Serialize, Deserialize)]
@@ -372,14 +368,9 @@ struct TxRowKey {
     txid: FullHash,
 }
 
-#[derive(Serialize, Deserialize)]
-struct TxRowValue {
-    rawtx: Bytes,
-}
-
 struct TxRow {
     key: TxRowKey,
-    value: TxRowValue,
+    value: Bytes, // raw transaction
 }
 
 impl TxRow {
@@ -387,28 +378,28 @@ impl TxRow {
         let txid = txn.txid().into_bytes();
         TxRow {
             key: TxRowKey { code: b'T', txid },
-            value: TxRowValue {
-                rawtx: serialize(txn),
-            },
+            value: serialize(txn),
         }
     }
 
-    fn filter(prefix: &[u8]) -> Bytes {
+    fn key(prefix: &[u8]) -> Bytes {
         [b"T", prefix].concat()
     }
 
-    fn to_row(&self) -> DBRow {
-        let key = bincode::serialize(&self.key).unwrap();
-        let value = bincode::serialize(&self.value).unwrap();
-        // info!("tx id  = {}", hex::encode(&self.key.txid[..]));
-        // info!("tx key = {}", hex::encode(&self.key.txid[..]));
-        DBRow { key, value }
+    fn to_row(self) -> DBRow {
+        let TxRow { key, value } = self;
+        DBRow {
+            key: bincode::serialize(&key).unwrap(),
+            value,
+        }
     }
 
-    fn from_row(row: &DBRow) -> Self {
-        let key = bincode::deserialize(&row.key).expect("failed to parse TxRowKey");
-        let value = bincode::deserialize(&row.value).expect("failed to parse TxRowValue");
-        TxRow { key, value }
+    fn from_row(row: DBRow) -> Self {
+        let DBRow { key, value } = row;
+        TxRow {
+            key: bincode::deserialize(&key).expect("failed to parse TxRowKey"),
+            value,
+        }
     }
 }
 
@@ -441,14 +432,14 @@ impl TxConfRow {
         [b"C", prefix].concat()
     }
 
-    fn to_row(&self) -> DBRow {
+    fn to_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: vec![],
         }
     }
 
-    fn from_row(row: &DBRow) -> Self {
+    fn from_row(row: DBRow) -> Self {
         TxConfRow {
             key: bincode::deserialize(&row.key).expect("failed to parse TxConfKey"),
         }
@@ -614,14 +605,14 @@ impl TxHistoryRow {
         [b"H", scripthash_prefix].concat()
     }
 
-    fn to_row(&self) -> DBRow {
+    fn to_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: vec![],
         }
     }
 
-    fn from_row(row: &DBRow) -> Self {
+    fn from_row(row: DBRow) -> Self {
         let key = bincode::deserialize(&row.key).expect("failed to deserialize TxHistoryKey");
         TxHistoryRow { key }
     }
@@ -657,14 +648,14 @@ impl TxEdgeRow {
         TxEdgeRow { key }
     }
 
-    fn to_row(&self) -> DBRow {
+    fn to_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: vec![],
         }
     }
 
-    fn from_row(row: &DBRow) -> Self {
+    fn from_row(row: DBRow) -> Self {
         TxEdgeRow {
             key: bincode::deserialize(&row.key).expect("failed to deserialize TxEdgeKey"),
         }
