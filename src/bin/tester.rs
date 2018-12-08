@@ -39,9 +39,8 @@ fn run_server(config: Config) -> Result<()> {
         true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
-    let headers = HeaderList::empty();
-    let headers = indexer.update(&daemon, headers, fetch)?;
-    info!("indexed {} blocks", headers.len());
+    indexer.update(&daemon, fetch)?;
+    info!("indexed {} blocks", indexer.headers().len());
     let addr = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6").unwrap();
     for txid in indexer.history(&addr.script_pubkey()).keys() {
         info!("{}", txid);

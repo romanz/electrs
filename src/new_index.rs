@@ -37,6 +37,7 @@ pub struct Indexer {
     txstore_db: rocksdb::DB,
     history_db: rocksdb::DB,
 
+    headers: HeaderList, // TODO: RwLock
     added_blockhashes: HashSet<Sha256dHash>,
 }
 
@@ -56,6 +57,7 @@ impl Indexer {
         Indexer {
             txstore_db: db_open(&path.join("txstore")),
             history_db: db_open(&path.join("history")),
+            headers: HeaderList::empty(), // TODO: sync from db
             added_blockhashes: HashSet::new(),
         }
     }
@@ -63,12 +65,11 @@ impl Indexer {
     pub fn update(
         &mut self,
         daemon: &Daemon,
-        headers: HeaderList,
         fetch: FetchFrom,
-    ) -> Result<HeaderList> {
+    ) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
-        let new_headers = headers.order(daemon.get_new_headers(&headers, &tip)?);
+        let new_headers = self.headers.order(daemon.get_new_headers(&self.headers, &tip)?);
 
         let fetcher = match fetch {
             FetchFrom::BITCOIND => bitcoind_fetcher,
@@ -87,10 +88,13 @@ impl Indexer {
         info!("compacting history DB");
         self.history_db.compact_range(None, None);
 
-        let mut headers = headers;
-        headers.apply(new_headers);
-        assert_eq!(tip, *headers.tip());
-        Ok(headers)
+        self.headers.apply(new_headers);
+        assert_eq!(tip, *self.headers.tip());
+        Ok(())
+    }
+
+    pub fn headers(&self) -> &HeaderList {
+        &self.headers
     }
 
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
