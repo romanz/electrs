@@ -53,7 +53,8 @@ impl TxInRow {
             code: b'I',
             prev_hash_prefix: hash_prefix(&txid[..]),
             prev_index: output_index as u16,
-        }).unwrap()
+        })
+        .unwrap()
     }
 
     pub fn to_row(&self) -> Row {
@@ -95,7 +96,8 @@ impl TxOutRow {
         bincode::serialize(&TxOutKey {
             code: b'O',
             script_hash_prefix: hash_prefix(&script_hash[..HASH_PREFIX_LEN]),
-        }).unwrap()
+        })
+        .unwrap()
     }
 
     pub fn to_row(&self) -> Row {
@@ -252,7 +254,8 @@ pub fn index_block(block: &Block, height: u32, extended_db_enabled: bool) -> Vec
         key: bincode::serialize(&BlockKey {
             code: b'B',
             hash: full_hash(&blockhash[..]),
-        }).unwrap(),
+        })
+        .unwrap(),
         value: serialize(&block.header),
     });
 
@@ -263,7 +266,8 @@ pub fn index_block(block: &Block, height: u32, extended_db_enabled: bool) -> Vec
             key: bincode::serialize(&BlockKey {
                 code: b'M',
                 hash: full_hash(&blockhash[..]),
-            }).unwrap(),
+            })
+            .unwrap(),
             value: bincode::serialize(&blockmeta).unwrap(),
         });
     }
@@ -275,7 +279,8 @@ pub fn index_block(block: &Block, height: u32, extended_db_enabled: bool) -> Vec
             key: bincode::serialize(&BlockKey {
                 code: b'X',
                 hash: full_hash(&blockhash[..]),
-            }).unwrap(),
+            })
+            .unwrap(),
             value: bincode::serialize(&txids).unwrap(),
         });
     }

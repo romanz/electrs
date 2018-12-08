@@ -190,7 +190,8 @@ impl HeaderList {
                 height: height,
                 hash: hashed_header.blockhash,
                 header: hashed_header.header,
-            }).collect()
+            })
+            .collect()
     }
 
     pub fn apply(&mut self, new_headers: Vec<HeaderEntry>) {
@@ -352,7 +353,8 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
                 u5::try_from_u8(0).expect("0<32"),
                 script[2..22].to_vec(),
                 to_bech_network(network),
-            ).unwrap(),
+            )
+            .unwrap(),
         ))
     } else if script.is_v0_p2wsh() {
         Some(Payload::WitnessProgram(
@@ -360,7 +362,8 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
                 u5::try_from_u8(0).expect("0<32"),
                 script[2..34].to_vec(),
                 to_bech_network(network),
-            ).unwrap(),
+            )
+            .unwrap(),
         ))
     } else {
         None
@@ -370,7 +373,8 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
         Address {
             payload: payload?,
             network: *network,
-        }.to_string(),
+        }
+        .to_string(),
     )
 }
 

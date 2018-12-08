@@ -112,7 +112,8 @@ impl Indexer {
             .map(|history_row| match history_row.key.txinfo {
                 TxHistoryInfo::Funding(txid, ..) => txid,
                 TxHistoryInfo::Spending(txid, ..) => txid,
-            }).map(|txid| deserialize(&txid).expect("failed to deserialize Sha256dHash txid"))
+            })
+            .map(|txid| deserialize(&txid).expect("failed to deserialize Sha256dHash txid"))
             // TODO: check tx confirmation status
             .collect();
         debug!("txids: {:?}", txids);
@@ -151,7 +152,8 @@ impl Indexer {
                 let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
                 assert_eq!(*txid, txn.txid());
                 (*txid, txn)
-            }).collect()
+            })
+            .collect()
     }
 
     fn lookup_txos(
@@ -164,7 +166,8 @@ impl Indexer {
                     .lookup_txo(&txid, *vout)
                     .expect("missing txo in txns db");
                 ((*txid, *vout), txo)
-            }).collect()
+            })
+            .collect()
     }
 
     fn lookup_txo(&self, txid: &Sha256dHash, vout: usize) -> Option<TxOut> {
@@ -220,7 +223,8 @@ fn bitcoind_fetcher(
                     .map(|(block, entry)| BlockEntry {
                         block,
                         entry: entry.clone(), // TODO: remove this clone()
-                    }).collect();
+                    })
+                    .collect();
                 assert_eq!(block_entries.len(), entries.len());
                 sender
                     .send(block_entries)
@@ -259,7 +263,8 @@ fn blkfiles_fetcher(
                                 debug!("unknown block {}", blockhash);
                                 None
                             })
-                    }).collect();
+                    })
+                    .collect();
                 trace!("fetched {} blocks", block_entries.len());
                 sender
                     .send(block_entries)
@@ -368,7 +373,8 @@ fn db_scan(db: &rocksdb::DB, prefix: &[u8]) -> Vec<DBRow> {
         .map(|(k, v)| DBRow {
             key: k.into_vec(),
             value: v.into_vec(),
-        }).collect()
+        })
+        .collect()
 }
 
 fn db_write(db: &rocksdb::DB, mut rows: Vec<DBRow>) {
@@ -502,7 +508,8 @@ impl TxOutRow {
             code: b'O',
             txid: txid.to_bytes(),
             vout: vout as u16,
-        }).unwrap()
+        })
+        .unwrap()
     }
 
     fn to_row(self) -> DBRow {
@@ -578,7 +585,8 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
             }
             rows
-        }).flatten()
+        })
+        .flatten()
         .collect()
 }
 
@@ -610,7 +618,8 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<(Sha256dHash, usi
                     }
                 })
             })
-        }).collect()
+        })
+        .collect()
 }
 
 fn index_blocks(
@@ -626,7 +635,8 @@ fn index_blocks(
                 index_transaction(tx, height, previous_txos_map, &mut rows);
             }
             rows
-        }).flatten()
+        })
+        .flatten()
         .collect()
 }
 

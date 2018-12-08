@@ -212,8 +212,10 @@ pub fn verify_index_compatibility(store: &DBStore, config: &Config) {
             key: b"C".to_vec(),
             value: compatibility_bytes,
         }]),
-        Some(x) => if x != compatibility_bytes {
-            panic!("Incompatible database found. Changing --light mode requires a reindex.");
-        },
+        Some(x) => {
+            if x != compatibility_bytes {
+                panic!("Incompatible database found. Changing --light mode requires a reindex.");
+            }
+        }
     }
 }
