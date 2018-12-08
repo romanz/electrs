@@ -1,7 +1,7 @@
 use bincode;
 use bitcoin::blockdata::block::Block;
 use bitcoin::blockdata::script::Script;
-use bitcoin::blockdata::transaction::Transaction;
+use bitcoin::blockdata::transaction::{Transaction, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
@@ -119,7 +119,7 @@ impl Indexer {
     }
 
     fn index(&mut self, blocks: &[BlockEntry]) {
-        let previous_txns_map = self.lookup_txns(&get_previous_txids(blocks));
+        let previous_txos_map = self.lookup_txos(&get_previous_txos(blocks));
         for b in blocks {
             let blockhash = b.entry.hash();
             // TODO: replace by lookup into txstore_db?
@@ -127,7 +127,7 @@ impl Indexer {
                 panic!("cannot index block {} (missing from store)", blockhash);
             }
         }
-        let rows = index_blocks(blocks, &previous_txns_map);
+        let rows = index_blocks(blocks, &previous_txos_map);
         db_write(&self.history_db, rows);
     }
 
@@ -142,6 +142,24 @@ impl Indexer {
                 assert_eq!(*txid, txn.txid());
                 (*txid, txn)
             }).collect()
+    }
+
+    fn lookup_txos(
+        &self,
+        txos: &BTreeSet<(Sha256dHash, usize)>,
+    ) -> HashMap<(Sha256dHash, usize), TxOut> {
+        txos.par_iter()
+            .map(|(txid, vout)| {
+                let txo = self
+                    .lookup_txo(&txid, *vout)
+                    .expect("missing txo in txns db");
+                ((*txid, *vout), txo)
+            }).collect()
+    }
+
+    fn lookup_txo(&self, txid: &Sha256dHash, vout: usize) -> Option<TxOut> {
+        db_get(&self.txstore_db, &TxOutRow::key(txid, vout))
+            .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 }
 
@@ -446,6 +464,45 @@ impl TxConfRow {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct TxOutKey {
+    code: u8,
+    txid: FullHash,
+    vout: u16,
+}
+
+struct TxOutRow {
+    key: TxOutKey,
+    value: Bytes, // serialized output
+}
+
+impl TxOutRow {
+    fn new(txid: &FullHash, vout: usize, txout: &TxOut) -> TxOutRow {
+        TxOutRow {
+            key: TxOutKey {
+                code: b'O',
+                txid: *txid,
+                vout: vout as u16,
+            },
+            value: serialize(txout),
+        }
+    }
+    fn key(txid: &Sha256dHash, vout: usize) -> Bytes {
+        bincode::serialize(&TxOutKey {
+            code: b'O',
+            txid: txid.to_bytes(),
+            vout: vout as u16,
+        }).unwrap()
+    }
+
+    fn to_row(self) -> DBRow {
+        DBRow {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: self.value,
+        }
+    }
+}
+
 fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
@@ -478,14 +535,15 @@ fn add_transaction(
     rows.push(TxRow::new(tx).to_row());
     rows.push(TxConfRow::new(tx, blockheight, &blockhash).to_row());
 
-    // TODO: add O rows
-    // let txid = tx.txid().into_bytes();
-    // for (txo_index, txo) in tx.output.iter().enumerate() {
-    //     rows.push(TxOutRow::new(txid, txo_index, txo).to_row());
-    // }
+    let txid = tx.txid().into_bytes();
+    for (txo_index, txo) in tx.output.iter().enumerate() {
+        if !txo.script_pubkey.is_provably_unspendable() {
+            rows.push(TxOutRow::new(&txid, txo_index, txo).to_row());
+        }
+    }
 }
 
-fn get_previous_txids(block_entries: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
+fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<(Sha256dHash, usize)> {
     block_entries
         .iter()
         .flat_map(|b| {
@@ -494,7 +552,10 @@ fn get_previous_txids(block_entries: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
                     if txin.previous_output.is_null() {
                         None
                     } else {
-                        Some(txin.previous_output.txid)
+                        Some((
+                            txin.previous_output.txid,
+                            txin.previous_output.vout as usize,
+                        ))
                     }
                 })
             })
@@ -503,7 +564,7 @@ fn get_previous_txids(block_entries: &[BlockEntry]) -> BTreeSet<Sha256dHash> {
 
 fn index_blocks(
     block_entries: &[BlockEntry],
-    previous_txns_map: &HashMap<Sha256dHash, Transaction>,
+    previous_txos_map: &HashMap<(Sha256dHash, usize), TxOut>,
 ) -> Vec<DBRow> {
     block_entries
         .par_iter()
@@ -511,7 +572,7 @@ fn index_blocks(
             let mut rows = vec![];
             for tx in &b.block.txdata {
                 let height = b.entry.height() as u32;
-                index_transaction(tx, height, previous_txns_map, &mut rows);
+                index_transaction(tx, height, previous_txos_map, &mut rows);
             }
             rows
         }).flatten()
@@ -522,7 +583,7 @@ fn index_blocks(
 fn index_transaction(
     tx: &Transaction,
     confirmed_height: u32,
-    previous_txns_map: &HashMap<Sha256dHash, Transaction>,
+    previous_txos_map: &HashMap<(Sha256dHash, usize), TxOut>,
     rows: &mut Vec<DBRow>,
 ) {
     // persist history index:
@@ -546,22 +607,28 @@ fn index_transaction(
             continue;
         }
         let prev_txid = txi.previous_output.txid;
-        let prev_txn = previous_txns_map
-            .get(&prev_txid)
-            .expect(&format!("missing previous txn {:?}", prev_txid));
-        let vout = txi.previous_output.vout as usize;
-        let out = prev_txn
-            .output
-            .get(vout)
-            .expect(&format!("missing output #{} at txn {}", vout, prev_txid));
+        let prev_vout = txi.previous_output.vout;
+        let prev_txo = previous_txos_map
+            .get(&(prev_txid, prev_vout as usize))
+            .expect(&format!("missing previous txo {}:{}", prev_txid, prev_vout));
         let history = TxHistoryRow::new(
-            &out.script_pubkey,
+            &prev_txo.script_pubkey,
             confirmed_height,
-            TxHistoryInfo::Spending(txid, txi_index as u16, prev_txid.into_bytes(), vout as u16),
+            TxHistoryInfo::Spending(
+                txid,
+                txi_index as u16,
+                prev_txid.into_bytes(),
+                prev_vout as u16,
+            ),
         );
         rows.push(history.to_row());
 
-        let edge = TxEdgeRow::new(prev_txid.into_bytes(), vout as u16, txid, txi_index as u16);
+        let edge = TxEdgeRow::new(
+            prev_txid.into_bytes(),
+            prev_vout as u16,
+            txid,
+            txi_index as u16,
+        );
         rows.push(edge.to_row());
     }
 }
