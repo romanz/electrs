@@ -1,7 +1,7 @@
 use bincode;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::script::Script;
-use bitcoin::blockdata::transaction::{Transaction, TxOut};
+use bitcoin::blockdata::transaction::{Transaction, OutPoint, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
@@ -52,7 +52,7 @@ pub struct BlockId(usize, Sha256dHash);
 #[derive(Debug)]
 pub struct Utxo {
     txid: Sha256dHash,
-    vout: usize,
+    vout: u32,
     txout: TxOut,
     confirmed: BlockId,
 }
@@ -144,24 +144,24 @@ impl Indexer {
             .filter_map(|history| self.tx_confirming_block(&history.get_txid()).map(|b| (history, b)))
             .fold(HashMap::new(), |mut utxos, (history, block)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(txid, vout) =>
-                        utxos.insert((deserialize(&txid).unwrap(), vout as usize), block),
-                    TxHistoryInfo::Spending(_, _, prevtxid, prevout) =>
-                        utxos.remove(&(deserialize(&prevtxid).unwrap(), prevout as usize)),
+                    TxHistoryInfo::Funding(..) =>
+                        utxos.insert(history.get_outpoint(), block),
+                    TxHistoryInfo::Spending(..) =>
+                        utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
                 utxos
             });
 
-        let txoids = utxosconf.keys().cloned().collect();
-        let txos = self.lookup_txos(&txoids);
+        let outpoints = utxosconf.keys().cloned().collect();
+        let txos = self.lookup_txos(&outpoints);
 
         txos.into_iter()
-            .map(|(txoid, txo)| Utxo {
-                txid: txoid.0,
-                vout: txoid.1,
+            .map(|(outpoint, txo)| Utxo {
+                txid: outpoint.txid,
+                vout: outpoint.vout,
                 txout: txo,
-                confirmed: utxosconf.remove(&txoid).unwrap()
+                confirmed: utxosconf.remove(&outpoint).unwrap()
             })
             .collect()
     }
@@ -205,20 +205,21 @@ impl Indexer {
 
     fn lookup_txos(
         &self,
-        txos: &BTreeSet<(Sha256dHash, usize)>,
-    ) -> HashMap<(Sha256dHash, usize), TxOut> {
-        txos.par_iter()
-            .map(|(txid, vout)| {
+        outpoints: &BTreeSet<OutPoint>,
+    ) -> HashMap<OutPoint, TxOut> {
+        outpoints
+            .par_iter()
+            .map(|outpoint| {
                 let txo = self
-                    .lookup_txo(&txid, *vout)
+                    .lookup_txo(&outpoint)
                     .expect("missing txo in txns db");
-                ((*txid, *vout), txo)
+                (*outpoint, txo)
             })
             .collect()
     }
 
-    fn lookup_txo(&self, txid: &Sha256dHash, vout: usize) -> Option<TxOut> {
-        db_get(&self.txstore_db, &TxOutRow::key(txid, vout))
+    fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
+        db_get(&self.txstore_db, &TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 
@@ -458,6 +459,10 @@ fn db_get(db: &rocksdb::DB, key: &[u8]) -> Option<Bytes> {
 
 type FullHash = [u8; 32]; // serialized SHA256 result
 
+fn parse_hash(hash: &FullHash) -> Sha256dHash {
+    deserialize(hash).expect("failed to parse Sha256dHash")
+}
+
 #[derive(Serialize, Deserialize)]
 struct TxRowKey {
     code: u8,
@@ -565,11 +570,11 @@ impl TxOutRow {
             value: serialize(txout),
         }
     }
-    fn key(txid: &Sha256dHash, vout: usize) -> Bytes {
+    fn key(outpoint: &OutPoint) -> Bytes {
         bincode::serialize(&TxOutKey {
             code: b'O',
-            txid: txid.to_bytes(),
-            vout: vout as u16,
+            txid: outpoint.txid.to_bytes(),
+            vout: outpoint.vout as u16,
         })
         .unwrap()
     }
@@ -664,7 +669,7 @@ fn add_transaction(tx: &Transaction, blockheight: u32, blockhash: FullHash, rows
     }
 }
 
-fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<(Sha256dHash, usize)> {
+fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
     block_entries
         .iter()
         .flat_map(|b| {
@@ -673,10 +678,7 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<(Sha256dHash, usi
                     if txin.previous_output.is_null() {
                         None
                     } else {
-                        Some((
-                            txin.previous_output.txid,
-                            txin.previous_output.vout as usize,
-                        ))
+                        Some(txin.previous_output)
                     }
                 })
             })
@@ -686,7 +688,7 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<(Sha256dHash, usi
 
 fn index_blocks(
     block_entries: &[BlockEntry],
-    previous_txos_map: &HashMap<(Sha256dHash, usize), TxOut>,
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
 ) -> Vec<DBRow> {
     block_entries
         .par_iter()
@@ -706,7 +708,7 @@ fn index_blocks(
 fn index_transaction(
     tx: &Transaction,
     confirmed_height: u32,
-    previous_txos_map: &HashMap<(Sha256dHash, usize), TxOut>,
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
     rows: &mut Vec<DBRow>,
 ) {
     // persist history index:
@@ -729,26 +731,25 @@ fn index_transaction(
         if txi.previous_output.is_null() {
             continue;
         }
-        let prev_txid = txi.previous_output.txid;
-        let prev_vout = txi.previous_output.vout;
         let prev_txo = previous_txos_map
-            .get(&(prev_txid, prev_vout as usize))
-            .expect(&format!("missing previous txo {}:{}", prev_txid, prev_vout));
+            .get(&txi.previous_output)
+            .expect(&format!("missing previous txo {}", txi.previous_output));
+
         let history = TxHistoryRow::new(
             &prev_txo.script_pubkey,
             confirmed_height,
             TxHistoryInfo::Spending(
                 txid,
                 txi_index as u16,
-                prev_txid.into_bytes(),
-                prev_vout as u16,
+                txi.previous_output.txid.into_bytes(),
+                txi.previous_output.vout as u16,
             ),
         );
         rows.push(history.to_row());
 
         let edge = TxEdgeRow::new(
-            prev_txid.into_bytes(),
-            prev_vout as u16,
+            txi.previous_output.txid.into_bytes(),
+            txi.previous_output.vout as u16,
             txid,
             txi_index as u16,
         );
@@ -810,10 +811,25 @@ impl TxHistoryRow {
     }
 
     fn get_txid(&self) -> Sha256dHash {
-        deserialize(&match self.key.txinfo {
-            TxHistoryInfo::Funding(txid, ..) => txid,
-            TxHistoryInfo::Spending(txid, ..) => txid,
-        }).expect("failed to deserialize Sha256dHash txid")
+        match self.key.txinfo {
+            TxHistoryInfo::Funding(txid, ..) => parse_hash(&txid),
+            TxHistoryInfo::Spending(txid, ..) => parse_hash(&txid),
+        }
+    }
+
+    // for funding rows, returns the funded output.
+    // for spending rows, returns the spent previous output.
+    fn get_outpoint(&self) -> OutPoint {
+        match self.key.txinfo {
+            TxHistoryInfo::Funding(txid, vout) => OutPoint {
+                txid: parse_hash(&txid),
+                vout: vout as u32
+            },
+            TxHistoryInfo::Spending(_, _, prevtxid, prevout) => OutPoint {
+                txid: parse_hash(&prevtxid),
+                vout: prevout as u32
+            },
+        }
     }
 }
 
