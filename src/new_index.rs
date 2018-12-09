@@ -7,6 +7,7 @@ use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use rayon::prelude::*;
+use itertools::Itertools;
 use rocksdb;
 
 struct DBRow {
@@ -123,8 +124,8 @@ impl Indexer {
         let rows = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]));
         let mut txnsconf = rows
             .into_iter()
-            .map(TxHistoryRow::from_row)
-            .map(|history| history.get_txid())
+            .map(|row| TxHistoryRow::from_row(row).get_txid())
+            .dedup()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
             .collect::<HashMap<Sha256dHash, BlockId>>();
 
