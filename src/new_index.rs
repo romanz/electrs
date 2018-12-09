@@ -382,7 +382,7 @@ fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<Block>> {
 
 fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
     let mut cursor = Cursor::new(&blob);
-    let mut blocks = vec![];
+    let mut slices = vec![];
     let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
         match u32::consensus_decode(&mut cursor) {
@@ -403,11 +403,18 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
             .chain_err(|| format!("seek {} failed", block_size))?;
         let end = cursor.position() as usize;
 
-        let block: Block = deserialize(&blob[start..end])
-            .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
-        blocks.push(block);
+        slices.push(&blob[start..end])
     }
-    Ok(blocks)
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(0) // CPU-bound
+        .thread_name(|i| format!("parse-blocks-{}", i))
+        .build()
+        .unwrap();
+    Ok(pool.install(|| slices
+        .par_iter()
+        .map(|slice| deserialize(slice).expect("failed to parse Block"))
+        .collect()))
 }
 
 fn db_open(path: &Path) -> rocksdb::DB {
