@@ -6,8 +6,8 @@ use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use rayon::prelude::*;
 use itertools::Itertools;
+use rayon::prelude::*;
 use rocksdb;
 
 struct DBRow {
@@ -178,7 +178,9 @@ impl Indexer {
     }
 
     fn index(&mut self, blocks: &[BlockEntry]) {
+        debug!("looking up TXOs from {} blocks", blocks.len());
         let previous_txos_map = self.lookup_txos(&get_previous_txos(blocks));
+        debug!("looked up {} TXOs", previous_txos_map.len());
         for b in blocks {
             let blockhash = b.entry.hash();
             // TODO: replace by lookup into txstore_db?
@@ -187,7 +189,9 @@ impl Indexer {
             }
         }
         let rows = index_blocks(blocks, &previous_txos_map);
+        debug!("indexed {} history rows", rows.len());
         db_write(&self.history_db, rows);
+        debug!("written to DB");
     }
 
     // TODO: can we pass txids as a "generic iterable"?
@@ -204,19 +208,21 @@ impl Indexer {
             .collect()
     }
 
-    fn lookup_txos(
-        &self,
-        outpoints: &BTreeSet<OutPoint>,
-    ) -> HashMap<OutPoint, TxOut> {
-        outpoints
-            .par_iter()
-            .map(|outpoint| {
-                let txo = self
-                    .lookup_txo(&outpoint)
-                    .expect("missing txo in txns db");
-                (*outpoint, txo)
-            })
-            .collect()
+    fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(16) // we need to saturate SSD IOPS
+            .thread_name(|i| format!("lookup-txo-{}", i))
+            .build()
+            .unwrap();
+        pool.install(|| {
+            outpoints
+                .par_iter()
+                .map(|outpoint| {
+                    let txo = self.lookup_txo(&outpoint).expect("missing txo in txns db");
+                    (*outpoint, txo)
+                })
+                .collect()
+        })
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
@@ -646,7 +652,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
     block_entries
-        .par_iter()
+        .par_iter() // serialization is CPU-intensive
         .map(|b| {
             let mut rows = vec![];
             let blockheight = b.entry.height() as u32;
@@ -699,7 +705,7 @@ fn index_blocks(
     previous_txos_map: &HashMap<OutPoint, TxOut>,
 ) -> Vec<DBRow> {
     block_entries
-        .par_iter()
+        .par_iter() // serialization is CPU-intensive
         .map(|b| {
             let mut rows = vec![];
             for tx in &b.block.txdata {
