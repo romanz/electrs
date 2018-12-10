@@ -14,6 +14,24 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{spawn_thread, HeaderEntry, SyncChannel};
 
+#[derive(Clone, Copy)]
+pub enum FetchFrom {
+    BITCOIND,
+    BLKFILES,
+}
+
+pub fn start_fetcher(
+    from: FetchFrom,
+    daemon: &Daemon,
+    new_headers: &[HeaderEntry],
+) -> Result<Fetcher<Vec<BlockEntry>>> {
+    let fetcher = match from {
+        FetchFrom::BITCOIND => bitcoind_fetcher,
+        FetchFrom::BLKFILES => blkfiles_fetcher,
+    };
+    fetcher(daemon, new_headers)
+}
+
 pub struct BlockEntry {
     pub block: Block,
     pub entry: HeaderEntry,
@@ -40,7 +58,7 @@ impl<T> Fetcher<T> {
     }
 }
 
-pub fn bitcoind_fetcher(
+fn bitcoind_fetcher(
     daemon: &Daemon,
     new_headers: &[HeaderEntry],
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
@@ -77,7 +95,7 @@ pub fn bitcoind_fetcher(
     ))
 }
 
-pub fn blkfiles_fetcher(
+fn blkfiles_fetcher(
     daemon: &Daemon,
     new_headers: &[HeaderEntry],
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
