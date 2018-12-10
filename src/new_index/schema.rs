@@ -152,12 +152,10 @@ impl<'a> Query<'a> {
 
     pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
-        let rows = self
+        let mut txnsconf = self
             .store
             .history_db
-            .scan(&TxHistoryRow::filter(&scripthash[..]));
-        let mut txnsconf = rows
-            .into_iter()
+            .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .dedup()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
@@ -176,8 +174,7 @@ impl<'a> Query<'a> {
         let mut utxosconf = self
             .store
             .history_db
-            .scan(&TxHistoryRow::filter(&scripthash[..]))
-            .into_iter()
+            .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
@@ -249,8 +246,7 @@ impl<'a> Query<'a> {
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
         self.store
             .txstore_db
-            .scan(&TxConfRow::filter(&txid[..]))
-            .into_iter()
+            .iter_scan(&TxConfRow::filter(&txid[..]))
             .map(TxConfRow::from_row)
             .find_map(|conf| {
                 let headers = self.indexed_headers.read().unwrap();

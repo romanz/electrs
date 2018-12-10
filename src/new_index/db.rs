@@ -9,6 +9,31 @@ pub struct DBRow {
     pub value: Vec<u8>,
 }
 
+pub struct ScanIterator {
+    prefix: Vec<u8>,
+    iter: rocksdb::DBIterator,
+    done: bool,
+}
+
+impl Iterator for ScanIterator {
+    type Item = DBRow;
+
+    fn next(&mut self) -> Option<DBRow> {
+        if self.done {
+            return None;
+        }
+        let (key, value) = self.iter.next()?;
+        if !key.starts_with(&self.prefix) {
+            self.done = true;
+            return None;
+        }
+        Some(DBRow {
+            key: key.to_vec(),
+            value: value.to_vec(),
+        })
+    }
+}
+
 pub struct DB {
     db: rocksdb::DB,
 }
@@ -40,16 +65,12 @@ impl DB {
         self.db.compact_range(None, None);
     }
 
-    pub fn scan(&self, prefix: &[u8]) -> Vec<DBRow> {
-        let mode = rocksdb::IteratorMode::From(prefix, rocksdb::Direction::Forward);
-        self.db
-            .iterator(mode)
-            .take_while(|(key, _)| key.starts_with(prefix))
-            .map(|(k, v)| DBRow {
-                key: k.into_vec(),
-                value: v.into_vec(),
-            })
-            .collect()
+    pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
+        ScanIterator {
+            prefix: prefix.to_vec(),
+            iter: self.db.prefix_iterator(prefix),
+            done: false,
+        }
     }
 
     pub fn write(&self, mut rows: Vec<DBRow>) {
