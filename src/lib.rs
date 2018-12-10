@@ -10,6 +10,7 @@ extern crate dirs;
 extern crate glob;
 extern crate hex;
 extern crate hyper;
+extern crate itertools;
 extern crate libc;
 extern crate lru;
 extern crate lru_cache;
@@ -40,8 +41,6 @@ extern crate log;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-#[macro_use]
-extern crate itertools;
 
 pub mod app;
 pub mod bulk;
