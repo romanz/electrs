@@ -16,9 +16,8 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{FetchFrom, Indexer},
+    new_index::{FetchFrom, Indexer, Store},
     signal::Waiter,
-    util::HeaderList,
 };
 
 fn run_server(config: Config) -> Result<()> {
@@ -34,13 +33,13 @@ fn run_server(config: Config) -> Result<()> {
         signal.clone(),
         &metrics,
     )?;
-    let mut indexer = Indexer::open(&config.db_path.join("newindex"));
+    let store = Store::open(&config.db_path.join("newindex"));
+    let mut indexer = Indexer::open(&store);
     let fetch = match config.jsonrpc_import {
         true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     indexer.update(&daemon, fetch)?;
-    info!("indexed {} blocks", indexer.headers().len());
     let addr = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6").unwrap();
     for (txid, (txn, b)) in indexer.history(&addr.script_pubkey()) {
         info!("{} in {:?} --- {:?}", txid, b, txn);

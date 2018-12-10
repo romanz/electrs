@@ -11,6 +11,7 @@ use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
+use std::sync::RwLock;
 
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
@@ -18,20 +19,37 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{Bytes, HeaderList};
 
-mod fetch;
 mod db;
+mod fetch;
 
-use crate::new_index::fetch::{bitcoind_fetcher, blkfiles_fetcher, BlockEntry};
 use crate::new_index::db::{DBRow, DB};
+use crate::new_index::fetch::{bitcoind_fetcher, blkfiles_fetcher, BlockEntry};
 
 // use config::Config;
 
-pub struct Indexer {
-    // TODO: should be column families
+pub struct Store {
     txstore_db: DB,
     history_db: DB,
+}
 
-    headers: HeaderList, // TODO: RwLock
+impl Store {
+    pub fn open(path: &Path) -> Self {
+        Store {
+            txstore_db: DB::open(&path.join("txstore")),
+            history_db: DB::open(&path.join("history")),
+        }
+    }
+
+    fn indexed_headers(&self) -> HeaderList {
+        // TODO: read (and verify) from DB
+        HeaderList::empty()
+    }
+}
+
+pub struct Indexer<'a> {
+    // TODO: should be column families
+    store: &'a Store,
+    indexed_headers: RwLock<HeaderList>,
     added_blockhashes: HashSet<Sha256dHash>,
 }
 
@@ -52,12 +70,11 @@ pub enum FetchFrom {
 }
 
 // TODO: &[Block] should be an iterator / a queue.
-impl Indexer {
-    pub fn open(path: &Path) -> Self {
+impl<'a> Indexer<'a> {
+    pub fn open(store: &'a Store) -> Self {
         Indexer {
-            txstore_db: DB::open(&path.join("txstore")),
-            history_db: DB::open(&path.join("history")),
-            headers: HeaderList::empty(), // TODO: sync from db
+            store,
+            indexed_headers: RwLock::new(store.indexed_headers()), // TODO: sync from db
             added_blockhashes: HashSet::new(),
         }
     }
@@ -65,9 +82,11 @@ impl Indexer {
     pub fn update(&mut self, daemon: &Daemon, fetch: FetchFrom) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
-        let new_headers = self
-            .headers
-            .order(daemon.get_new_headers(&self.headers, &tip)?);
+
+        let new_headers = {
+            let headers = self.indexed_headers.read().unwrap();
+            headers.order(daemon.get_new_headers(&headers, &tip)?)
+        };
 
         let fetcher = match fetch {
             FetchFrom::BITCOIND => bitcoind_fetcher,
@@ -78,38 +97,40 @@ impl Indexer {
         fetcher(&daemon, &new_headers)?.map(|blocks| self.add(&blocks));
 
         info!("compacting txns DB");
-        self.txstore_db.compact_all();
+        self.store.txstore_db.compact_all();
 
         info!("indexing history from {} blocks", new_headers.len());
         fetcher(&daemon, &new_headers)?.map(|blocks| self.index(&blocks));
 
         info!("compacting history DB");
-        self.history_db.compact_all();
+        self.store.history_db.compact_all();
 
-        self.headers.apply(new_headers);
-        assert_eq!(tip, *self.headers.tip());
+        let mut headers = self.indexed_headers.write().unwrap();
+        headers.apply(new_headers);
+        assert_eq!(tip, *headers.tip());
         Ok(())
     }
 
-    pub fn headers(&self) -> &HeaderList {
-        &self.headers
-    }
-
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        self.txstore_db
+        self.store
+            .txstore_db
             .get(&BlockRow::header_key(hash.to_bytes()))
             .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
-        self.txstore_db
+        self.store
+            .txstore_db
             .get(&BlockRow::txids_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
-        let rows = self.history_db.scan(&TxHistoryRow::filter(&scripthash[..]));
+        let rows = self
+            .store
+            .history_db
+            .scan(&TxHistoryRow::filter(&scripthash[..]));
         let mut txnsconf = rows
             .into_iter()
             .map(|row| TxHistoryRow::from_row(row).get_txid())
@@ -128,6 +149,7 @@ impl Indexer {
     pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
         let scripthash = compute_script_hash(script.as_bytes());
         let mut utxosconf = self
+            .store
             .history_db
             .scan(&TxHistoryRow::filter(&scripthash[..]))
             .into_iter()
@@ -161,7 +183,7 @@ impl Indexer {
     fn add(&mut self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
-        self.txstore_db.write(rows);
+        self.store.txstore_db.write(rows);
 
         self.added_blockhashes
             .extend(blocks.into_iter().map(|b| b.entry.hash()));
@@ -180,7 +202,7 @@ impl Indexer {
         }
         let rows = index_blocks(blocks, &previous_txos_map);
         debug!("indexed {} history rows", rows.len());
-        self.history_db.write(rows);
+        self.store.history_db.write(rows);
         debug!("written to DB");
     }
 
@@ -190,6 +212,7 @@ impl Indexer {
             .par_iter()
             .map(|txid| {
                 let rawtx = self
+                    .store
                     .txstore_db
                     .get(&TxRow::key(&txid[..]))
                     .expect(&format!("missing txid {} in txns db", txid));
@@ -218,26 +241,23 @@ impl Indexer {
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
-        self.txstore_db
+        self.store
+            .txstore_db
             .get(&TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
-        self.txstore_db
+        self.store
+            .txstore_db
             .scan(&TxConfRow::filter(&txid[..]))
             .into_iter()
             .map(TxConfRow::from_row)
             .find_map(|conf| {
-                let header = self
-                    .headers
-                    .header_by_height(conf.key.blockheight as usize)
-                    .expect("missing block header for recorded block height");
-                if &header.hash()[..] == conf.key.blockhash {
-                    Some(BlockId(header.height(), header.hash().clone()))
-                } else {
-                    None
-                }
+                let headers = self.indexed_headers.read().unwrap();
+                headers
+                    .header_by_blockhash(&parse_hash(&conf.key.blockhash))
+                    .map(|h| BlockId(h.height(), *h.hash()))
             })
     }
 }
