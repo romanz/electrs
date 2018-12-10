@@ -1,50 +1,38 @@
 use bincode;
-use bitcoin::blockdata::block::{Block, BlockHeader};
+use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::script::Script;
-use bitcoin::blockdata::transaction::{Transaction, OutPoint, TxOut};
-use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
-use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
+use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxOut};
+use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
 use rayon::prelude::*;
-use rocksdb;
 
-struct DBRow {
-    key: Vec<u8>,
-    value: Vec<u8>,
-}
-
-// use crypto::digest::Digest;
-// use crypto::sha2::Sha256;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs;
-use std::io::{Cursor, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::Receiver;
-use std::thread;
+use std::path::Path;
 
-// use daemon::Daemon;
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::util::{spawn_thread, Bytes, HeaderEntry, HeaderList, SyncChannel};
+use crate::util::{Bytes, HeaderList};
+
+mod fetch;
+mod db;
+
+use crate::new_index::fetch::{bitcoind_fetcher, blkfiles_fetcher, BlockEntry};
+use crate::new_index::db::{DBRow, DB};
 
 // use config::Config;
 
 pub struct Indexer {
     // TODO: should be column families
-    txstore_db: rocksdb::DB,
-    history_db: rocksdb::DB,
+    txstore_db: DB,
+    history_db: DB,
 
     headers: HeaderList, // TODO: RwLock
     added_blockhashes: HashSet<Sha256dHash>,
-}
-
-struct BlockEntry {
-    block: Block,
-    entry: HeaderEntry,
 }
 
 #[derive(Debug)]
@@ -67,21 +55,19 @@ pub enum FetchFrom {
 impl Indexer {
     pub fn open(path: &Path) -> Self {
         Indexer {
-            txstore_db: db_open(&path.join("txstore")),
-            history_db: db_open(&path.join("history")),
+            txstore_db: DB::open(&path.join("txstore")),
+            history_db: DB::open(&path.join("history")),
             headers: HeaderList::empty(), // TODO: sync from db
             added_blockhashes: HashSet::new(),
         }
     }
 
-    pub fn update(
-        &mut self,
-        daemon: &Daemon,
-        fetch: FetchFrom,
-    ) -> Result<()> {
+    pub fn update(&mut self, daemon: &Daemon, fetch: FetchFrom) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
-        let new_headers = self.headers.order(daemon.get_new_headers(&self.headers, &tip)?);
+        let new_headers = self
+            .headers
+            .order(daemon.get_new_headers(&self.headers, &tip)?);
 
         let fetcher = match fetch {
             FetchFrom::BITCOIND => bitcoind_fetcher,
@@ -92,13 +78,13 @@ impl Indexer {
         fetcher(&daemon, &new_headers)?.map(|blocks| self.add(&blocks));
 
         info!("compacting txns DB");
-        self.txstore_db.compact_range(None, None);
+        self.txstore_db.compact_all();
 
         info!("indexing history from {} blocks", new_headers.len());
         fetcher(&daemon, &new_headers)?.map(|blocks| self.index(&blocks));
 
         info!("compacting history DB");
-        self.history_db.compact_range(None, None);
+        self.history_db.compact_all();
 
         self.headers.apply(new_headers);
         assert_eq!(tip, *self.headers.tip());
@@ -110,18 +96,20 @@ impl Indexer {
     }
 
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        db_get(&self.txstore_db, &BlockRow::header_key(hash.to_bytes()))
+        self.txstore_db
+            .get(&BlockRow::header_key(hash.to_bytes()))
             .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
-        db_get(&self.txstore_db, &BlockRow::txids_key(hash.to_bytes()))
+        self.txstore_db
+            .get(&BlockRow::txids_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
-    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction,BlockId)> {
+    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
-        let rows = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]));
+        let rows = self.history_db.scan(&TxHistoryRow::filter(&scripthash[..]));
         let mut txnsconf = rows
             .into_iter()
             .map(|row| TxHistoryRow::from_row(row).get_txid())
@@ -139,16 +127,19 @@ impl Indexer {
 
     pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
         let scripthash = compute_script_hash(script.as_bytes());
-        let mut utxosconf = db_scan(&self.history_db, &TxHistoryRow::filter(&scripthash[..]))
+        let mut utxosconf = self
+            .history_db
+            .scan(&TxHistoryRow::filter(&scripthash[..]))
             .into_iter()
             .map(TxHistoryRow::from_row)
-            .filter_map(|history| self.tx_confirming_block(&history.get_txid()).map(|b| (history, b)))
+            .filter_map(|history| {
+                self.tx_confirming_block(&history.get_txid())
+                    .map(|b| (history, b))
+            })
             .fold(HashMap::new(), |mut utxos, (history, block)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(..) =>
-                        utxos.insert(history.get_outpoint(), block),
-                    TxHistoryInfo::Spending(..) =>
-                        utxos.remove(&history.get_outpoint()),
+                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), block),
+                    TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
                 utxos
@@ -162,16 +153,15 @@ impl Indexer {
                 txid: outpoint.txid,
                 vout: outpoint.vout,
                 txout: txo,
-                confirmed: utxosconf.remove(&outpoint).unwrap()
+                confirmed: utxosconf.remove(&outpoint).unwrap(),
             })
             .collect()
     }
 
-
     fn add(&mut self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
-        db_write(&self.txstore_db, rows);
+        self.txstore_db.write(rows);
 
         self.added_blockhashes
             .extend(blocks.into_iter().map(|b| b.entry.hash()));
@@ -190,7 +180,7 @@ impl Indexer {
         }
         let rows = index_blocks(blocks, &previous_txos_map);
         debug!("indexed {} history rows", rows.len());
-        db_write(&self.history_db, rows);
+        self.history_db.write(rows);
         debug!("written to DB");
     }
 
@@ -199,7 +189,9 @@ impl Indexer {
         txids
             .par_iter()
             .map(|txid| {
-                let rawtx = db_get(&self.txstore_db, &TxRow::key(&txid[..]))
+                let rawtx = self
+                    .txstore_db
+                    .get(&TxRow::key(&txid[..]))
                     .expect(&format!("missing txid {} in txns db", txid));
                 let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
                 assert_eq!(*txid, txn.txid());
@@ -226,16 +218,20 @@ impl Indexer {
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
-        db_get(&self.txstore_db, &TxOutRow::key(&outpoint))
+        self.txstore_db
+            .get(&TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
-        db_scan(&self.txstore_db, &TxConfRow::filter(&txid[..]))
+        self.txstore_db
+            .scan(&TxConfRow::filter(&txid[..]))
             .into_iter()
             .map(TxConfRow::from_row)
             .find_map(|conf| {
-                let header = self.headers.header_by_height(conf.key.blockheight as usize)
+                let header = self
+                    .headers
+                    .header_by_height(conf.key.blockheight as usize)
                     .expect("missing block header for recorded block height");
                 if &header.hash()[..] == conf.key.blockhash {
                     Some(BlockId(header.height(), header.hash().clone()))
@@ -244,231 +240,6 @@ impl Indexer {
                 }
             })
     }
-}
-
-struct Fetcher<T> {
-    receiver: Receiver<T>,
-    thread: thread::JoinHandle<()>,
-}
-
-impl<T> Fetcher<T> {
-    fn from(receiver: Receiver<T>, thread: thread::JoinHandle<()>) -> Self {
-        Fetcher { receiver, thread }
-    }
-
-    fn map<F>(self, mut func: F)
-    where
-        F: FnMut(T) -> (),
-    {
-        for item in self.receiver {
-            func(item);
-        }
-        self.thread.join().expect("fetcher thread panicked")
-    }
-}
-
-fn bitcoind_fetcher(
-    daemon: &Daemon,
-    new_headers: &[HeaderEntry],
-) -> Result<Fetcher<Vec<BlockEntry>>> {
-    new_headers.last().map(|tip| {
-        info!("{:?} ({} new headers)", tip, new_headers.len());
-    });
-    let new_headers = new_headers.to_vec();
-    let daemon = daemon.reconnect()?;
-    let chan = SyncChannel::new(1);
-    let sender = chan.sender();
-    Ok(Fetcher::from(
-        chan.into_receiver(),
-        spawn_thread("bitcoind_fetcher", move || -> () {
-            for entries in new_headers.chunks(100) {
-                let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
-                let blocks = daemon
-                    .getblocks(&blockhashes)
-                    .expect("failed to get blocks from bitcoind");
-                assert_eq!(blocks.len(), entries.len());
-                let block_entries: Vec<BlockEntry> = blocks
-                    .into_iter()
-                    .zip(entries)
-                    .map(|(block, entry)| BlockEntry {
-                        block,
-                        entry: entry.clone(), // TODO: remove this clone()
-                    })
-                    .collect();
-                assert_eq!(block_entries.len(), entries.len());
-                sender
-                    .send(block_entries)
-                    .expect("failed to send fetched blocks");
-            }
-        }),
-    ))
-}
-
-fn blkfiles_fetcher(
-    daemon: &Daemon,
-    new_headers: &[HeaderEntry],
-) -> Result<Fetcher<Vec<BlockEntry>>> {
-    let magic = daemon.magic();
-    let blk_files = daemon.list_blk_files()?;
-
-    let chan = SyncChannel::new(1);
-    let sender = chan.sender();
-
-    let mut entry_map: HashMap<Sha256dHash, HeaderEntry> =
-        new_headers.iter().map(|h| (*h.hash(), h.clone())).collect();
-
-    let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
-    Ok(Fetcher::from(
-        chan.into_receiver(),
-        spawn_thread("bitcoind_fetcher", move || -> () {
-            parser.map(|blocks| {
-                let block_entries: Vec<BlockEntry> = blocks
-                    .into_iter()
-                    .filter_map(|block| {
-                        let blockhash = block.bitcoin_hash();
-                        entry_map
-                            .remove(&blockhash)
-                            .map(|entry| BlockEntry { block, entry })
-                            .or_else(|| {
-                                debug!("unknown block {}", blockhash);
-                                None
-                            })
-                    })
-                    .collect();
-                trace!("fetched {} blocks", block_entries.len());
-                sender
-                    .send(block_entries)
-                    .expect("failed to send blocks entries from blk*.dat files");
-            });
-            if !entry_map.is_empty() {
-                panic!(
-                    "failed to index {} blocks from blk*.dat files",
-                    entry_map.len()
-                )
-            }
-        }),
-    ))
-}
-
-fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Fetcher<Vec<u8>> {
-    let chan = SyncChannel::new(1);
-    let sender = chan.sender();
-
-    Fetcher::from(
-        chan.into_receiver(),
-        spawn_thread("blkfiles_reader", move || -> () {
-            for path in blk_files {
-                trace!("reading {:?}", path);
-                let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
-                sender
-                    .send(blob)
-                    .expect(&format!("failed to send {:?} contents", path));
-            }
-        }),
-    )
-}
-
-fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<Block>> {
-    let chan = SyncChannel::new(1);
-    let sender = chan.sender();
-
-    Fetcher::from(
-        chan.into_receiver(),
-        spawn_thread("blkfiles_parser", move || -> () {
-            blobs.map(|blob| {
-                trace!("parsing {} bytes", blob.len());
-                let blocks = parse_blocks(blob, magic).expect("failed to parse blk*.dat file");
-                sender
-                    .send(blocks)
-                    .expect("failed to send blocks from blk*.dat file");
-            });
-        }),
-    )
-}
-
-fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
-    let mut cursor = Cursor::new(&blob);
-    let mut slices = vec![];
-    let max_pos = blob.len() as u64;
-    while cursor.position() < max_pos {
-        match u32::consensus_decode(&mut cursor) {
-            Ok(value) => {
-                if magic != value {
-                    cursor
-                        .seek(SeekFrom::Current(-3))
-                        .expect("failed to seek back");
-                    continue;
-                }
-            }
-            Err(_) => break, // EOF
-        };
-        let block_size = u32::consensus_decode(&mut cursor).chain_err(|| "no block size")?;
-        let start = cursor.position() as usize;
-        cursor
-            .seek(SeekFrom::Current(block_size as i64))
-            .chain_err(|| format!("seek {} failed", block_size))?;
-        let end = cursor.position() as usize;
-
-        slices.push(&blob[start..end])
-    }
-
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(0) // CPU-bound
-        .thread_name(|i| format!("parse-blocks-{}", i))
-        .build()
-        .unwrap();
-    Ok(pool.install(|| slices
-        .par_iter()
-        .map(|slice| deserialize(slice).expect("failed to parse Block"))
-        .collect()))
-}
-
-fn db_open(path: &Path) -> rocksdb::DB {
-    debug!("opening DB at {:?}", path);
-    let mut db_opts = rocksdb::Options::default();
-    db_opts.create_if_missing(true);
-    db_opts.set_max_open_files(-1); // TODO: make sure to `ulimit -n` this process correctly
-    db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
-    db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
-    db_opts.set_target_file_size_base(256 << 20);
-    db_opts.set_write_buffer_size(256 << 20);
-    db_opts.set_disable_auto_compactions(true); // for initial bulk load
-
-    // db_opts.set_advise_random_on_open(???);
-    db_opts.set_compaction_readahead_size(1 << 20);
-
-    // let mut block_opts = rocksdb::BlockBasedOptions::default();
-    // block_opts.set_block_size(???);
-
-    rocksdb::DB::open(&db_opts, path).expect("failed to open RocksDB")
-}
-
-fn db_scan(db: &rocksdb::DB, prefix: &[u8]) -> Vec<DBRow> {
-    let mode = rocksdb::IteratorMode::From(prefix, rocksdb::Direction::Forward);
-    db.iterator(mode)
-        .take_while(|(key, _)| key.starts_with(prefix))
-        .map(|(k, v)| DBRow {
-            key: k.into_vec(),
-            value: v.into_vec(),
-        })
-        .collect()
-}
-
-fn db_write(db: &rocksdb::DB, mut rows: Vec<DBRow>) {
-    trace!("writing {} rows to {:?}", rows.len(), db);
-    rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
-    let mut batch = rocksdb::WriteBatch::default();
-    for row in rows {
-        batch.put(&row.key, &row.value).unwrap();
-    }
-    let mut opts = rocksdb::WriteOptions::new();
-    opts.set_sync(false);
-    opts.disable_wal(true);
-    db.write_opt(batch, &opts).unwrap();
-}
-
-fn db_get(db: &rocksdb::DB, key: &[u8]) -> Option<Bytes> {
-    db.get(key).unwrap().map(|v| v.to_vec())
 }
 
 type FullHash = [u8; 32]; // serialized SHA256 result
@@ -837,11 +608,11 @@ impl TxHistoryRow {
         match self.key.txinfo {
             TxHistoryInfo::Funding(txid, vout) => OutPoint {
                 txid: parse_hash(&txid),
-                vout: vout as u32
+                vout: vout as u32,
             },
             TxHistoryInfo::Spending(_, _, prevtxid, prevout) => OutPoint {
                 txid: parse_hash(&prevtxid),
-                vout: prevout as u32
+                vout: prevout as u32,
             },
         }
     }
