@@ -11,7 +11,7 @@ use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
@@ -44,12 +44,13 @@ impl Store {
 pub struct Indexer<'a> {
     // TODO: should be column families
     store: &'a Store,
-    indexed_headers: RwLock<HeaderList>,
+    indexed_headers: Arc<RwLock<HeaderList>>,
     added_blockhashes: HashSet<Sha256dHash>,
 }
 
 pub struct Query<'a> {
-    indexer: &'a Indexer<'a>,
+    store: &'a Store,                         // TODO: should be used as read-only
+    indexed_headers: Arc<RwLock<HeaderList>>, // TODO: should be used as read-only
 }
 
 #[derive(Debug)]
@@ -68,7 +69,7 @@ impl<'a> Indexer<'a> {
     pub fn open(store: &'a Store) -> Self {
         Indexer {
             store,
-            indexed_headers: RwLock::new(store.indexed_headers()), // TODO: sync from db
+            indexed_headers: Arc::new(RwLock::new(store.indexed_headers())), // TODO: sync from db
             added_blockhashes: HashSet::new(),
         }
     }
@@ -101,7 +102,10 @@ impl<'a> Indexer<'a> {
     }
 
     pub fn query(&self) -> Query {
-        Query { indexer: self }
+        Query {
+            store: self.store,
+            indexed_headers: self.indexed_headers.clone(),
+        }
     }
 
     fn add(&mut self, blocks: &[BlockEntry]) {
@@ -133,16 +137,14 @@ impl<'a> Indexer<'a> {
 
 impl<'a> Query<'a> {
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        self.indexer
-            .store
+        self.store
             .txstore_db
             .get(&BlockRow::header_key(hash.to_bytes()))
             .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
-        self.indexer
-            .store
+        self.store
             .txstore_db
             .get(&BlockRow::txids_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
@@ -151,7 +153,6 @@ impl<'a> Query<'a> {
     pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
         let rows = self
-            .indexer
             .store
             .history_db
             .scan(&TxHistoryRow::filter(&scripthash[..]));
@@ -173,7 +174,6 @@ impl<'a> Query<'a> {
     pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
         let scripthash = compute_script_hash(script.as_bytes());
         let mut utxosconf = self
-            .indexer
             .store
             .history_db
             .scan(&TxHistoryRow::filter(&scripthash[..]))
@@ -211,7 +211,6 @@ impl<'a> Query<'a> {
             .par_iter()
             .map(|txid| {
                 let rawtx = self
-                    .indexer
                     .store
                     .txstore_db
                     .get(&TxRow::key(&txid[..]))
@@ -241,22 +240,20 @@ impl<'a> Query<'a> {
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
-        self.indexer
-            .store
+        self.store
             .txstore_db
             .get(&TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
-        self.indexer
-            .store
+        self.store
             .txstore_db
             .scan(&TxConfRow::filter(&txid[..]))
             .into_iter()
             .map(TxConfRow::from_row)
             .find_map(|conf| {
-                let headers = self.indexer.indexed_headers.read().unwrap();
+                let headers = self.indexed_headers.read().unwrap();
                 headers
                     .header_by_blockhash(&parse_hash(&conf.key.blockhash))
                     .map(|h| BlockId(h.height(), *h.hash()))
