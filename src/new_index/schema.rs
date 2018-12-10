@@ -264,7 +264,143 @@ impl<'a> Query<'a> {
     }
 }
 
+fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
+    // persist individual transactions:
+    //      T{txid} → {rawtx}
+    //      C{txid}{blockhash}{height} →
+    //      O{txid}{index} → {txout}
+    // persist block headers' and txids' rows:
+    //      B{blockhash} → {header}
+    //      X{blockhash} → {txid1}...{txidN}
+    block_entries
+        .par_iter() // serialization is CPU-intensive
+        .map(|b| {
+            let mut rows = vec![];
+            let blockheight = b.entry.height() as u32;
+            let blockhash = b.entry.hash().to_bytes();
+            let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
+
+            rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
+            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
+
+            for tx in &b.block.txdata {
+                add_transaction(tx, blockheight, blockhash, &mut rows);
+            }
+            rows
+        })
+        .flatten()
+        .collect()
+}
+
+fn add_transaction(tx: &Transaction, blockheight: u32, blockhash: FullHash, rows: &mut Vec<DBRow>) {
+    rows.push(TxRow::new(tx).to_row());
+    rows.push(TxConfRow::new(tx, blockheight, blockhash).to_row());
+
+    let txid = tx.txid().into_bytes();
+    for (txo_index, txo) in tx.output.iter().enumerate() {
+        if !txo.script_pubkey.is_provably_unspendable() {
+            rows.push(TxOutRow::new(&txid, txo_index, txo).to_row());
+        }
+    }
+}
+
+fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
+    block_entries
+        .iter()
+        .flat_map(|b| {
+            b.block.txdata.iter().flat_map(|tx| {
+                tx.input.iter().filter_map(|txin| {
+                    if txin.previous_output.is_null() {
+                        None
+                    } else {
+                        Some(txin.previous_output)
+                    }
+                })
+            })
+        })
+        .collect()
+}
+
+fn index_blocks(
+    block_entries: &[BlockEntry],
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
+) -> Vec<DBRow> {
+    block_entries
+        .par_iter() // serialization is CPU-intensive
+        .map(|b| {
+            let mut rows = vec![];
+            for tx in &b.block.txdata {
+                let height = b.entry.height() as u32;
+                index_transaction(tx, height, previous_txos_map, &mut rows);
+            }
+            rows
+        })
+        .flatten()
+        .collect()
+}
+
+// TODO: return an iterator?
+fn index_transaction(
+    tx: &Transaction,
+    confirmed_height: u32,
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
+    rows: &mut Vec<DBRow>,
+) {
+    // persist history index:
+    //      H{funding-scripthash}{funding-height}F{funding-txid:vout} → ""
+    //      H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout} → ""
+    // persist "edges" for fast is-this-TXO-spent check
+    //      S{funding-txid:vout}{spending-txid:vin} → ""
+    let txid = tx.txid().into_bytes();
+    for (txo_index, txo) in tx.output.iter().enumerate() {
+        if !txo.script_pubkey.is_provably_unspendable() {
+            let history = TxHistoryRow::new(
+                &txo.script_pubkey,
+                confirmed_height,
+                TxHistoryInfo::Funding(txid, txo_index as u16),
+            );
+            rows.push(history.to_row())
+        }
+    }
+    for (txi_index, txi) in tx.input.iter().enumerate() {
+        if txi.previous_output.is_null() {
+            continue;
+        }
+        let prev_txo = previous_txos_map
+            .get(&txi.previous_output)
+            .expect(&format!("missing previous txo {}", txi.previous_output));
+
+        let history = TxHistoryRow::new(
+            &prev_txo.script_pubkey,
+            confirmed_height,
+            TxHistoryInfo::Spending(
+                txid,
+                txi_index as u16,
+                txi.previous_output.txid.into_bytes(),
+                txi.previous_output.vout as u16,
+            ),
+        );
+        rows.push(history.to_row());
+
+        let edge = TxEdgeRow::new(
+            txi.previous_output.txid.into_bytes(),
+            txi.previous_output.vout as u16,
+            txid,
+            txi_index as u16,
+        );
+        rows.push(edge.to_row());
+    }
+}
+
 type FullHash = [u8; 32]; // serialized SHA256 result
+
+fn compute_script_hash(script: &[u8]) -> FullHash {
+    let mut hash = FullHash::default();
+    let mut sha2 = Sha256::new();
+    sha2.input(script);
+    sha2.result(&mut hash);
+    hash
+}
 
 fn parse_hash(hash: &FullHash) -> Sha256dHash {
     deserialize(hash).expect("failed to parse Sha256dHash")
@@ -434,142 +570,6 @@ impl BlockRow {
             value: self.value,
         }
     }
-}
-
-fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
-    // persist individual transactions:
-    //      T{txid} → {rawtx}
-    //      C{txid}{blockhash}{height} →
-    //      O{txid}{index} → {txout}
-    // persist block headers' and txids' rows:
-    //      B{blockhash} → {header}
-    //      X{blockhash} → {txid1}...{txidN}
-    block_entries
-        .par_iter() // serialization is CPU-intensive
-        .map(|b| {
-            let mut rows = vec![];
-            let blockheight = b.entry.height() as u32;
-            let blockhash = b.entry.hash().to_bytes();
-            let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
-
-            rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
-            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
-
-            for tx in &b.block.txdata {
-                add_transaction(tx, blockheight, blockhash, &mut rows);
-            }
-            rows
-        })
-        .flatten()
-        .collect()
-}
-
-fn add_transaction(tx: &Transaction, blockheight: u32, blockhash: FullHash, rows: &mut Vec<DBRow>) {
-    rows.push(TxRow::new(tx).to_row());
-    rows.push(TxConfRow::new(tx, blockheight, blockhash).to_row());
-
-    let txid = tx.txid().into_bytes();
-    for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !txo.script_pubkey.is_provably_unspendable() {
-            rows.push(TxOutRow::new(&txid, txo_index, txo).to_row());
-        }
-    }
-}
-
-fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
-    block_entries
-        .iter()
-        .flat_map(|b| {
-            b.block.txdata.iter().flat_map(|tx| {
-                tx.input.iter().filter_map(|txin| {
-                    if txin.previous_output.is_null() {
-                        None
-                    } else {
-                        Some(txin.previous_output)
-                    }
-                })
-            })
-        })
-        .collect()
-}
-
-fn index_blocks(
-    block_entries: &[BlockEntry],
-    previous_txos_map: &HashMap<OutPoint, TxOut>,
-) -> Vec<DBRow> {
-    block_entries
-        .par_iter() // serialization is CPU-intensive
-        .map(|b| {
-            let mut rows = vec![];
-            for tx in &b.block.txdata {
-                let height = b.entry.height() as u32;
-                index_transaction(tx, height, previous_txos_map, &mut rows);
-            }
-            rows
-        })
-        .flatten()
-        .collect()
-}
-
-// TODO: return an iterator?
-fn index_transaction(
-    tx: &Transaction,
-    confirmed_height: u32,
-    previous_txos_map: &HashMap<OutPoint, TxOut>,
-    rows: &mut Vec<DBRow>,
-) {
-    // persist history index:
-    //      H{funding-scripthash}{funding-height}F{funding-txid:vout} → ""
-    //      H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout} → ""
-    // persist "edges" for fast is-this-TXO-spent check
-    //      S{funding-txid:vout}{spending-txid:vin} → ""
-    let txid = tx.txid().into_bytes();
-    for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !txo.script_pubkey.is_provably_unspendable() {
-            let history = TxHistoryRow::new(
-                &txo.script_pubkey,
-                confirmed_height,
-                TxHistoryInfo::Funding(txid, txo_index as u16),
-            );
-            rows.push(history.to_row())
-        }
-    }
-    for (txi_index, txi) in tx.input.iter().enumerate() {
-        if txi.previous_output.is_null() {
-            continue;
-        }
-        let prev_txo = previous_txos_map
-            .get(&txi.previous_output)
-            .expect(&format!("missing previous txo {}", txi.previous_output));
-
-        let history = TxHistoryRow::new(
-            &prev_txo.script_pubkey,
-            confirmed_height,
-            TxHistoryInfo::Spending(
-                txid,
-                txi_index as u16,
-                txi.previous_output.txid.into_bytes(),
-                txi.previous_output.vout as u16,
-            ),
-        );
-        rows.push(history.to_row());
-
-        let edge = TxEdgeRow::new(
-            txi.previous_output.txid.into_bytes(),
-            txi.previous_output.vout as u16,
-            txid,
-            txi_index as u16,
-        );
-        rows.push(edge.to_row());
-    }
-}
-
-fn compute_script_hash(script: &[u8]) -> FullHash {
-    let mut hash = FullHash::default();
-    let mut sha2 = Sha256::new();
-    sha2.input(script);
-    sha2.result(&mut hash);
-    hash
 }
 
 #[derive(Serialize, Deserialize)]
