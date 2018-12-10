@@ -19,7 +19,7 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{Bytes, HeaderList};
 
-use crate::new_index::db::{DBRow, DB};
+use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 pub struct Store {
@@ -150,12 +150,16 @@ impl<'a> Query<'a> {
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
-    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
+    fn history_iter_scan(&self, script: &Script) -> ScanIterator {
         let scripthash = compute_script_hash(script.as_bytes());
-        let mut txnsconf = self
-            .store
+        self.store
             .history_db
             .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
+    }
+
+    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
+        let mut txnsconf = self
+            .history_iter_scan(script)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .dedup()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
@@ -170,11 +174,8 @@ impl<'a> Query<'a> {
     }
 
     pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
-        let scripthash = compute_script_hash(script.as_bytes());
         let mut utxosconf = self
-            .store
-            .history_db
-            .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
+            .history_iter_scan(script)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
