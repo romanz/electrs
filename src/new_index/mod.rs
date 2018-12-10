@@ -53,6 +53,10 @@ pub struct Indexer<'a> {
     added_blockhashes: HashSet<Sha256dHash>,
 }
 
+pub struct Query<'a> {
+    indexer: &'a Indexer<'a>,
+}
+
 #[derive(Debug)]
 pub struct BlockId(usize, Sha256dHash);
 
@@ -111,15 +115,49 @@ impl<'a> Indexer<'a> {
         Ok(())
     }
 
+    pub fn query(&self) -> Query {
+        Query { indexer: self }
+    }
+
+    fn add(&mut self, blocks: &[BlockEntry]) {
+        // TODO: skip orphaned blocks?
+        let rows = add_blocks(blocks);
+        self.store.txstore_db.write(rows);
+
+        self.added_blockhashes
+            .extend(blocks.into_iter().map(|b| b.entry.hash()));
+    }
+
+    fn index(&mut self, blocks: &[BlockEntry]) {
+        debug!("looking up TXOs from {} blocks", blocks.len());
+        let previous_txos_map = self.query().lookup_txos(&get_previous_txos(blocks));
+        debug!("looked up {} TXOs", previous_txos_map.len());
+        for b in blocks {
+            let blockhash = b.entry.hash();
+            // TODO: replace by lookup into txstore_db?
+            if !self.added_blockhashes.contains(&blockhash) {
+                panic!("cannot index block {} (missing from store)", blockhash);
+            }
+        }
+        let rows = index_blocks(blocks, &previous_txos_map);
+        debug!("indexed {} history rows", rows.len());
+        self.store.history_db.write(rows);
+        debug!("written to DB");
+    }
+}
+
+impl<'a> Query<'a> {
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        self.store
+        self.indexer
+            .store
             .txstore_db
             .get(&BlockRow::header_key(hash.to_bytes()))
             .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
-        self.store
+        self.indexer
+            .store
             .txstore_db
             .get(&BlockRow::txids_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
@@ -128,6 +166,7 @@ impl<'a> Indexer<'a> {
     pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
         let scripthash = compute_script_hash(script.as_bytes());
         let rows = self
+            .indexer
             .store
             .history_db
             .scan(&TxHistoryRow::filter(&scripthash[..]));
@@ -149,6 +188,7 @@ impl<'a> Indexer<'a> {
     pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
         let scripthash = compute_script_hash(script.as_bytes());
         let mut utxosconf = self
+            .indexer
             .store
             .history_db
             .scan(&TxHistoryRow::filter(&scripthash[..]))
@@ -180,38 +220,13 @@ impl<'a> Indexer<'a> {
             .collect()
     }
 
-    fn add(&mut self, blocks: &[BlockEntry]) {
-        // TODO: skip orphaned blocks?
-        let rows = add_blocks(blocks);
-        self.store.txstore_db.write(rows);
-
-        self.added_blockhashes
-            .extend(blocks.into_iter().map(|b| b.entry.hash()));
-    }
-
-    fn index(&mut self, blocks: &[BlockEntry]) {
-        debug!("looking up TXOs from {} blocks", blocks.len());
-        let previous_txos_map = self.lookup_txos(&get_previous_txos(blocks));
-        debug!("looked up {} TXOs", previous_txos_map.len());
-        for b in blocks {
-            let blockhash = b.entry.hash();
-            // TODO: replace by lookup into txstore_db?
-            if !self.added_blockhashes.contains(&blockhash) {
-                panic!("cannot index block {} (missing from store)", blockhash);
-            }
-        }
-        let rows = index_blocks(blocks, &previous_txos_map);
-        debug!("indexed {} history rows", rows.len());
-        self.store.history_db.write(rows);
-        debug!("written to DB");
-    }
-
     // TODO: can we pass txids as a "generic iterable"?
     fn lookup_txns(&self, txids: &BTreeSet<Sha256dHash>) -> HashMap<Sha256dHash, Transaction> {
         txids
             .par_iter()
             .map(|txid| {
                 let rawtx = self
+                    .indexer
                     .store
                     .txstore_db
                     .get(&TxRow::key(&txid[..]))
@@ -241,20 +256,22 @@ impl<'a> Indexer<'a> {
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
-        self.store
+        self.indexer
+            .store
             .txstore_db
             .get(&TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
     }
 
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
-        self.store
+        self.indexer
+            .store
             .txstore_db
             .scan(&TxConfRow::filter(&txid[..]))
             .into_iter()
             .map(TxConfRow::from_row)
             .find_map(|conf| {
-                let headers = self.indexed_headers.read().unwrap();
+                let headers = self.indexer.indexed_headers.read().unwrap();
                 headers
                     .header_by_blockhash(&parse_hash(&conf.key.blockhash))
                     .map(|h| BlockId(h.height(), *h.hash()))

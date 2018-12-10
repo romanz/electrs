@@ -40,12 +40,15 @@ fn run_server(config: Config) -> Result<()> {
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     indexer.update(&daemon, fetch)?;
-    let addr = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6").unwrap();
-    for (txid, (txn, b)) in indexer.history(&addr.script_pubkey()) {
+    let script = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6")
+        .unwrap()
+        .script_pubkey();
+    let q = indexer.query();
+    for (txid, (txn, b)) in q.history(&script) {
         info!("{} in {:?} --- {:?}", txid, b, txn);
     }
 
-    debug!("utxo: {:?}", indexer.utxo(&addr.script_pubkey()));
+    debug!("utxo: {:?}", q.utxo(&script));
 
     Ok(())
 }
