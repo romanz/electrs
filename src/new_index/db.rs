@@ -34,6 +34,7 @@ impl Iterator for ScanIterator {
     }
 }
 
+#[derive(Debug)]
 pub struct DB {
     db: rocksdb::DB,
 }

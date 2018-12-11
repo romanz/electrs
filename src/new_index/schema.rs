@@ -133,7 +133,7 @@ impl<'a> Indexer<'a> {
 
     fn index(&mut self, blocks: &[BlockEntry]) {
         debug!("looking up TXOs from {} blocks", blocks.len());
-        let previous_txos_map = self.query().lookup_txos(&get_previous_txos(blocks));
+        let previous_txos_map = lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks));
         debug!("looked up {} TXOs", previous_txos_map.len());
         for b in blocks {
             let blockhash = b.entry.hash();
@@ -205,7 +205,7 @@ impl<'a> Query<'a> {
             });
 
         let outpoints = utxosconf.keys().cloned().collect();
-        let txos = self.lookup_txos(&outpoints);
+        let txos = lookup_txos(&self.store.txstore_db, &outpoints);
 
         txos.into_iter()
             .map(|(outpoint, txo)| Utxo {
@@ -296,28 +296,8 @@ impl<'a> Query<'a> {
             })
     }
 
-    fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(16) // we need to saturate SSD IOPS
-            .thread_name(|i| format!("lookup-txo-{}", i))
-            .build()
-            .unwrap();
-        pool.install(|| {
-            outpoints
-                .par_iter()
-                .map(|outpoint| {
-                    let txo = self.lookup_txo(&outpoint).expect("missing txo in txns db");
-                    (*outpoint, txo)
-                })
-                .collect()
-        })
-    }
-
     pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
-        self.store
-            .txstore_db
-            .get(&TxOutRow::key(&outpoint))
-            .map(|val| deserialize(&val).expect("failed to parse TxOut"))
+        lookup_txo(&self.store.txstore_db, outpoint)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
@@ -404,6 +384,30 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
             })
         })
         .collect()
+}
+
+fn lookup_txos(txstore_db: &DB, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(16) // we need to saturate SSD IOPS
+        .thread_name(|i| format!("lookup-txo-{}", i))
+        .build()
+        .unwrap();
+    pool.install(|| {
+        outpoints
+            .par_iter()
+            .map(|outpoint| {
+                let txo = lookup_txo(&txstore_db, &outpoint)
+                    .expect(&format!("missing txo {} in {:?}", outpoint, txstore_db));
+                (*outpoint, txo)
+            })
+            .collect()
+    })
+}
+
+fn lookup_txo(txstore_db: &DB, outpoint: &OutPoint) -> Option<TxOut> {
+    txstore_db
+        .get(&TxOutRow::key(&outpoint))
+        .map(|val| deserialize(&val).expect("failed to parse TxOut"))
 }
 
 fn index_blocks(
