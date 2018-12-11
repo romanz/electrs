@@ -118,7 +118,7 @@ impl<'a> Indexer<'a> {
     pub fn query(&self) -> Query {
         Query {
             store: self.store,
-            indexed_headers: self.indexed_headers.clone(),
+            indexed_headers: Arc::clone(&self.indexed_headers),
         }
     }
 
