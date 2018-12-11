@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 // use signal::Waiter;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::util::{Bytes, HeaderList};
+use crate::util::{full_hash, Bytes, HeaderEntry, HeaderList};
 
 use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
@@ -56,12 +56,25 @@ pub struct Query<'a> {
 #[derive(Debug)]
 pub struct BlockId(usize, Sha256dHash);
 
+// represents the status of a block that is part of the best chain
+pub struct BestChainBlock {
+    height: usize,
+    next: Option<Sha256dHash>,
+}
+
 #[derive(Debug)]
 pub struct Utxo {
     txid: Sha256dHash,
     vout: u32,
     txout: TxOut,
-    confirmed: BlockId,
+    confirmed: Option<BlockId>,
+}
+
+#[derive(Debug)]
+pub struct SpendingInput {
+    txid: Sha256dHash,
+    vin: u32,
+    confirmed: Option<BlockId>,
 }
 
 // TODO: &[Block] should be an iterator / a queue.
@@ -198,26 +211,87 @@ impl<'a> Query<'a> {
                 txid: outpoint.txid,
                 vout: outpoint.vout,
                 txout: txo,
-                confirmed: utxosconf.remove(&outpoint).unwrap(),
+                confirmed: Some(utxosconf.remove(&outpoint).unwrap()),
             })
             .collect()
     }
 
+    pub fn get_header(&self, height: usize) -> Option<HeaderEntry> {
+        self.indexed_headers
+            .read()
+            .unwrap()
+            .header_by_height(height)
+            .cloned()
+    }
+
+    pub fn get_headers(&self, heights: &[usize]) -> Result<Vec<HeaderEntry>> {
+        let headers = self.indexed_headers.read().unwrap();
+        heights
+            .iter()
+            .map(|height| {
+                headers
+                    .header_by_height(*height)
+                    .cloned()
+                    .chain_err(|| format!("missing block height {}", height))
+            })
+            .collect()
+    }
+
+    pub fn best_height(&self) -> usize {
+        self.indexed_headers.read().unwrap().len() - 1
+    }
+
+    pub fn best_hash(&self) -> Sha256dHash {
+        self.indexed_headers.read().unwrap().tip().clone()
+    }
+
+    pub fn best_header(&self) -> HeaderEntry {
+        let headers = self.indexed_headers.read().unwrap();
+        headers
+            .header_by_blockhash(headers.tip())
+            .expect("missing chain tip")
+            .clone()
+    }
+
+    pub fn get_bestchain_block(&self, hash: &Sha256dHash) -> Option<BestChainBlock> {
+        // TODO differentiate orphaned and non-existing blocks? telling them apart requires
+        // an additional db read.
+        let headers = self.indexed_headers.read().unwrap();
+        // get_header_by_hash looks up the height first, then fetches the header by that.
+        // if the block is no longer the best block at this height, it'll return None.
+        headers
+            .header_by_blockhash(hash)
+            .map(|header| BestChainBlock {
+                height: header.height(),
+                next: headers
+                    .header_by_height(header.height() + 1)
+                    .map(|h| h.hash().clone()),
+            })
+    }
+
     // TODO: can we pass txids as a "generic iterable"?
+    // TODO: if made public, this should return a Result instead of panicking
     fn lookup_txns(&self, txids: &BTreeSet<Sha256dHash>) -> HashMap<Sha256dHash, Transaction> {
         txids
             .par_iter()
             .map(|txid| {
-                let rawtx = self
-                    .store
-                    .txstore_db
-                    .get(&TxRow::key(&txid[..]))
+                let txn = self
+                    .lookup_txn(txid)
                     .expect(&format!("missing txid {} in txns db", txid));
-                let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
-                assert_eq!(*txid, txn.txid());
                 (*txid, txn)
             })
             .collect()
+    }
+
+    pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+        self.store
+            .txstore_db
+            .get(&TxRow::key(&txid[..]))
+            .map(|rawtx| {
+                let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
+                assert_eq!(*txid, txn.txid());
+                txn
+            })
     }
 
     fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
@@ -237,11 +311,26 @@ impl<'a> Query<'a> {
         })
     }
 
-    fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
+    pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
         self.store
             .txstore_db
             .get(&TxOutRow::key(&outpoint))
             .map(|val| deserialize(&val).expect("failed to parse TxOut"))
+    }
+
+    pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
+        self.store
+            .history_db
+            .iter_scan(&TxEdgeRow::filter(&outpoint))
+            .map(TxEdgeRow::from_row)
+            .find_map(|edge| {
+                let txid = parse_hash(&edge.key.spending_txid);
+                self.tx_confirming_block(&txid).map(|b| SpendingInput {
+                    txid,
+                    vin: edge.key.spending_vin as u32,
+                    confirmed: Some(b),
+                })
+            })
     }
 
     fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
@@ -662,6 +751,11 @@ impl TxEdgeRow {
             spending_vin,
         };
         TxEdgeRow { key }
+    }
+
+    pub fn filter(outpoint: &OutPoint) -> Bytes {
+        // TODO build key without using bincode? [ b"S", &outpoint.txid[..], outpoint.vout?? ].concat()
+        bincode::serialize(&(b'S', full_hash(&outpoint.txid[..]), outpoint.vout as u16)).unwrap()
     }
 
     fn to_row(self) -> DBRow {
