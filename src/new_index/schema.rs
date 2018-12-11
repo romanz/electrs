@@ -66,7 +66,8 @@ pub struct BestChainBlock {
 pub struct Utxo {
     txid: Sha256dHash,
     vout: u32,
-    txout: TxOut,
+    value: u64,
+    script: Script,
     confirmed: Option<BlockId>,
 }
 
@@ -210,7 +211,8 @@ impl<'a> Query<'a> {
             .map(|(outpoint, txo)| Utxo {
                 txid: outpoint.txid,
                 vout: outpoint.vout,
-                txout: txo,
+                value: txo.value,
+                script: txo.script_pubkey,
                 confirmed: Some(utxosconf.remove(&outpoint).unwrap()),
             })
             .collect()
