@@ -151,10 +151,11 @@ impl<'a> Indexer<'a> {
 
 impl<'a> Query<'a> {
     pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
-        self.store
-            .txstore_db
-            .get(&BlockRow::header_key(hash.to_bytes()))
-            .map(|val| deserialize(&val).expect("failed to parse BlockHeader"))
+        self.indexed_headers
+            .read()
+            .unwrap()
+            .header_by_blockhash(hash)
+            .map(|h| h.header().clone())
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
