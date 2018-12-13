@@ -1,5 +1,5 @@
 use bitcoin::blockdata::block::Block;
-use bitcoin::consensus::encode::{deserialize, Decodable};
+use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use rayon::prelude::*;
 
@@ -35,7 +35,10 @@ pub fn start_fetcher(
 pub struct BlockEntry {
     pub block: Block,
     pub entry: HeaderEntry,
+    pub size: u32,
 }
+
+type SizedBlock = (Block, u32);
 
 pub struct Fetcher<T> {
     receiver: Receiver<T>,
@@ -82,8 +85,9 @@ fn bitcoind_fetcher(
                     .into_iter()
                     .zip(entries)
                     .map(|(block, entry)| BlockEntry {
+                        entry: entry.clone(),                 // TODO: remove this clone()
+                        size: serialize(&block).len() as u32, // TODO: avoid re-serializing
                         block,
-                        entry: entry.clone(), // TODO: remove this clone()
                     })
                     .collect();
                 assert_eq!(block_entries.len(), entries.len());
@@ -112,14 +116,14 @@ fn blkfiles_fetcher(
     Ok(Fetcher::from(
         chan.into_receiver(),
         spawn_thread("bitcoind_fetcher", move || -> () {
-            parser.map(|blocks| {
-                let block_entries: Vec<BlockEntry> = blocks
+            parser.map(|sizedblocks| {
+                let block_entries: Vec<BlockEntry> = sizedblocks
                     .into_iter()
-                    .filter_map(|block| {
+                    .filter_map(|(block, size)| {
                         let blockhash = block.bitcoin_hash();
                         entry_map
                             .remove(&blockhash)
-                            .map(|entry| BlockEntry { block, entry })
+                            .map(|entry| BlockEntry { block, entry, size })
                             .or_else(|| {
                                 debug!("unknown block {}", blockhash);
                                 None
@@ -159,7 +163,7 @@ fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Fetcher<Vec<u8>> {
     )
 }
 
-fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<Block>> {
+fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<SizedBlock>> {
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
 
@@ -177,7 +181,7 @@ fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<Block>> {
     )
 }
 
-fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
+fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<SizedBlock>> {
     let mut cursor = Cursor::new(&blob);
     let mut slices = vec![];
     let max_pos = blob.len() as u64;
@@ -200,7 +204,7 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
             .chain_err(|| format!("seek {} failed", block_size))?;
         let end = cursor.position() as usize;
 
-        slices.push(&blob[start..end])
+        slices.push((&blob[start..end], block_size));
     }
 
     let pool = rayon::ThreadPoolBuilder::new()
@@ -210,8 +214,8 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
         .unwrap();
     Ok(pool.install(|| {
         slices
-            .par_iter()
-            .map(|slice| deserialize(slice).expect("failed to parse Block"))
+            .into_par_iter()
+            .map(|(slice, size)| (deserialize(slice).expect("failed to parse Block"), size))
             .collect()
     }))
 }

@@ -1,4 +1,5 @@
 use crate::errors::*;
+use crate::new_index::BlockEntry;
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
@@ -59,7 +60,7 @@ pub struct BlockStatus {
     pub next_best: Option<Sha256dHash>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BlockMeta {
     pub tx_count: u32,
     pub size: u32,
@@ -75,8 +76,18 @@ impl<'a> From<&'a Block> for BlockMeta {
     fn from(block: &'a Block) -> BlockMeta {
         BlockMeta {
             tx_count: block.txdata.len() as u32,
-            size: serialize(block).len() as u32,
             weight: block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
+            size: serialize(block).len() as u32,
+        }
+    }
+}
+
+impl<'a> From<&'a BlockEntry> for BlockMeta {
+    fn from(b: &'a BlockEntry) -> BlockMeta {
+        BlockMeta {
+            tx_count: b.block.txdata.len() as u32,
+            weight: b.block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
+            size: b.size,
         }
     }
 }

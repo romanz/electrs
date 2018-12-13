@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 // use signal::Waiter;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::util::{full_hash, Bytes, HeaderEntry, HeaderList, BlockMeta};
+use crate::util::{full_hash, BlockMeta, Bytes, HeaderEntry, HeaderList};
 
 use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
@@ -342,9 +342,10 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
     //      O{txid}{index} → {txout}
-    // persist block headers' and txids' rows:
+    // persist block headers', txids' rows and metadata:
     //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
+    //      M{blockhash} → {tx_count}{size}{weight}
     block_entries
         .par_iter() // serialization is CPU-intensive
         .map(|b| {
@@ -355,7 +356,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
 
             rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
             rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
-            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(&b.block)).to_row());
+            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
 
             for tx in &b.block.txdata {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
