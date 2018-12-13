@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 // use signal::Waiter;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::util::{full_hash, Bytes, HeaderEntry, HeaderList};
+use crate::util::{full_hash, Bytes, HeaderEntry, HeaderList, BlockMeta};
 
 use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
@@ -162,7 +162,14 @@ impl<'a> Query<'a> {
         self.store
             .txstore_db
             .get(&BlockRow::txids_key(hash.to_bytes()))
-            .map(|val| bincode::deserialize(&val).expect("failed to parse BlockHeader"))
+            .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
+    }
+
+    pub fn get_block_meta(&self, hash: &Sha256dHash) -> Option<BlockMeta> {
+        self.store
+            .txstore_db
+            .get(&BlockRow::meta_key(hash.to_bytes()))
+            .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
     }
 
     fn history_iter_scan(&self, script: &Script) -> ScanIterator {
@@ -348,6 +355,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
 
             rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
             rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
+            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(&b.block)).to_row());
 
             for tx in &b.block.txdata {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
@@ -646,12 +654,23 @@ impl BlockRow {
         }
     }
 
+    fn new_meta(hash: FullHash, meta: &BlockMeta) -> BlockRow {
+        BlockRow {
+            key: BlockKey { code: b'M', hash },
+            value: bincode::serialize(meta).unwrap(),
+        }
+    }
+
     fn header_key(hash: FullHash) -> Bytes {
         [b"B", &hash[..]].concat()
     }
 
     fn txids_key(hash: FullHash) -> Bytes {
         [b"X", &hash[..]].concat()
+    }
+
+    fn meta_key(hash: FullHash) -> Bytes {
+        [b"M", &hash[..]].concat()
     }
 
     fn to_row(self) -> DBRow {
@@ -778,5 +797,3 @@ impl TxEdgeRow {
         }
     }
 }
-
-// TODO: add Block metadata row (# of txs, size and weight)
