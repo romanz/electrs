@@ -20,7 +20,7 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
-use util::{get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus};
+use util::{get_script_asm, script_to_address, full_hash, BlockHeaderMeta, FullHash, TransactionStatus};
 
 const TX_LIMIT: usize = 25;
 const BLOCK_LIMIT: usize = 10;
@@ -491,18 +491,19 @@ fn handle_request(
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         }
-        (&Method::GET, Some(&"address"), Some(address), None, None) => {
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None) |
+        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
             // @TODO create new AddressStatsValue struct?
-            let script_hash = address_to_scripthash(address, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             match query.status(&script_hash[..]) {
                 Ok(status) => json_response(
                     json!({
-                    "address": address,
-                    "tx_count": status.history().len(),
-                    "confirmed_balance": status.confirmed_balance(),
-                    "mempool_balance": status.mempool_balance(),
-                    "total_received": status.total_received(),
-                }),
+                        *script_type: script_str,
+                        "tx_count": status.history().len(),
+                        "confirmed_balance": status.confirmed_balance(),
+                        "mempool_balance": status.mempool_balance(),
+                        "total_received": status.total_received(),
+                    }),
                     TTL_SHORT,
                 ),
 
@@ -510,18 +511,19 @@ fn handle_request(
                 Err(errors::Error(errors::ErrorKind::Msg(ref msg), _))
                     if *msg == "Too many txs".to_string() =>
                 {
-                    json_response(json!({ "address": address }), TTL_SHORT)
+                    json_response(json!({ *script_type: script_str }), TTL_SHORT)
                 }
 
                 Err(err) => bail!(err),
             }
         }
-        (&Method::GET, Some(&"address"), Some(address), Some(&"txs"), start_index) => {
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"txs"), start_index) |
+        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"txs"), start_index) => {
             let start_index = start_index
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
                 .max(0u32) as usize;
 
-            let script_hash = address_to_scripthash(address, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let status = query.status(&script_hash[..])?;
             let txs = status.history_txs();
 
@@ -546,8 +548,9 @@ fn handle_request(
 
             json_response(txs, TTL_SHORT)
         }
-        (&Method::GET, Some(&"address"), Some(address), Some(&"utxo"), None) => {
-            let script_hash = address_to_scripthash(address, &config.network_type)?;
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None) |
+        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"utxo"), None) => {
+            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let status = query.status(&script_hash[..])?;
             let utxos: Vec<UtxoValue> = status
                 .unspent()
@@ -682,6 +685,14 @@ fn blocks(query: &Arc<Query>, start_height: Option<usize>) -> Result<Response<Bo
         }
     }
     json_response(values, TTL_SHORT)
+}
+
+fn to_scripthash(script_type: &str, script_str: &str, network: &Network) -> Result<FullHash, HttpError> {
+    match script_type {
+        "address" => address_to_scripthash(script_str, network),
+        "scripthash" => Ok(full_hash(&hex::decode(script_str)?)),
+        _ => bail!("Invalid script type".to_string())
+    }
 }
 
 fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
