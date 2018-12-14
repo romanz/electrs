@@ -9,6 +9,7 @@ use error_chain::ChainedError;
 use std::process;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bitcoin::util::address::Address;
 
@@ -18,6 +19,7 @@ use electrs::{
     errors::*,
     metrics::Metrics,
     new_index::{compute_script_hash, FetchFrom, Indexer, Query, Store},
+    rest,
     signal::Waiter,
 };
 
@@ -52,6 +54,16 @@ fn run_server(config: Config) -> Result<()> {
     }
 
     debug!("utxo: {:?}", q.utxo(&scripthash));
+
+    let q = Arc::new(q);
+    let server = rest::run_server(&config, q);
+
+    loop {
+        if let Err(err) = signal.wait(Duration::from_secs(5)) {
+            info!("stopping server: {}", err);
+            break;
+        }
+    }
 
     Ok(())
 }
