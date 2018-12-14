@@ -154,12 +154,12 @@ impl<'a> Indexer<'a> {
 }
 
 impl<'a> Query<'a> {
-    pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<BlockHeader> {
+    pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
         self.indexed_headers
             .read()
             .unwrap()
             .header_by_blockhash(hash)
-            .map(|h| h.header().clone())
+            .map(|h| h.clone())
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
@@ -174,6 +174,13 @@ impl<'a> Query<'a> {
             .txstore_db
             .get(&BlockRow::meta_key(hash.to_bytes()))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
+    }
+
+    pub fn get_block_with_meta(&self, hash: &Sha256dHash) -> Option<BlockHeaderMeta> {
+        Some(BlockHeaderMeta {
+            header_entry: self.get_block_header(hash)?,
+            meta: self.get_block_meta(hash)?,
+        })
     }
 
     fn history_iter_scan(&self, scripthash: &[u8]) -> ScanIterator {
