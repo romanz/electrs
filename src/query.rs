@@ -406,6 +406,30 @@ impl Query {
         Ok((branch, pos))
     }
 
+    pub fn get_id_from_pos(
+        &self,
+        height: usize,
+        tx_pos: usize,
+        want_merkle: bool,
+    ) -> Result<(Sha256dHash, Vec<Sha256dHash>)> {
+        let header_entry = self
+            .app
+            .index()
+            .get_header(height)
+            .chain_err(|| format!("missing block #{}", height))?;
+
+        let txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
+        let txid = *txids
+            .get(tx_pos)
+            .chain_err(|| format!("No tx in position #{} in block #{}", tx_pos, height))?;
+
+        if want_merkle {
+            let (branches, _root) = create_merkle_branch_and_root(txids, tx_pos);
+            return Ok((txid, branches));
+        }
+        return Ok((txid, [].to_vec()));
+    }
+
     pub fn broadcast(&self, txn: &Transaction) -> Result<Sha256dHash> {
         self.app.daemon().broadcast(txn)
     }

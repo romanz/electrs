@@ -33,6 +33,12 @@ fn usize_from_value(val: Option<&Value>, name: &str) -> Result<usize> {
     Ok(val as usize)
 }
 
+fn bool_from_value(val: Option<&Value>, name: &str) -> Result<bool> {
+    let val = val.chain_err(|| format!("missing {}", name))?;
+    let val = val.as_bool().chain_err(|| format!("not a bool {}", name))?;
+    Ok(val as bool)
+}
+
 fn unspent_from_status(status: &Status) -> Value {
     json!(Value::Array(
         status
@@ -283,6 +289,30 @@ impl Connection {
                 "pos": pos}))
     }
 
+    fn blockchain_transaction_id_from_pos(&self, params: &[Value]) -> Result<Value> {
+        let height = usize_from_value(params.get(0), "height")?;
+        let tx_pos = usize_from_value(params.get(1), "tx_pos")?;
+        let mut want_merkle = false;
+        if params.len() > 2 {
+            want_merkle = bool_from_value(params.get(2), "merkle")?;
+        }
+
+        let (txid, merkle) = self.query.get_id_from_pos(height, tx_pos, want_merkle)?;
+
+        if !want_merkle {
+            return Ok(json!(txid.be_hex_string()));
+        }
+
+        let merkle_vec: Vec<String> = merkle
+            .into_iter()
+            .map(|entry| entry.be_hex_string())
+            .collect();
+
+        Ok(json!({
+            "tx_id" : txid.be_hex_string(),
+            "merkle" : merkle_vec}))
+    }
+
     fn handle_command(&mut self, method: &str, params: &[Value], id: &Number) -> Result<Value> {
         let timer = self
             .stats
@@ -307,6 +337,9 @@ impl Connection {
             "blockchain.transaction.broadcast" => self.blockchain_transaction_broadcast(&params),
             "blockchain.transaction.get" => self.blockchain_transaction_get(&params),
             "blockchain.transaction.get_merkle" => self.blockchain_transaction_get_merkle(&params),
+            "blockchain.transaction.id_from_pos" => {
+                self.blockchain_transaction_id_from_pos(&params)
+            }
             "mempool.get_fee_histogram" => self.mempool_get_fee_histogram(),
             "server.banner" => self.server_banner(),
             "server.donation_address" => self.server_donation_address(),
