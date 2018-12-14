@@ -88,7 +88,7 @@ impl Connection {
     }
 
     fn server_version(&self) -> Result<Value> {
-        Ok(json!(["RustElectrum 0.1.0", "1.2"]))
+        Ok(json!(["RustElectrum 0.1.0", "1.4"]))
     }
 
     fn server_banner(&self) -> Result<Value> {
