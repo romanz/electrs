@@ -119,6 +119,27 @@ fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     Sha256dHash::from_data(&data)
 }
 
+fn create_merkle_branch_and_root(
+    mut hashes: Vec<Sha256dHash>,
+    mut index: usize,
+) -> (Vec<Sha256dHash>, Sha256dHash) {
+    let mut merkle = vec![];
+    while hashes.len() > 1 {
+        if hashes.len() % 2 != 0 {
+            let last = hashes.last().unwrap().clone();
+            hashes.push(last);
+        }
+        index = if index % 2 == 0 { index + 1 } else { index - 1 };
+        merkle.push(hashes[index]);
+        index = index / 2;
+        hashes = hashes
+            .chunks(2)
+            .map(|pair| merklize(pair[0], pair[1]))
+            .collect()
+    }
+    (merkle, hashes[0])
+}
+
 // TODO: the functions below can be part of ReadStore.
 fn txrow_by_txid(store: &ReadStore, txid: &Sha256dHash) -> Option<TxRow> {
     let key = TxRow::filter_full(&txid);
@@ -376,27 +397,13 @@ impl Query {
             .index()
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;
-        let mut txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
+        let txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
         let pos = txids
             .iter()
             .position(|txid| txid == tx_hash)
             .chain_err(|| format!("missing txid {}", tx_hash))?;
-        let mut merkle = vec![];
-        let mut index = pos;
-        while txids.len() > 1 {
-            if txids.len() % 2 != 0 {
-                let last = txids.last().unwrap().clone();
-                txids.push(last);
-            }
-            index = if index % 2 == 0 { index + 1 } else { index - 1 };
-            merkle.push(txids[index]);
-            index = index / 2;
-            txids = txids
-                .chunks(2)
-                .map(|pair| merklize(pair[0], pair[1]))
-                .collect()
-        }
-        Ok((merkle, pos))
+        let (branch, _root) = create_merkle_branch_and_root(txids, pos);
+        Ok((branch, pos))
     }
 
     pub fn broadcast(&self, txn: &Transaction) -> Result<Sha256dHash> {
