@@ -1,6 +1,5 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::util::address::Address;
 use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
 use hex;
@@ -8,13 +7,11 @@ use serde_json::{from_str, Number, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::str::FromStr;
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::errors::*;
-use crate::index::compute_script_hash;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::query::{Query, Status};
 use crate::util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
@@ -52,27 +49,6 @@ fn unspent_from_status(status: &Status) -> Value {
             }))
             .collect()
     ))
-}
-
-fn address_from_value(val: Option<&Value>) -> Result<Address> {
-    let addr = val
-        .chain_err(|| "no address")?
-        .as_str()
-        .chain_err(|| "non-string address")?;
-    Address::from_str(addr).chain_err(|| format!("invalid address {}", addr))
-}
-
-fn jsonify_header(entry: &HeaderEntry) -> Value {
-    let header = entry.header();
-    json!({
-        "block_height": entry.height(),
-        "version": header.version,
-        "prev_block_hash": header.prev_blockhash.be_hex_string(),
-        "merkle_root": header.merkle_root.be_hex_string(),
-        "timestamp": header.time,
-        "bits": header.bits,
-        "nonce": header.nonce
-    })
 }
 
 struct Connection {
@@ -197,16 +173,6 @@ impl Connection {
         }))
     }
 
-    fn blockchain_block_get_header(&self, params: &[Value]) -> Result<Value> {
-        let height = usize_from_value(params.get(0), "missing height")?;
-        let mut entries = self.query.get_headers(&[height]);
-        let entry = entries
-            .pop()
-            .chain_err(|| format!("missing header #{}", height))?;
-        assert_eq!(entries.len(), 0);
-        Ok(json!(jsonify_header(&entry)))
-    }
-
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
         let fee_rate = self.query.estimate_fee(blocks_count); // in BTC/kB
@@ -225,27 +191,8 @@ impl Connection {
         Ok(result)
     }
 
-    fn blockchain_address_subscribe(&mut self, params: &[Value]) -> Result<Value> {
-        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
-        let status = self.query.status(&script_hash[..])?;
-        let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
-        let script_hash: Sha256dHash = deserialize(&script_hash).unwrap();
-        self.status_hashes.insert(script_hash, result.clone());
-        Ok(result)
-    }
-
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let status = self.query.status(&script_hash[..])?;
-        Ok(
-            json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
-        )
-    }
-
-    fn blockchain_address_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
@@ -264,27 +211,8 @@ impl Connection {
         )))
     }
 
-    fn blockchain_address_get_history(&self, params: &[Value]) -> Result<Value> {
-        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
-        let status = self.query.status(&script_hash[..])?;
-        Ok(json!(Value::Array(
-            status
-                .history()
-                .into_iter()
-                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
-                .collect()
-        )))
-    }
-
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
-    }
-
-    fn blockchain_address_listunspent(&self, params: &[Value]) -> Result<Value> {
-        let addr = address_from_value(params.get(0)).chain_err(|| "bad address")?;
-        let script_hash = compute_script_hash(&addr.script_pubkey().into_bytes());
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
 
@@ -358,11 +286,6 @@ impl Connection {
             .with_label_values(&[method])
             .start_timer();
         let result = match method {
-            "blockchain.address.get_balance" => self.blockchain_address_get_balance(&params),
-            "blockchain.address.get_history" => self.blockchain_address_get_history(&params),
-            "blockchain.address.listunspent" => self.blockchain_address_listunspent(&params),
-            "blockchain.address.subscribe" => self.blockchain_address_subscribe(&params),
-            "blockchain.block.get_header" => self.blockchain_block_get_header(&params),
             "blockchain.block.header" => self.blockchain_block_header(&params),
             "blockchain.block.headers" => self.blockchain_block_headers(&params),
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
