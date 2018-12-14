@@ -313,14 +313,15 @@ impl<'a> Query<'a> {
     }
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
-        self.store
-            .txstore_db
-            .get(&TxRow::key(&txid[..]))
-            .map(|rawtx| {
-                let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
-                assert_eq!(*txid, txn.txid());
-                txn
-            })
+        self.lookup_raw_txn(txid).map(|rawtx| {
+            let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
+            assert_eq!(*txid, txn.txid());
+            txn
+        })
+    }
+
+    pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+        self.store.txstore_db.get(&TxRow::key(&txid[..]))
     }
 
     pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
@@ -340,6 +341,24 @@ impl<'a> Query<'a> {
                     confirmed: Some(b),
                 })
             })
+    }
+    pub fn lookup_tx_spends(&self, tx: Transaction) -> Vec<Option<SpendingInput>> {
+        let txid = tx.txid();
+
+        tx.output
+            .iter()
+            .enumerate()
+            .map(|(vout, txout)| {
+                if !txout.script_pubkey.is_provably_unspendable() {
+                    self.lookup_spend(&OutPoint {
+                        txid,
+                        vout: vout as u32,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
