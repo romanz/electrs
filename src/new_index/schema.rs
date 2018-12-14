@@ -194,12 +194,13 @@ impl<'a> Query<'a> {
         scripthash: &[u8],
         last_seen_txid: Option<&Sha256dHash>,
         limit: usize,
-    ) -> Vec<(Transaction, BlockId)> {
-        let mut txs_conf = self
+    ) -> Vec<(Transaction, Option<BlockId>)> {
+        let txs_conf = self
             .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .dedup()
-            .skip_while(|txid| { // skip until we reach the last_seen_txid
+            .skip_while(|txid| {
+                // skip until we reach the last_seen_txid
                 last_seen_txid.map_or(false, |last_seen_txid| last_seen_txid != txid)
             })
             .skip(match last_seen_txid {
@@ -215,7 +216,7 @@ impl<'a> Query<'a> {
             .expect("failed looking up txs in history index")
             .into_iter()
             .zip(txs_conf)
-            .map(|(tx, (_, blockid))| (tx, blockid))
+            .map(|(tx, (_, blockid))| (tx, Some(blockid)))
             .collect()
     }
 
