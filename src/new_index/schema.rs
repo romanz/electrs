@@ -6,6 +6,7 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use error_chain::ChainedError;
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -172,32 +173,32 @@ impl<'a> Query<'a> {
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
     }
 
-    fn history_iter_scan(&self, script: &Script) -> ScanIterator {
-        let scripthash = compute_script_hash(script.as_bytes());
+    fn history_iter_scan(&self, scripthash: &[u8]) -> ScanIterator {
         self.store
             .history_db
             .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
     }
 
-    pub fn history(&self, script: &Script) -> HashMap<Sha256dHash, (Transaction, BlockId)> {
-        let mut txnsconf = self
-            .history_iter_scan(script)
+    pub fn history(&self, scripthash: &[u8]) -> Vec<(Transaction, BlockId)> {
+        let mut txs_conf = self
+            .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .dedup()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
-            .collect::<HashMap<Sha256dHash, BlockId>>();
+            .collect::<Vec<(Sha256dHash, BlockId)>>();
 
-        let txids = txnsconf.keys().cloned().collect();
-        let txns = self.lookup_txns(&txids);
-
-        txns.into_iter()
-            .map(|(txid, txn)| (txid, (txn, txnsconf.remove(&txid).unwrap())))
+        let txids = txs_conf.iter().map(|t| t.0.clone()).collect();
+        self.lookup_txns(&txids)
+            .expect("failed looking up txs in history index")
+            .into_iter()
+            .zip(txs_conf)
+            .map(|(tx, (_, blockid))| (tx, blockid))
             .collect()
     }
 
-    pub fn utxo(&self, script: &Script) -> Vec<Utxo> {
+    pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let mut utxosconf = self
-            .history_iter_scan(script)
+            .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
@@ -280,17 +281,11 @@ impl<'a> Query<'a> {
     }
 
     // TODO: can we pass txids as a "generic iterable"?
-    // TODO: if made public, this should return a Result instead of panicking
-    fn lookup_txns(&self, txids: &BTreeSet<Sha256dHash>) -> HashMap<Sha256dHash, Transaction> {
+    pub fn lookup_txns(&self, txids: &Vec<Sha256dHash>) -> Result<Vec<Transaction>> {
         txids
             .par_iter()
-            .map(|txid| {
-                let txn = self
-                    .lookup_txn(txid)
-                    .expect(&format!("missing txid {} in txns db", txid));
-                (*txid, txn)
-            })
-            .collect()
+            .map(|txid| self.lookup_txn(txid).chain_err(|| "missing tx"))
+            .collect::<Result<Vec<Transaction>>>()
     }
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
@@ -493,7 +488,7 @@ fn index_transaction(
 
 type FullHash = [u8; 32]; // serialized SHA256 result
 
-fn compute_script_hash(script: &[u8]) -> FullHash {
+pub fn compute_script_hash(script: &[u8]) -> FullHash {
     let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
     sha2.input(script);

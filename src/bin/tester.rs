@@ -16,7 +16,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{FetchFrom, Indexer, Store},
+    new_index::{compute_script_hash, FetchFrom, Indexer, Store},
     signal::Waiter,
 };
 
@@ -43,12 +43,13 @@ fn run_server(config: Config) -> Result<()> {
     let script = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6")
         .unwrap()
         .script_pubkey();
+    let scripthash = compute_script_hash(&script.as_bytes());
     let q = indexer.query();
-    for (txid, (txn, b)) in q.history(&script) {
-        info!("{} in {:?} --- {:?}", txid, b, txn);
+    for (tx, b) in q.history(&scripthash) {
+        info!("tx in {:?} --- {:?}", b, tx);
     }
 
-    debug!("utxo: {:?}", q.utxo(&script));
+    debug!("utxo: {:?}", q.utxo(&scripthash));
 
     Ok(())
 }
