@@ -446,35 +446,18 @@ fn handle_request(
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         }
-        // TODO: implement address stats
-        /*
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None) |
         (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
-            // @TODO create new AddressStatsValue struct?
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
-            match query.status(&script_hash[..]) {
-                Ok(status) => json_response(
-                    json!({
-                        *script_type: script_str,
-                        "tx_count": status.history().len(),
-                        "confirmed_balance": status.confirmed_balance(),
-                        "mempool_balance": status.mempool_balance(),
-                        "total_received": status.total_received(),
-                    }),
-                    TTL_SHORT,
-                ),
-
-                // if the address has too many txs, just return the address with no additional info (but no error)
-                Err(errors::Error(errors::ErrorKind::Msg(ref msg), _))
-                    if *msg == "Too many txs".to_string() =>
-                {
-                    json_response(json!({ *script_type: script_str }), TTL_SHORT)
-                }
-
-                Err(err) => bail!(err),
-            }
+            let stats = query.stats(&script_hash[..]);
+            json_response(
+                json!({
+                    *script_type: script_str,
+                    "stats": stats,
+                }),
+                TTL_SHORT,
+            )
         }
-        */
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"txs"), last_seen_txid) |
         (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"txs"), last_seen_txid) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;

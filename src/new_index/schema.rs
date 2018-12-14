@@ -81,6 +81,33 @@ pub struct SpendingInput {
     pub confirmed: Option<BlockId>,
 }
 
+#[derive(Debug)]
+pub struct ScriptStats {
+    confirmed_tx_count: usize,
+    confirmed_funded_txo_count: usize,
+    confirmed_funded_txo_sum: u64,
+    confirmed_spent_txo_count: usize,
+    confirmed_spent_txo_sum: u64,
+
+    //unconfirmed_tx_count: usize,
+    //unconfirmed_funded_txo_count: usize,
+    //unconfirmed_funded_txo_sum: usize,
+    //unconfirmed_spent_txo_count: usize,
+    //unconfirmed_spent_txo_sum: usize,
+}
+
+impl ScriptStats {
+    fn default() -> Self {
+        ScriptStats {
+            confirmed_tx_count: 0,
+            confirmed_funded_txo_count: 0,
+            confirmed_funded_txo_sum: 0,
+            confirmed_spent_txo_count: 0,
+            confirmed_spent_txo_sum: 0,
+        }
+    }
+}
+
 // TODO: &[Block] should be an iterator / a queue.
 impl<'a> Indexer<'a> {
     pub fn open(store: &'a Store) -> Self {
@@ -189,6 +216,7 @@ impl<'a> Query<'a> {
         let txs_conf = self
             .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
+            // FIXME: dedup() won't work if the same txid is both spending and funding
             .dedup()
             .skip_while(|txid| {
                 // skip until we reach the last_seen_txid
@@ -240,6 +268,40 @@ impl<'a> Query<'a> {
                 confirmed: Some(utxos_conf.remove(&outpoint).unwrap()),
             })
             .collect()
+    }
+
+    pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
+        self
+            .history_iter_scan(scripthash)
+            .map(TxHistoryRow::from_row)
+            .filter_map(|history| {
+                self.tx_confirming_block(&history.get_txid())
+                    .map(|b| (history, b))
+            })
+            .fold((ScriptStats::default(), HashSet::new()), |mut acc, (history, b)| {
+                // is it the first time we're seeing this tx?
+                // XXX: the list of seen txids can be reset whenever we see a new block height
+                if acc.1.insert(history.get_txid()) {
+                    acc.0.confirmed_tx_count += 1;
+                }
+
+                // TODO: keep amount on history rows, to avoid the txo lookup?
+                let txo = self.lookup_txo(&history.get_outpoint())
+                    .expect("cannot load txo from history");
+
+                match history.key.txinfo {
+                    TxHistoryInfo::Funding(..) => {
+                        acc.0.confirmed_funded_txo_count += 1;
+                        acc.0.confirmed_funded_txo_sum += txo.value;
+                    },
+                    TxHistoryInfo::Spending(..) => {
+                        acc.0.confirmed_spent_txo_count += 1;
+                        acc.0.confirmed_spent_txo_sum += txo.value;
+                    },
+                };
+
+                acc
+            }).0
     }
 
     pub fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
