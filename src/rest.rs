@@ -1,18 +1,20 @@
+use crate::config::Config;
+use crate::errors;
+use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
+use crate::util::{
+    full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
+};
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::network::constants::Network;
 use bitcoin::util::address::Address;
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
-use bitcoin::{Transaction, TxIn, TxOut};
-use config::Config;
-use errors;
+use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future};
 use hyper::service::service_fn_ok;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use index::compute_script_hash;
-use mempool::MEMPOOL_HEIGHT;
-use query::{FundingOutput, Query, SpendingInput, TxnHeight};
+
 use serde::Serialize;
 use serde_json;
 use std::collections::BTreeMap;
@@ -20,7 +22,6 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
-use util::{get_script_asm, script_to_address, full_hash, BlockHeaderMeta, FullHash, TransactionStatus};
 
 const TX_LIMIT: usize = 25;
 const BLOCK_LIMIT: usize = 10;
@@ -85,12 +86,12 @@ impl From<Transaction> for TransactionValue {
         let vin = tx
             .input
             .iter()
-            .map(|el| TxInValue::from(el.clone()))
+            .map(|el| TxInValue::from(el.clone())) // TODO avoid clone
             .collect();
         let vout = tx
             .output
             .iter()
-            .map(|el| TxOutValue::from(el.clone()))
+            .map(|el| TxOutValue::from(el.clone())) // TODO avoid clone
             .collect();
         let bytes = serialize(&tx);
 
@@ -108,23 +109,10 @@ impl From<Transaction> for TransactionValue {
     }
 }
 
-impl From<TxnHeight> for TransactionValue {
-    fn from(t: TxnHeight) -> Self {
-        let TxnHeight {
-            txn,
-            height,
-            blockhash,
-        } = t;
-        let mut value = TransactionValue::from(txn);
-        value.status = Some(if height != MEMPOOL_HEIGHT {
-            TransactionStatus {
-                confirmed: true,
-                block_height: Some(height as usize),
-                block_hash: Some(blockhash),
-            }
-        } else {
-            TransactionStatus::unconfirmed()
-        });
+impl From<(Transaction, Option<BlockId>)> for TransactionValue {
+    fn from((tx, blockid): (Transaction, Option<BlockId>)) -> Self {
+        let mut value = TransactionValue::from(tx);
+        value.status = Some(TransactionStatus::from(blockid));
         value
     }
 }
@@ -215,32 +203,14 @@ struct UtxoValue {
     value: u64,
     status: TransactionStatus,
 }
-impl From<FundingOutput> for UtxoValue {
-    fn from(out: FundingOutput) -> Self {
-        let FundingOutput {
-            txn,
-            txn_id,
-            output_index,
-            value,
-            ..
-        } = out;
-        let TxnHeight {
-            height, blockhash, ..
-        } = txn.unwrap(); // we should never get a FundingOutput without a txn here
-
+impl From<Utxo> for UtxoValue {
+    fn from(utxo: Utxo) -> Self {
         UtxoValue {
-            txid: txn_id,
-            vout: output_index as u32,
-            value: value,
-            status: if height != MEMPOOL_HEIGHT {
-                TransactionStatus {
-                    confirmed: true,
-                    block_height: Some(height as usize),
-                    block_hash: Some(blockhash),
-                }
-            } else {
-                TransactionStatus::unconfirmed()
-            },
+            txid: utxo.txid,
+            vout: utxo.vout,
+            value: utxo.value,
+            status: TransactionStatus::from(utxo.confirmed),
+            // utxo.script is also available but is unused here
         }
     }
 }
@@ -254,29 +224,11 @@ struct SpendingValue {
 }
 impl From<SpendingInput> for SpendingValue {
     fn from(spend: SpendingInput) -> Self {
-        let SpendingInput {
-            txn,
-            txn_id,
-            input_index,
-            ..
-        } = spend;
-        let TxnHeight {
-            height, blockhash, ..
-        } = txn.unwrap(); // we should never get a SpendingInput without a txn here
-
         SpendingValue {
             spent: true,
-            txid: Some(txn_id),
-            vin: Some(input_index as u32),
-            status: Some(if height != MEMPOOL_HEIGHT {
-                TransactionStatus {
-                    confirmed: true,
-                    block_height: Some(height as usize),
-                    block_hash: Some(blockhash),
-                }
-            } else {
-                TransactionStatus::unconfirmed()
-            }),
+            txid: Some(spend.txid),
+            vin: Some(spend.vin),
+            status: Some(TransactionStatus::from(spend.confirmed)),
         }
     }
 }
@@ -293,7 +245,7 @@ impl Default for SpendingValue {
 
 fn ttl_by_depth(height: Option<usize>, query: &Query) -> u32 {
     height.map_or(TTL_SHORT, |height| {
-        if query.get_best_height() - height >= CONF_FINAL {
+        if query.best_height() - height >= CONF_FINAL {
             TTL_LONG
         } else {
             TTL_SHORT
@@ -310,7 +262,7 @@ fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Arc<Query>) -> 
 fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc<Query>) {
     {
         // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
-        let mut lookups: BTreeMap<Sha256dHash, Vec<(u32, &mut TxInValue)>> = BTreeMap::new();
+        let mut lookups: BTreeMap<OutPoint, &mut TxInValue> = BTreeMap::new();
         // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
         // locality from empirical test up to 2 or 3 times faster
 
@@ -319,10 +271,11 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc
             if config.prevout_enabled {
                 for mut vin in tx.vin.iter_mut() {
                     if !vin.is_coinbase {
-                        lookups
-                            .entry(vin.txid)
-                            .or_insert(vec![])
-                            .push((vin.vout, vin));
+                        let outpoint = OutPoint {
+                            txid: vin.txid,
+                            vout: vin.vout,
+                        };
+                        lookups.insert(outpoint, vin);
                     }
                 }
             }
@@ -336,15 +289,16 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc
 
         // fetch prevtxs and attach prevouts to nextins
         if config.prevout_enabled {
-            for (prev_txid, prev_vouts) in lookups {
-                let prevtx = query.load_txn(&prev_txid, None).unwrap();
-                for (prev_out_idx, ref mut nextin) in prev_vouts {
-                    let mut prevout =
-                        TxOutValue::from(prevtx.output[prev_out_idx as usize].clone());
-                    prevout.scriptpubkey_address =
-                        script_to_address(&prevout.scriptpubkey, &config.network_type);
-                    nextin.prevout = Some(prevout);
-                }
+            let outpoints = lookups.keys().cloned().collect();
+            let txos = query.lookup_txos(&outpoints);
+
+            for (outpoint, txo) in txos {
+                let mut prevout = TxOutValue::from(txo);
+                prevout.scriptpubkey_address =
+                    script_to_address(&prevout.scriptpubkey, &config.network_type);
+
+                let nextin = lookups.remove(&outpoint).unwrap();
+                nextin.prevout = Some(prevout);
             }
         }
     }
@@ -419,13 +373,13 @@ fn handle_request(
     ) {
         (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => http_message(
             StatusCode::OK,
-            query.get_best_header_hash().be_hex_string(),
+            query.best_hash().be_hex_string(),
             TTL_SHORT,
         ),
 
         (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => http_message(
             StatusCode::OK,
-            query.get_best_height().to_string(),
+            query.best_height().to_string(),
             TTL_SHORT,
         ),
 
@@ -435,16 +389,15 @@ fn handle_request(
         }
         (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
-            let headers = query.get_headers(&[height]);
-            let header = headers
-                .get(0)
+            let header = query.header_by_height(height)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let ttl = ttl_by_depth(Some(height), query);
             http_message(StatusCode::OK, header.hash().be_hex_string(), ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let blockhm = query.get_block_header_with_meta(&hash)?;
+            let blockhm = query.get_block_with_meta(&hash)
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let block_value = BlockValue::from(blockhm);
             json_response(block_value, TTL_LONG)
         }
@@ -458,14 +411,14 @@ fn handle_request(
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
                 .get_block_txids(&hash)
-                .map_err(|_| HttpError::not_found("Block not found".to_string()))?;
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
                 .get_block_txids(&hash)
-                .map_err(|_| HttpError::not_found("Block not found".to_string()))?;
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
 
             let start_index = start_index
                 .map_or(0u32, |el| el.parse().unwrap_or(0))
@@ -485,12 +438,16 @@ fn handle_request(
                 .take(TX_LIMIT)
                 .map(|txid| {
                     query
-                        .load_txn(&txid, Some(&hash))
+                        .lookup_txn(&txid)
+                        .map(|tx| (tx, query.tx_confirming_block(&txid)))
                         .map(TransactionValue::from)
+                        .ok_or_else(|| "missing tx".to_string())
                 }).collect::<Result<Vec<TransactionValue>, _>>()?;
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         }
+        // TODO: implement address stats
+        /*
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None) |
         (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
             // @TODO create new AddressStatsValue struct?
@@ -517,33 +474,18 @@ fn handle_request(
                 Err(err) => bail!(err),
             }
         }
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"txs"), start_index) |
-        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"txs"), start_index) => {
-            let start_index = start_index
-                .map_or(0u32, |el| el.parse().unwrap_or(0))
-                .max(0u32) as usize;
-
+        */
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"txs"), last_seen_txid) |
+        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"txs"), last_seen_txid) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
-            let status = query.status(&script_hash[..])?;
-            let txs = status.history_txs();
+            let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
-            if txs.len() == 0 {
-                return json_response(json!([]), TTL_SHORT);
-            } else if start_index >= txs.len() {
-                bail!(HttpError::not_found("start index out of range".to_string()));
-            } else if start_index % TX_LIMIT != 0 {
-                bail!(HttpError::from(format!(
-                    "start index must be a multipication of {}",
-                    TX_LIMIT
-                )));
-            }
-
-            let mut txs = txs
-                .iter()
-                .skip(start_index)
-                .take(TX_LIMIT)
-                .map(|t| TransactionValue::from((*t).clone()))
+            let mut txs = query
+                .history(&script_hash[..], last_seen_txid.as_ref(), TX_LIMIT)
+                .into_iter()
+                .map(TransactionValue::from)
                 .collect();
+
             attach_txs_data(&mut txs, config, query);
 
             json_response(txs, TTL_SHORT)
@@ -551,21 +493,19 @@ fn handle_request(
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None) |
         (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"utxo"), None) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
-            let status = query.status(&script_hash[..])?;
-            let utxos: Vec<UtxoValue> = status
-                .unspent()
+            let utxos: Vec<UtxoValue> = query.utxo(&script_hash[..])
                 .into_iter()
-                .map(|o| UtxoValue::from(o.clone()))
+                .map(UtxoValue::from)
                 .collect();
-            // @XXX no paging, but query.status() is limited to 30 funding txs
+            // XXX paging?
             json_response(utxos, TTL_SHORT)
         }
         (&Method::GET, Some(&"tx"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let transaction = query
-                .load_txn(&hash, None)
-                .map_err(|_| HttpError::not_found("Transaction not found".to_string()))?;
-            let status = query.get_tx_status(&hash)?;
+                .lookup_txn(&hash)
+                .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
+            let status = query.get_tx_status(&hash);
             let ttl = ttl_by_depth(status.block_height, query);
 
             let mut value = TransactionValue::from(transaction);
@@ -576,20 +516,22 @@ fn handle_request(
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let rawtx = query
-                .load_raw_txn(&hash, None)
-                .map_err(|_| HttpError::not_found("Transaction not found".to_string()))?;
-            let ttl = ttl_by_depth(query.get_tx_status(&hash)?.block_height, query);
+                .lookup_raw_txn(&hash)
+                .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
+            let ttl = ttl_by_depth(query.get_tx_status(&hash).block_height, query);
             http_message(StatusCode::OK, hex::encode(rawtx), ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let status = query.get_tx_status(&hash)?;
+            let status = query.get_tx_status(&hash);
             let ttl = ttl_by_depth(status.block_height, query);
             json_response(status, ttl)
         }
+        // TODO: implement merkle proof
+        /*
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkle-proof"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let status = query.get_tx_status(&hash)?;
+            let status = query.get_tx_status(&hash);
             if !status.confirmed {
                 bail!("Transaction is unconfirmed".to_string())
             };
@@ -600,12 +542,13 @@ fn handle_request(
                 ttl,
             )
         }
+        */
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let outpoint = (hash, index.parse::<usize>()?);
-            let spend = query.find_spending_by_outpoint(outpoint)?.map_or_else(
-                || SpendingValue::default(),
-                |spend| SpendingValue::from(spend),
+            let outpoint = OutPoint { txid: hash, vout: index.parse::<u32>()? };
+            let spend = query.lookup_spend(&outpoint).map_or_else(
+                SpendingValue::default,
+                SpendingValue::from,
             );
             let ttl = ttl_by_depth(
                 spend
@@ -619,10 +562,10 @@ fn handle_request(
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let tx = query
-                .load_txn(&hash, None)
-                .map_err(|_| HttpError::not_found("Transaction not found".to_string()))?;
+                .lookup_txn(&hash)
+                .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
             let spends: Vec<SpendingValue> = query
-                .find_spending_for_funding_tx(tx)?
+                .lookup_tx_spends(tx)
                 .into_iter()
                 .map(|spend| {
                     spend.map_or_else(
@@ -666,17 +609,18 @@ fn blocks(query: &Arc<Query>, start_height: Option<usize>) -> Result<Response<Bo
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query
-            .get_headers(&[height])
-            .get(0)
-            .ok_or(HttpError::not_found("Block not found".to_string()))?
+            .header_by_height(height)
+            .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?
             .hash()
             .clone(),
-        None => query.get_best_header()?.hash().clone(),
+        None => query.best_header().hash().clone(),
     };
 
     let zero = [0u8; 32];
     for _ in 0..BLOCK_LIMIT {
-        let blockhm = query.get_block_header_with_meta(&current_hash)?;
+        let blockhm = query
+            .get_block_with_meta(&current_hash)
+            .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
         values.push(BlockValue::from(blockhm));
 

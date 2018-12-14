@@ -6,7 +6,6 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use error_chain::ChainedError;
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -314,6 +313,10 @@ impl<'a> Query<'a> {
 
     pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
         lookup_txo(&self.store.txstore_db, outpoint)
+    }
+
+    pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+        lookup_txos(&self.store.txstore_db, outpoints)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
