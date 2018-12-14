@@ -133,18 +133,39 @@ impl Connection {
 
     fn blockchain_block_header(&self, params: &[Value]) -> Result<Value> {
         let height = usize_from_value(params.get(0), "height")?;
-        let header: String = self
+        let mut cp_height = 0;
+        if params.len() > 1 {
+            cp_height = usize_from_value(params.get(1), "cp_height")?;
+        }
+
+        let raw_header_hex: String = self
             .query
             .get_headers(&[height])
             .into_iter()
             .map(|entry| hex::encode(&serialize(entry.header())))
             .collect();
-        Ok(json!(header))
+
+        if cp_height == 0 {
+            return Ok(json!(raw_header_hex));
+        }
+        let (branch, root) = self.query.get_header_merkle_proof(height, cp_height)?;
+
+        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.be_hex_string()).collect();
+
+        return Ok(json!({
+            "header": raw_header_hex,
+            "root": root.be_hex_string(),
+            "branch": branch_vec
+        }));
     }
 
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
         let start_height = usize_from_value(params.get(0), "start_height")?;
         let count = usize_from_value(params.get(1), "count")?;
+        let mut cp_height = 0;
+        if params.len() > 2 {
+            cp_height = usize_from_value(params.get(2), "cp_height")?;
+        }
         let heights: Vec<usize> = (start_height..(start_height + count)).collect();
         let headers: Vec<String> = self
             .query
@@ -152,10 +173,27 @@ impl Connection {
             .into_iter()
             .map(|entry| hex::encode(&serialize(entry.header())))
             .collect();
+
+        if count == 0 || cp_height == 0 {
+            return Ok(json!({
+                "count": headers.len(),
+                "hex": headers.join(""),
+                "max": 2016,
+            }));
+        }
+
+        let (branch, root) = self
+            .query
+            .get_header_merkle_proof(start_height + (count - 1), cp_height)?;
+
+        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.be_hex_string()).collect();
+
         Ok(json!({
             "count": headers.len(),
             "hex": headers.join(""),
             "max": 2016,
+            "root": root.be_hex_string(),
+            "branch" : branch_vec
         }))
     }
 

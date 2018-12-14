@@ -406,6 +406,33 @@ impl Query {
         Ok((branch, pos))
     }
 
+    pub fn get_header_merkle_proof(
+        &self,
+        height: usize,
+        cp_height: usize,
+    ) -> Result<(Vec<Sha256dHash>, Sha256dHash)> {
+        if cp_height < height {
+            return Err(format!("cp_height #{} < height #{}", cp_height, height))?;
+        }
+
+        let best_height = self.get_best_header()?.height();
+        if best_height < cp_height {
+            return Err(format!(
+                "cp_height #{} above best block height #{}",
+                cp_height, best_height
+            ))?;
+        }
+
+        let index = self.app.index();
+        let header_hashes: Vec<Sha256dHash> = (0..cp_height + 1)
+            .into_iter()
+            .map(|height| index.get_header(height).unwrap().hash().clone())
+            .collect();
+
+        let (branch, root) = create_merkle_branch_and_root(header_hashes, height);
+        Ok((branch, root))
+    }
+
     pub fn get_id_from_pos(
         &self,
         height: usize,
