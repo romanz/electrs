@@ -245,9 +245,9 @@ impl Query {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|b| (history, b))
             })
-            .fold(HashMap::new(), |mut utxos, (history, b)| {
+            .fold(HashMap::new(), |mut utxos, (history, blockid)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), b),
+                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), blockid),
                     TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
@@ -269,37 +269,41 @@ impl Query {
     }
 
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
-        self
-            .history_iter_scan(scripthash)
+        self.history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
-                    .map(|b| (history, b))
+                    .map(|blockid| (history, blockid))
             })
-            .fold((ScriptStats::default(), HashSet::new()), |mut acc, (history, b)| {
-                // is it the first time we're seeing this tx?
-                // XXX: the list of seen txids can be reset whenever we see a new block height
-                if acc.1.insert(history.get_txid()) {
-                    acc.0.confirmed_tx_count += 1;
-                }
+            .fold(
+                (ScriptStats::default(), HashSet::new()),
+                |mut acc, (history, _blockid)| {
+                    // is it the first time we're seeing this tx?
+                    // XXX: the list of seen txids can be reset whenever we see a new block height
+                    if acc.1.insert(history.get_txid()) {
+                        acc.0.confirmed_tx_count += 1;
+                    }
 
-                // TODO: keep amount on history rows, to avoid the txo lookup?
-                let txo = self.lookup_txo(&history.get_outpoint())
-                    .expect("cannot load txo from history");
+                    // TODO: keep amount on history rows, to avoid the txo lookup?
+                    let txo = self
+                        .lookup_txo(&history.get_outpoint())
+                        .expect("cannot load txo from history");
 
-                match history.key.txinfo {
-                    TxHistoryInfo::Funding(..) => {
-                        acc.0.confirmed_funded_txo_count += 1;
-                        acc.0.confirmed_funded_txo_sum += txo.value;
-                    },
-                    TxHistoryInfo::Spending(..) => {
-                        acc.0.confirmed_spent_txo_count += 1;
-                        acc.0.confirmed_spent_txo_sum += txo.value;
-                    },
-                };
+                    match history.key.txinfo {
+                        TxHistoryInfo::Funding(..) => {
+                            acc.0.confirmed_funded_txo_count += 1;
+                            acc.0.confirmed_funded_txo_sum += txo.value;
+                        }
+                        TxHistoryInfo::Spending(..) => {
+                            acc.0.confirmed_spent_txo_count += 1;
+                            acc.0.confirmed_spent_txo_sum += txo.value;
+                        }
+                    };
 
-                acc
-            }).0
+                    acc
+                },
+            )
+            .0
     }
 
     pub fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
@@ -415,16 +419,18 @@ impl Query {
     }
 
     pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
+        let headers = self.store.indexed_headers.read().unwrap();
         self.store
             .txstore_db
             .iter_scan(&TxConfRow::filter(&txid[..]))
             .map(TxConfRow::from_row)
-            .find_map(|conf| {
-                let headers = self.store.indexed_headers.read().unwrap();
+            .filter(|conf| {
                 headers
-                    .header_by_blockhash(&parse_hash(&conf.key.blockhash))
-                    .map(|h| BlockId(h.height(), *h.hash()))
+                    .header_by_height(conf.key.blockheight as usize)
+                    .map_or(false, |h| h.hash()[..] == conf.key.blockhash)
             })
+            .nth(0)
+            .map(|conf| conf.blockid())
     }
 
     // compatbility with previous tx/block status format
@@ -442,7 +448,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
     //      O{txid}{index} → {txout}
-    // persist block headers', txids' rows and metadata:
+    // persist block headers', txids' and metadata rows:
     //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
     //      M{blockhash} → {tx_count}{size}{weight}
@@ -686,6 +692,13 @@ impl TxConfRow {
         TxConfRow {
             key: bincode::deserialize(&row.key).expect("failed to parse TxConfKey"),
         }
+    }
+
+    fn blockid(&self) -> BlockId {
+        BlockId(
+            self.key.blockheight as usize,
+            parse_hash(&self.key.blockhash),
+        )
     }
 }
 
