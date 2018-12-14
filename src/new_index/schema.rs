@@ -53,12 +53,6 @@ impl Store {
 #[derive(Debug)]
 pub struct BlockId(pub usize, pub Sha256dHash);
 
-// represents the status of a block that is part of the best chain
-pub struct BestChainBlock {
-    pub height: usize,
-    pub next: Option<Sha256dHash>,
-}
-
 #[derive(Debug)]
 pub struct Utxo {
     pub txid: Sha256dHash,
@@ -340,22 +334,6 @@ impl Query {
             .clone()
     }
 
-    pub fn get_bestchain_block(&self, hash: &Sha256dHash) -> Option<BestChainBlock> {
-        // TODO differentiate orphaned and non-existing blocks? telling them apart requires
-        // an additional db read.
-        let headers = self.store.indexed_headers.read().unwrap();
-        // get_header_by_hash looks up the height first, then fetches the header by that.
-        // if the block is no longer the best block at this height, it'll return None.
-        headers
-            .header_by_blockhash(hash)
-            .map(|header| BestChainBlock {
-                height: header.height(),
-                next: headers
-                    .header_by_height(header.height() + 1)
-                    .map(|h| h.hash().clone()),
-            })
-    }
-
     // TODO: can we pass txids as a "generic iterable"?
     // TODO: should also use a custom ThreadPoolBuilder?
     pub fn lookup_txns(&self, txids: &Vec<Sha256dHash>) -> Result<Vec<Transaction>> {
@@ -439,7 +417,24 @@ impl Query {
     }
 
     pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
-        BlockStatus::from(self.get_bestchain_block(hash))
+        // TODO differentiate orphaned and non-existing blocks? telling them apart requires
+        // an additional db read.
+
+        let headers = self.store.indexed_headers.read().unwrap();
+        // get_header_by_hash looks up the height first, then fetches the header by that.
+        // if the block is no longer the best block at this height, it'll return None.
+
+        headers.header_by_blockhash(hash).map_or_else(
+            || BlockStatus::orphaned(),
+            |header| {
+                BlockStatus::confirmed(
+                    header.height(),
+                    headers
+                        .header_by_height(header.height() + 1)
+                        .map(|h| h.hash().clone()),
+                )
+            },
+        )
     }
 }
 

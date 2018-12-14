@@ -1,5 +1,5 @@
 use crate::errors::*;
-use crate::new_index::{BestChainBlock, BlockEntry, BlockId};
+use crate::new_index::{BlockEntry, BlockId};
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
@@ -73,19 +73,20 @@ pub struct BlockStatus {
     pub next_best: Option<Sha256dHash>,
 }
 
-impl From<Option<BestChainBlock>> for BlockStatus {
-    fn from(b: Option<BestChainBlock>) -> BlockStatus {
-        match b {
-            Some(b) => BlockStatus {
-                in_best_chain: true,
-                height: Some(b.height),
-                next_best: b.next,
-            },
-            None => BlockStatus {
-                in_best_chain: false,
-                height: None,
-                next_best: None,
-            },
+impl BlockStatus {
+    pub fn confirmed(height: usize, next_best: Option<Sha256dHash>) -> BlockStatus {
+        BlockStatus {
+            in_best_chain: true,
+            height: Some(height),
+            next_best,
+        }
+    }
+
+    pub fn orphaned() -> BlockStatus {
+        BlockStatus {
+            in_best_chain: true,
+            height: None,
+            next_best: None,
         }
     }
 }
