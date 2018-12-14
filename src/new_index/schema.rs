@@ -182,12 +182,25 @@ impl<'a> Query<'a> {
             .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
     }
 
-    pub fn history(&self, scripthash: &[u8]) -> Vec<(Transaction, BlockId)> {
+    pub fn history(
+        &self,
+        scripthash: &[u8],
+        last_seen_txid: Option<&Sha256dHash>,
+        limit: usize,
+    ) -> Vec<(Transaction, BlockId)> {
         let mut txs_conf = self
             .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .dedup()
+            .skip_while(|txid| { // skip until we reach the last_seen_txid
+                last_seen_txid.map_or(false, |last_seen_txid| last_seen_txid != txid)
+            })
+            .skip(match last_seen_txid {
+                Some(_) => 1, // skip the last_seen_txid itself
+                None => 0,
+            })
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
+            .take(limit)
             .collect::<Vec<(Sha256dHash, BlockId)>>();
 
         let txids = txs_conf.iter().map(|t| t.0.clone()).collect();
@@ -284,6 +297,7 @@ impl<'a> Query<'a> {
     }
 
     // TODO: can we pass txids as a "generic iterable"?
+    // TODO: should also use a custom ThreadPoolBuilder?
     pub fn lookup_txns(&self, txids: &Vec<Sha256dHash>) -> Result<Vec<Transaction>> {
         txids
             .par_iter()

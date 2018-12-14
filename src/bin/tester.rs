@@ -45,7 +45,8 @@ fn run_server(config: Config) -> Result<()> {
         .script_pubkey();
     let scripthash = compute_script_hash(&script.as_bytes());
     let q = indexer.query();
-    for (tx, b) in q.history(&scripthash) {
+
+    for (tx, b) in q.history(&scripthash, None, 10) {
         info!("tx in {:?} --- {:?}", b, tx);
     }
 
