@@ -26,34 +26,28 @@ use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 pub struct Store {
+    // TODO: should be column families
     txstore_db: DB,
     history_db: DB,
+    added_blockhashes: RwLock<HashSet<Sha256dHash>>,
+    indexed_headers: RwLock<HeaderList>,
 }
 
 impl Store {
     pub fn open(path: &Path) -> Self {
+        let txstore_db = DB::open(&path.join("txstore"));
+        let history_db = DB::open(&path.join("history"));
+        // TODO: read (and verify) from DB
+        let added_blockhashes = RwLock::new(HashSet::new());
+        let indexed_headers = RwLock::new(HeaderList::empty());
+
         Store {
-            txstore_db: DB::open(&path.join("txstore")),
-            history_db: DB::open(&path.join("history")),
+            txstore_db,
+            history_db,
+            added_blockhashes,
+            indexed_headers,
         }
     }
-
-    fn indexed_headers(&self) -> HeaderList {
-        // TODO: read (and verify) from DB
-        HeaderList::empty()
-    }
-}
-
-pub struct Indexer<'a> {
-    // TODO: should be column families
-    store: &'a Store,
-    indexed_headers: Arc<RwLock<HeaderList>>,
-    added_blockhashes: HashSet<Sha256dHash>,
-}
-
-pub struct Query<'a> {
-    store: &'a Store,                         // TODO: should be used as read-only
-    indexed_headers: Arc<RwLock<HeaderList>>, // TODO: should be used as read-only
 }
 
 #[derive(Debug)]
@@ -81,14 +75,13 @@ pub struct SpendingInput {
     pub confirmed: Option<BlockId>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct ScriptStats {
     confirmed_tx_count: usize,
     confirmed_funded_txo_count: usize,
     confirmed_funded_txo_sum: u64,
     confirmed_spent_txo_count: usize,
     confirmed_spent_txo_sum: u64,
-
     //unconfirmed_tx_count: usize,
     //unconfirmed_funded_txo_count: usize,
     //unconfirmed_funded_txo_sum: usize,
@@ -108,14 +101,18 @@ impl ScriptStats {
     }
 }
 
+pub struct Indexer {
+    store: Arc<Store>,
+}
+
+pub struct Query {
+    store: Arc<Store>, // TODO: should be used as read-only
+}
+
 // TODO: &[Block] should be an iterator / a queue.
-impl<'a> Indexer<'a> {
-    pub fn open(store: &'a Store) -> Self {
-        Indexer {
-            store,
-            indexed_headers: Arc::new(RwLock::new(store.indexed_headers())), // TODO: sync from db
-            added_blockhashes: HashSet::new(),
-        }
+impl Indexer {
+    pub fn open(store: Arc<Store>) -> Self {
+        Indexer { store }
     }
 
     pub fn update(&mut self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
@@ -123,7 +120,7 @@ impl<'a> Indexer<'a> {
         let tip = daemon.getbestblockhash()?;
 
         let new_headers = {
-            let headers = self.indexed_headers.read().unwrap();
+            let headers = self.store.indexed_headers.read().unwrap();
             headers.order(daemon.get_new_headers(&headers, &tip)?)
         };
 
@@ -139,17 +136,10 @@ impl<'a> Indexer<'a> {
         info!("compacting history DB");
         self.store.history_db.compact_all();
 
-        let mut headers = self.indexed_headers.write().unwrap();
+        let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
         Ok(())
-    }
-
-    pub fn query(&self) -> Query {
-        Query {
-            store: self.store,
-            indexed_headers: Arc::clone(&self.indexed_headers),
-        }
     }
 
     fn add(&mut self, blocks: &[BlockEntry]) {
@@ -157,7 +147,10 @@ impl<'a> Indexer<'a> {
         let rows = add_blocks(blocks);
         self.store.txstore_db.write(rows);
 
-        self.added_blockhashes
+        self.store
+            .added_blockhashes
+            .write()
+            .unwrap()
             .extend(blocks.into_iter().map(|b| b.entry.hash()));
     }
 
@@ -165,10 +158,11 @@ impl<'a> Indexer<'a> {
         debug!("looking up TXOs from {} blocks", blocks.len());
         let previous_txos_map = lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks));
         debug!("looked up {} TXOs", previous_txos_map.len());
+        let added_blockhashes = self.store.added_blockhashes.read().unwrap();
         for b in blocks {
             let blockhash = b.entry.hash();
             // TODO: replace by lookup into txstore_db?
-            if !self.added_blockhashes.contains(&blockhash) {
+            if !added_blockhashes.contains(&blockhash) {
                 panic!("cannot index block {} (missing from store)", blockhash);
             }
         }
@@ -179,7 +173,11 @@ impl<'a> Indexer<'a> {
     }
 }
 
-impl<'a> Query<'a> {
+impl Query {
+    pub fn new(store: Arc<Store>) -> Self {
+        Query { store }
+    }
+
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
         self.store
             .txstore_db
@@ -305,7 +303,8 @@ impl<'a> Query<'a> {
     }
 
     pub fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
-        self.indexed_headers
+        self.store
+            .indexed_headers
             .read()
             .unwrap()
             .header_by_blockhash(hash)
@@ -313,7 +312,8 @@ impl<'a> Query<'a> {
     }
 
     pub fn header_by_height(&self, height: usize) -> Option<HeaderEntry> {
-        self.indexed_headers
+        self.store
+            .indexed_headers
             .read()
             .unwrap()
             .header_by_height(height)
@@ -321,15 +321,15 @@ impl<'a> Query<'a> {
     }
 
     pub fn best_height(&self) -> usize {
-        self.indexed_headers.read().unwrap().len() - 1
+        self.store.indexed_headers.read().unwrap().len() - 1
     }
 
     pub fn best_hash(&self) -> Sha256dHash {
-        self.indexed_headers.read().unwrap().tip().clone()
+        self.store.indexed_headers.read().unwrap().tip().clone()
     }
 
     pub fn best_header(&self) -> HeaderEntry {
-        let headers = self.indexed_headers.read().unwrap();
+        let headers = self.store.indexed_headers.read().unwrap();
         headers
             .header_by_blockhash(headers.tip())
             .expect("missing chain tip")
@@ -339,7 +339,7 @@ impl<'a> Query<'a> {
     pub fn get_bestchain_block(&self, hash: &Sha256dHash) -> Option<BestChainBlock> {
         // TODO differentiate orphaned and non-existing blocks? telling them apart requires
         // an additional db read.
-        let headers = self.indexed_headers.read().unwrap();
+        let headers = self.store.indexed_headers.read().unwrap();
         // get_header_by_hash looks up the height first, then fetches the header by that.
         // if the block is no longer the best block at this height, it'll return None.
         headers
@@ -420,7 +420,7 @@ impl<'a> Query<'a> {
             .iter_scan(&TxConfRow::filter(&txid[..]))
             .map(TxConfRow::from_row)
             .find_map(|conf| {
-                let headers = self.indexed_headers.read().unwrap();
+                let headers = self.store.indexed_headers.read().unwrap();
                 headers
                     .header_by_blockhash(&parse_hash(&conf.key.blockhash))
                     .map(|h| BlockId(h.height(), *h.hash()))

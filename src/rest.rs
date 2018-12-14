@@ -253,13 +253,13 @@ fn ttl_by_depth(height: Option<usize>, query: &Query) -> u32 {
     })
 }
 
-fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Arc<Query>) -> TransactionValue {
+fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Query) -> TransactionValue {
     let mut txs = vec![tx];
     attach_txs_data(&mut txs, config, query);
     txs.remove(0)
 }
 
-fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Arc<Query>) {
+fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Query) {
     {
         // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
         let mut lookups: BTreeMap<OutPoint, &mut TxInValue> = BTreeMap::new();
@@ -357,7 +357,7 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
 
 fn handle_request(
     req: Request<Body>,
-    query: &Arc<Query>,
+    query: &Query,
     config: &Config,
 ) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
@@ -588,7 +588,7 @@ fn json_response<T: Serialize>(value: T, ttl: u32) -> Result<Response<Body>, Htt
         .unwrap())
 }
 
-fn blocks(query: &Arc<Query>, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
+fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query

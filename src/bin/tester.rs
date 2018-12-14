@@ -8,6 +8,7 @@ extern crate electrs;
 use error_chain::ChainedError;
 use std::process;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use bitcoin::util::address::Address;
 
@@ -16,7 +17,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{compute_script_hash, FetchFrom, Indexer, Store},
+    new_index::{compute_script_hash, FetchFrom, Indexer, Query, Store},
     signal::Waiter,
 };
 
@@ -33,8 +34,8 @@ fn run_server(config: Config) -> Result<()> {
         signal.clone(),
         &metrics,
     )?;
-    let store = Store::open(&config.db_path.join("newindex"));
-    let mut indexer = Indexer::open(&store);
+    let store = Arc::new(Store::open(&config.db_path.join("newindex")));
+    let mut indexer = Indexer::open(Arc::clone(&store));
     let fetch = match config.jsonrpc_import {
         true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
@@ -44,7 +45,7 @@ fn run_server(config: Config) -> Result<()> {
         .unwrap()
         .script_pubkey();
     let scripthash = compute_script_hash(&script.as_bytes());
-    let q = indexer.query();
+    let q = Query::new(Arc::clone(&store));
 
     for (tx, b) in q.history(&scripthash, None, 10) {
         info!("tx in {:?} --- {:?}", b, tx);
