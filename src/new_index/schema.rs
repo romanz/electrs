@@ -18,7 +18,10 @@ use std::sync::{Arc, RwLock};
 // use signal::Waiter;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::util::{full_hash, BlockMeta, Bytes, HeaderEntry, HeaderList};
+use crate::util::{
+    full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
+    TransactionStatus,
+};
 
 use crate::new_index::db::{DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
@@ -55,28 +58,28 @@ pub struct Query<'a> {
 }
 
 #[derive(Debug)]
-pub struct BlockId(usize, Sha256dHash);
+pub struct BlockId(pub usize, pub Sha256dHash);
 
 // represents the status of a block that is part of the best chain
 pub struct BestChainBlock {
-    height: usize,
-    next: Option<Sha256dHash>,
+    pub height: usize,
+    pub next: Option<Sha256dHash>,
 }
 
 #[derive(Debug)]
 pub struct Utxo {
-    txid: Sha256dHash,
-    vout: u32,
-    value: u64,
-    script: Script,
-    confirmed: Option<BlockId>,
+    pub txid: Sha256dHash,
+    pub vout: u32,
+    pub value: u64,
+    pub script: Script,
+    pub confirmed: Option<BlockId>,
 }
 
 #[derive(Debug)]
 pub struct SpendingInput {
-    txid: Sha256dHash,
-    vin: u32,
-    confirmed: Option<BlockId>,
+    pub txid: Sha256dHash,
+    pub vin: u32,
+    pub confirmed: Option<BlockId>,
 }
 
 // TODO: &[Block] should be an iterator / a queue.
@@ -318,7 +321,7 @@ impl<'a> Query<'a> {
             })
     }
 
-    fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
+    pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
         self.store
             .txstore_db
             .iter_scan(&TxConfRow::filter(&txid[..]))
@@ -329,6 +332,15 @@ impl<'a> Query<'a> {
                     .header_by_blockhash(&parse_hash(&conf.key.blockhash))
                     .map(|h| BlockId(h.height(), *h.hash()))
             })
+    }
+
+    // compatbility with previous tx/block status format
+    pub fn get_tx_status(&self, txid: &Sha256dHash) -> TransactionStatus {
+        TransactionStatus::from(self.tx_confirming_block(txid))
+    }
+
+    pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
+        BlockStatus::from(self.get_bestchain_block(hash))
     }
 }
 

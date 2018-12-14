@@ -1,5 +1,5 @@
 use crate::errors::*;
-use crate::new_index::BlockEntry;
+use crate::new_index::{BestChainBlock, BlockEntry, BlockId};
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
@@ -53,11 +53,41 @@ impl TransactionStatus {
     }
 }
 
+impl From<Option<BlockId>> for TransactionStatus {
+    fn from(blockid: Option<BlockId>) -> TransactionStatus {
+        match blockid {
+            Some(BlockId(block_height, block_hash)) => TransactionStatus {
+                confirmed: true,
+                block_height: Some(block_height as usize),
+                block_hash: Some(block_hash),
+            },
+            None => TransactionStatus::unconfirmed(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct BlockStatus {
     pub in_best_chain: bool,
     pub height: Option<usize>,
     pub next_best: Option<Sha256dHash>,
+}
+
+impl From<Option<BestChainBlock>> for BlockStatus {
+    fn from(b: Option<BestChainBlock>) -> BlockStatus {
+        match b {
+            Some(b) => BlockStatus {
+                in_best_chain: true,
+                height: Some(b.height),
+                next_best: b.next,
+            },
+            None => BlockStatus {
+                in_best_chain: false,
+                height: None,
+                next_best: None,
+            },
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
