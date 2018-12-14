@@ -154,14 +154,6 @@ impl<'a> Indexer<'a> {
 }
 
 impl<'a> Query<'a> {
-    pub fn get_block_header(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
-        self.indexed_headers
-            .read()
-            .unwrap()
-            .header_by_blockhash(hash)
-            .map(|h| h.clone())
-    }
-
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
         self.store
             .txstore_db
@@ -178,7 +170,7 @@ impl<'a> Query<'a> {
 
     pub fn get_block_with_meta(&self, hash: &Sha256dHash) -> Option<BlockHeaderMeta> {
         Some(BlockHeaderMeta {
-            header_entry: self.get_block_header(hash)?,
+            header_entry: self.header_by_hash(hash)?,
             meta: self.get_block_meta(hash)?,
         })
     }
@@ -221,23 +213,23 @@ impl<'a> Query<'a> {
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
-        let mut utxosconf = self
+        let mut utxos_conf = self
             .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|b| (history, b))
             })
-            .fold(HashMap::new(), |mut utxos, (history, block)| {
+            .fold(HashMap::new(), |mut utxos, (history, b)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), block),
+                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), b),
                     TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
                 utxos
             });
 
-        let outpoints = utxosconf.keys().cloned().collect();
+        let outpoints = utxos_conf.keys().cloned().collect();
         let txos = lookup_txos(&self.store.txstore_db, &outpoints);
 
         txos.into_iter()
@@ -246,30 +238,25 @@ impl<'a> Query<'a> {
                 vout: outpoint.vout,
                 value: txo.value,
                 script: txo.script_pubkey,
-                confirmed: Some(utxosconf.remove(&outpoint).unwrap()),
+                confirmed: Some(utxos_conf.remove(&outpoint).unwrap()),
             })
             .collect()
     }
 
-    pub fn get_header(&self, height: usize) -> Option<HeaderEntry> {
+    pub fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
+        self.indexed_headers
+            .read()
+            .unwrap()
+            .header_by_blockhash(hash)
+            .cloned()
+    }
+
+    pub fn header_by_height(&self, height: usize) -> Option<HeaderEntry> {
         self.indexed_headers
             .read()
             .unwrap()
             .header_by_height(height)
             .cloned()
-    }
-
-    pub fn get_headers(&self, heights: &[usize]) -> Result<Vec<HeaderEntry>> {
-        let headers = self.indexed_headers.read().unwrap();
-        heights
-            .iter()
-            .map(|height| {
-                headers
-                    .header_by_height(*height)
-                    .cloned()
-                    .chain_err(|| format!("missing block height {}", height))
-            })
-            .collect()
     }
 
     pub fn best_height(&self) -> usize {
