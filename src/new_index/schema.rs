@@ -29,6 +29,7 @@ pub struct Store {
     txstore_db: DB,
     history_db: DB,
     added_blockhashes: RwLock<HashSet<Sha256dHash>>,
+    indexed_blockhashes: RwLock<HashSet<Sha256dHash>>,
     indexed_headers: RwLock<HeaderList>,
 }
 
@@ -36,14 +37,17 @@ impl Store {
     pub fn open(path: &Path) -> Self {
         let txstore_db = DB::open(&path.join("txstore"));
         let history_db = DB::open(&path.join("history"));
-        // TODO: read (and verify) from DB
-        let added_blockhashes = RwLock::new(HashSet::new());
+        let added_blockhashes =
+            RwLock::new(load_blockhashes(&txstore_db, &BlockRow::txids_filter()));
+        let indexed_blockhashes =
+            RwLock::new(load_blockhashes(&history_db, &BlockRow::header_filter()));
         let indexed_headers = RwLock::new(HeaderList::empty());
 
         Store {
             txstore_db,
             history_db,
             added_blockhashes,
+            indexed_blockhashes,
             indexed_headers,
         }
     }
@@ -108,7 +112,25 @@ impl Indexer {
         Indexer { store }
     }
 
-    pub fn update(&mut self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
+    fn headers_to_add(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
+        let added_blockhashes = self.store.added_blockhashes.read().unwrap();
+        new_headers
+            .iter()
+            .filter(|e| !added_blockhashes.contains(e.hash()))
+            .cloned()
+            .collect()
+    }
+
+    fn headers_to_index(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
+        let indexed_blockhashes = self.store.indexed_blockhashes.read().unwrap();
+        new_headers
+            .iter()
+            .filter(|e| !indexed_blockhashes.contains(e.hash()))
+            .cloned()
+            .collect()
+    }
+
+    pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
 
@@ -117,14 +139,16 @@ impl Indexer {
             headers.order(daemon.get_new_headers(&headers, &tip)?)
         };
 
-        info!("adding transactions from {} blocks", new_headers.len());
-        start_fetcher(from, &daemon, &new_headers)?.map(|blocks| self.add(&blocks));
+        let to_add = self.headers_to_add(&new_headers);
+        info!("adding transactions from {} blocks", to_add.len());
+        start_fetcher(from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
 
         info!("compacting txns DB");
         self.store.txstore_db.compact_all();
 
-        info!("indexing history from {} blocks", new_headers.len());
-        start_fetcher(from, &daemon, &new_headers)?.map(|blocks| self.index(&blocks));
+        let to_index = self.headers_to_index(&new_headers);
+        info!("indexing history from {} blocks", to_index.len());
+        start_fetcher(from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
 
         info!("compacting history DB");
         self.store.history_db.compact_all();
@@ -135,7 +159,7 @@ impl Indexer {
         Ok(())
     }
 
-    fn add(&mut self, blocks: &[BlockEntry]) {
+    fn add(&self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
         self.store.txstore_db.write(rows);
@@ -147,7 +171,7 @@ impl Indexer {
             .extend(blocks.into_iter().map(|b| b.entry.hash()));
     }
 
-    fn index(&mut self, blocks: &[BlockEntry]) {
+    fn index(&self, blocks: &[BlockEntry]) {
         debug!("looking up TXOs from {} blocks", blocks.len());
         let previous_txos_map = lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks));
         debug!("looked up {} TXOs", previous_txos_map.len());
@@ -435,6 +459,13 @@ impl Query {
             },
         )
     }
+}
+
+fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<Sha256dHash> {
+    db.iter_scan(prefix)
+        .map(BlockRow::from_row)
+        .map(|r| deserialize(&r.key.hash).expect("failed to parse Sha256dHash"))
+        .collect()
 }
 
 fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
@@ -775,8 +806,16 @@ impl BlockRow {
         [b"B", &hash[..]].concat()
     }
 
+    fn header_filter() -> Bytes {
+        b"B".to_vec()
+    }
+
     fn txids_key(hash: FullHash) -> Bytes {
         [b"X", &hash[..]].concat()
+    }
+
+    fn txids_filter() -> Bytes {
+        b"X".to_vec()
     }
 
     fn meta_key(hash: FullHash) -> Bytes {
@@ -787,6 +826,13 @@ impl BlockRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: self.value,
+        }
+    }
+
+    fn from_row(row: DBRow) -> Self {
+        BlockRow {
+            key: bincode::deserialize(&row.key).unwrap(),
+            value: row.value,
         }
     }
 }

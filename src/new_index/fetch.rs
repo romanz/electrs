@@ -23,7 +23,7 @@ pub enum FetchFrom {
 pub fn start_fetcher(
     from: FetchFrom,
     daemon: &Daemon,
-    new_headers: &[HeaderEntry],
+    new_headers: Vec<HeaderEntry>,
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
     let fetcher = match from {
         FetchFrom::BITCOIND => bitcoind_fetcher,
@@ -63,12 +63,11 @@ impl<T> Fetcher<T> {
 
 fn bitcoind_fetcher(
     daemon: &Daemon,
-    new_headers: &[HeaderEntry],
+    new_headers: Vec<HeaderEntry>,
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
     new_headers.last().map(|tip| {
         info!("{:?} ({} new headers)", tip, new_headers.len());
     });
-    let new_headers = new_headers.to_vec();
     let daemon = daemon.reconnect()?;
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
@@ -101,7 +100,7 @@ fn bitcoind_fetcher(
 
 fn blkfiles_fetcher(
     daemon: &Daemon,
-    new_headers: &[HeaderEntry],
+    new_headers: Vec<HeaderEntry>,
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
     let magic = daemon.magic();
     let blk_files = daemon.list_blk_files()?;
@@ -110,7 +109,7 @@ fn blkfiles_fetcher(
     let sender = chan.sender();
 
     let mut entry_map: HashMap<Sha256dHash, HeaderEntry> =
-        new_headers.iter().map(|h| (*h.hash(), h.clone())).collect();
+        new_headers.into_iter().map(|h| (*h.hash(), h)).collect();
 
     let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
     Ok(Fetcher::from(
