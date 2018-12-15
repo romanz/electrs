@@ -1,5 +1,4 @@
 use bincode;
-use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::blockdata::script::Script;
 use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
@@ -443,8 +442,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
     //      O{txid}{index} → {txout}
-    // persist block headers', txids' and metadata rows:
-    //      B{blockhash} → {header}
+    // persist block txids' and metadata rows (used to mark added blocks):
     //      X{blockhash} → {txid1}...{txidN}
     //      M{blockhash} → {tx_count}{size}{weight}
     block_entries
@@ -454,14 +452,11 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
             let blockheight = b.entry.height() as u32;
             let blockhash = b.entry.hash().to_bytes();
             let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
-
-            rows.push(BlockRow::new_header(blockhash, &b.block.header).to_row());
-            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
-            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
-
             for tx in &b.block.txdata {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
             }
+            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
+            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
             rows
         })
         .flatten()
@@ -525,6 +520,8 @@ fn index_blocks(
     block_entries: &[BlockEntry],
     previous_txos_map: &HashMap<OutPoint, TxOut>,
 ) -> Vec<DBRow> {
+    // persist block headers' rows (use to mark indexed blocks):
+    //      B{blockhash} → {header}
     block_entries
         .par_iter() // serialization is CPU-intensive
         .map(|b| {
@@ -533,6 +530,7 @@ fn index_blocks(
                 let height = b.entry.height() as u32;
                 index_transaction(tx, height, previous_txos_map, &mut rows);
             }
+            rows.push(BlockRow::new_header(&b).to_row());
             rows
         })
         .flatten()
@@ -749,10 +747,13 @@ struct BlockRow {
 }
 
 impl BlockRow {
-    fn new_header(hash: FullHash, header: &BlockHeader) -> BlockRow {
+    fn new_header(block_entry: &BlockEntry) -> BlockRow {
         BlockRow {
-            key: BlockKey { code: b'B', hash },
-            value: serialize(header),
+            key: BlockKey {
+                code: b'B',
+                hash: block_entry.entry.hash().to_bytes(),
+            },
+            value: serialize(&block_entry.block.header),
         }
     }
 
