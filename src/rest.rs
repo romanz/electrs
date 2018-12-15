@@ -266,10 +266,10 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
         // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
         // locality from empirical test up to 2 or 3 times faster
 
-        for mut tx in txs.iter_mut() {
+        for tx in txs.iter_mut() {
             // collect lookups
             if config.prevout_enabled {
-                for mut vin in tx.vin.iter_mut() {
+                for vin in tx.vin.iter_mut() {
                     if !vin.is_coinbase {
                         let outpoint = OutPoint {
                             txid: vin.txid,
