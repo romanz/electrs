@@ -115,7 +115,7 @@ fn blkfiles_fetcher(
     let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
     Ok(Fetcher::from(
         chan.into_receiver(),
-        spawn_thread("bitcoind_fetcher", move || -> () {
+        spawn_thread("blkfiles_fetcher", move || -> () {
             parser.map(|sizedblocks| {
                 let block_entries: Vec<BlockEntry> = sizedblocks
                     .into_iter()
