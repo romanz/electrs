@@ -7,18 +7,15 @@ extern crate electrs;
 
 use error_chain::ChainedError;
 use std::process;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-
-use bitcoin::util::address::Address;
 
 use electrs::{
     config::Config,
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{compute_script_hash, FetchFrom, Indexer, Query, Store},
+    new_index::{FetchFrom, Indexer, Query, Store},
     rest,
     signal::Waiter,
 };
@@ -37,26 +34,14 @@ fn run_server(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let mut indexer = Indexer::open(Arc::clone(&store));
+    let indexer = Indexer::open(Arc::clone(&store));
     let fetch = match config.jsonrpc_import {
         true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     indexer.update(&daemon, fetch)?;
-    let script = Address::from_str("msRnv37GmMXU86EbPZTkGCCqYw1zUZX6v6")
-        .unwrap()
-        .script_pubkey();
-    let scripthash = compute_script_hash(&script.as_bytes());
     let q = Query::new(Arc::clone(&store));
-
-    for (tx, b) in q.history(&scripthash, None, 10) {
-        info!("tx in {:?} --- {:?}", b, tx);
-    }
-
-    debug!("utxo: {:?}", q.utxo(&scripthash));
-
-    let q = Arc::new(q);
-    let server = rest::run_server(&config, q);
+    let server = rest::run_server(&config, Arc::new(q));
 
     loop {
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
