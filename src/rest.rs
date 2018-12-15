@@ -371,17 +371,13 @@ fn handle_request(
         path.get(2),
         path.get(3),
     ) {
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => http_message(
-            StatusCode::OK,
-            query.best_hash().be_hex_string(),
-            TTL_SHORT,
-        ),
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => {
+            http_message(StatusCode::OK, query.best_hash().be_hex_string(), TTL_SHORT)
+        }
 
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => http_message(
-            StatusCode::OK,
-            query.best_height().to_string(),
-            TTL_SHORT,
-        ),
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => {
+            http_message(StatusCode::OK, query.best_height().to_string(), TTL_SHORT)
+        }
 
         (&Method::GET, Some(&"blocks"), start_height, None, None) => {
             let start_height = start_height.and_then(|height| height.parse::<usize>().ok());
@@ -389,14 +385,16 @@ fn handle_request(
         }
         (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
-            let header = query.header_by_height(height)
+            let header = query
+                .header_by_height(height)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let ttl = ttl_by_depth(Some(height), query);
             http_message(StatusCode::OK, header.hash().be_hex_string(), ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let blockhm = query.get_block_with_meta(&hash)
+            let blockhm = query
+                .get_block_with_meta(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let block_value = BlockValue::from(blockhm);
             json_response(block_value, TTL_LONG)
@@ -442,12 +440,13 @@ fn handle_request(
                         .map(|tx| (tx, query.tx_confirming_block(&txid)))
                         .map(TransactionValue::from)
                         .ok_or_else(|| "missing tx".to_string())
-                }).collect::<Result<Vec<TransactionValue>, _>>()?;
+                })
+                .collect::<Result<Vec<TransactionValue>, _>>()?;
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         }
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None) |
-        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None)
+        | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let stats = query.stats(&script_hash[..]);
             json_response(
@@ -458,8 +457,20 @@ fn handle_request(
                 TTL_SHORT,
             )
         }
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"txs"), last_seen_txid) |
-        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"txs"), last_seen_txid) => {
+        (
+            &Method::GET,
+            Some(script_type @ &"address"),
+            Some(script_str),
+            Some(&"txs"),
+            last_seen_txid,
+        )
+        | (
+            &Method::GET,
+            Some(script_type @ &"scripthash"),
+            Some(script_str),
+            Some(&"txs"),
+            last_seen_txid,
+        ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
@@ -473,10 +484,17 @@ fn handle_request(
 
             json_response(txs, TTL_SHORT)
         }
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None) |
-        (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), Some(&"utxo"), None) => {
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None)
+        | (
+            &Method::GET,
+            Some(script_type @ &"scripthash"),
+            Some(script_str),
+            Some(&"utxo"),
+            None,
+        ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
-            let utxos: Vec<UtxoValue> = query.utxo(&script_hash[..])
+            let utxos: Vec<UtxoValue> = query
+                .utxo(&script_hash[..])
                 .into_iter()
                 .map(UtxoValue::from)
                 .collect();
@@ -528,11 +546,13 @@ fn handle_request(
         */
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let outpoint = OutPoint { txid: hash, vout: index.parse::<u32>()? };
-            let spend = query.lookup_spend(&outpoint).map_or_else(
-                SpendingValue::default,
-                SpendingValue::from,
-            );
+            let outpoint = OutPoint {
+                txid: hash,
+                vout: index.parse::<u32>()?,
+            };
+            let spend = query
+                .lookup_spend(&outpoint)
+                .map_or_else(SpendingValue::default, SpendingValue::from);
             let ttl = ttl_by_depth(
                 spend
                     .status
@@ -555,7 +575,8 @@ fn handle_request(
                         || SpendingValue::default(),
                         |spend| SpendingValue::from(spend),
                     )
-                }).collect();
+                })
+                .collect();
             // @TODO long ttl if all outputs are either spent long ago or unspendable
             json_response(spends, TTL_SHORT)
         }
@@ -614,11 +635,15 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
     json_response(values, TTL_SHORT)
 }
 
-fn to_scripthash(script_type: &str, script_str: &str, network: &Network) -> Result<FullHash, HttpError> {
+fn to_scripthash(
+    script_type: &str,
+    script_str: &str,
+    network: &Network,
+) -> Result<FullHash, HttpError> {
     match script_type {
         "address" => address_to_scripthash(script_str, network),
         "scripthash" => Ok(full_hash(&hex::decode(script_str)?)),
-        _ => bail!("Invalid script type".to_string())
+        _ => bail!("Invalid script type".to_string()),
     }
 }
 
@@ -751,7 +776,8 @@ mod tests {
             .and_then(|el| el.as_u64())
             .ok_or(HttpError::from(
                 "confirmations absent or not a u64".to_string(),
-            )).unwrap();
+            ))
+            .unwrap();
 
         assert_eq!(10, confirmations);
 
