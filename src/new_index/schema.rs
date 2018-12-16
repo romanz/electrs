@@ -177,9 +177,7 @@ impl Indexer {
     }
 
     fn index(&self, blocks: &[BlockEntry]) {
-        debug!("looking up TXOs from {} blocks", blocks.len());
         let previous_txos_map = lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks));
-        debug!("looked up {} TXOs", previous_txos_map.len());
         let added_blockhashes = self.store.added_blockhashes.read().unwrap();
         for b in blocks {
             let blockhash = b.entry.hash();
@@ -189,9 +187,7 @@ impl Indexer {
             }
         }
         let rows = index_blocks(blocks, &previous_txos_map);
-        debug!("indexed {} history rows", rows.len());
         self.store.history_db.write(rows);
-        debug!("written to DB");
     }
 }
 
