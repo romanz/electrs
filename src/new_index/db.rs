@@ -53,6 +53,7 @@ impl DB {
 
         // db_opts.set_advise_random_on_open(???);
         db_opts.set_compaction_readahead_size(1 << 20);
+        db_opts.increase_parallelism(2);
 
         // let mut block_opts = rocksdb::BlockBasedOptions::default();
         // block_opts.set_block_size(???);
