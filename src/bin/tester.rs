@@ -41,7 +41,7 @@ fn run_server(config: Config) -> Result<()> {
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     indexer.update(&daemon, fetch)?;
-    indexer.flush();
+    indexer.start_flushing();
     let q = Query::new(Arc::clone(&store));
     let server = rest::run_server(&config, Arc::new(q));
 
@@ -50,7 +50,6 @@ fn run_server(config: Config) -> Result<()> {
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
             indexer.update(&daemon, fetch)?;
-            indexer.flush();
             tip = current_tip;
         } else {
             if let Err(err) = signal.wait(Duration::from_secs(5)) {

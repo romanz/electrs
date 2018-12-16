@@ -172,7 +172,7 @@ impl Indexer {
         Ok(tip)
     }
 
-    pub fn flush(&mut self) {
+    pub fn start_flushing(&mut self) {
         self.flush = DBFlush::Enable;
         self.store.txstore_db.write(vec![], self.flush);
         self.store.history_db.write(vec![], self.flush);
