@@ -723,7 +723,7 @@ impl From<encode::Error> for HttpError {
 
 #[cfg(test)]
 mod tests {
-    use rest::HttpError;
+    use crate::rest::HttpError;
     use serde_json::Value;
     use std::collections::HashMap;
 
