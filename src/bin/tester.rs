@@ -35,13 +35,14 @@ fn run_server(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let mut indexer = Indexer::open(Arc::clone(&store));
-    let fetch = match config.jsonrpc_import {
-        true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
-        false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
-    };
-    indexer.update(&daemon, fetch)?;
-    indexer.start_flushing();
+    let mut indexer = Indexer::open(
+        Arc::clone(&store),
+        match config.jsonrpc_import {
+            true => FetchFrom::Bitcoind, // slower, uses JSONRPC (good for incremental updates)
+            false => FetchFrom::BlkFiles, // faster, uses blk*.dat files (good for initial indexing)
+        },
+    );
+    indexer.update(&daemon)?;
     let q = Query::new(Arc::clone(&store));
     let server = rest::run_server(&config, Arc::new(q));
 
@@ -49,7 +50,7 @@ fn run_server(config: Config) -> Result<()> {
     loop {
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
-            indexer.update(&daemon, fetch)?;
+            indexer.update(&daemon)?;
             tip = current_tip;
         } else {
             if let Err(err) = signal.wait(Duration::from_secs(5)) {

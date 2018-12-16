@@ -99,6 +99,7 @@ impl ScriptStats {
 pub struct Indexer {
     store: Arc<Store>,
     flush: DBFlush,
+    from: FetchFrom,
 }
 
 pub struct Query {
@@ -107,10 +108,11 @@ pub struct Query {
 
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
-    pub fn open(store: Arc<Store>) -> Self {
+    pub fn open(store: Arc<Store>, from: FetchFrom) -> Self {
         Indexer {
             store,
             flush: DBFlush::Disable,
+            from,
         }
     }
 
@@ -151,31 +153,38 @@ impl Indexer {
         Ok(result)
     }
 
-    pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<Sha256dHash> {
+    pub fn update(&mut self, daemon: &Daemon) -> Result<Sha256dHash> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = self.get_new_headers(&daemon, &tip)?;
 
         let to_add = self.headers_to_add(&new_headers);
-        debug!("adding transactions from {} blocks", to_add.len());
-        start_fetcher(from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
+        debug!(
+            "adding transactions from {} blocks using {:?}",
+            to_add.len(),
+            self.from
+        );
+        start_fetcher(self.from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
         self.full_compact_if_needed(&self.store.txstore_db);
 
         let to_index = self.headers_to_index(&new_headers);
-        debug!("indexing history from {} blocks", to_index.len());
-        start_fetcher(from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
+        debug!(
+            "indexing history from {} blocks using {:?}",
+            to_index.len(),
+            self.from
+        );
+        start_fetcher(self.from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
         self.full_compact_if_needed(&self.store.history_db);
 
         let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
-        Ok(tip)
-    }
 
-    pub fn start_flushing(&mut self) {
         self.flush = DBFlush::Enable;
         self.store.txstore_db.write(vec![], self.flush);
         self.store.history_db.write(vec![], self.flush);
+        self.from = FetchFrom::Bitcoind;
+        Ok(tip)
     }
 
     fn add(&self, blocks: &[BlockEntry]) {
