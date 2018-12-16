@@ -39,6 +39,12 @@ pub struct DB {
     db: rocksdb::DB,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum DBFlush {
+    Disable,
+    Enable,
+}
+
 impl DB {
     pub fn open(path: &Path) -> DB {
         debug!("opening DB at {:?}", path);
@@ -77,16 +83,25 @@ impl DB {
         }
     }
 
-    pub fn write(&self, mut rows: Vec<DBRow>) {
-        trace!("writing {} rows to {:?}", rows.len(), self.db);
+    pub fn write(&self, mut rows: Vec<DBRow>, flush: DBFlush) {
+        debug!(
+            "writing {} rows to {:?}, flush={:?}",
+            rows.len(),
+            self.db,
+            flush
+        );
         rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
         let mut batch = rocksdb::WriteBatch::default();
         for row in rows {
             batch.put(&row.key, &row.value).unwrap();
         }
+        let do_flush = match flush {
+            DBFlush::Enable => true,
+            DBFlush::Disable => false,
+        };
         let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(false);
-        opts.disable_wal(true);
+        opts.set_sync(do_flush);
+        opts.disable_wal(!do_flush);
         self.db.write_opt(batch, &opts).unwrap();
     }
 

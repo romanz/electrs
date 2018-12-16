@@ -21,7 +21,7 @@ use crate::util::{
     TransactionStatus,
 };
 
-use crate::new_index::db::{DBRow, ScanIterator, DB};
+use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 pub struct Store {
@@ -98,6 +98,7 @@ impl ScriptStats {
 
 pub struct Indexer {
     store: Arc<Store>,
+    flush: DBFlush,
 }
 
 pub struct Query {
@@ -107,7 +108,10 @@ pub struct Query {
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
     pub fn open(store: Arc<Store>) -> Self {
-        Indexer { store }
+        Indexer {
+            store,
+            flush: DBFlush::Disable,
+        }
     }
 
     fn headers_to_add(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
@@ -168,10 +172,16 @@ impl Indexer {
         Ok(())
     }
 
+    pub fn flush(&mut self) {
+        self.flush = DBFlush::Enable;
+        self.store.txstore_db.write(vec![], self.flush);
+        self.store.history_db.write(vec![], self.flush);
+    }
+
     fn add(&self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
         let rows = add_blocks(blocks);
-        self.store.txstore_db.write(rows);
+        self.store.txstore_db.write(rows, self.flush);
 
         self.store
             .added_blockhashes
@@ -191,7 +201,7 @@ impl Indexer {
             }
         }
         let rows = index_blocks(blocks, &previous_txos_map);
-        self.store.history_db.write(rows);
+        self.store.history_db.write(rows, self.flush);
     }
 }
 
