@@ -151,7 +151,7 @@ impl Indexer {
         Ok(result)
     }
 
-    pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
+    pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<Sha256dHash> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = self.get_new_headers(&daemon, &tip)?;
@@ -169,7 +169,7 @@ impl Indexer {
         let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
-        Ok(())
+        Ok(tip)
     }
 
     pub fn flush(&mut self) {

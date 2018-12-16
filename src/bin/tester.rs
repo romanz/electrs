@@ -5,6 +5,7 @@ extern crate log;
 
 extern crate electrs;
 
+use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
 use std::process;
 use std::sync::Arc;
@@ -34,22 +35,31 @@ fn run_server(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let indexer = Indexer::open(Arc::clone(&store));
+    let mut indexer = Indexer::open(Arc::clone(&store));
     let fetch = match config.jsonrpc_import {
         true => FetchFrom::BITCOIND, // slower, uses JSONRPC (good for incremental updates)
         false => FetchFrom::BLKFILES, // faster, uses blk*.dat files (good for initial indexing)
     };
     indexer.update(&daemon, fetch)?;
+    indexer.flush();
     let q = Query::new(Arc::clone(&store));
     let server = rest::run_server(&config, Arc::new(q));
 
+    let mut tip = Sha256dHash::default();
     loop {
-        if let Err(err) = signal.wait(Duration::from_secs(5)) {
-            info!("stopping server: {}", err);
-            break;
+        let current_tip = daemon.getbestblockhash()?;
+        if current_tip != tip {
+            indexer.update(&daemon, fetch)?;
+            indexer.flush();
+            tip = current_tip;
+        } else {
+            if let Err(err) = signal.wait(Duration::from_secs(5)) {
+                info!("stopping server: {}", err);
+                break;
+            }
         }
     }
-
+    info!("server stopped");
     Ok(())
 }
 
