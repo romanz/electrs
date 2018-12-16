@@ -607,6 +607,7 @@ impl Daemon {
     ) -> Result<Vec<BlockHeader>> {
         // Iterate back over headers until known blockash is found:
         if indexed_headers.len() == 0 {
+            debug!("downloading all block headers up to {}", bestblockhash);
             return self.get_all_headers(bestblockhash);
         }
         debug!(
