@@ -66,7 +66,7 @@ fn bitcoind_fetcher(
     new_headers: Vec<HeaderEntry>,
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
     new_headers.last().map(|tip| {
-        info!("{:?} ({} new headers)", tip, new_headers.len());
+        info!("{:?} ({} new blocks to fetch)", tip, new_headers.len());
     });
     let daemon = daemon.reconnect()?;
     let chan = SyncChannel::new(1);

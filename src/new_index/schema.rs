@@ -36,19 +36,17 @@ pub struct Store {
 impl Store {
     pub fn open(path: &Path) -> Self {
         let txstore_db = DB::open(&path.join("txstore"));
+        let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::txids_filter());
+        debug!("{} blocks were added", added_blockhashes.len());
         let history_db = DB::open(&path.join("history"));
-        let added_blockhashes =
-            RwLock::new(load_blockhashes(&txstore_db, &BlockRow::txids_filter()));
-        let indexed_blockhashes =
-            RwLock::new(load_blockhashes(&history_db, &BlockRow::header_filter()));
-        let indexed_headers = RwLock::new(HeaderList::empty());
-
+        let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::header_filter());
+        debug!("{} blocks were indexed", indexed_blockhashes.len());
         Store {
             txstore_db,
             history_db,
-            added_blockhashes,
-            indexed_blockhashes,
-            indexed_headers,
+            added_blockhashes: RwLock::new(added_blockhashes),
+            indexed_blockhashes: RwLock::new(indexed_blockhashes),
+            indexed_headers: RwLock::new(HeaderList::empty()),
         }
     }
 }
@@ -139,22 +137,28 @@ impl Indexer {
         }
     }
 
+    fn get_new_headers(&self, daemon: &Daemon, tip: &Sha256dHash) -> Result<Vec<HeaderEntry>> {
+        let headers = self.store.indexed_headers.read().unwrap();
+        let new_headers = daemon.get_new_headers(&headers, &tip)?;
+        let result = headers.order(new_headers);
+        result.last().map(|tip| {
+            info!("{:?} ({} left to process)", tip, result.len());
+        });
+        Ok(result)
+    }
+
     pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
-
-        let new_headers = {
-            let headers = self.store.indexed_headers.read().unwrap();
-            headers.order(daemon.get_new_headers(&headers, &tip)?)
-        };
+        let new_headers = self.get_new_headers(&daemon, &tip)?;
 
         let to_add = self.headers_to_add(&new_headers);
-        info!("adding transactions from {} blocks", to_add.len());
+        debug!("adding transactions from {} blocks", to_add.len());
         start_fetcher(from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
         self.full_compact_if_needed(&self.store.txstore_db);
 
         let to_index = self.headers_to_index(&new_headers);
-        info!("indexing history from {} blocks", to_index.len());
+        debug!("indexing history from {} blocks", to_index.len());
         start_fetcher(from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
         self.full_compact_if_needed(&self.store.history_db);
 
