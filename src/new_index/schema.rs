@@ -130,6 +130,15 @@ impl Indexer {
             .collect()
     }
 
+    fn full_compact_if_needed(&self, db: &DB) {
+        let key = b"F".to_vec();
+        if db.get(&key).is_none() {
+            db.full_compaction();
+            db.put(&key, b"");
+            assert!(db.get(&key).is_some());
+        }
+    }
+
     pub fn update(&self, daemon: &Daemon, from: FetchFrom) -> Result<()> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
@@ -142,16 +151,12 @@ impl Indexer {
         let to_add = self.headers_to_add(&new_headers);
         info!("adding transactions from {} blocks", to_add.len());
         start_fetcher(from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
-
-        info!("compacting txns DB");
-        self.store.txstore_db.compact_all();
+        self.full_compact_if_needed(&self.store.txstore_db);
 
         let to_index = self.headers_to_index(&new_headers);
         info!("indexing history from {} blocks", to_index.len());
         start_fetcher(from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
-
-        info!("compacting history DB");
-        self.store.history_db.compact_all();
+        self.full_compact_if_needed(&self.store.history_db);
 
         let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);

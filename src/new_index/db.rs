@@ -61,9 +61,11 @@ impl DB {
         DB { db }
     }
 
-    pub fn compact_all(&self) {
+    pub fn full_compaction(&self) {
         // TODO: make sure this doesn't fail silently
+        debug!("starting full compaction on {:?}", self.db);
         self.db.compact_range(None, None);
+        debug!("finished full compaction on {:?}", self.db);
     }
 
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
@@ -85,6 +87,10 @@ impl DB {
         opts.set_sync(false);
         opts.disable_wal(true);
         self.db.write_opt(batch, &opts).unwrap();
+    }
+
+    pub fn put(&self, key: &[u8], value: &[u8]) {
+        self.db.put(key, value).unwrap();
     }
 
     pub fn get(&self, key: &[u8]) -> Option<Bytes> {
