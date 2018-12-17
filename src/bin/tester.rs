@@ -15,7 +15,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{FetchFrom, Indexer, Query, Store},
+    new_index::{FetchFrom, Indexer, Mempool, Query, Store},
     rest,
     signal::Waiter,
 };
@@ -47,21 +47,25 @@ fn run_server(config: Config) -> Result<()> {
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store));
     let mut tip = indexer.update(&daemon)?;
-    let q = Query::new(Arc::clone(&store));
-    let server = rest::run_server(&config, Arc::new(q));
+
+    let q = Arc::new(Query::new(Arc::clone(&store)));
+    let mut mempool = Mempool::new(Arc::clone(&q));
+    mempool.update(&daemon)?;
+
+    let server = rest::run_server(&config, q);
 
     loop {
+        if let Err(err) = signal.wait(Duration::from_secs(5)) {
+            info!("stopping server: {}", err);
+            server.stop();
+            break;
+        }
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
             indexer.update(&daemon)?;
             tip = current_tip;
-        } else {
-            if let Err(err) = signal.wait(Duration::from_secs(5)) {
-                info!("stopping server: {}", err);
-                server.stop();
-                break;
-            }
-        }
+        };
+        mempool.update(&daemon)?;
     }
     info!("server stopped");
     Ok(())
