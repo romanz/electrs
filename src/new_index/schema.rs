@@ -691,14 +691,6 @@ impl TxRow {
             value,
         }
     }
-
-    fn from_row(row: DBRow) -> Self {
-        let DBRow { key, value } = row;
-        TxRow {
-            key: bincode::deserialize(&key).expect("failed to parse TxRowKey"),
-            value,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -832,10 +824,6 @@ impl BlockRow {
             key: BlockKey { code: b'D', hash },
             value: vec![],
         }
-    }
-
-    fn header_key(hash: FullHash) -> Bytes {
-        [b"B", &hash[..]].concat()
     }
 
     fn txids_key(hash: FullHash) -> Bytes {

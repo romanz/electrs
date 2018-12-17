@@ -4,6 +4,7 @@ use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo}
 use crate::util::{
     full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
 };
+
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::network::constants::Network;
 use bitcoin::util::address::Address;

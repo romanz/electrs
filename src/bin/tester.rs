@@ -5,7 +5,6 @@ extern crate log;
 
 extern crate electrs;
 
-use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
 use std::process;
 use std::sync::Arc;
