@@ -36,10 +36,10 @@ pub struct Store {
 impl Store {
     pub fn open(path: &Path) -> Self {
         let txstore_db = DB::open(&path.join("txstore"));
-        let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::txids_filter());
+        let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::done_filter());
         debug!("{} blocks were added", added_blockhashes.len());
         let history_db = DB::open(&path.join("history"));
-        let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::header_filter());
+        let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
         debug!("{} blocks were indexed", indexed_blockhashes.len());
         Store {
             txstore_db,
@@ -497,7 +497,8 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
     //      O{txid}{index} → {txout}
-    // persist block txids' and metadata rows (used to mark added blocks):
+    // persist block headers', block txids' and metadata rows:
+    //      B{blockhash} → {header}
     //      X{blockhash} → {txid1}...{txidN}
     //      M{blockhash} → {tx_count}{size}{weight}
     block_entries
@@ -510,8 +511,10 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
             for tx in &b.block.txdata {
                 add_transaction(tx, blockheight, blockhash, &mut rows);
             }
+            rows.push(BlockRow::new_header(&b).to_row());
             rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
             rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
+            rows.push(BlockRow::new_done(blockhash).to_row()); // mark block as "added"
             rows
         })
         .flatten()
@@ -575,8 +578,6 @@ fn index_blocks(
     block_entries: &[BlockEntry],
     previous_txos_map: &HashMap<OutPoint, TxOut>,
 ) -> Vec<DBRow> {
-    // persist block headers' rows (use to mark indexed blocks):
-    //      B{blockhash} → {header}
     block_entries
         .par_iter() // serialization is CPU-intensive
         .map(|b| {
@@ -585,7 +586,7 @@ fn index_blocks(
                 let height = b.entry.height() as u32;
                 index_transaction(tx, height, previous_txos_map, &mut rows);
             }
-            rows.push(BlockRow::new_header(&b).to_row());
+            rows.push(BlockRow::new_done(b.entry.hash().to_bytes()).to_row()); // mark block as "indexed"
             rows
         })
         .flatten()
@@ -826,24 +827,27 @@ impl BlockRow {
         }
     }
 
-    fn header_key(hash: FullHash) -> Bytes {
-        [b"B", &hash[..]].concat()
+    fn new_done(hash: FullHash) -> BlockRow {
+        BlockRow {
+            key: BlockKey { code: b'D', hash },
+            value: vec![],
+        }
     }
 
-    fn header_filter() -> Bytes {
-        b"B".to_vec()
+    fn header_key(hash: FullHash) -> Bytes {
+        [b"B", &hash[..]].concat()
     }
 
     fn txids_key(hash: FullHash) -> Bytes {
         [b"X", &hash[..]].concat()
     }
 
-    fn txids_filter() -> Bytes {
-        b"X".to_vec()
-    }
-
     fn meta_key(hash: FullHash) -> Bytes {
         [b"M", &hash[..]].concat()
+    }
+
+    fn done_filter() -> Bytes {
+        b"D".to_vec()
     }
 
     fn to_row(self) -> DBRow {
