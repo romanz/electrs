@@ -42,11 +42,10 @@ fn run_server(config: Config) -> Result<()> {
             false => FetchFrom::BlkFiles, // faster, uses blk*.dat files (good for initial indexing)
         },
     );
-    indexer.update(&daemon)?;
+    let mut tip = indexer.update(&daemon)?;
     let q = Query::new(Arc::clone(&store));
     let server = rest::run_server(&config, Arc::new(q));
 
-    let mut tip = Sha256dHash::default();
     loop {
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
