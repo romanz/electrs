@@ -654,7 +654,8 @@ fn index_transaction(
     }
 }
 
-type FullHash = [u8; 32]; // serialized SHA256 result
+// TODO: replace by a separate opaque type (similar to Sha256dHash, but without the "double")
+pub type FullHash = [u8; 32]; // serialized SHA256 result
 
 pub fn compute_script_hash(script: &Script) -> FullHash {
     let mut hash = FullHash::default();
