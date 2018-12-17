@@ -54,6 +54,7 @@ fn run_server(config: Config) -> Result<()> {
         } else {
             if let Err(err) = signal.wait(Duration::from_secs(5)) {
                 info!("stopping server: {}", err);
+                server.stop();
                 break;
             }
         }

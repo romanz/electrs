@@ -10,6 +10,7 @@ use bitcoin::util::address::Address;
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
+use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future};
 use hyper::service::service_fn_ok;
@@ -321,7 +322,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
     }
 }
 
-pub fn run_server(config: &Config, query: Arc<Query>) {
+pub fn run_server(config: &Config, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 
@@ -346,13 +347,30 @@ pub fn run_server(config: &Config, query: Arc<Query>) {
         )
     };
 
+    let (tx, rx) = oneshot::channel::<()>();
     let server = Server::bind(&addr)
         .serve(new_service)
+        .with_graceful_shutdown(rx)
         .map_err(|e| eprintln!("server error: {}", e));
 
-    thread::spawn(move || {
-        rt::run(server);
-    });
+    Handle {
+        tx,
+        thread: thread::spawn(move || {
+            rt::run(server);
+        }),
+    }
+}
+
+pub struct Handle {
+    tx: oneshot::Sender<()>,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Handle {
+    pub fn stop(self) {
+        self.tx.send(()).expect("failed to send shutdown signal");
+        self.thread.join().expect("REST server failed");
+    }
 }
 
 fn handle_request(
