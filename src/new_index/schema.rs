@@ -648,10 +648,10 @@ fn index_transaction(
 
 type FullHash = [u8; 32]; // serialized SHA256 result
 
-pub fn compute_script_hash(script: &[u8]) -> FullHash {
+pub fn compute_script_hash(script: &Script) -> FullHash {
     let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
-    sha2.input(script);
+    sha2.input(script.as_bytes());
     sha2.result(&mut hash);
     hash
 }
@@ -875,7 +875,7 @@ impl TxHistoryRow {
     fn new(script: &Script, confirmed_height: u32, txinfo: TxHistoryInfo) -> Self {
         let key = TxHistoryKey {
             code: b'H',
-            scripthash: compute_script_hash(&script[..]),
+            scripthash: compute_script_hash(&script),
             confirmed_height,
             txinfo,
         };

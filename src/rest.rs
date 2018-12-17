@@ -673,7 +673,7 @@ fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, Http
     {
         bail!(HttpError::from("Address on invalid network".to_string()))
     }
-    Ok(compute_script_hash(&addr.script_pubkey().into_bytes()))
+    Ok(compute_script_hash(&addr.script_pubkey()))
 }
 
 #[derive(Debug)]
