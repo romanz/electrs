@@ -434,7 +434,7 @@ impl Query {
         let txid = tx.txid();
 
         tx.output
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(vout, txout)| {
                 if !txout.script_pubkey.is_provably_unspendable() {
