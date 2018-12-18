@@ -412,25 +412,26 @@ impl Query {
         cp_height: usize,
     ) -> Result<(Vec<Sha256dHash>, Sha256dHash)> {
         if cp_height < height {
-            return Err(format!("cp_height #{} < height #{}", cp_height, height))?;
+            bail!("cp_height #{} < height #{}", cp_height, height);
         }
 
         let best_height = self.get_best_header()?.height();
         if best_height < cp_height {
-            return Err(format!(
+            bail!(
                 "cp_height #{} above best block height #{}",
-                cp_height, best_height
-            ))?;
+                cp_height,
+                best_height
+            );
         }
 
-        let index = self.app.index();
-        let header_hashes: Vec<Sha256dHash> = (0..cp_height + 1)
+        let heights: Vec<usize> = (0..cp_height + 1).collect();
+        let header_hashes: Vec<Sha256dHash> = self
+            .get_headers(&heights)
             .into_iter()
-            .map(|height| index.get_header(height).unwrap().hash().clone())
+            .map(|h| *h.hash())
             .collect();
-
-        let (branch, root) = create_merkle_branch_and_root(header_hashes, height);
-        Ok((branch, root))
+        assert_eq!(header_hashes.len(), heights.len());
+        Ok(create_merkle_branch_and_root(header_hashes, height))
     }
 
     pub fn get_id_from_pos(
@@ -445,16 +446,17 @@ impl Query {
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;
 
-        let txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
+        let txids = self.app.daemon().getblocktxids(header_entry.hash())?;
         let txid = *txids
             .get(tx_pos)
             .chain_err(|| format!("No tx in position #{} in block #{}", tx_pos, height))?;
 
-        if want_merkle {
-            let (branches, _root) = create_merkle_branch_and_root(txids, tx_pos);
-            return Ok((txid, branches));
-        }
-        return Ok((txid, [].to_vec()));
+        let branch = if want_merkle {
+            create_merkle_branch_and_root(txids, tx_pos).0
+        } else {
+            vec![]
+        };
+        Ok((txid, branch))
     }
 
     pub fn broadcast(&self, txn: &Transaction) -> Result<Sha256dHash> {

@@ -30,10 +30,24 @@ fn usize_from_value(val: Option<&Value>, name: &str) -> Result<usize> {
     Ok(val as usize)
 }
 
+fn usize_from_value_or(val: Option<&Value>, name: &str, default: usize) -> Result<usize> {
+    if val.is_none() {
+        return Ok(default);
+    }
+    usize_from_value(val, name)
+}
+
 fn bool_from_value(val: Option<&Value>, name: &str) -> Result<bool> {
     let val = val.chain_err(|| format!("missing {}", name))?;
     let val = val.as_bool().chain_err(|| format!("not a bool {}", name))?;
-    Ok(val as bool)
+    Ok(val)
+}
+
+fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<bool> {
+    if val.is_none() {
+        return Ok(default);
+    }
+    bool_from_value(val, name)
 }
 
 fn unspent_from_status(status: &Status) -> Value {
@@ -109,10 +123,7 @@ impl Connection {
 
     fn blockchain_block_header(&self, params: &[Value]) -> Result<Value> {
         let height = usize_from_value(params.get(0), "height")?;
-        let mut cp_height = 0;
-        if params.len() > 1 {
-            cp_height = usize_from_value(params.get(1), "cp_height")?;
-        }
+        let cp_height = usize_from_value_or(params.get(1), "cp_height", 0)?;
 
         let raw_header_hex: String = self
             .query
@@ -138,10 +149,7 @@ impl Connection {
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
         let start_height = usize_from_value(params.get(0), "start_height")?;
         let count = usize_from_value(params.get(1), "count")?;
-        let mut cp_height = 0;
-        if params.len() > 2 {
-            cp_height = usize_from_value(params.get(2), "cp_height")?;
-        }
+        let cp_height = usize_from_value_or(params.get(2), "cp_height", 0)?;
         let heights: Vec<usize> = (start_height..(start_height + count)).collect();
         let headers: Vec<String> = self
             .query
@@ -258,10 +266,7 @@ impl Connection {
     fn blockchain_transaction_id_from_pos(&self, params: &[Value]) -> Result<Value> {
         let height = usize_from_value(params.get(0), "height")?;
         let tx_pos = usize_from_value(params.get(1), "tx_pos")?;
-        let mut want_merkle = false;
-        if params.len() > 2 {
-            want_merkle = bool_from_value(params.get(2), "merkle")?;
-        }
+        let want_merkle = bool_from_value_or(params.get(2), "merkle", false)?;
 
         let (txid, merkle) = self.query.get_id_from_pos(height, tx_pos, want_merkle)?;
 
