@@ -20,6 +20,17 @@ use electrs::{
     signal::Waiter,
 };
 
+fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
+    let mut jsonrpc_import = config.jsonrpc_import;
+    if !jsonrpc_import {
+        jsonrpc_import = !store.is_empty();
+    }
+    match jsonrpc_import {
+        true => FetchFrom::Bitcoind, // slower, uses JSONRPC (good for incremental updates)
+        false => FetchFrom::BlkFiles, // faster, uses blk*.dat files (good for initial indexing)
+    }
+}
+
 fn run_server(config: Config) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
@@ -34,13 +45,7 @@ fn run_server(config: Config) -> Result<()> {
         &metrics,
     )?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let mut indexer = Indexer::open(
-        Arc::clone(&store),
-        match config.jsonrpc_import {
-            true => FetchFrom::Bitcoind, // slower, uses JSONRPC (good for incremental updates)
-            false => FetchFrom::BlkFiles, // faster, uses blk*.dat files (good for initial indexing)
-        },
-    );
+    let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store));
     let mut tip = indexer.update(&daemon)?;
     let q = Query::new(Arc::clone(&store));
     let server = rest::run_server(&config, Arc::new(q));
