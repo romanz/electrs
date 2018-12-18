@@ -4,6 +4,8 @@ use std::path::Path;
 
 use crate::util::Bytes;
 
+static DB_VERSION: u32 = 1;
+
 pub struct DBRow {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -64,8 +66,11 @@ impl DB {
         // let mut block_opts = rocksdb::BlockBasedOptions::default();
         // block_opts.set_block_size(???);
 
-        let db = rocksdb::DB::open(&db_opts, path).expect("failed to open RocksDB");
-        DB { db }
+        let db = DB {
+            db: rocksdb::DB::open(&db_opts, path).expect("failed to open RocksDB"),
+        };
+        db.verify_compatibility();
+        db
     }
 
     pub fn full_compaction(&self) {
@@ -111,5 +116,17 @@ impl DB {
 
     pub fn get(&self, key: &[u8]) -> Option<Bytes> {
         self.db.get(key).unwrap().map(|v| v.to_vec())
+    }
+
+    fn verify_compatibility(&self) {
+        let compatibility_bytes = bincode::serialize(&DB_VERSION).unwrap();
+
+        match self.get(b"V") {
+            None => self.put(b"V", &compatibility_bytes),
+            Some(ref x) if x != &compatibility_bytes => {
+                panic!("Incompatible database found. Please reindex.")
+            }
+            Some(_) => (),
+        }
     }
 }
