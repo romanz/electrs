@@ -1,6 +1,6 @@
 use chan_signal::Signal;
 
-error_chain!{
+error_chain! {
     types {
         Error, ErrorKind, ResultExt, Result;
     }

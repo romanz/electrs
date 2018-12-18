@@ -206,7 +206,8 @@ impl Tracker {
                         None // ignore this transaction for now
                     }
                 }
-            }).collect();
+            })
+            .collect();
         if entries.is_empty() {
             return Ok(());
         }
