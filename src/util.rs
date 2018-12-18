@@ -103,8 +103,8 @@ pub struct BlockHeaderMeta {
     pub meta: BlockMeta,
 }
 
-impl<'a> From<&'a Block> for BlockMeta {
-    fn from(block: &'a Block) -> BlockMeta {
+impl From<&Block> for BlockMeta {
+    fn from(block: &Block) -> BlockMeta {
         BlockMeta {
             tx_count: block.txdata.len() as u32,
             weight: block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
@@ -113,8 +113,8 @@ impl<'a> From<&'a Block> for BlockMeta {
     }
 }
 
-impl<'a> From<&'a BlockEntry> for BlockMeta {
-    fn from(b: &'a BlockEntry) -> BlockMeta {
+impl From<&BlockEntry> for BlockMeta {
+    fn from(b: &BlockEntry) -> BlockMeta {
         BlockMeta {
             tx_count: b.block.txdata.len() as u32,
             weight: b.block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
