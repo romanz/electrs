@@ -54,6 +54,12 @@ impl Store {
 #[derive(Debug)]
 pub struct BlockId(pub usize, pub Sha256dHash);
 
+impl From<&HeaderEntry> for BlockId {
+    fn from(header: &HeaderEntry) -> Self {
+        BlockId(header.height(), header.hash().clone())
+    }
+}
+
 #[derive(Debug)]
 pub struct Utxo {
     pub txid: Sha256dHash,
@@ -449,13 +455,11 @@ impl Query {
             .txstore_db
             .iter_scan(&TxConfRow::filter(&txid[..]))
             .map(TxConfRow::from_row)
-            .filter(|conf| {
-                headers
-                    .header_by_height(conf.key.blockheight as usize)
-                    .map_or(false, |h| h.hash()[..] == conf.key.blockhash)
-            })
+            // header_by_blockhash only returns blocks that are part of the best chain,
+            // or None for orphaned blocks.
+            .filter_map(|conf| headers.header_by_blockhash(&parse_hash(&conf.key.blockhash)))
             .nth(0)
-            .map(|conf| conf.blockid())
+            .map(BlockId::from)
     }
 
     // compatbility with previous tx/block status format
@@ -468,9 +472,9 @@ impl Query {
         // an additional db read.
 
         let headers = self.store.indexed_headers.read().unwrap();
-        // get_header_by_hash looks up the height first, then fetches the header by that.
-        // if the block is no longer the best block at this height, it'll return None.
 
+        // header_by_blockhash only returns blocks that are part of the best chain,
+        // or None for orphaned blocks.
         headers.header_by_blockhash(hash).map_or_else(
             || BlockStatus::orphaned(),
             |header| {
@@ -505,11 +509,10 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
         .par_iter() // serialization is CPU-intensive
         .map(|b| {
             let mut rows = vec![];
-            let blockheight = b.entry.height() as u32;
             let blockhash = b.entry.hash().to_bytes();
             let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
             for tx in &b.block.txdata {
-                add_transaction(tx, blockheight, blockhash, &mut rows);
+                add_transaction(tx, blockhash, &mut rows);
             }
             rows.push(BlockRow::new_header(&b).to_row());
             rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
@@ -521,9 +524,9 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
         .collect()
 }
 
-fn add_transaction(tx: &Transaction, blockheight: u32, blockhash: FullHash, rows: &mut Vec<DBRow>) {
+fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>) {
     rows.push(TxRow::new(tx).to_row());
-    rows.push(TxConfRow::new(tx, blockheight, blockhash).to_row());
+    rows.push(TxConfRow::new(tx, blockhash).to_row());
 
     let txid = tx.txid().into_bytes();
     for (txo_index, txo) in tx.output.iter().enumerate() {
@@ -697,7 +700,6 @@ impl TxRow {
 struct TxConfKey {
     code: u8,
     txid: FullHash,
-    blockheight: u32,
     blockhash: FullHash,
 }
 
@@ -706,13 +708,12 @@ struct TxConfRow {
 }
 
 impl TxConfRow {
-    fn new(txn: &Transaction, blockheight: u32, blockhash: FullHash) -> TxConfRow {
+    fn new(txn: &Transaction, blockhash: FullHash) -> TxConfRow {
         let txid = txn.txid().into_bytes();
         TxConfRow {
             key: TxConfKey {
                 code: b'C',
                 txid,
-                blockheight,
                 blockhash,
             },
         }
@@ -733,13 +734,6 @@ impl TxConfRow {
         TxConfRow {
             key: bincode::deserialize(&row.key).expect("failed to parse TxConfKey"),
         }
-    }
-
-    fn blockid(&self) -> BlockId {
-        BlockId(
-            self.key.blockheight as usize,
-            parse_hash(&self.key.blockhash),
-        )
     }
 }
 
