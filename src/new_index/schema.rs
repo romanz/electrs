@@ -49,6 +49,11 @@ impl Store {
             indexed_headers: RwLock::new(HeaderList::empty()),
         }
     }
+
+    /// Used to decide whether to use "blk*.dat" files for faster initial indexing
+    pub fn is_empty(&self) -> bool {
+        return self.added_blockhashes.read().unwrap().is_empty();
+    }
 }
 
 #[derive(Debug)]
