@@ -857,7 +857,7 @@ enum TxHistoryInfo {
 struct TxHistoryKey {
     code: u8,
     scripthash: FullHash,
-    confirmed_height: u32,
+    confirmed_height: u32, // MUST be serialized as big-endian (for correct scans).
     txinfo: TxHistoryInfo,
 }
 
@@ -882,13 +882,16 @@ impl TxHistoryRow {
 
     fn to_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::config().big_endian().serialize(&self.key).unwrap(),
             value: vec![],
         }
     }
 
     fn from_row(row: DBRow) -> Self {
-        let key = bincode::deserialize(&row.key).expect("failed to deserialize TxHistoryKey");
+        let key = bincode::config()
+            .big_endian()
+            .deserialize(&row.key)
+            .expect("failed to deserialize TxHistoryKey");
         TxHistoryRow { key }
     }
 
