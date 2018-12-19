@@ -34,7 +34,6 @@ num_cpus = "1.0"
 page_size = "0.4"
 prometheus = "0.4"
 rayon = "1.0"
-rocksdb = "0.10.1"
 rust-crypto = "0.2"
 secp256k1 = "0.11"
 serde = "1.0"
@@ -49,3 +48,8 @@ url = "1.0"
 [dependencies.bitcoin]
 version = "0.15.1"
 features = ["serde"]
+
+
+[dependencies.rocksdb]
+git = "https://github.com/romanz/rust-rocksdb/"
+rev = "f87cb851b6122959fbdb4b83d58b8300d4d59d3f" # for SetOptions API
