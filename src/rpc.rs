@@ -106,7 +106,7 @@ impl Connection {
     }
 
     fn server_banner(&self) -> Result<Value> {
-        Ok(json!("Welcome to RustElectrum Server!\n"))
+        Ok(json!(self.query.get_banner()?))
     }
 
     fn server_donation_address(&self) -> Result<Value> {

@@ -441,6 +441,10 @@ impl Daemon {
         Ok(from_value(info).chain_err(|| "invalid network info")?)
     }
 
+    pub fn get_subversion(&self) -> Result<String> {
+        Ok(self.getnetworkinfo()?.subversion)
+    }
+
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
         parse_hash(&self.request("getbestblockhash", json!([]))?).chain_err(|| "invalid blockhash")
     }

@@ -26,6 +26,7 @@ pub struct Config {
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
+    pub server_banner: String,
 }
 
 impl Config {
@@ -107,6 +108,12 @@ impl Config {
                     .long("tx-cache-size")
                     .help("Number of transactions to keep in for query LRU cache")
                     .default_value("10000")  // should be enough for a small wallet.
+            )
+            .arg(
+                Arg::with_name("server_banner")
+                    .long("server-banner")
+                    .help("The banner to be shown in the Electrum console")
+                    .default_value("Welcome to electrs (Electrum Rust Server)!")
             )
             .get_matches();
 
@@ -192,6 +199,7 @@ impl Config {
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
+            server_banner: value_t_or_exit!(m, "server_banner", String),
         };
         eprintln!("{:?}", config);
         config

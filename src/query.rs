@@ -486,4 +486,8 @@ impl Query {
         }
         last_fee_rate * 1e-5 // [BTC/kB] = 10^5 [sat/B]
     }
+
+    pub fn get_banner(&self) -> Result<String> {
+        self.app.get_banner()
+    }
 }

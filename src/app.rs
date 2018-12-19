@@ -1,12 +1,13 @@
 use bitcoin::util::hash::Sha256dHash;
 use std::sync::{Arc, Mutex};
 
-use crate::{daemon, errors::*, index, signal::Waiter, store};
+use crate::{config::Config, daemon, errors::*, index, signal::Waiter, store};
 
 pub struct App {
     store: store::DBStore,
     index: index::Index,
     daemon: daemon::Daemon,
+    banner: String,
     tip: Mutex<Sha256dHash>,
 }
 
@@ -15,11 +16,13 @@ impl App {
         store: store::DBStore,
         index: index::Index,
         daemon: daemon::Daemon,
+        config: &Config,
     ) -> Result<Arc<App>> {
         Ok(Arc::new(App {
             store,
             index,
             daemon: daemon.reconnect()?,
+            banner: config.server_banner.clone(),
             tip: Mutex::new(Sha256dHash::default()),
         }))
     }
@@ -45,5 +48,13 @@ impl App {
             *tip = self.index().update(self.write_store(), &signal)?;
         }
         Ok(new_block)
+    }
+
+    pub fn get_banner(&self) -> Result<String> {
+        Ok(format!(
+            "{}\n{}",
+            self.banner,
+            self.daemon.get_subversion()?
+        ))
     }
 }

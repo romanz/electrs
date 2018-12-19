@@ -54,7 +54,7 @@ fn run_server(config: &Config) -> Result<()> {
     }
     .enable_compaction(); // enable auto compactions before starting incremental index updates.
 
-    let app = App::new(store, index, daemon)?;
+    let app = App::new(store, index, daemon, &config)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size);
     let query = Query::new(app.clone(), &metrics, tx_cache);
 
