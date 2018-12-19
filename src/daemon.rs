@@ -102,9 +102,9 @@ struct BlockchainInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct NetworkInfo {
+pub struct NetworkInfo {
     version: u64,
-    subversion: String,
+    pub subversion: String,
 }
 
 pub struct MempoolEntry {
@@ -436,7 +436,7 @@ impl Daemon {
         Ok(from_value(info).chain_err(|| "invalid blockchain info")?)
     }
 
-    fn getnetworkinfo(&self) -> Result<NetworkInfo> {
+    pub fn getnetworkinfo(&self) -> Result<NetworkInfo> {
         let info: Value = self.request("getnetworkinfo", json!([]))?;
         Ok(from_value(info).chain_err(|| "invalid network info")?)
     }

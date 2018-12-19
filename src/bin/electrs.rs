@@ -17,6 +17,7 @@ use electrs::{
     index::Index,
     metrics::Metrics,
     query::{Query, TransactionCache},
+    rpc::create_server_banner,
     rpc::RPC,
     signal::Waiter,
     store::{full_compaction, is_fully_compacted, DBStore},
@@ -54,6 +55,7 @@ fn run_server(config: &Config) -> Result<()> {
     }
     .enable_compaction(); // enable auto compactions before starting incremental index updates.
 
+    let server_banner = create_server_banner(daemon.getnetworkinfo()?, &config.server_banner);
     let app = App::new(store, index, daemon)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size);
     let query = Query::new(app.clone(), &metrics, tx_cache);
@@ -63,7 +65,14 @@ fn run_server(config: &Config) -> Result<()> {
         app.update(&signal)?;
         query.update_mempool()?;
         server
-            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics))
+            .get_or_insert_with(|| {
+                RPC::start(
+                    config.electrum_rpc_addr,
+                    query.clone(),
+                    &metrics,
+                    server_banner.clone(),
+                )
+            })
             .notify(); // update subscribed clients
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
             info!("stopping server: {}", err);

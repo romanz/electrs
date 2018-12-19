@@ -11,6 +11,7 @@ use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::daemon::NetworkInfo;
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::query::{Query, Status};
@@ -65,6 +66,12 @@ fn unspent_from_status(status: &Status) -> Value {
     ))
 }
 
+pub fn create_server_banner(info: NetworkInfo, banner: &String) -> String {
+    banner
+        .replace("{daemonversion}", &info.subversion)
+        .replace("{version}", "RustElectrum Server")
+}
+
 struct Connection {
     query: Arc<Query>,
     last_header_entry: Option<HeaderEntry>,
@@ -73,6 +80,7 @@ struct Connection {
     addr: SocketAddr,
     chan: SyncChannel<Message>,
     stats: Arc<Stats>,
+    banner: String,
 }
 
 impl Connection {
@@ -81,6 +89,7 @@ impl Connection {
         stream: TcpStream,
         addr: SocketAddr,
         stats: Arc<Stats>,
+        banner: String,
     ) -> Connection {
         Connection {
             query,
@@ -90,6 +99,7 @@ impl Connection {
             addr,
             chan: SyncChannel::new(10),
             stats,
+            banner,
         }
     }
 
@@ -106,7 +116,7 @@ impl Connection {
     }
 
     fn server_banner(&self) -> Result<Value> {
-        Ok(json!("Welcome to RustElectrum Server!\n"))
+        Ok(json!(self.banner))
     }
 
     fn server_donation_address(&self) -> Result<Value> {
@@ -521,7 +531,12 @@ impl RPC {
         chan
     }
 
-    pub fn start(addr: SocketAddr, query: Arc<Query>, metrics: &Metrics) -> RPC {
+    pub fn start(
+        addr: SocketAddr,
+        query: Arc<Query>,
+        metrics: &Metrics,
+        server_banner: String,
+    ) -> RPC {
         let stats = Arc::new(Stats {
             latency: metrics.histogram_vec(
                 HistogramOpts::new("electrum_rpc", "Electrum RPC latency (seconds)"),
@@ -544,9 +559,10 @@ impl RPC {
                     let query = query.clone();
                     let senders = senders.clone();
                     let stats = stats.clone();
+                    let banner = server_banner.clone();
                     children.push(spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
-                        let conn = Connection::new(query, stream, addr, stats);
+                        let conn = Connection::new(query, stream, addr, stats, banner);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
