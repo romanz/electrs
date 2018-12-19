@@ -280,7 +280,7 @@ impl Connection {
             .collect();
 
         Ok(json!({
-            "tx_id" : txid.be_hex_string(),
+            "tx_hash" : txid.be_hex_string(),
             "merkle" : merkle_vec}))
     }
 
