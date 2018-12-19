@@ -1,34 +1,70 @@
-# Electrum Server in Rust
+# Esplora - Electrs backend API
 
-[![Build Status](https://travis-ci.com/romanz/electrs.svg?branch=master)](https://travis-ci.com/romanz/electrs)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
-[![crates.io](http://meritbadge.herokuapp.com/electrs)](https://crates.io/crates/electrs)
-[![gitter.im](https://badges.gitter.im/romanz/electrs.svg)](https://gitter.im/romanz/electrs)
+A block chain index engine and HTTP API written in Rust based on [romanz/electrs](https://github.com/romanz/electrs).
 
-An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx), [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server) and [bitcoincore-indexd](https://github.com/jonasschnelli/bitcoincore-indexd).
+Used as the backend for the [Esplora block explorer](https://github.com/Blockstream/esplora) powering [blockstream.info](https://blockstream.info/).
 
-The motivation behind this project is to enable a user to run his own Electrum server,
-with required hardware resources not much beyond those of a [full node](https://en.bitcoin.it/wiki/Full_node#Why_should_you_use_a_full_node_wallet).
-The server indexes the entire Bitcoin blockchain, and the resulting index enables fast queries for any given user wallet,
-allowing the user to keep real-time track of his balances and his transaction history using the [Electrum wallet](https://electrum.org/).
-Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
-thus preserving the privacy of the user's addresses and balances.
+API documentation [is available here](https://github.com/blockstream/esplora/blob/master/API.md).
 
-## Features
+### Installing & indexing
 
- * Supports Electrum protocol [v1.2](https://electrumx.readthedocs.io/en/latest/protocol.html)
- * Maintains an index over transaction inputs and outputs, allowing fast balance queries
- * Fast synchronization of the Bitcoin blockchain (~2 hours for ~187GB @ July 2018) on [modest hardware](https://gist.github.com/romanz/cd9324474de0c2f121198afe3d063548)
- * Low index storage overhead (~20%), relying on a local full node for transaction retrieval
- * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
- * Low CPU & memory usage (after initial indexing)
- * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
- * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
+Install Rust, Bitcoin Core and the `clang` and `cmake` packages, then:
 
-## Usage
+```bash
+$ git clone https://github.com/blockstream/electrs && cd electrs
+$ git checkout bitcoin_e # or liquid_e
+$ cargo run --release -- -vvvv --daemon-dir ~/.bitcoin
+```
 
-See [here](doc/usage.md) for installation, build and usage instructions.
+See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
+Note that our indexes are incompatible with electrs's and has to be created separately.
 
-## Index database
+The indexes require 250GB-300GB of storage after running compaction, but you'll need to have at least 500GB
+of free space available for the initial (non-compacted) indexing process.
+Creating the indexes should take a few hours on a beefy machine with SSD.
 
-The database schema is described [here](doc/schema.md).
+For personal low-volume use, the storage requirements can be reduced with `--light` (see below under CLI options).
+
+To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
+
+### Notable changes from Electrs:
+
+- HTTP REST API instead of the Electrum JSON-RPC protocol, with extended transaction information
+  (previous outputs, spending transactions, script asm and more).
+
+- Extended indexes and database storage for improved performance under high load:
+
+  - A full transaction store mapping txids to raw transactions is kept in the database under the prefix `t`.
+    This takes up ~200GB of extra storage.
+  - A map of blockhash to txids is kept in the database under the prefix `X`.
+  - Block stats metadata (number of transactions, size and weight) is kept in the database under the prefix `M`.
+  - The index with `T` prefix mapping txids to block heights now also includes the block hash.
+    This allows for quick reorg-aware transaction confirmation status lookups, by verifying the
+    current block at the recorded height still matches the recorded block hash.
+
+  With these new indexes, bitcoind is no longer queried to serve user requests and is only polled
+  periodically for new blocks and for syncing the mempool.
+
+- Support for Liquid and other Elements-based networks, including CT, peg-in/out and multi-asset.
+  (under the `liquid_e` branch)
+
+### CLI options
+
+In addition to electrs's original configuration options, a few new options are also available:
+
+- `--http-addr <addr:port>` - HTTP server address/port to listen on (default: `127.0.0.1:3000`).
+- `--light` - enable light resource mode, which disables the `X`, `M` and `t` indexes
+   and queries this information from bitcoind instead.
+   This significantly reduces storage requirements (at the time of writing, by about 250GB),
+   at the cost of more expensive lookups and more reliance on bitcoind.
+- `--disable-prevout` - disable attaching previous output information to inputs.
+  This significantly reduces the amount of transaction lookups (and IO/CPU/memory usage),
+  at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
+  Consider setting this if you're using `--light`.
+- `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
+
+See `$ cargo run --release -- --help` for the full list of options.
+
+## License
+
+MIT

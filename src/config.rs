@@ -126,7 +126,7 @@ impl Config {
             .arg(
                 Arg::with_name("disable_prevout")
                     .long("disable-prevout")
-                    .help("Don't attach previout output details to inputs")
+                    .help("Don't attach previous output details to inputs")
             )
             .get_matches();
 

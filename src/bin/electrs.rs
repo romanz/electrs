@@ -44,9 +44,11 @@ fn run_server(config: Config) -> Result<()> {
         signal.clone(),
         &metrics,
     )?;
+    // TODO: wait for daemon to fully sync (before indexing and starting REST API)
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store));
     let mut tip = indexer.update(&daemon)?;
+    // TODO: enable compactions on store.
 
     let q = Arc::new(Query::new(Arc::clone(&store)));
     let mut mempool = Mempool::new(Arc::clone(&q));
