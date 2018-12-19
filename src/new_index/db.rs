@@ -80,6 +80,12 @@ impl DB {
         debug!("finished full compaction on {:?}", self.db);
     }
 
+    pub fn enable_auto_compaction(&self) {
+        self.db
+            .set_option("disable_auto_compactions", "false")
+            .unwrap();
+    }
+
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
         ScanIterator {
             prefix: prefix.to_vec(),

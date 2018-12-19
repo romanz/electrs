@@ -145,13 +145,14 @@ impl Indexer {
             .collect()
     }
 
-    fn full_compact_if_needed(&self, db: &DB) {
+    fn start_auto_compactions(&self, db: &DB) {
         let key = b"F".to_vec();
         if db.get(&key).is_none() {
             db.full_compaction();
             db.put(&key, b"");
             assert!(db.get(&key).is_some());
         }
+        db.enable_auto_compaction();
     }
 
     fn get_new_headers(&self, daemon: &Daemon, tip: &Sha256dHash) -> Result<Vec<HeaderEntry>> {
@@ -176,7 +177,7 @@ impl Indexer {
             self.from
         );
         start_fetcher(self.from, &daemon, to_add)?.map(|blocks| self.add(&blocks));
-        self.full_compact_if_needed(&self.store.txstore_db);
+        self.start_auto_compactions(&self.store.txstore_db);
 
         let to_index = self.headers_to_index(&new_headers);
         debug!(
@@ -185,7 +186,7 @@ impl Indexer {
             self.from
         );
         start_fetcher(self.from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
-        self.full_compact_if_needed(&self.store.history_db);
+        self.start_auto_compactions(&self.store.history_db);
 
         let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);
