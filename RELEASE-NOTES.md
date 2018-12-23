@@ -1,3 +1,10 @@
+# 0.4.3 (23 Dec 2018)
+
+* Support Rust 2018 edition (1.31)
+* Upgrade to Electrum protocol 1.4 (from 1.2)
+* Let server banner be configurable via command-line flag
+* Improve query.get_merkle_proof() performance
+
 # 0.4.2 (22 Nov 2018)
 
 * Update to rust-bitcoin 0.15.1
