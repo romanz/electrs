@@ -356,7 +356,7 @@ impl Query {
             .0
     }
 
-    pub fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
+    fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
         self.store
             .indexed_headers
             .read()
@@ -967,7 +967,7 @@ impl TxEdgeRow {
         TxEdgeRow { key }
     }
 
-    pub fn filter(outpoint: &OutPoint) -> Bytes {
+    fn filter(outpoint: &OutPoint) -> Bytes {
         // TODO build key without using bincode? [ b"S", &outpoint.txid[..], outpoint.vout?? ].concat()
         bincode::serialize(&(b'S', full_hash(&outpoint.txid[..]), outpoint.vout as u16)).unwrap()
     }
