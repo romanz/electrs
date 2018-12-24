@@ -13,7 +13,7 @@ use std::sync::{Arc, RwLock};
 
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
-use crate::chain::{OutPoint, Transaction, TxOut};
+use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{
@@ -41,6 +41,8 @@ impl Store {
         let history_db = DB::open(&path.join("history"));
         let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
         debug!("{} blocks were indexed", indexed_blockhashes.len());
+        let headers_map = load_blockheaders(&txstore_db);
+        debug!("{} headers were loaded", headers_map.len());
         Store {
             txstore_db,
             history_db,
@@ -502,6 +504,17 @@ fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<Sha256dHash> {
         .collect()
 }
 
+fn load_blockheaders(db: &DB) -> HashMap<Sha256dHash, BlockHeader> {
+    db.iter_scan(&BlockRow::header_filter())
+        .map(BlockRow::from_row)
+        .map(|r| {
+            let key: Sha256dHash = deserialize(&r.key.hash).expect("failed to parse Sha256dHash");
+            let value: BlockHeader = deserialize(&r.value).expect("failed to parse BlockHeader");
+            (key, value)
+        })
+        .collect()
+}
+
 fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
@@ -825,6 +838,10 @@ impl BlockRow {
             key: BlockKey { code: b'D', hash },
             value: vec![],
         }
+    }
+
+    fn header_filter() -> Bytes {
+        b"B".to_vec()
     }
 
     fn txids_key(hash: FullHash) -> Bytes {
