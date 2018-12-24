@@ -85,26 +85,21 @@ pub struct SpendingInput {
 
 #[derive(Serialize, Debug)]
 pub struct ScriptStats {
-    confirmed_tx_count: usize,
-    confirmed_funded_txo_count: usize,
-    confirmed_funded_txo_sum: u64,
-    confirmed_spent_txo_count: usize,
-    confirmed_spent_txo_sum: u64,
-    //unconfirmed_tx_count: usize,
-    //unconfirmed_funded_txo_count: usize,
-    //unconfirmed_funded_txo_sum: usize,
-    //unconfirmed_spent_txo_count: usize,
-    //unconfirmed_spent_txo_sum: usize,
+    tx_count: usize,
+    funded_txo_count: usize,
+    funded_txo_sum: u64,
+    spent_txo_count: usize,
+    spent_txo_sum: u64,
 }
 
 impl ScriptStats {
     fn default() -> Self {
         ScriptStats {
-            confirmed_tx_count: 0,
-            confirmed_funded_txo_count: 0,
-            confirmed_funded_txo_sum: 0,
-            confirmed_spent_txo_count: 0,
-            confirmed_spent_txo_sum: 0,
+            tx_count: 0,
+            funded_txo_count: 0,
+            funded_txo_sum: 0,
+            spent_txo_count: 0,
+            spent_txo_sum: 0,
         }
     }
 }
@@ -336,7 +331,7 @@ impl Query {
                     // is it the first time we're seeing this tx?
                     // XXX: the list of seen txids can be reset whenever we see a new block height
                     if acc.1.insert(history.get_txid()) {
-                        acc.0.confirmed_tx_count += 1;
+                        acc.0.tx_count += 1;
                     }
 
                     // TODO: keep amount on history rows, to avoid the txo lookup?
@@ -346,12 +341,12 @@ impl Query {
 
                     match history.key.txinfo {
                         TxHistoryInfo::Funding(..) => {
-                            acc.0.confirmed_funded_txo_count += 1;
-                            acc.0.confirmed_funded_txo_sum += txo.value;
+                            acc.0.funded_txo_count += 1;
+                            acc.0.funded_txo_sum += txo.value;
                         }
                         TxHistoryInfo::Spending(..) => {
-                            acc.0.confirmed_spent_txo_count += 1;
-                            acc.0.confirmed_spent_txo_sum += txo.value;
+                            acc.0.spent_txo_count += 1;
+                            acc.0.spent_txo_sum += txo.value;
                         }
                     };
 
