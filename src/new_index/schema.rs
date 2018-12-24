@@ -1,6 +1,5 @@
 use bincode;
 use bitcoin::blockdata::script::Script;
-use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use crypto::digest::Digest;
@@ -14,6 +13,7 @@ use std::sync::{Arc, RwLock};
 
 // use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 // use signal::Waiter;
+use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{

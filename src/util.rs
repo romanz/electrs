@@ -1,6 +1,7 @@
+use crate::chain::{Block, BlockHeader};
 use crate::errors::*;
 use crate::new_index::{BlockEntry, BlockId};
-use bitcoin::blockdata::block::{Block, BlockHeader};
+
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use std::collections::HashMap;

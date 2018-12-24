@@ -1,4 +1,5 @@
-use bitcoin::blockdata::block::Block;
+use crate::chain::Block;
+
 use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
 use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
 use rayon::prelude::*;

@@ -27,6 +27,9 @@ extern crate time;
 extern crate tiny_http;
 extern crate url;
 
+#[cfg(feature = "liquid")]
+extern crate elements;
+
 #[macro_use]
 extern crate chan;
 #[macro_use]
@@ -44,6 +47,7 @@ extern crate serde_json;
 
 pub mod app;
 pub mod bulk;
+pub mod chain;
 pub mod config;
 pub mod daemon;
 pub mod errors;

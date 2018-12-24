@@ -1,3 +1,4 @@
+use crate::chain::{OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
@@ -10,7 +11,6 @@ use bitcoin::network::constants::Network;
 use bitcoin::util::address::Address;
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
-use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future};

@@ -11,6 +11,10 @@ documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
 
+[features]
+default = []
+liquid = ["elements"]
+
 [dependencies]
 arrayref = "0.3"
 base64 = "0.9"
@@ -53,3 +57,10 @@ features = ["serde"]
 [dependencies.rocksdb]
 git = "https://github.com/romanz/rust-rocksdb/"
 rev = "f87cb851b6122959fbdb4b83d58b8300d4d59d3f" # for SetOptions API
+
+
+[dependencies.elements]
+optional = true
+git = "https://github.com/ElementsProject/rust-elements/"
+rev = "78c1e29809b7420041b1259711f0a2934211a0d3" # from master branch
+features = ["serde-feature"] # Doesn't look to work by now

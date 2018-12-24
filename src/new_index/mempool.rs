@@ -1,4 +1,5 @@
-use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxOut};
+use crate::chain::{OutPoint, Transaction, TxOut};
+
 use bitcoin::util::hash::Sha256dHash;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
