@@ -45,14 +45,11 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-pub mod app;
-pub mod bulk;
 pub mod chain;
 pub mod config;
 pub mod daemon;
 pub mod errors;
 pub mod fake;
-pub mod index;
 pub mod metrics;
 pub mod rest;
 pub mod signal;
