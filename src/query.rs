@@ -203,14 +203,21 @@ pub struct Query {
     app: Arc<App>,
     tracker: RwLock<Tracker>,
     tx_cache: TransactionCache,
+    txid_limit: usize,
 }
 
 impl Query {
-    pub fn new(app: Arc<App>, metrics: &Metrics, tx_cache: TransactionCache) -> Arc<Query> {
+    pub fn new(
+        app: Arc<App>,
+        metrics: &Metrics,
+        tx_cache: TransactionCache,
+        txid_limit: usize,
+    ) -> Arc<Query> {
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new(metrics)),
             tx_cache,
+            txid_limit,
         })
     }
 
@@ -291,6 +298,15 @@ impl Query {
         let mut spending = vec![];
         let read_store = self.app.read_store();
         let txid_prefixes = txids_by_script_hash(read_store, script_hash);
+        // if the limit is enabled
+        if self.txid_limit > 0 {
+            if txid_prefixes.len() > self.txid_limit {
+                bail!(
+                    "{}+ transactions found, query may take a long time",
+                    txid_prefixes.len()
+                );
+            }
+        }
         for t in self.load_txns_by_prefix(read_store, txid_prefixes)? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }

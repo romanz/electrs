@@ -56,7 +56,7 @@ fn run_server(config: &Config) -> Result<()> {
 
     let app = App::new(store, index, daemon, &config)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size);
-    let query = Query::new(app.clone(), &metrics, tx_cache);
+    let query = Query::new(app.clone(), &metrics, tx_cache, config.txid_limit);
 
     let mut server = None; // Electrum RPC server
     loop {
