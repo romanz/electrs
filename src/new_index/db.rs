@@ -81,9 +81,8 @@ impl DB {
     }
 
     pub fn enable_auto_compaction(&self) {
-        self.db
-            .set_option("disable_auto_compactions", "false")
-            .unwrap();
+        let opts = [("disable_auto_compactions", "false")];
+        self.db.set_options(&opts).unwrap();
     }
 
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
