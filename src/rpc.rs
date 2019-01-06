@@ -3,7 +3,7 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::Sha256dHash;
 use error_chain::ChainedError;
 use hex;
-use serde_json::{from_str, Number, Value};
+use serde_json::{from_str, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
@@ -284,7 +284,7 @@ impl Connection {
             "merkle" : merkle_vec}))
     }
 
-    fn handle_command(&mut self, method: &str, params: &[Value], id: &Number) -> Result<Value> {
+    fn handle_command(&mut self, method: &str, params: &[Value], id: &Value) -> Result<Value> {
         let timer = self
             .stats
             .latency
@@ -395,7 +395,7 @@ impl Connection {
                         (
                             Some(&Value::String(ref method)),
                             &Value::Array(ref params),
-                            Some(&Value::Number(ref id)),
+                            Some(ref id),
                         ) => self.handle_command(method, params, id)?,
                         _ => bail!("invalid command: {}", cmd),
                     };
