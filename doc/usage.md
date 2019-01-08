@@ -81,13 +81,7 @@ $ ./scripts/local-electrum.bash
 <snip>
 ```
 
-In order to use a secure connection, TLS-terminating proxy (e.g. [hitch](https://github.com/varnish/hitch)) is recommended:
-```bash
-$ hitch --backend=[127.0.0.1]:50001 --frontend=[127.0.0.1]:50002 pem_file
-$ electrum --oneserver --server=127.0.0.1:50002:s
-```
-
-You can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#) by placing the following block in `nginx.conf`.
+In order to use a secure connection, you can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#) by placing the following block in `nginx.conf`.
 
 ```nginx
 stream {
@@ -99,14 +93,19 @@ stream {
                 listen 50002 ssl;
                 proxy_pass electrs;
 
-                ssl_certificate /path/to/fullchain.pem;
-                ssl_certificate_key /path/to/privkey.pem;
+                ssl_certificate /path/to/example.crt;
+                ssl_certificate_key /path/to/example.key;
                 ssl_session_cache shared:SSL:1m;
                 ssl_session_timeout 4h;
                 ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
                 ssl_prefer_server_ciphers on;
         }
 }
+```
+
+```bash
+$ sudo systemctl restart nginx
+$ electrum --oneserver --server=example:50002:s
 ```
 
 ## Docker
