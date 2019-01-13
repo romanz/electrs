@@ -75,23 +75,18 @@ impl DBStore {
         let mut opts = self.opts.clone();
         if opts.bulk_import == true {
             opts.bulk_import = false;
-            drop(self); // DB must be closed before being re-opened
             info!("enabling auto-compactions");
-            DBStore::open_opts(opts)
-        } else {
-            self
+            let opts = [("disable_auto_compactions", "false")];
+            self.db.set_options(&opts).unwrap();
         }
+        self
     }
 
     pub fn compact(self) -> Self {
-        let opts = self.opts.clone();
-        drop(self); // DB must be closed before being re-opened
-
-        let store = DBStore::open_opts(opts);
         info!("starting full compaction");
-        store.db.compact_range(None, None); // would take a while
+        self.db.compact_range(None, None); // would take a while
         info!("finished full compaction");
-        store
+        self
     }
 
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {

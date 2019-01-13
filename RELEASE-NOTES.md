@@ -1,3 +1,7 @@
+# TBD
+
+* Limit query results, to prevent RPC server to get stuck (see `--txid-limit` flag)
+
 # 0.4.3 (23 Dec 2018)
 
 * Support Rust 2018 edition (1.31)
