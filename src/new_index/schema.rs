@@ -24,6 +24,8 @@ use crate::util::{
 use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
+const MIN_HISTORY_ITEMS_TO_CACHE: usize = 10; // TODO: number TBD
+
 pub struct Store {
     // TODO: should be column families
     txstore_db: DB,
@@ -83,7 +85,7 @@ pub struct SpendingInput {
     pub confirmed: Option<BlockId>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ScriptStats {
     tx_count: usize,
     funded_txo_count: usize,
@@ -287,6 +289,7 @@ impl Query {
             .collect()
     }
 
+    // TODO: implement delta updates similarly to stats
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let mut utxos_conf = self
             .history_iter_scan(scripthash)
@@ -319,41 +322,87 @@ impl Query {
     }
 
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
-        self.history_iter_scan(scripthash)
+        // get the last known stats and the blockhash they are updated for.
+        // invalidates the cache if the block was orphaned.
+        let cache: Option<(ScriptStats, usize)> = self
+            .store
+            .history_db
+            .get(&StatsCacheRow::key(scripthash))
+            .map(|c| bincode::deserialize(&c).unwrap())
+            .and_then(|(stats, blockhash)| {
+                self.height_by_hash(&blockhash)
+                    .map(|height| (stats, height))
+            });
+
+        // update stats with new transactions since
+        let (newstats, lastblock) = cache.map_or_else(
+            || self.stats_delta(scripthash, ScriptStats::default(), 0),
+            |(oldstats, blockheight)| self.stats_delta(scripthash, oldstats, blockheight + 1),
+        );
+
+        // save updated stats to cache
+        if let Some(lastblock) = lastblock {
+            if newstats.funded_txo_count + newstats.spent_txo_count > MIN_HISTORY_ITEMS_TO_CACHE {
+                self.store.history_db.write(
+                    vec![StatsCacheRow::new(scripthash, &newstats, &lastblock).to_row()],
+                    DBFlush::Enable, // @XXX enable flush?
+                );
+            }
+        }
+
+        newstats
+    }
+
+    fn stats_delta(
+        &self,
+        scripthash: &[u8],
+        init_stats: ScriptStats,
+        start_height: usize,
+    ) -> (ScriptStats, Option<Sha256dHash>) {
+        let history_iter = self
+            .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
+            // TODO: seek directly to start_height without reading earlier rows
+            .skip_while(|history| history.key.confirmed_height as usize <= start_height)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|blockid| (history, blockid))
-            })
-            .fold(
-                (ScriptStats::default(), HashSet::new()),
-                |mut acc, (history, _blockid)| {
-                    // is it the first time we're seeing this tx?
-                    // XXX: the list of seen txids can be reset whenever we see a new block height
-                    if acc.1.insert(history.get_txid()) {
-                        acc.0.tx_count += 1;
-                    }
+            });
 
-                    // TODO: keep amount on history rows, to avoid the txo lookup?
-                    let txo = self
-                        .lookup_txo(&history.get_outpoint())
-                        .expect("cannot load txo from history");
+        let mut stats = init_stats;
+        let mut seen_txids = HashSet::new();
+        let mut lastblock = None;
 
-                    match history.key.txinfo {
-                        TxHistoryInfo::Funding(..) => {
-                            acc.0.funded_txo_count += 1;
-                            acc.0.funded_txo_sum += txo.value;
-                        }
-                        TxHistoryInfo::Spending(..) => {
-                            acc.0.spent_txo_count += 1;
-                            acc.0.spent_txo_sum += txo.value;
-                        }
-                    };
+        for (history, blockid) in history_iter {
+            if lastblock != Some(blockid.1) {
+                seen_txids.clear();
+            }
 
-                    acc
-                },
-            )
-            .0
+            // count the number of unique transactions
+            if seen_txids.insert(history.get_txid()) {
+                stats.tx_count += 1;
+            }
+
+            // XXX: keep amount on history rows, to avoid the txo lookup?
+            let txo = self
+                .lookup_txo(&history.get_outpoint())
+                .expect("cannot load txo from history");
+
+            match history.key.txinfo {
+                TxHistoryInfo::Funding(..) => {
+                    stats.funded_txo_count += 1;
+                    stats.funded_txo_sum += txo.value;
+                }
+                TxHistoryInfo::Spending(..) => {
+                    stats.spent_txo_count += 1;
+                    stats.spent_txo_sum += txo.value;
+                }
+            };
+
+            lastblock = Some(blockid.1);
+        }
+
+        (stats, lastblock)
     }
 
     fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
@@ -363,6 +412,16 @@ impl Query {
             .unwrap()
             .header_by_blockhash(hash)
             .cloned()
+    }
+
+    // Get the height of a blockhash, only if its part of the best chain
+    fn height_by_hash(&self, hash: &Sha256dHash) -> Option<usize> {
+        self.store
+            .indexed_headers
+            .read()
+            .unwrap()
+            .header_by_blockhash(hash)
+            .map(|header| header.height())
     }
 
     pub fn header_by_height(&self, height: usize) -> Option<HeaderEntry> {
@@ -982,6 +1041,40 @@ impl TxEdgeRow {
     fn from_row(row: DBRow) -> Self {
         TxEdgeRow {
             key: bincode::deserialize(&row.key).expect("failed to deserialize TxEdgeKey"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct StatsCacheKey {
+    code: u8,
+    scripthash: FullHash,
+}
+
+struct StatsCacheRow {
+    key: StatsCacheKey,
+    value: Bytes,
+}
+
+impl StatsCacheRow {
+    fn new(scripthash: &[u8], stats: &ScriptStats, blockhash: &Sha256dHash) -> Self {
+        StatsCacheRow {
+            key: StatsCacheKey {
+                code: b'A',
+                scripthash: full_hash(scripthash),
+            },
+            value: bincode::serialize(&(stats, blockhash)).unwrap(),
+        }
+    }
+
+    pub fn key(scripthash: &[u8]) -> Bytes {
+        [b"A", scripthash].concat()
+    }
+
+    fn to_row(self) -> DBRow {
+        DBRow {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: self.value,
         }
     }
 }
