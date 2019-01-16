@@ -264,8 +264,8 @@ impl Query {
         let txs_conf = self
             .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
-            // FIXME: dedup() won't work if the same txid is both spending and funding
-            .dedup()
+            // XXX: unique() requires keeping an in-memory list of all txids, can we avoid that?
+            .unique()
             .skip_while(|txid| {
                 // skip until we reach the last_seen_txid
                 last_seen_txid.map_or(false, |last_seen_txid| last_seen_txid != txid)
