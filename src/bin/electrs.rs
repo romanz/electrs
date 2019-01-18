@@ -60,10 +60,10 @@ fn run_server(config: Config) -> Result<()> {
     )?;
     finish_verification(&daemon, &signal)?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store));
+    let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
     let mut tip = indexer.update(&daemon)?;
 
-    let q = Arc::new(Query::new(Arc::clone(&store)));
+    let q = Arc::new(Query::new(Arc::clone(&store), &metrics));
     let mut mempool = Mempool::new(Arc::clone(&q));
     mempool.update(&daemon)?;
 

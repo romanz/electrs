@@ -11,11 +11,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-// use metrics::{Counter, Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
-// use signal::Waiter;
 use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::errors::*;
+use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
     full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
     TransactionStatus,
@@ -110,20 +109,30 @@ pub struct Indexer {
     store: Arc<Store>,
     flush: DBFlush,
     from: FetchFrom,
+    duration: HistogramVec,
 }
 
 pub struct Query {
     store: Arc<Store>, // TODO: should be used as read-only
+    duration: HistogramVec,
 }
 
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
-    pub fn open(store: Arc<Store>, from: FetchFrom) -> Self {
+    pub fn open(store: Arc<Store>, from: FetchFrom, metrics: &Metrics) -> Self {
         Indexer {
             store,
             flush: DBFlush::Disable,
             from,
+            duration: metrics.histogram_vec(
+                HistogramOpts::new("index_duration", "Index update duration (in seconds)"),
+                &["step"],
+            ),
         }
+    }
+
+    fn start_timer(&self, name: &str) -> HistogramTimer {
+        self.duration.with_label_values(&[name]).start_timer()
     }
 
     fn headers_to_add(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
@@ -200,8 +209,14 @@ impl Indexer {
 
     fn add(&self, blocks: &[BlockEntry]) {
         // TODO: skip orphaned blocks?
-        let rows = add_blocks(blocks);
-        self.store.txstore_db.write(rows, self.flush);
+        let rows = {
+            let _timer = self.start_timer("add_process");
+            add_blocks(blocks)
+        };
+        {
+            let _timer = self.start_timer("add_write");
+            self.store.txstore_db.write(rows, self.flush);
+        }
 
         self.store
             .added_blockhashes
@@ -211,26 +226,43 @@ impl Indexer {
     }
 
     fn index(&self, blocks: &[BlockEntry]) {
-        let previous_txos_map = lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks));
-        let added_blockhashes = self.store.added_blockhashes.read().unwrap();
-        for b in blocks {
-            let blockhash = b.entry.hash();
-            // TODO: replace by lookup into txstore_db?
-            if !added_blockhashes.contains(&blockhash) {
-                panic!("cannot index block {} (missing from store)", blockhash);
+        let previous_txos_map = {
+            let _timer = self.start_timer("index_lookup");
+            lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks))
+        };
+        let rows = {
+            let _timer = self.start_timer("index_process");
+            let added_blockhashes = self.store.added_blockhashes.read().unwrap();
+            for b in blocks {
+                let blockhash = b.entry.hash();
+                // TODO: replace by lookup into txstore_db?
+                if !added_blockhashes.contains(&blockhash) {
+                    panic!("cannot index block {} (missing from store)", blockhash);
+                }
             }
-        }
-        let rows = index_blocks(blocks, &previous_txos_map);
+            index_blocks(blocks, &previous_txos_map)
+        };
         self.store.history_db.write(rows, self.flush);
     }
 }
 
 impl Query {
-    pub fn new(store: Arc<Store>) -> Self {
-        Query { store }
+    pub fn new(store: Arc<Store>, metrics: &Metrics) -> Self {
+        Query {
+            store,
+            duration: metrics.histogram_vec(
+                HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
+                &["name"],
+            ),
+        }
+    }
+
+    fn start_timer(&self, name: &str) -> HistogramTimer {
+        self.duration.with_label_values(&[name]).start_timer()
     }
 
     pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
+        let _timer = self.start_timer("get_block_txids");
         self.store
             .txstore_db
             .get(&BlockRow::txids_key(hash.to_bytes()))
@@ -238,6 +270,7 @@ impl Query {
     }
 
     pub fn get_block_meta(&self, hash: &Sha256dHash) -> Option<BlockMeta> {
+        let _timer = self.start_timer("get_block_meta");
         self.store
             .txstore_db
             .get(&BlockRow::meta_key(hash.to_bytes()))
@@ -245,6 +278,7 @@ impl Query {
     }
 
     pub fn get_block_with_meta(&self, hash: &Sha256dHash) -> Option<BlockHeaderMeta> {
+        let _timer = self.start_timer("get_block_with_meta");
         Some(BlockHeaderMeta {
             header_entry: self.header_by_hash(hash)?,
             meta: self.get_block_meta(hash)?,
@@ -263,6 +297,7 @@ impl Query {
         last_seen_txid: Option<&Sha256dHash>,
         limit: usize,
     ) -> Vec<(Transaction, Option<BlockId>)> {
+        let _timer_scan = self.start_timer("history");
         let txs_conf = self
             .history_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
@@ -291,6 +326,7 @@ impl Query {
 
     // TODO: implement delta updates similarly to stats
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
+        let _timer = self.start_timer("utxo");
         let mut utxos_conf = self
             .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
@@ -324,6 +360,7 @@ impl Query {
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
         // get the last known stats and the blockhash they are updated for.
         // invalidates the cache if the block was orphaned.
+        let _timer = self.start_timer("stats");
         let cache: Option<(ScriptStats, usize)> = self
             .store
             .history_db
@@ -359,6 +396,7 @@ impl Query {
         init_stats: ScriptStats,
         start_height: usize,
     ) -> (ScriptStats, Option<Sha256dHash>) {
+        let _timer = self.start_timer("stats_delta"); // TODO: measure also the number of txns processed.
         let history_iter = self
             .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
@@ -452,6 +490,7 @@ impl Query {
     // TODO: can we pass txids as a "generic iterable"?
     // TODO: should also use a custom ThreadPoolBuilder?
     pub fn lookup_txns(&self, txids: &Vec<Sha256dHash>) -> Result<Vec<Transaction>> {
+        let _timer = self.start_timer("lookup_txns");
         txids
             .par_iter()
             .map(|txid| self.lookup_txn(txid).chain_err(|| "missing tx"))
@@ -459,6 +498,7 @@ impl Query {
     }
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+        let _timer = self.start_timer("lookup_txn");
         self.lookup_raw_txn(txid).map(|rawtx| {
             let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
             assert_eq!(*txid, txn.txid());
@@ -467,18 +507,22 @@ impl Query {
     }
 
     pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+        let _timer = self.start_timer("lookup_raw_txn");
         self.store.txstore_db.get(&TxRow::key(&txid[..]))
     }
 
     pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
+        let _timer = self.start_timer("lookup_txo");
         lookup_txo(&self.store.txstore_db, outpoint)
     }
 
     pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+        let _timer = self.start_timer("lookup_txos");
         lookup_txos(&self.store.txstore_db, outpoints)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
+        let _timer = self.start_timer("lookup_spend");
         self.store
             .history_db
             .iter_scan(&TxEdgeRow::filter(&outpoint))
@@ -493,6 +537,7 @@ impl Query {
             })
     }
     pub fn lookup_tx_spends(&self, tx: Transaction) -> Vec<Option<SpendingInput>> {
+        let _timer = self.start_timer("lookup_tx_spends");
         let txid = tx.txid();
 
         tx.output
@@ -512,6 +557,7 @@ impl Query {
     }
 
     pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
+        let _timer = self.start_timer("tx_confirming_block");
         let headers = self.store.indexed_headers.read().unwrap();
         self.store
             .txstore_db
@@ -526,6 +572,7 @@ impl Query {
 
     // compatbility with previous tx/block status format
     pub fn get_tx_status(&self, txid: &Sha256dHash) -> TransactionStatus {
+        let _timer = self.start_timer("get_tx_status");
         TransactionStatus::from(self.tx_confirming_block(txid))
     }
 
