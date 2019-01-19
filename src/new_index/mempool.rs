@@ -6,7 +6,9 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 
 use crate::daemon::Daemon;
-use crate::new_index::{compute_script_hash, schema::FullHash, ChainQuery, SpendingInput};
+use crate::new_index::{
+    compute_script_hash, schema::FullHash, ChainQuery, ScriptStats, SpendingInput, Utxo,
+};
 
 use crate::errors::*;
 
@@ -48,6 +50,40 @@ impl Mempool {
                 .cloned()
                 .collect(),
         }
+    }
+
+    pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
+        let txids = match self.history.get(scripthash){
+            None => return vec![],
+            Some(txids) => txids,
+        };
+        let mut utxos = vec![];
+        for txid in txids {
+            let tx = self.txstore.get(txid).expect("missing mempool tx");
+            for (i, txo) in tx.output.iter().enumerate() {
+                if compute_script_hash(&txo.script_pubkey) == scripthash {
+                    let outpoint = OutPoint {
+                        txid: *txid,
+                        vout: i as u32,
+                    };
+                    if self.edges.get(&outpoint).is_none() {
+                        utxos.push(Utxo {
+                            txid: outpoint.txid,
+                            vout: outpoint.vout,
+                            value: txo.value,
+                            script: txo.script_pubkey.clone(), // TODO: avoid clone
+                            confirmed: None,
+                        })
+                    }
+                }
+            }
+        }
+        utxos
+    }
+
+    pub fn stats(&self, _scripthash: &[u8]) -> ScriptStats {
+        // @TODO implement
+        ScriptStats::default()
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {

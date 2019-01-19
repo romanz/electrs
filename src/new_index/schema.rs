@@ -94,7 +94,7 @@ pub struct ScriptStats {
 }
 
 impl ScriptStats {
-    fn default() -> Self {
+    pub fn default() -> Self {
         ScriptStats {
             tx_count: 0,
             funded_txo_count: 0,
