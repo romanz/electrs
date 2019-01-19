@@ -17,7 +17,6 @@ use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
     full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
-    TransactionStatus,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
@@ -536,26 +535,6 @@ impl ChainQuery {
                 })
             })
     }
-    pub fn lookup_tx_spends(&self, tx: Transaction) -> Vec<Option<SpendingInput>> {
-        let _timer = self.start_timer("lookup_tx_spends");
-        let txid = tx.txid();
-
-        tx.output
-            .par_iter()
-            .enumerate()
-            .map(|(vout, txout)| {
-                if !txout.script_pubkey.is_provably_unspendable() {
-                    self.lookup_spend(&OutPoint {
-                        txid,
-                        vout: vout as u32,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
         let _timer = self.start_timer("tx_confirming_block");
         let headers = self.store.indexed_headers.read().unwrap();
@@ -568,12 +547,6 @@ impl ChainQuery {
             .filter_map(|conf| headers.header_by_blockhash(&parse_hash(&conf.key.blockhash)))
             .nth(0)
             .map(BlockId::from)
-    }
-
-    // compatbility with previous tx/block status format
-    pub fn get_tx_status(&self, txid: &Sha256dHash) -> TransactionStatus {
-        let _timer = self.start_timer("get_tx_status");
-        TransactionStatus::from(self.tx_confirming_block(txid))
     }
 
     pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {

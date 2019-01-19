@@ -124,7 +124,7 @@ impl Mempool {
             self.txstore.insert(txid, tx);
         }
         // Phase 2: index history and spend edges (can fail if some txos cannot be found)
-        let txos = match self.lookup_txos(self.get_prevouts(&txids)) {
+        let txos = match self.lookup_txos(&self.get_prevouts(&txids)) {
             Ok(txos) => txos,
             Err(err) => {
                 warn!("lookup txouts failed: {}", err);
@@ -157,7 +157,8 @@ impl Mempool {
         }
     }
 
-    pub fn lookup_txos(&self, outpoints: BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
+    // @TODO use parallel lookup for confirmed txos?
+    pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
         outpoints
             .into_iter()
             .map(|outpoint| {
@@ -167,7 +168,7 @@ impl Mempool {
                     None => self.chain.lookup_txo(&outpoint),
                 };
                 match result {
-                    Some(txout) => Ok((outpoint, txout)),
+                    Some(txout) => Ok((*outpoint, txout)),
                     None => bail!("missing outpoint {:?}", outpoint),
                 }
             })
