@@ -112,7 +112,7 @@ pub struct Indexer {
     duration: HistogramVec,
 }
 
-pub struct Query {
+pub struct ChainQuery {
     store: Arc<Store>, // TODO: should be used as read-only
     duration: HistogramVec,
 }
@@ -246,9 +246,9 @@ impl Indexer {
     }
 }
 
-impl Query {
+impl ChainQuery {
     pub fn new(store: Arc<Store>, metrics: &Metrics) -> Self {
-        Query {
+        ChainQuery {
             store,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),

@@ -6,20 +6,20 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 
 use crate::daemon::Daemon;
-use crate::new_index::{compute_script_hash, schema::FullHash, Query};
+use crate::new_index::{compute_script_hash, schema::FullHash, ChainQuery};
 
 use crate::errors::*;
 
 pub struct Mempool {
-    query: Arc<Query>,
+    chain: Arc<ChainQuery>,
     txstore: HashMap<Sha256dHash, Transaction>,
     history: HashMap<FullHash, HashSet<Sha256dHash>>, // ScriptHash -> {txids}
 }
 
 impl Mempool {
-    pub fn new(query: Arc<Query>) -> Self {
+    pub fn new(chain: Arc<ChainQuery>) -> Self {
         Mempool {
-            query,
+            chain,
             txstore: HashMap::new(),
             history: HashMap::new(),
         }
@@ -108,7 +108,7 @@ impl Mempool {
                 let result = match self.txstore.get(&outpoint.txid) {
                     Some(txn) => txn.output.get(outpoint.vout as usize).cloned(),
                     // TODO: do concurrently for non-mempool txns
-                    None => self.query.lookup_txo(&outpoint),
+                    None => self.chain.lookup_txo(&outpoint),
                 };
                 match result {
                     Some(txout) => Ok((outpoint, txout)),

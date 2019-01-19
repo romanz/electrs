@@ -15,7 +15,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{FetchFrom, Indexer, Mempool, Query, Store},
+    new_index::{ChainQuery, FetchFrom, Indexer, Mempool, Store},
     rest,
     signal::Waiter,
 };
@@ -63,7 +63,7 @@ fn run_server(config: Config) -> Result<()> {
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
     let mut tip = indexer.update(&daemon)?;
 
-    let q = Arc::new(Query::new(Arc::clone(&store), &metrics));
+    let q = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
     let mut mempool = Mempool::new(Arc::clone(&q));
     mempool.update(&daemon)?;
 
