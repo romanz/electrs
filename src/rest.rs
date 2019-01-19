@@ -456,7 +456,6 @@ fn handle_request(
                 .map(|txid| {
                     query
                         .lookup_txn(&txid)
-                        .map(|tx| (tx, query.tx_confirming_block(&txid)))
                         .map(TransactionValue::from)
                         .ok_or_else(|| "missing tx".to_string())
                 })
