@@ -135,7 +135,7 @@ impl Mempool {
         }
         // TODO: make it more efficient (currently it takes O(|mempool|) time)
         self.history.retain(|_scripthash, txids| {
-            txids.retain(|txid| to_remove.contains(txid));
+            txids.retain(|txid| !to_remove.contains(txid));
             !txids.is_empty()
         })
     }
