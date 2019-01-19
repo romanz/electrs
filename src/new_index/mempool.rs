@@ -6,7 +6,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 
 use crate::daemon::Daemon;
-use crate::new_index::{compute_script_hash, schema::FullHash, ChainQuery};
+use crate::new_index::{compute_script_hash, schema::FullHash, ChainQuery, SpendingInput};
 
 use crate::errors::*;
 
@@ -14,6 +14,7 @@ pub struct Mempool {
     chain: Arc<ChainQuery>,
     txstore: HashMap<Sha256dHash, Transaction>,
     history: HashMap<FullHash, HashSet<Sha256dHash>>, // ScriptHash -> {txids}
+    edges: HashMap<OutPoint, (Sha256dHash, u32)>,     // OutPoint -> (spending_txid, spending_vin)
 }
 
 impl Mempool {
@@ -22,11 +23,20 @@ impl Mempool {
             chain,
             txstore: HashMap::new(),
             history: HashMap::new(),
+            edges: HashMap::new(),
         }
     }
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
         self.txstore.get(txid).map(|item| item.clone())
+    }
+
+    pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
+        self.edges.get(outpoint).map(|(txid, vin)| SpendingInput {
+            txid: *txid,
+            vin: *vin,
+            confirmed: None,
+        })
     }
 
     pub fn history(&self, scripthash: &[u8]) -> Vec<Transaction> {
@@ -71,7 +81,7 @@ impl Mempool {
             txids.push(txid);
             self.txstore.insert(txid, tx);
         }
-        // Phase 2: index history (can fail if some txos cannot be found)
+        // Phase 2: index history and spend edges (can fail if some txos cannot be found)
         let txos = match self.lookup_txos(self.get_prevouts(&txids)) {
             Ok(txos) => txos,
             Err(err) => {
@@ -91,12 +101,16 @@ impl Mempool {
             let funding = tx
                 .output
                 .iter()
-                .map(|spending_txo| (compute_script_hash(&spending_txo.script_pubkey), txid));
+                .map(|funding_txo| (compute_script_hash(&funding_txo.script_pubkey), txid));
             for (scripthash, txid) in funding.chain(spending) {
                 self.history
                     .entry(scripthash)
                     .or_insert_with(|| HashSet::new())
                     .insert(txid);
+            }
+
+            for (i, txi) in tx.input.iter().enumerate() {
+                self.edges.insert(txi.previous_output, (txid, i as u32));
             }
         }
     }
@@ -137,6 +151,9 @@ impl Mempool {
         self.history.retain(|_scripthash, txids| {
             txids.retain(|txid| !to_remove.contains(txid));
             !txids.is_empty()
-        })
+        });
+
+        self.edges
+            .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
     }
 }
