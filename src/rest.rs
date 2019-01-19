@@ -247,7 +247,7 @@ impl Default for SpendingValue {
 
 fn ttl_by_depth(height: Option<usize>, query: &Query) -> u32 {
     height.map_or(TTL_SHORT, |height| {
-        if query.chain.best_height() - height >= CONF_FINAL {
+        if query.chain().best_height() - height >= CONF_FINAL {
             TTL_LONG
         } else {
             TTL_SHORT
@@ -405,7 +405,7 @@ fn handle_request(
         (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
             let header = query
-                .chain
+                .chain()
                 .header_by_height(height)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let ttl = ttl_by_depth(Some(height), query);
@@ -414,7 +414,7 @@ fn handle_request(
         (&Method::GET, Some(&"block"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let blockhm = query
-                .chain
+                .chain()
                 .get_block_with_meta(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let block_value = BlockValue::from(blockhm);
@@ -422,14 +422,14 @@ fn handle_request(
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let status = query.chain.get_block_status(&hash);
+            let status = query.chain().get_block_status(&hash);
             let ttl = ttl_by_depth(status.height, query);
             json_response(status, ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
-                .chain
+                .chain()
                 .get_block_txids(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
@@ -437,7 +437,7 @@ fn handle_request(
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
-                .chain
+                .chain()
                 .get_block_txids(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
 
@@ -498,7 +498,7 @@ fn handle_request(
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
             let mut txs = query
-                .chain
+                .chain()
                 .history(&script_hash[..], last_seen_txid.as_ref(), TX_LIMIT)
                 .into_iter()
                 .map(TransactionValue::from)
@@ -527,9 +527,7 @@ fn handle_request(
             // @TODO implement paging
 
             let mut txs = query
-                .mempool
-                .read()
-                .unwrap()
+                .mempool()
                 .history(&script_hash[..])
                 .into_iter()
                 .map(TransactionValue::from)
@@ -669,18 +667,18 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query
-            .chain
+            .chain()
             .header_by_height(height)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?
             .hash()
             .clone(),
-        None => query.chain.best_header().hash().clone(),
+        None => query.chain().best_header().hash().clone(),
     };
 
     let zero = [0u8; 32];
     for _ in 0..BLOCK_LIMIT {
         let blockhm = query
-            .chain
+            .chain()
             .get_block_with_meta(&current_hash)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
