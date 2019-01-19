@@ -1,14 +1,16 @@
-use crate::chain::{OutPoint, Transaction, TxOut};
-
+use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::Sha256dHash;
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::Arc;
 
+use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::new_index::{
     compute_script_hash, schema::FullHash, ChainQuery, ScriptStats, SpendingInput, Utxo,
 };
+use crate::util::Bytes;
 
 use crate::errors::*;
 
@@ -31,6 +33,10 @@ impl Mempool {
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
         self.txstore.get(txid).map(|item| item.clone())
+    }
+
+    pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+        self.txstore.get(txid).map(serialize)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
