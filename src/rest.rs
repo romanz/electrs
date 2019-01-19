@@ -508,6 +508,38 @@ fn handle_request(
 
             json_response(txs, TTL_SHORT)
         }
+        (
+            &Method::GET,
+            Some(script_type @ &"address"),
+            Some(script_str),
+            Some(&"mempool-txs"),
+            None,
+        )
+        | (
+            &Method::GET,
+            Some(script_type @ &"scripthash"),
+            Some(script_str),
+            Some(&"mempool-txs"),
+            None,
+        ) => {
+            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+
+            // @TODO implement paging
+
+            let mut txs = query
+                .mempool
+                .read()
+                .unwrap()
+                .history(&script_hash[..])
+                .into_iter()
+                .map(TransactionValue::from)
+                .collect();
+
+            attach_txs_data(&mut txs, config, query);
+
+            json_response(txs, TTL_SHORT)
+        }
+
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None)
         | (
             &Method::GET,
