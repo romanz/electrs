@@ -82,13 +82,13 @@ impl Mempool {
         };
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
-            let funding = tx.input.iter().map(|txi| {
+            let spending = tx.input.iter().map(|txi| {
                 let funding_txo = txos
                     .get(&txi.previous_output)
                     .expect(&format!("missing outpoint {:?}", txi.previous_output));
                 (compute_script_hash(&funding_txo.script_pubkey), txid)
             });
-            let spending = tx
+            let funding = tx
                 .output
                 .iter()
                 .map(|spending_txo| (compute_script_hash(&spending_txo.script_pubkey), txid));
