@@ -72,7 +72,6 @@ pub struct Utxo {
     pub txid: Sha256dHash,
     pub vout: u32,
     pub value: u64,
-    pub script: Script,
     pub confirmed: Option<BlockId>,
 }
 
@@ -326,7 +325,7 @@ impl ChainQuery {
     // TODO: implement delta updates similarly to stats
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let _timer = self.start_timer("utxo");
-        let mut utxos_conf = self
+        self
             .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
@@ -335,23 +334,18 @@ impl ChainQuery {
             })
             .fold(HashMap::new(), |mut utxos, (history, blockid)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(..) => utxos.insert(history.get_outpoint(), blockid),
+                    TxHistoryInfo::Funding(.., value) => utxos.insert(history.get_outpoint(), (blockid, value)),
                     TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
                 utxos
-            });
-
-        let outpoints = utxos_conf.keys().cloned().collect();
-        let txos = lookup_txos(&self.store.txstore_db, &outpoints);
-
-        txos.into_iter()
-            .map(|(outpoint, txo)| Utxo {
+            })
+            .into_iter()
+            .map(|(outpoint, (blockid, value))| Utxo {
                 txid: outpoint.txid,
                 vout: outpoint.vout,
-                value: txo.value,
-                script: txo.script_pubkey,
-                confirmed: Some(utxos_conf.remove(&outpoint).unwrap()),
+                value,
+                confirmed: Some(blockid),
             })
             .collect()
     }
@@ -415,24 +409,18 @@ impl ChainQuery {
                 seen_txids.clear();
             }
 
-            // count the number of unique transactions
             if seen_txids.insert(history.get_txid()) {
                 stats.tx_count += 1;
             }
 
-            // XXX: keep amount on history rows, to avoid the txo lookup?
-            let txo = self
-                .lookup_txo(&history.get_outpoint())
-                .expect("cannot load txo from history");
-
             match history.key.txinfo {
-                TxHistoryInfo::Funding(..) => {
+                TxHistoryInfo::Funding(.., value) => {
                     stats.funded_txo_count += 1;
-                    stats.funded_txo_sum += txo.value;
+                    stats.funded_txo_sum += value;
                 }
-                TxHistoryInfo::Spending(..) => {
+                TxHistoryInfo::Spending(.., value) => {
                     stats.spent_txo_count += 1;
-                    stats.spent_txo_sum += txo.value;
+                    stats.spent_txo_sum += value;
                 }
             };
 
@@ -707,7 +695,7 @@ fn index_transaction(
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,
-                TxHistoryInfo::Funding(txid, txo_index as u16),
+                TxHistoryInfo::Funding(txid, txo_index as u16, txo.value),
             );
             rows.push(history.to_row())
         }
@@ -728,6 +716,7 @@ fn index_transaction(
                 txi_index as u16,
                 txi.previous_output.txid.into_bytes(),
                 txi.previous_output.vout as u16,
+                prev_txo.value,
             ),
         );
         rows.push(history.to_row());
@@ -947,8 +936,8 @@ impl BlockRow {
 
 #[derive(Serialize, Deserialize)]
 enum TxHistoryInfo {
-    Funding(FullHash, u16),                 // funding txid/vout
-    Spending(FullHash, u16, FullHash, u16), // spending txid/vin and previous funding txid/vout
+    Funding(FullHash, u16, u64),                 // funding txid/vout and value
+    Spending(FullHash, u16, FullHash, u16, u64), // spending txid/vin, previous funding txid/vout and value
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1004,11 +993,11 @@ impl TxHistoryRow {
     // for spending rows, returns the spent previous output.
     fn get_outpoint(&self) -> OutPoint {
         match self.key.txinfo {
-            TxHistoryInfo::Funding(txid, vout) => OutPoint {
+            TxHistoryInfo::Funding(txid, vout, _) => OutPoint {
                 txid: parse_hash(&txid),
                 vout: vout as u32,
             },
-            TxHistoryInfo::Spending(_, _, prevtxid, prevout) => OutPoint {
+            TxHistoryInfo::Spending(_, _, prevtxid, prevout, _) => OutPoint {
                 txid: parse_hash(&prevtxid),
                 vout: prevout as u32,
             },

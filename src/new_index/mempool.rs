@@ -77,7 +77,6 @@ impl Mempool {
                             txid: outpoint.txid,
                             vout: outpoint.vout,
                             value: txo.value,
-                            script: txo.script_pubkey.clone(), // TODO: avoid clone
                             confirmed: None,
                         })
                     }
