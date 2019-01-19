@@ -1,7 +1,7 @@
 use crate::chain::{OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
 use crate::errors;
-use crate::new_index::{compute_script_hash, BlockId, ChainQuery, SpendingInput, Utxo};
+use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
 use crate::util::{
     full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
 };
@@ -245,9 +245,9 @@ impl Default for SpendingValue {
     }
 }
 
-fn ttl_by_depth(height: Option<usize>, query: &ChainQuery) -> u32 {
+fn ttl_by_depth(height: Option<usize>, query: &Query) -> u32 {
     height.map_or(TTL_SHORT, |height| {
-        if query.best_height() - height >= CONF_FINAL {
+        if query.chain.best_height() - height >= CONF_FINAL {
             TTL_LONG
         } else {
             TTL_SHORT
@@ -255,13 +255,13 @@ fn ttl_by_depth(height: Option<usize>, query: &ChainQuery) -> u32 {
     })
 }
 
-fn attach_tx_data(tx: TransactionValue, config: &Config, query: &ChainQuery) -> TransactionValue {
+fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Query) -> TransactionValue {
     let mut txs = vec![tx];
     attach_txs_data(&mut txs, config, query);
     txs.remove(0)
 }
 
-fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &ChainQuery) {
+fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Query) {
     {
         // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
         let mut lookups: BTreeMap<OutPoint, &mut TxInValue> = BTreeMap::new();
@@ -323,7 +323,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Cha
     }
 }
 
-pub fn run_server(config: &Config, query: Arc<ChainQuery>) -> Handle {
+pub fn run_server(config: &Config, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 
@@ -376,7 +376,7 @@ impl Handle {
 
 fn handle_request(
     req: Request<Body>,
-    query: &ChainQuery,
+    query: &Query,
     config: &Config,
 ) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
@@ -405,6 +405,7 @@ fn handle_request(
         (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
             let height = height.parse::<usize>()?;
             let header = query
+                .chain
                 .header_by_height(height)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let ttl = ttl_by_depth(Some(height), query);
@@ -413,6 +414,7 @@ fn handle_request(
         (&Method::GET, Some(&"block"), Some(hash), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let blockhm = query
+                .chain
                 .get_block_with_meta(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let block_value = BlockValue::from(blockhm);
@@ -420,13 +422,14 @@ fn handle_request(
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let status = query.get_block_status(&hash);
+            let status = query.chain.get_block_status(&hash);
             let ttl = ttl_by_depth(status.height, query);
             json_response(status, ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
+                .chain
                 .get_block_txids(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
@@ -434,6 +437,7 @@ fn handle_request(
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
+                .chain
                 .get_block_txids(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
 
@@ -470,7 +474,8 @@ fn handle_request(
             json_response(
                 json!({
                     *script_type: script_str,
-                    "stats": stats,
+                    "chain_stats": stats.0,
+                    "mempool_stats": stats.1,
                 }),
                 TTL_SHORT,
             )
@@ -493,6 +498,7 @@ fn handle_request(
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
             let mut txs = query
+                .chain
                 .history(&script_hash[..], last_seen_txid.as_ref(), TX_LIMIT)
                 .into_iter()
                 .map(TransactionValue::from)
@@ -627,20 +633,22 @@ fn json_response<T: Serialize>(value: T, ttl: u32) -> Result<Response<Body>, Htt
         .unwrap())
 }
 
-fn blocks(query: &ChainQuery, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
+fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query
+            .chain
             .header_by_height(height)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?
             .hash()
             .clone(),
-        None => query.best_header().hash().clone(),
+        None => query.chain.best_header().hash().clone(),
     };
 
     let zero = [0u8; 32];
     for _ in 0..BLOCK_LIMIT {
         let blockhm = query
+            .chain
             .get_block_with_meta(&current_hash)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();

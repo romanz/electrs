@@ -7,7 +7,7 @@ extern crate electrs;
 
 use error_chain::ChainedError;
 use std::process;
-use std::sync::Arc;
+use std::sync::{Arc,RwLock};
 use std::time::Duration;
 
 use electrs::{
@@ -15,7 +15,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{ChainQuery, FetchFrom, Indexer, Mempool, Store},
+    new_index::{ChainQuery, FetchFrom, Indexer, Mempool, Query, Store},
     rest,
     signal::Waiter,
 };
@@ -63,9 +63,10 @@ fn run_server(config: Config) -> Result<()> {
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
     let mut tip = indexer.update(&daemon)?;
 
-    let q = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
-    let mut mempool = Mempool::new(Arc::clone(&q));
-    mempool.update(&daemon)?;
+    let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
+    let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain))));
+    mempool.write().unwrap().update(&daemon)?;
+    let q = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
 
     let server = rest::run_server(&config, q);
 
@@ -80,7 +81,7 @@ fn run_server(config: Config) -> Result<()> {
             indexer.update(&daemon)?;
             tip = current_tip;
         };
-        mempool.update(&daemon)?;
+        mempool.write().unwrap().update(&daemon)?;
     }
     info!("server stopped");
     Ok(())
