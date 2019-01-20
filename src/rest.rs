@@ -534,7 +534,7 @@ fn handle_request(
                 .mempool()
                 .history(&script_hash[..])
                 .into_iter()
-                .map(TransactionValue::from)
+                .map(|tx| TransactionValue::from((tx, None)))
                 .collect();
 
             attach_txs_data(&mut txs, config, query);
