@@ -743,7 +743,7 @@ pub fn compute_script_hash(script: &Script) -> FullHash {
     hash
 }
 
-fn parse_hash(hash: &FullHash) -> Sha256dHash {
+pub fn parse_hash(hash: &FullHash) -> Sha256dHash {
     deserialize(hash).expect("failed to parse Sha256dHash")
 }
 
@@ -936,7 +936,7 @@ impl BlockRow {
 }
 
 #[derive(Serialize, Deserialize)]
-enum TxHistoryInfo {
+pub enum TxHistoryInfo {
     Funding(FullHash, u16, u64), // funding txid/vout and value
     Spending(FullHash, u16, FullHash, u16, u64), // spending txid/vin, previous funding txid/vout and value
 }

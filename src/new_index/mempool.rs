@@ -1,5 +1,6 @@
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::Sha256dHash;
+use itertools::Itertools;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
@@ -8,7 +9,8 @@ use std::sync::Arc;
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::new_index::{
-    compute_script_hash, schema::FullHash, ChainQuery, ScriptStats, SpendingInput, Utxo,
+    compute_script_hash, parse_hash, schema::FullHash, ChainQuery, ScriptStats, SpendingInput,
+    TxHistoryInfo, Utxo,
 };
 use crate::util::Bytes;
 
@@ -17,8 +19,8 @@ use crate::errors::*;
 pub struct Mempool {
     chain: Arc<ChainQuery>,
     txstore: HashMap<Sha256dHash, Transaction>,
-    history: HashMap<FullHash, HashSet<Sha256dHash>>, // ScriptHash -> {txids}
-    edges: HashMap<OutPoint, (Sha256dHash, u32)>,     // OutPoint -> (spending_txid, spending_vin)
+    history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
+    edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
 }
 
 impl Mempool {
@@ -50,40 +52,42 @@ impl Mempool {
     pub fn history(&self, scripthash: &[u8]) -> Vec<Transaction> {
         match self.history.get(scripthash) {
             None => return vec![],
-            Some(txids) => txids
+            Some(entries) => entries
                 .iter()
-                .map(|txid| self.txstore.get(txid).expect("missing mempool tx"))
+                .map(get_entry_txid)
+                .unique()
+                .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
                 .cloned()
                 .collect(),
         }
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
-        let txids = match self.history.get(scripthash) {
+        let entries = match self.history.get(scripthash) {
             None => return vec![],
-            Some(txids) => txids,
+            Some(entries) => entries,
         };
-        let mut utxos = vec![];
-        for txid in txids {
-            let tx = self.txstore.get(txid).expect("missing mempool tx");
-            for (i, txo) in tx.output.iter().enumerate() {
-                if compute_script_hash(&txo.script_pubkey) == scripthash {
-                    let outpoint = OutPoint {
-                        txid: *txid,
-                        vout: i as u32,
-                    };
-                    if self.edges.get(&outpoint).is_none() {
-                        utxos.push(Utxo {
-                            txid: outpoint.txid,
-                            vout: outpoint.vout,
-                            value: txo.value,
-                            confirmed: None,
-                        })
-                    }
-                }
-            }
-        }
-        utxos
+
+        entries
+            .into_iter()
+            .filter_map(|entry| match entry {
+                TxHistoryInfo::Funding(txid, vout, value) => Some(Utxo {
+                    txid: parse_hash(txid),
+                    vout: *vout as u32,
+                    value: *value,
+                    confirmed: None,
+                }),
+                TxHistoryInfo::Spending(..) => None,
+            })
+            .filter(|utxo| {
+                self.edges
+                    .get(&OutPoint {
+                        txid: utxo.txid,
+                        vout: utxo.vout,
+                    })
+                    .is_none()
+            })
+            .collect()
     }
 
     pub fn stats(&self, _scripthash: &[u8]) -> ScriptStats {
@@ -133,21 +137,36 @@ impl Mempool {
         };
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
-            let spending = tx.input.iter().map(|txi| {
-                let funding_txo = txos
+            let txid_bytes = txid.into_bytes();
+
+            let spending = tx.input.iter().enumerate().map(|(index, txi)| {
+                let prev_txo = txos
                     .get(&txi.previous_output)
                     .expect(&format!("missing outpoint {:?}", txi.previous_output));
-                (compute_script_hash(&funding_txo.script_pubkey), txid)
+                (
+                    compute_script_hash(&prev_txo.script_pubkey),
+                    TxHistoryInfo::Spending(
+                        txid_bytes,
+                        index as u16,
+                        txi.previous_output.txid.into_bytes(),
+                        txi.previous_output.vout as u16,
+                        prev_txo.value,
+                    ),
+                )
             });
-            let funding = tx
-                .output
-                .iter()
-                .map(|funding_txo| (compute_script_hash(&funding_txo.script_pubkey), txid));
-            for (scripthash, txid) in funding.chain(spending) {
+
+            let funding = tx.output.iter().enumerate().map(|(index, txo)| {
+                (
+                    compute_script_hash(&txo.script_pubkey),
+                    TxHistoryInfo::Funding(txid_bytes, index as u16, txo.value),
+                )
+            });
+
+            for (scripthash, entry) in funding.chain(spending) {
                 self.history
                     .entry(scripthash)
-                    .or_insert_with(|| HashSet::new())
-                    .insert(txid);
+                    .or_insert_with(|| Vec::new())
+                    .push(entry);
             }
 
             for (i, txi) in tx.input.iter().enumerate() {
@@ -190,12 +209,19 @@ impl Mempool {
                 .expect(&format!("missing mempool tx {}", txid));
         }
         // TODO: make it more efficient (currently it takes O(|mempool|) time)
-        self.history.retain(|_scripthash, txids| {
-            txids.retain(|txid| !to_remove.contains(txid));
-            !txids.is_empty()
+        self.history.retain(|_scripthash, entries| {
+            entries.retain(|entry| !to_remove.contains(&get_entry_txid(entry)));
+            !entries.is_empty()
         });
 
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
+    }
+}
+
+fn get_entry_txid(entry: &TxHistoryInfo) -> Sha256dHash {
+    match entry {
+        TxHistoryInfo::Funding(txid, ..) => parse_hash(&txid),
+        TxHistoryInfo::Spending(txid, ..) => parse_hash(&txid),
     }
 }
