@@ -390,13 +390,17 @@ fn handle_request(
         path.get(2),
         path.get(3),
     ) {
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => {
-            http_message(StatusCode::OK, query.best_hash().be_hex_string(), TTL_SHORT)
-        }
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => http_message(
+            StatusCode::OK,
+            query.chain().best_hash().be_hex_string(),
+            TTL_SHORT,
+        ),
 
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => {
-            http_message(StatusCode::OK, query.best_height().to_string(), TTL_SHORT)
-        }
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => http_message(
+            StatusCode::OK,
+            query.chain().best_height().to_string(),
+            TTL_SHORT,
+        ),
 
         (&Method::GET, Some(&"blocks"), start_height, None, None) => {
             let start_height = start_height.and_then(|height| height.parse::<usize>().ok());

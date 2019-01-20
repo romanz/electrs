@@ -325,8 +325,7 @@ impl ChainQuery {
     // TODO: implement delta updates similarly to stats
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let _timer = self.start_timer("utxo");
-        self
-            .history_iter_scan(scripthash)
+        self.history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
@@ -334,7 +333,9 @@ impl ChainQuery {
             })
             .fold(HashMap::new(), |mut utxos, (history, blockid)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(.., value) => utxos.insert(history.get_outpoint(), (blockid, value)),
+                    TxHistoryInfo::Funding(.., value) => {
+                        utxos.insert(history.get_outpoint(), (blockid, value))
+                    }
                     TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
@@ -936,7 +937,7 @@ impl BlockRow {
 
 #[derive(Serialize, Deserialize)]
 enum TxHistoryInfo {
-    Funding(FullHash, u16, u64),                 // funding txid/vout and value
+    Funding(FullHash, u16, u64), // funding txid/vout and value
     Spending(FullHash, u16, FullHash, u16, u64), // spending txid/vin, previous funding txid/vout and value
 }
 

@@ -59,7 +59,7 @@ impl Mempool {
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
-        let txids = match self.history.get(scripthash){
+        let txids = match self.history.get(scripthash) {
             None => return vec![],
             Some(txids) => txids,
         };

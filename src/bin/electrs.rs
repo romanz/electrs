@@ -7,7 +7,7 @@ extern crate electrs;
 
 use error_chain::ChainedError;
 use std::process;
-use std::sync::{Arc,RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use electrs::{

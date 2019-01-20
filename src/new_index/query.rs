@@ -2,7 +2,7 @@ use bitcoin::util::hash::Sha256dHash;
 use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::{Arc,RwLock,RwLockReadGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
@@ -33,7 +33,10 @@ impl Query {
     }
 
     pub fn stats(&self, scripthash: &[u8]) -> (ScriptStats, ScriptStats) {
-        (self.chain.stats(scripthash), self.mempool().stats(scripthash))
+        (
+            self.chain.stats(scripthash),
+            self.mempool().stats(scripthash),
+        )
     }
 
     pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
