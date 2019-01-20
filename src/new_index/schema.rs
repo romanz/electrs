@@ -84,11 +84,11 @@ pub struct SpendingInput {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ScriptStats {
-    tx_count: usize,
-    funded_txo_count: usize,
-    funded_txo_sum: u64,
-    spent_txo_count: usize,
-    spent_txo_sum: u64,
+    pub tx_count: usize,
+    pub funded_txo_count: usize,
+    pub funded_txo_sum: u64,
+    pub spent_txo_count: usize,
+    pub spent_txo_sum: u64,
 }
 
 impl ScriptStats {

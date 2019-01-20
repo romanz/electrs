@@ -90,9 +90,34 @@ impl Mempool {
             .collect()
     }
 
-    pub fn stats(&self, _scripthash: &[u8]) -> ScriptStats {
-        // @TODO implement
-        ScriptStats::default()
+    // @XXX avoid code duplication with ChainQuery::stats()?
+    pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
+        let mut stats = ScriptStats::default();
+        let mut seen_txids = HashSet::new();
+
+        let entries = match self.history.get(scripthash) {
+            None => return stats,
+            Some(entries) => entries,
+        };
+
+        for entry in entries {
+            if seen_txids.insert(get_entry_txid(entry)) {
+                stats.tx_count += 1;
+            }
+
+            match entry {
+                TxHistoryInfo::Funding(.., value) => {
+                    stats.funded_txo_count += 1;
+                    stats.funded_txo_sum += value;
+                }
+                TxHistoryInfo::Spending(.., value) => {
+                    stats.spent_txo_count += 1;
+                    stats.spent_txo_sum += value;
+                }
+            };
+        }
+
+        stats
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
