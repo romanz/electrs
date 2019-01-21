@@ -60,3 +60,6 @@ optional = true
 git = "https://github.com/ElementsProject/rust-elements/"
 rev = "78c1e29809b7420041b1259711f0a2934211a0d3" # from master branch
 features = ["serde-feature"] # Doesn't look to work by now
+
+[dev-dependencies]
+tempfile = "3.0"
