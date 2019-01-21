@@ -333,10 +333,10 @@ impl ChainQuery {
             })
             .fold(HashMap::new(), |mut utxos, (history, blockid)| {
                 match history.key.txinfo {
-                    TxHistoryInfo::Funding(.., value) => {
-                        utxos.insert(history.get_outpoint(), (blockid, value))
+                    TxHistoryInfo::Funding(ref info) => {
+                        utxos.insert(history.get_outpoint(), (blockid, info.value))
                     }
-                    TxHistoryInfo::Spending(..) => utxos.remove(&history.get_outpoint()),
+                    TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
                 };
                 // TODO: make sure funding rows are processed before spending rows on the same height
                 utxos
@@ -415,13 +415,13 @@ impl ChainQuery {
             }
 
             match history.key.txinfo {
-                TxHistoryInfo::Funding(.., value) => {
+                TxHistoryInfo::Funding(ref info) => {
                     stats.funded_txo_count += 1;
-                    stats.funded_txo_sum += value;
+                    stats.funded_txo_sum += info.value;
                 }
-                TxHistoryInfo::Spending(.., value) => {
+                TxHistoryInfo::Spending(ref info) => {
                     stats.spent_txo_count += 1;
-                    stats.spent_txo_sum += value;
+                    stats.spent_txo_sum += info.value;
                 }
             };
 
@@ -696,7 +696,11 @@ fn index_transaction(
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,
-                TxHistoryInfo::Funding(txid, txo_index as u16, txo.value),
+                TxHistoryInfo::Funding(FundingInfo {
+                    txid,
+                    vout: txo_index as u16,
+                    value: txo.value,
+                }),
             );
             rows.push(history.to_row())
         }
@@ -712,13 +716,13 @@ fn index_transaction(
         let history = TxHistoryRow::new(
             &prev_txo.script_pubkey,
             confirmed_height,
-            TxHistoryInfo::Spending(
+            TxHistoryInfo::Spending(SpendingInfo {
                 txid,
-                txi_index as u16,
-                txi.previous_output.txid.into_bytes(),
-                txi.previous_output.vout as u16,
-                prev_txo.value,
-            ),
+                vin: txi_index as u16,
+                prev_txid: txi.previous_output.txid.into_bytes(),
+                prev_vout: txi.previous_output.vout as u16,
+                value: prev_txo.value,
+            }),
         );
         rows.push(history.to_row());
 
@@ -936,9 +940,25 @@ impl BlockRow {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct FundingInfo {
+    pub txid: FullHash, // funding transaction
+    pub vout: u16,
+    pub value: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SpendingInfo {
+    pub txid: FullHash, // spending transaction
+    pub vin: u16,
+    pub prev_txid: FullHash, // funding transaction
+    pub prev_vout: u16,
+    pub value: u64,
+}
+
+#[derive(Serialize, Deserialize)]
 pub enum TxHistoryInfo {
-    Funding(FullHash, u16, u64), // funding txid/vout and value
-    Spending(FullHash, u16, FullHash, u16, u64), // spending txid/vin, previous funding txid/vout and value
+    Funding(FundingInfo),
+    Spending(SpendingInfo),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -985,8 +1005,8 @@ impl TxHistoryRow {
 
     fn get_txid(&self) -> Sha256dHash {
         match self.key.txinfo {
-            TxHistoryInfo::Funding(txid, ..) => parse_hash(&txid),
-            TxHistoryInfo::Spending(txid, ..) => parse_hash(&txid),
+            TxHistoryInfo::Funding(ref info) => parse_hash(&info.txid),
+            TxHistoryInfo::Spending(ref info) => parse_hash(&info.txid),
         }
     }
 
@@ -994,13 +1014,13 @@ impl TxHistoryRow {
     // for spending rows, returns the spent previous output.
     fn get_outpoint(&self) -> OutPoint {
         match self.key.txinfo {
-            TxHistoryInfo::Funding(txid, vout, _) => OutPoint {
-                txid: parse_hash(&txid),
-                vout: vout as u32,
+            TxHistoryInfo::Funding(ref info) => OutPoint {
+                txid: parse_hash(&info.txid),
+                vout: info.vout as u32,
             },
-            TxHistoryInfo::Spending(_, _, prevtxid, prevout, _) => OutPoint {
-                txid: parse_hash(&prevtxid),
-                vout: prevout as u32,
+            TxHistoryInfo::Spending(ref info) => OutPoint {
+                txid: parse_hash(&info.prev_txid),
+                vout: info.prev_vout as u32,
             },
         }
     }

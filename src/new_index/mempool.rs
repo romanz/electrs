@@ -9,8 +9,8 @@ use std::sync::Arc;
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::new_index::{
-    compute_script_hash, parse_hash, schema::FullHash, ChainQuery, ScriptStats, SpendingInput,
-    TxHistoryInfo, Utxo,
+    compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
+    SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::Bytes;
 
@@ -71,10 +71,10 @@ impl Mempool {
         entries
             .into_iter()
             .filter_map(|entry| match entry {
-                TxHistoryInfo::Funding(txid, vout, value) => Some(Utxo {
-                    txid: parse_hash(txid),
-                    vout: *vout as u32,
-                    value: *value,
+                TxHistoryInfo::Funding(info) => Some(Utxo {
+                    txid: parse_hash(&info.txid),
+                    vout: info.vout as u32,
+                    value: info.value,
                     confirmed: None,
                 }),
                 TxHistoryInfo::Spending(..) => None,
@@ -106,13 +106,13 @@ impl Mempool {
             }
 
             match entry {
-                TxHistoryInfo::Funding(.., value) => {
+                TxHistoryInfo::Funding(info) => {
                     stats.funded_txo_count += 1;
-                    stats.funded_txo_sum += value;
+                    stats.funded_txo_sum += info.value;
                 }
-                TxHistoryInfo::Spending(.., value) => {
+                TxHistoryInfo::Spending(info) => {
                     stats.spent_txo_count += 1;
-                    stats.spent_txo_sum += value;
+                    stats.spent_txo_sum += info.value;
                 }
             };
         }
@@ -163,27 +163,31 @@ impl Mempool {
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
             let txid_bytes = txid.into_bytes();
-
+            // An iterator over (ScriptHash, TxHistoryInfo)
             let spending = tx.input.iter().enumerate().map(|(index, txi)| {
                 let prev_txo = txos
                     .get(&txi.previous_output)
                     .expect(&format!("missing outpoint {:?}", txi.previous_output));
                 (
                     compute_script_hash(&prev_txo.script_pubkey),
-                    TxHistoryInfo::Spending(
-                        txid_bytes,
-                        index as u16,
-                        txi.previous_output.txid.into_bytes(),
-                        txi.previous_output.vout as u16,
-                        prev_txo.value,
-                    ),
+                    TxHistoryInfo::Spending(SpendingInfo {
+                        txid: txid_bytes,
+                        vin: index as u16,
+                        prev_txid: txi.previous_output.txid.into_bytes(),
+                        prev_vout: txi.previous_output.vout as u16,
+                        value: prev_txo.value,
+                    }),
                 )
             });
-
+            // An iterator over (ScriptHash, TxHistoryInfo)
             let funding = tx.output.iter().enumerate().map(|(index, txo)| {
                 (
                     compute_script_hash(&txo.script_pubkey),
-                    TxHistoryInfo::Funding(txid_bytes, index as u16, txo.value),
+                    TxHistoryInfo::Funding(FundingInfo {
+                        txid: txid_bytes,
+                        vout: index as u16,
+                        value: txo.value,
+                    }),
                 )
             });
 
@@ -246,7 +250,7 @@ impl Mempool {
 
 fn get_entry_txid(entry: &TxHistoryInfo) -> Sha256dHash {
     match entry {
-        TxHistoryInfo::Funding(txid, ..) => parse_hash(&txid),
-        TxHistoryInfo::Spending(txid, ..) => parse_hash(&txid),
+        TxHistoryInfo::Funding(info) => parse_hash(&info.txid),
+        TxHistoryInfo::Spending(info) => parse_hash(&info.txid),
     }
 }
