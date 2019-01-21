@@ -313,6 +313,7 @@ impl Daemon {
                 HistogramOpts::new("daemon_rpc", "Bitcoind RPC latency (in seconds)"),
                 &["method"],
             ),
+            // TODO: use better buckets (e.g. 1 byte to 10MB).
             size: metrics.histogram_vec(
                 HistogramOpts::new("daemon_bytes", "Bitcoind RPC size (in bytes)"),
                 &["method", "dir"],

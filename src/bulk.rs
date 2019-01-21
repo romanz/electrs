@@ -56,6 +56,7 @@ impl Parser {
     }
 
     fn last_indexed_row(&self) -> Row {
+        // TODO: use JSONRPC for missing blocks, and don't use 'L' row at all.
         let indexed_blockhashes = self.indexed_blockhashes.lock().unwrap();
         let last_header = self
             .current_headers
