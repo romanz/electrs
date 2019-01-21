@@ -64,7 +64,7 @@ fn run_server(config: Config) -> Result<()> {
     let mut tip = indexer.update(&daemon)?;
 
     let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
-    let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain))));
+    let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain), &metrics)));
     mempool.write().unwrap().update(&daemon)?;
     let q = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
 

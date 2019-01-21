@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
+use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
     compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
@@ -21,15 +22,31 @@ pub struct Mempool {
     txstore: HashMap<Sha256dHash, Transaction>,
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
     edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
+    // monitoring
+    latency: HistogramVec, // mempool requests latency
+    delta: HistogramVec,   // # of added/removed txs
+    count: GaugeVec,       // current state of the mempool
 }
 
 impl Mempool {
-    pub fn new(chain: Arc<ChainQuery>) -> Self {
+    pub fn new(chain: Arc<ChainQuery>, metrics: &Metrics) -> Self {
         Mempool {
             chain,
             txstore: HashMap::new(),
             history: HashMap::new(),
             edges: HashMap::new(),
+            latency: metrics.histogram_vec(
+                HistogramOpts::new("mempool_latency", "Mempool requests latency (in seconds)"),
+                &["part"],
+            ),
+            delta: metrics.histogram_vec(
+                HistogramOpts::new("mempool_delta", "# of transactions added/removed"),
+                &["type"],
+            ),
+            count: metrics.gauge_vec(
+                MetricOpts::new("mempool_count", "# of elements currently at the mempool"),
+                &["type"],
+            ),
         }
     }
 
@@ -50,6 +67,7 @@ impl Mempool {
     }
 
     pub fn history(&self, scripthash: &[u8]) -> Vec<Transaction> {
+        let _timer = self.latency.with_label_values(&["history"]).start_timer();
         match self.history.get(scripthash) {
             None => return vec![],
             Some(entries) => entries
@@ -63,6 +81,7 @@ impl Mempool {
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
+        let _timer = self.latency.with_label_values(&["utxo"]).start_timer();
         let entries = match self.history.get(scripthash) {
             None => return vec![],
             Some(entries) => entries,
@@ -92,6 +111,7 @@ impl Mempool {
 
     // @XXX avoid code duplication with ChainQuery::stats()?
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
+        let _timer = self.latency.with_label_values(&["stats"]).start_timer();
         let mut stats = ScriptStats::default();
         let mut seen_txids = HashSet::new();
 
@@ -121,6 +141,7 @@ impl Mempool {
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
+        let _timer = self.latency.with_label_values(&["update"]).start_timer();
         let new_txids = daemon
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
@@ -140,10 +161,19 @@ impl Mempool {
         self.add(to_add);
         // Remove missing transactions
         self.remove(to_remove);
+
+        self.count
+            .with_label_values(&["txs"])
+            .set(self.txstore.len() as f64);
         Ok(())
     }
 
     fn add(&mut self, txs: Vec<Transaction>) {
+        self.delta
+            .with_label_values(&["add"])
+            .observe(txs.len() as f64);
+        let _timer = self.latency.with_label_values(&["add"]).start_timer();
+
         let mut txids = vec![];
         // Phase 1: add to txstore
         for tx in txs {
@@ -206,6 +236,10 @@ impl Mempool {
 
     // @TODO use parallel lookup for confirmed txos?
     pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
+        let _timer = self
+            .latency
+            .with_label_values(&["lookup_txos"])
+            .start_timer();
         outpoints
             .into_iter()
             .map(|outpoint| {
@@ -232,6 +266,11 @@ impl Mempool {
     }
 
     fn remove(&mut self, to_remove: HashSet<&Sha256dHash>) {
+        self.delta
+            .with_label_values(&["remove"])
+            .observe(to_remove.len() as f64);
+        let _timer = self.latency.with_label_values(&["remove"]).start_timer();
+
         for txid in &to_remove {
             self.txstore
                 .remove(&txid)
