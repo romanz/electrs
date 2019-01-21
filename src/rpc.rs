@@ -515,7 +515,9 @@ impl RPC {
             info!("RPC server running on {}", addr);
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
-                stream.set_nonblocking(false).expect("failed to set connection as blocking");
+                stream
+                    .set_nonblocking(false)
+                    .expect("failed to set connection as blocking");
                 acceptor.send(Some((stream, addr))).expect("send failed");
             }
         });
