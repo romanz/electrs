@@ -57,10 +57,10 @@ impl TransactionStatus {
 impl From<Option<BlockId>> for TransactionStatus {
     fn from(blockid: Option<BlockId>) -> TransactionStatus {
         match blockid {
-            Some(BlockId(block_height, block_hash)) => TransactionStatus {
+            Some(b) => TransactionStatus {
                 confirmed: true,
-                block_height: Some(block_height as usize),
-                block_hash: Some(block_hash),
+                block_height: Some(b.height as usize),
+                block_hash: Some(b.hash),
             },
             None => TransactionStatus::unconfirmed(),
         }

@@ -59,11 +59,17 @@ impl Store {
 }
 
 #[derive(Debug)]
-pub struct BlockId(pub usize, pub Sha256dHash);
+pub struct BlockId {
+    pub height: usize,
+    pub hash: Sha256dHash,
+}
 
 impl From<&HeaderEntry> for BlockId {
     fn from(header: &HeaderEntry) -> Self {
-        BlockId(header.height(), header.hash().clone())
+        BlockId {
+            height: header.height(),
+            hash: *header.hash(),
+        }
     }
 }
 
@@ -406,7 +412,7 @@ impl ChainQuery {
         let mut lastblock = None;
 
         for (history, blockid) in history_iter {
-            if lastblock != Some(blockid.1) {
+            if lastblock != Some(blockid.hash) {
                 seen_txids.clear();
             }
 
@@ -425,7 +431,7 @@ impl ChainQuery {
                 }
             };
 
-            lastblock = Some(blockid.1);
+            lastblock = Some(blockid.hash);
         }
 
         (stats, lastblock)
