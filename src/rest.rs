@@ -25,7 +25,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
 
-const TX_LIMIT: usize = 25;
+const CHAIN_TXS_PER_PAGE: usize = 25;
+const MAX_MEMPOOL_TXS: usize = 50;
 const BLOCK_LIMIT: usize = 10;
 
 const TTL_LONG: u32 = 157784630; // ttl for static resources (5 years)
@@ -389,24 +390,25 @@ fn handle_request(
         path.get(1),
         path.get(2),
         path.get(3),
+        path.get(4),
     ) {
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None) => http_message(
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None, None) => http_message(
             StatusCode::OK,
             query.chain().best_hash().be_hex_string(),
             TTL_SHORT,
         ),
 
-        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None) => http_message(
+        (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"height"), None, None) => http_message(
             StatusCode::OK,
             query.chain().best_height().to_string(),
             TTL_SHORT,
         ),
 
-        (&Method::GET, Some(&"blocks"), start_height, None, None) => {
+        (&Method::GET, Some(&"blocks"), start_height, None, None, None) => {
             let start_height = start_height.and_then(|height| height.parse::<usize>().ok());
             blocks(&query, start_height)
         }
-        (&Method::GET, Some(&"block-height"), Some(height), None, None) => {
+        (&Method::GET, Some(&"block-height"), Some(height), None, None, None) => {
             let height = height.parse::<usize>()?;
             let header = query
                 .chain()
@@ -415,7 +417,7 @@ fn handle_request(
             let ttl = ttl_by_depth(Some(height), query);
             http_message(StatusCode::OK, header.hash().be_hex_string(), ttl)
         }
-        (&Method::GET, Some(&"block"), Some(hash), None, None) => {
+        (&Method::GET, Some(&"block"), Some(hash), None, None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let blockhm = query
                 .chain()
@@ -424,13 +426,13 @@ fn handle_request(
             let block_value = BlockValue::from(blockhm);
             json_response(block_value, TTL_LONG)
         }
-        (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None) => {
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.chain().get_block_status(&hash);
             let ttl = ttl_by_depth(status.height, query);
             json_response(status, ttl)
         }
-        (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None) => {
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
                 .chain()
@@ -438,7 +440,7 @@ fn handle_request(
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
         }
-        (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index) => {
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
                 .chain()
@@ -450,17 +452,17 @@ fn handle_request(
                 .max(0u32) as usize;
             if start_index >= txids.len() {
                 bail!(HttpError::not_found("start index out of range".to_string()));
-            } else if start_index % TX_LIMIT != 0 {
+            } else if start_index % CHAIN_TXS_PER_PAGE != 0 {
                 bail!(HttpError::from(format!(
                     "start index must be a multipication of {}",
-                    TX_LIMIT
+                    CHAIN_TXS_PER_PAGE
                 )));
             }
 
             let mut txs = txids
                 .iter()
                 .skip(start_index)
-                .take(TX_LIMIT)
+                .take(CHAIN_TXS_PER_PAGE)
                 .map(|txid| {
                     query
                         .lookup_txn(&txid)
@@ -471,8 +473,8 @@ fn handle_request(
             attach_txs_data(&mut txs, config, query);
             json_response(txs, TTL_LONG)
         }
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None)
-        | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None) => {
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None, None)
+        | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None, None) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let stats = query.stats(&script_hash[..]);
             json_response(
@@ -489,6 +491,46 @@ fn handle_request(
             Some(script_type @ &"address"),
             Some(script_str),
             Some(&"txs"),
+            None,
+            None,
+        )
+        | (
+            &Method::GET,
+            Some(script_type @ &"scripthash"),
+            Some(script_str),
+            Some(&"txs"),
+            None,
+            None,
+        ) => {
+            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+
+            let mut chain_txs = query
+                .chain()
+                .history(&script_hash[..], None, CHAIN_TXS_PER_PAGE)
+                .into_iter()
+                .map(TransactionValue::from)
+                .collect();
+
+            attach_txs_data(&mut chain_txs, config, query);
+
+            let mut mempool_txs = query
+                .mempool()
+                .history(&script_hash[..], MAX_MEMPOOL_TXS)
+                .into_iter()
+                .map(|tx| TransactionValue::from((tx, None)))
+                .collect();
+
+            attach_txs_data(&mut mempool_txs, config, query);
+
+            json_response(json!({ "chain": chain_txs, "mempool": mempool_txs }), TTL_SHORT)
+        }
+
+        (
+            &Method::GET,
+            Some(script_type @ &"address"),
+            Some(script_str),
+            Some(&"txs"),
+            Some(&"chain"),
             last_seen_txid,
         )
         | (
@@ -496,6 +538,7 @@ fn handle_request(
             Some(script_type @ &"scripthash"),
             Some(script_str),
             Some(&"txs"),
+            Some(&"chain"),
             last_seen_txid,
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
@@ -503,7 +546,7 @@ fn handle_request(
 
             let mut txs = query
                 .chain()
-                .history(&script_hash[..], last_seen_txid.as_ref(), TX_LIMIT)
+                .history(&script_hash[..], last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
                 .into_iter()
                 .map(TransactionValue::from)
                 .collect();
@@ -516,23 +559,23 @@ fn handle_request(
             &Method::GET,
             Some(script_type @ &"address"),
             Some(script_str),
-            Some(&"mempool-txs"),
+            Some(&"txs"),
+            Some(&"mempool"),
             None,
         )
         | (
             &Method::GET,
             Some(script_type @ &"scripthash"),
             Some(script_str),
-            Some(&"mempool-txs"),
+            Some(&"txs"),
+            Some(&"mempool"),
             None,
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
 
-            // @TODO implement paging
-
             let mut txs = query
                 .mempool()
-                .history(&script_hash[..])
+                .history(&script_hash[..], MAX_MEMPOOL_TXS)
                 .into_iter()
                 .map(|tx| TransactionValue::from((tx, None)))
                 .collect();
@@ -542,12 +585,13 @@ fn handle_request(
             json_response(txs, TTL_SHORT)
         }
 
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None)
+        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None, None)
         | (
             &Method::GET,
             Some(script_type @ &"scripthash"),
             Some(script_str),
             Some(&"utxo"),
+            None,
             None,
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
@@ -559,7 +603,7 @@ fn handle_request(
             // XXX paging?
             json_response(utxos, TTL_SHORT)
         }
-        (&Method::GET, Some(&"tx"), Some(hash), None, None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), None, None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let transaction = query
                 .lookup_txn(&hash)
@@ -572,7 +616,7 @@ fn handle_request(
             let value = attach_tx_data(value, config, query);
             json_response(value, ttl)
         }
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let rawtx = query
                 .lookup_raw_txn(&hash)
@@ -580,7 +624,7 @@ fn handle_request(
             let ttl = ttl_by_depth(query.get_tx_status(&hash).block_height, query);
             http_message(StatusCode::OK, hex::encode(rawtx), ttl)
         }
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let status = query.get_tx_status(&hash);
             let ttl = ttl_by_depth(status.block_height, query);
@@ -602,7 +646,7 @@ fn handle_request(
             )
         }
         */
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index)) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let outpoint = OutPoint {
                 txid: hash,
@@ -620,7 +664,7 @@ fn handle_request(
             );
             json_response(spend, ttl)
         }
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let tx = query
                 .lookup_txn(&hash)

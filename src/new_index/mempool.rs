@@ -69,7 +69,7 @@ impl Mempool {
         self.edges.get(outpoint).is_some()
     }
 
-    pub fn history(&self, scripthash: &[u8]) -> Vec<Transaction> {
+    pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         match self.history.get(scripthash) {
             None => return vec![],
@@ -77,6 +77,7 @@ impl Mempool {
                 .iter()
                 .map(get_entry_txid)
                 .unique()
+                .take(limit)
                 .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
                 .cloned()
                 .collect(),
