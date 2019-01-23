@@ -81,6 +81,12 @@ pub struct Utxo {
     pub confirmed: Option<BlockId>,
 }
 
+impl From<&Utxo> for OutPoint {
+    fn from(utxo: &Utxo) -> Self {
+        OutPoint { txid: utxo.txid, vout: utxo.vout }
+    }
+}
+
 #[derive(Debug)]
 pub struct SpendingInput {
     pub txid: Sha256dHash,

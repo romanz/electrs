@@ -14,7 +14,6 @@ use crate::new_index::{
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::Bytes;
-
 use crate::errors::*;
 
 pub struct Mempool {
@@ -66,6 +65,10 @@ impl Mempool {
         })
     }
 
+    pub fn has_spend(&self, outpoint: &OutPoint) -> bool {
+        self.edges.get(outpoint).is_some()
+    }
+
     pub fn history(&self, scripthash: &[u8]) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         match self.history.get(scripthash) {
@@ -98,14 +101,7 @@ impl Mempool {
                 }),
                 TxHistoryInfo::Spending(..) => None,
             })
-            .filter(|utxo| {
-                self.edges
-                    .get(&OutPoint {
-                        txid: utxo.txid,
-                        vout: utxo.vout,
-                    })
-                    .is_none()
-            })
+            .filter(|utxo| !self.has_spend(&OutPoint::from(utxo)))
             .collect()
     }
 

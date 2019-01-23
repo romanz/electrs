@@ -28,7 +28,9 @@ impl Query {
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let mut utxos = self.chain.utxo(scripthash);
-        utxos.extend(self.mempool().utxo(scripthash));
+        let mempool = self.mempool();
+        utxos.retain(|utxo| !mempool.has_spend(&OutPoint::from(utxo)));
+        utxos.extend(mempool.utxo(scripthash));
         utxos
     }
 
