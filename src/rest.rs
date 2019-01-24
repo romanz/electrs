@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
 use crate::util::{
-    full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
+    is_coinbase, full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
 };
 
 use bitcoin::consensus::encode::{self, serialize};
@@ -16,6 +16,9 @@ use hex::{self, FromHexError};
 use hyper::rt::{self, Future};
 use hyper::service::service_fn_ok;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
+
+#[cfg(feature="liquid")]
+use elements::confidential::Value;
 
 use serde::Serialize;
 use serde_json;
@@ -39,13 +42,15 @@ struct BlockValue {
     height: u32,
     version: u32,
     timestamp: u32,
-    bits: u32,
-    nonce: u32,
     tx_count: u32,
     size: u32,
     weight: u32,
     merkle_root: String,
     previousblockhash: Option<String>,
+    #[cfg(not(feature="liquid"))]
+    nonce: u32,
+    #[cfg(not(feature="liquid"))]
+    bits: u32,
 }
 
 impl From<BlockHeaderMeta> for BlockValue {
@@ -56,8 +61,6 @@ impl From<BlockHeaderMeta> for BlockValue {
             height: blockhm.header_entry.height() as u32,
             version: header.version,
             timestamp: header.time,
-            bits: header.bits,
-            nonce: header.nonce,
             tx_count: blockhm.meta.tx_count,
             size: blockhm.meta.size,
             weight: blockhm.meta.weight,
@@ -67,6 +70,11 @@ impl From<BlockHeaderMeta> for BlockValue {
             } else {
                 None
             },
+
+            #[cfg(not(feature="liquid"))]
+            bits: header.bits,
+            #[cfg(not(feature="liquid"))]
+            nonce: header.nonce,
         }
     }
 }
@@ -134,12 +142,17 @@ struct TxInValue {
 
 impl From<TxIn> for TxInValue {
     fn from(txin: TxIn) -> Self {
-        let script = txin.script_sig;
+        #[cfg(not(feature="liquid"))]
         let witness = if txin.witness.len() > 0 {
             Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
         } else {
             None
         };
+        #[cfg(feature="liquid")]
+        let witness = None; // @TODO
+
+        let is_coinbase = is_coinbase(&txin);
+        let script = txin.script_sig;
 
         TxInValue {
             txid: txin.previous_output.txid,
@@ -147,8 +160,8 @@ impl From<TxIn> for TxInValue {
             prevout: None, // added later
             scriptsig_asm: get_script_asm(&script),
             scriptsig: script,
-            witness: witness,
-            is_coinbase: txin.previous_output.is_null(),
+            witness,
+            is_coinbase,
             sequence: txin.sequence,
         }
     }
@@ -158,14 +171,33 @@ impl From<TxIn> for TxInValue {
 struct TxOutValue {
     scriptpubkey: Script,
     scriptpubkey_asm: String,
-    value: u64,
     scriptpubkey_address: Option<String>,
     scriptpubkey_type: String,
+
+    #[cfg(not(feature="liquid"))]
+    value: u64,
+    #[cfg(feature="liquid")]
+    value: Option<u64>,
+    #[cfg(feature="liquid")]
+    valuecommitment: Option<String>,
 }
 
 impl From<TxOut> for TxOutValue {
     fn from(txout: TxOut) -> Self {
+        #[cfg(not(feature="liquid"))]
         let value = txout.value;
+
+        #[cfg(feature="liquid")]
+        let value = match txout.value {
+            Value::Explicit(value) => Some(value),
+            _ => None,
+        };
+        #[cfg(feature="liquid")]
+        let valuecommitment = match txout.value {
+            Value::Confidential(..) => Some(hex::encode(serialize(&txout.value))),
+            _ => None,
+        };
+
         let script = txout.script_pubkey;
         let script_asm = get_script_asm(&script);
 
@@ -195,6 +227,8 @@ impl From<TxOut> for TxOutValue {
             scriptpubkey_address: None, // added later
             scriptpubkey_type: script_type.to_string(),
             value,
+            #[cfg(feature="liquid")]
+            valuecommitment,
         }
     }
 }
@@ -203,17 +237,37 @@ impl From<TxOut> for TxOutValue {
 struct UtxoValue {
     txid: Sha256dHash,
     vout: u32,
-    value: u64,
     status: TransactionStatus,
+    #[cfg(not(feature="liquid"))]
+    value: u64,
+    #[cfg(feature="liquid")]
+    value: Option<u64>,
+    #[cfg(feature="liquid")]
+    valuecommitment: Option<String>,
 }
 impl From<Utxo> for UtxoValue {
     fn from(utxo: Utxo) -> Self {
+        #[cfg(not(feature="liquid"))]
+        let value = utxo.value;
+
+        #[cfg(feature="liquid")]
+        let value = match utxo.value {
+            Value::Explicit(value) => Some(value),
+            _ => None,
+        };
+        #[cfg(feature="liquid")]
+        let valuecommitment = match utxo.value {
+            Value::Confidential(..) => Some(hex::encode(serialize(&utxo.value))),
+            _ => None,
+        };
+
         UtxoValue {
             txid: utxo.txid,
             vout: utxo.vout,
-            value: utxo.value,
+            value,
             status: TransactionStatus::from(utxo.confirmed),
-            // utxo.script is also available but is unused here
+            #[cfg(feature="liquid")]
+            valuecommitment,
         }
     }
 }
@@ -307,19 +361,21 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
     }
 
     // attach tx fee
-    if config.prevout_enabled {
-        for mut tx in txs.iter_mut() {
-            if tx.vin.iter().any(|vin| vin.prevout.is_none()) {
-                continue;
-            }
+    #[cfg(not(feature="liquid"))] {
+        if config.prevout_enabled {
+            for mut tx in txs.iter_mut() {
+                if tx.vin.iter().any(|vin| vin.prevout.is_none()) {
+                    continue;
+                }
 
-            let total_in: u64 = tx
-                .vin
-                .iter()
-                .map(|vin| vin.clone().prevout.unwrap().value)
-                .sum();
-            let total_out: u64 = tx.vout.iter().map(|vout| vout.value).sum();
-            tx.fee = Some(total_in - total_out);
+                let total_in: u64 = tx
+                    .vin
+                    .iter()
+                    .map(|vin| vin.clone().prevout.unwrap().value)
+                    .sum();
+                let total_out: u64 = tx.vout.iter().map(|vout| vout.value).sum();
+                tx.fee = Some(total_in - total_out);
+            }
         }
     }
 }

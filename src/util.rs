@@ -1,4 +1,4 @@
-use crate::chain::{Block, BlockHeader};
+use crate::chain::{Block, BlockHeader, TxIn};
 use crate::errors::*;
 use crate::new_index::{BlockEntry, BlockId};
 
@@ -432,4 +432,11 @@ fn to_bech_network(network: &Network) -> B32Network {
 pub fn get_script_asm(script: &Script) -> String {
     let asm = format!("{:?}", script);
     (&asm[7..asm.len() - 1]).to_string()
+}
+
+pub fn is_coinbase(txin: &TxIn) -> bool {
+    #[cfg(not(feature="liquid"))]
+    return txin.previous_output.is_null();
+    #[cfg(feature="liquid")]
+    return txin.is_coinbase();
 }

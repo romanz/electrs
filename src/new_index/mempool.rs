@@ -123,13 +123,24 @@ impl Mempool {
             }
 
             match entry {
+                #[cfg(not(feature="liquid"))]
                 TxHistoryInfo::Funding(info) => {
                     stats.funded_txo_count += 1;
                     stats.funded_txo_sum += info.value;
                 }
+                #[cfg(feature="liquid")]
+                TxHistoryInfo::Funding(_) => {
+                    stats.funded_txo_count += 1;
+                }
+
+                #[cfg(not(feature="liquid"))]
                 TxHistoryInfo::Spending(info) => {
                     stats.spent_txo_count += 1;
                     stats.spent_txo_sum += info.value;
+                }
+                #[cfg(feature="liquid")]
+                TxHistoryInfo::Spending(_) => {
+                    stats.spent_txo_count += 1;
                 }
             };
         }

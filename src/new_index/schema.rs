@@ -7,6 +7,9 @@ use crypto::sha2::Sha256;
 use itertools::Itertools;
 use rayon::prelude::*;
 
+#[cfg(feature="liquid")]
+use elements::confidential::Value;
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -16,7 +19,7 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
-    full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
+    is_coinbase, full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
@@ -77,8 +80,11 @@ impl From<&HeaderEntry> for BlockId {
 pub struct Utxo {
     pub txid: Sha256dHash,
     pub vout: u32,
-    pub value: u64,
     pub confirmed: Option<BlockId>,
+    #[cfg(not(feature="liquid"))]
+    pub value: u64,
+    #[cfg(feature="liquid")]
+    pub value: Value,
 }
 
 impl From<&Utxo> for OutPoint {
@@ -98,8 +104,10 @@ pub struct SpendingInput {
 pub struct ScriptStats {
     pub tx_count: usize,
     pub funded_txo_count: usize,
-    pub funded_txo_sum: u64,
     pub spent_txo_count: usize,
+    #[cfg(not(feature="liquid"))]
+    pub funded_txo_sum: u64,
+    #[cfg(not(feature="liquid"))]
     pub spent_txo_sum: u64,
 }
 
@@ -108,8 +116,10 @@ impl ScriptStats {
         ScriptStats {
             tx_count: 0,
             funded_txo_count: 0,
-            funded_txo_sum: 0,
             spent_txo_count: 0,
+            #[cfg(not(feature="liquid"))]
+            funded_txo_sum: 0,
+            #[cfg(not(feature="liquid"))]
             spent_txo_sum: 0,
         }
     }
@@ -427,13 +437,24 @@ impl ChainQuery {
             }
 
             match history.key.txinfo {
+                #[cfg(not(feature="liquid"))]
                 TxHistoryInfo::Funding(ref info) => {
                     stats.funded_txo_count += 1;
                     stats.funded_txo_sum += info.value;
                 }
+                #[cfg(feature="liquid")]
+                TxHistoryInfo::Funding(_) => {
+                    stats.funded_txo_count += 1;
+                }
+
+                #[cfg(not(feature="liquid"))]
                 TxHistoryInfo::Spending(ref info) => {
                     stats.spent_txo_count += 1;
                     stats.spent_txo_sum += info.value;
+                }
+                #[cfg(feature="liquid")]
+                TxHistoryInfo::Spending(_) => {
+                    stats.spent_txo_count += 1;
                 }
             };
 
@@ -636,7 +657,7 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
         .flat_map(|b| {
             b.block.txdata.iter().flat_map(|tx| {
                 tx.input.iter().filter_map(|txin| {
-                    if txin.previous_output.is_null() {
+                    if is_coinbase(txin) {
                         None
                     } else {
                         Some(txin.previous_output)
@@ -718,7 +739,7 @@ fn index_transaction(
         }
     }
     for (txi_index, txi) in tx.input.iter().enumerate() {
-        if txi.previous_output.is_null() {
+        if is_coinbase(txi) {
             continue;
         }
         let prev_txo = previous_txos_map
@@ -955,7 +976,10 @@ impl BlockRow {
 pub struct FundingInfo {
     pub txid: FullHash, // funding transaction
     pub vout: u16,
+    #[cfg(not(feature="liquid"))]
     pub value: u64,
+    #[cfg(feature="liquid")]
+    pub value: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -964,7 +988,10 @@ pub struct SpendingInfo {
     pub vin: u16,
     pub prev_txid: FullHash, // funding transaction
     pub prev_vout: u16,
+    #[cfg(not(feature="liquid"))]
     pub value: u64,
+    #[cfg(feature="liquid")]
+    pub value: Value,
 }
 
 #[derive(Serialize, Deserialize)]
