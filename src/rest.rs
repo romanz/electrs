@@ -861,7 +861,8 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
 
-         let mut value = BlockValue::from(blockhm);
+        #[allow(unused_mut)]
+        let mut value = BlockValue::from(blockhm);
 
         #[cfg(feature="liquid")] {
             // exclude proof in block list view
