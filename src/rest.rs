@@ -8,7 +8,7 @@ use crate::util::{
 use crate::utils::Address;
 
 #[cfg(feature = "liquid")]
-use crate::utils::{BlockProofValue,IssuanceValue};
+use crate::utils::{BlockProofValue, IssuanceValue, PegOutRequest};
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::util::hash::{HexError, Sha256dHash};
@@ -206,11 +206,12 @@ struct TxOutValue {
     value: Option<u64>,
     #[cfg(feature="liquid")]
     valuecommitment: Option<String>,
-
     #[cfg(feature="liquid")]
     asset: Option<String>,
     #[cfg(feature="liquid")]
     assetcommitment: Option<String>,
+    #[cfg(feature="liquid")]
+    pegout: Option<PegOutRequest>,
 }
 
 impl From<TxOut> for TxOutValue {
@@ -282,6 +283,8 @@ impl From<TxOut> for TxOutValue {
             asset,
             #[cfg(feature="liquid")]
             assetcommitment,
+            #[cfg(feature="liquid")]
+            pegout: None, // added later
         }
     }
 }
@@ -394,6 +397,15 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
             for mut vout in tx.vout.iter_mut() {
                 vout.scriptpubkey_address =
                     script_to_address(&vout.scriptpubkey, &config.network_type);
+
+
+                #[cfg(feature="liquid")] {
+                    vout.pegout = PegOutRequest::parse(
+                        &vout.scriptpubkey,
+                        &config.parent_network,
+                        &config.parent_genesis_hash,
+                    );
+                }
             }
         }
 
