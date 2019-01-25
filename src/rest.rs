@@ -202,28 +202,36 @@ impl From<TxOut> for TxOutValue {
             _ => None,
         };
 
+        #[cfg(not(feature="liquid"))]
+        let is_fee = false;
+        #[cfg(feature="liquid")]
+        let is_fee = txout.is_fee();
+
         let script = txout.script_pubkey;
         let script_asm = get_script_asm(&script);
 
         // TODO should the following something to put inside rust-elements lib?
-        let mut script_type = "";
-        if script.is_empty() {
-            script_type = "empty";
+        let script_type = if is_fee {
+            "fee"
+        } else if script.is_empty() {
+            "empty"
         } else if script.is_op_return() {
-            script_type = "op_return";
+            "op_return"
         } else if script.is_p2pk() {
-            script_type = "p2pk";
+            "p2pk"
         } else if script.is_p2pkh() {
-            script_type = "p2pkh";
+            "p2pkh"
         } else if script.is_p2sh() {
-            script_type = "p2sh";
+            "p2sh"
         } else if script.is_v0_p2wpkh() {
-            script_type = "v0_p2wpkh";
+            "v0_p2wpkh"
         } else if script.is_v0_p2wsh() {
-            script_type = "v0_p2wsh";
+            "v0_p2wsh"
         } else if script.is_provably_unspendable() {
-            script_type = "provably_unspendable";
-        }
+            "provably_unspendable"
+        } else {
+            "unknown"
+        };
 
         TxOutValue {
             scriptpubkey: script,
