@@ -20,14 +20,8 @@ pub const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str = "cb4953dfe64aba4687d0de08e5ce
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;
-pub const HASH_PREFIX_LEN: usize = 8;
 
 pub type FullHash = [u8; HASH_LEN];
-pub type HashPrefix = [u8; HASH_PREFIX_LEN];
-
-pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
-    array_ref![hash, 0, HASH_PREFIX_LEN].clone()
-}
 
 pub fn full_hash(hash: &[u8]) -> FullHash {
     array_ref![hash, 0, HASH_LEN].clone()

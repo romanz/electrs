@@ -49,11 +49,9 @@ pub mod chain;
 pub mod config;
 pub mod daemon;
 pub mod errors;
-pub mod fake;
 pub mod metrics;
 pub mod rest;
 pub mod signal;
-pub mod store;
 pub mod util;
 pub mod utils;
 
