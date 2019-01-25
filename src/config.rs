@@ -34,6 +34,8 @@ pub struct Config {
 
 impl Config {
     pub fn from_args() -> Config {
+        let network_help = format!("Select Bitcoin network type ({})",  Network::names().join(", "));
+
         let m = App::new("Electrum Rust Server")
             .version(crate_version!())
             .arg(
@@ -68,7 +70,7 @@ impl Config {
             .arg(
                 Arg::with_name("network")
                     .long("network")
-                    .help("Select Bitcoin network type ('mainnet', 'testnet' or 'regtest')")
+                    .help(&network_help)
                     .takes_value(true),
             )
             .arg(

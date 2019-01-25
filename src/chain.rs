@@ -40,6 +40,14 @@ impl Network {
             Network::LiquidRegtest => 0xDAB5BFFA,
         }
     }
+
+    pub fn names() -> Vec<String> {
+        #[cfg(not(feature = "liquid"))]
+        return vec!["mainnet".to_string(), "testnet".to_string(), "regtest".to_string()];
+
+        #[cfg(feature = "liquid")]
+        return vec!["mainnet".to_string(), "testnet".to_string(), "regtest".to_string(), "liquid".to_string(), "liquidregtest".to_string()];
+    }
 }
 
 impl From<&str> for Network {
