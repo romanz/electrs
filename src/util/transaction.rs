@@ -1,0 +1,67 @@
+use bitcoin::util::hash::Sha256dHash;
+
+use crate::chain::{TxIn, TxOut};
+use crate::util::{BlockId, HeaderEntry};
+
+#[cfg(feature = "liquid")]
+use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
+
+#[derive(Serialize, Deserialize)]
+pub struct TransactionStatus {
+    pub confirmed: bool,
+    pub block_height: Option<usize>,
+    pub block_hash: Option<Sha256dHash>,
+}
+
+impl TransactionStatus {
+    pub fn unconfirmed() -> Self {
+        TransactionStatus {
+            confirmed: false,
+            block_height: None,
+            block_hash: None,
+        }
+    }
+    pub fn confirmed(header: &HeaderEntry) -> Self {
+        TransactionStatus {
+            confirmed: true,
+            block_height: Some(header.height()),
+            block_hash: Some(header.hash().clone()),
+        }
+    }
+}
+
+impl From<Option<BlockId>> for TransactionStatus {
+    fn from(blockid: Option<BlockId>) -> TransactionStatus {
+        match blockid {
+            Some(b) => TransactionStatus {
+                confirmed: true,
+                block_height: Some(b.height as usize),
+                block_hash: Some(b.hash),
+            },
+            None => TransactionStatus::unconfirmed(),
+        }
+    }
+}
+
+pub fn is_coinbase(txin: &TxIn) -> bool {
+    #[cfg(not(feature = "liquid"))]
+    return txin.previous_output.is_null();
+    #[cfg(feature = "liquid")]
+    return txin.is_coinbase();
+}
+
+pub fn has_prevout(txin: &TxIn) -> bool {
+    #[cfg(not(feature = "liquid"))]
+    return !txin.previous_output.is_null();
+    #[cfg(feature = "liquid")]
+    return !txin.is_coinbase()
+        && !txin.is_pegin
+        && txin.previous_output.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+}
+
+pub fn is_spendable(txout: &TxOut) -> bool {
+    #[cfg(not(feature = "liquid"))]
+    return !txout.script_pubkey.is_provably_unspendable();
+    #[cfg(feature = "liquid")]
+    return !txout.is_fee() && !txout.script_pubkey.is_provably_unspendable();
+}

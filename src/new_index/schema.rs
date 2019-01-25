@@ -19,7 +19,7 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
-    full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes,
+    full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, Bytes,
     HeaderEntry, HeaderList,
 };
 
@@ -59,21 +59,6 @@ impl Store {
     /// Used to decide whether to use "blk*.dat" files for faster initial indexing
     pub fn is_empty(&self) -> bool {
         return self.added_blockhashes.read().unwrap().is_empty();
-    }
-}
-
-#[derive(Debug)]
-pub struct BlockId {
-    pub height: usize,
-    pub hash: Sha256dHash,
-}
-
-impl From<&HeaderEntry> for BlockId {
-    fn from(header: &HeaderEntry) -> Self {
-        BlockId {
-            height: header.height(),
-            hash: *header.hash(),
-        }
     }
 }
 

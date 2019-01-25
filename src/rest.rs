@@ -1,17 +1,17 @@
 use crate::chain::{Network, OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
 use crate::errors;
-use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
+use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
+use crate::util::Address;
 use crate::util::{
-    full_hash, get_script_asm, is_coinbase, script_to_address, BlockHeaderMeta, FullHash,
+    full_hash, get_script_asm, is_coinbase, script_to_address, BlockHeaderMeta, BlockId, FullHash,
     TransactionStatus,
 };
-use crate::utils::Address;
 
 #[cfg(feature = "liquid")]
-use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
-#[cfg(feature = "liquid")]
-use crate::utils::{BlockProofValue, IssuanceValue, PegOutRequest};
+use crate::util::{
+    BlockProofValue, IssuanceValue, PegOutRequest, REGTEST_INITIAL_ISSUANCE_PREVOUT,
+};
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::util::hash::{HexError, Sha256dHash};
