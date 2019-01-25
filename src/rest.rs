@@ -137,6 +137,9 @@ struct TxInValue {
     witness: Option<Vec<String>>,
     is_coinbase: bool,
     sequence: u32,
+
+    #[cfg(feature="liquid")]
+    is_pegin: bool,
 }
 
 impl From<TxIn> for TxInValue {
@@ -162,6 +165,8 @@ impl From<TxIn> for TxInValue {
             witness,
             is_coinbase,
             sequence: txin.sequence,
+            #[cfg(feature="liquid")]
+            is_pegin: txin.is_pegin,
         }
     }
 }
