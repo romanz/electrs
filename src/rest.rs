@@ -4,10 +4,11 @@ use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
 use crate::util::{
     is_coinbase, full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
-    REGTEST_INITIAL_ISSUANCE_PREVOUT,
 };
 use crate::utils::Address;
 
+#[cfg(feature = "liquid")]
+use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
 #[cfg(feature = "liquid")]
 use crate::utils::{BlockProofValue, IssuanceValue, PegOutRequest};
 
