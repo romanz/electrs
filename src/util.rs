@@ -376,10 +376,9 @@ where
 }
 
 use crate::chain::Network;
-use bitcoin::util::address::{Address, Payload};
+use crate::utils::{Address, Payload};
 use bitcoin::util::hash::Hash160;
 use bitcoin::Script;
-use bitcoin::network::constants::Network as BNetwork;
 use bitcoin_bech32::constants::Network as B32Network;
 use bitcoin_bech32::{u5, WitnessProgram};
 
@@ -416,7 +415,7 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
     Some(
         Address {
             payload: payload?,
-            network: BNetwork::from(network),
+            network: *network,
         }
         .to_string(),
     )

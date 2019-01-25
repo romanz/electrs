@@ -5,9 +5,9 @@ use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo}
 use crate::util::{
     is_coinbase, full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
 };
+use crate::utils::Address;
 
 use bitcoin::consensus::encode::{self, serialize};
-use bitcoin::util::address::Address;
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
 use futures::sync::oneshot;
@@ -851,15 +851,13 @@ fn to_scripthash(
 fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
     let addr = Address::from_str(addr)?;
 
-    let addr_network = Network::from(&addr.network);
-
     #[cfg(not(feature = "liquid"))]
     let regtest_net = Network::Regtest;
     #[cfg(feature = "liquid")]
     let regtest_net = Network::LiquidRegtest;
 
-    if addr_network != *network
-        && !(addr_network == Network::Testnet && *network == regtest_net)
+    if addr.network != *network
+        && !(addr.network == Network::Testnet && *network == regtest_net)
     {
         bail!(HttpError::from("Address on invalid network".to_string()))
     }

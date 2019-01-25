@@ -55,5 +55,6 @@ pub mod rest;
 pub mod signal;
 pub mod store;
 pub mod util;
+pub mod utils;
 
 pub mod new_index;
