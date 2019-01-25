@@ -98,7 +98,7 @@ pub struct BlockchainInfo {
     pub bestblockhash: String,
     pub pruned: bool,
     pub verificationprogress: f32,
-    pub initialblockdownload: bool,
+    pub initialblockdownload: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -332,10 +332,17 @@ impl Daemon {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
         }
         loop {
-            if daemon.getblockchaininfo()?.initialblockdownload == false {
-                break;
-            }
-            warn!("wait until bitcoind is synced (i.e. initialblockdownload = false)");
+            let info = daemon.getblockchaininfo()?;
+
+            // initialblockdownload is unavailable on the 0.14-based elements
+            let synced = match info.initialblockdownload {
+                Some(ibd) => !ibd,
+                None => info.verificationprogress > 0.999,
+            };
+
+            if synced { break; }
+
+            warn!("wait until bitcoind is synced");
             signal.wait(Duration::from_secs(3))?;
         }
         Ok(daemon)
