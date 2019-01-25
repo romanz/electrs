@@ -30,13 +30,19 @@ pub struct Config {
     pub tx_cache_size: usize,
     pub extended_db_enabled: bool,
     pub prevout_enabled: bool,
+
+
+    #[cfg(feature="liquid")]
+    pub parent_network: Network,
+    #[cfg(feature="liquid")]
+    pub parent_genesis_hash: String,
 }
 
 impl Config {
     pub fn from_args() -> Config {
         let network_help = format!("Select Bitcoin network type ({})",  Network::names().join(", "));
 
-        let m = App::new("Electrum Rust Server")
+        let args = App::new("Electrum Rust Server")
             .version(crate_version!())
             .arg(
                 Arg::with_name("verbosity")
@@ -129,13 +135,28 @@ impl Config {
                 Arg::with_name("disable_prevout")
                     .long("disable-prevout")
                     .help("Don't attach previous output details to inputs")
-            )
-            .get_matches();
+            );
+
+        #[cfg(feature="liquid")]
+        let args = args
+            .arg(
+                Arg::with_name("parent_network")
+                    .long("parent-network")
+                    .help("Select parent network type (mainnet, testnet, regtest)")
+                    .takes_value(true),
+            );
+
+        let m = args.get_matches();
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
         let network_type = Network::from(network_name);
         let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let db_path = db_dir.join(network_name);
+
+        #[cfg(feature = "liquid")]
+        let parent_network = Network::from(m.value_of("parent_network").unwrap_or("mainnet"));
+        #[cfg(feature = "liquid")]
+        let parent_genesis_hash = parent_network.genesis_hash().le_hex_string();
 
         let default_daemon_port = match network_type {
             Network::Bitcoin => 8332,
@@ -247,6 +268,10 @@ impl Config {
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
             extended_db_enabled: !m.is_present("light"),
             prevout_enabled: !m.is_present("disable_prevout"),
+            #[cfg(feature = "liquid")]
+            parent_network,
+            #[cfg(feature = "liquid")]
+            parent_genesis_hash,
         };
         eprintln!("{:?}", config);
         config
