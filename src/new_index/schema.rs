@@ -19,7 +19,7 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
-    is_coinbase, full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
+    has_prevout, is_spendable, full_hash, BlockHeaderMeta, BlockMeta, BlockStatus, Bytes, HeaderEntry, HeaderList,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
@@ -657,7 +657,7 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
         .flat_map(|b| {
             b.block.txdata.iter().flat_map(|tx| {
                 tx.input.iter().filter_map(|txin| {
-                    if is_coinbase(txin) {
+                    if !has_prevout(txin) {
                         None
                     } else {
                         Some(txin.previous_output)
@@ -725,7 +725,7 @@ fn index_transaction(
     //      S{funding-txid:vout}{spending-txid:vin} → ""
     let txid = tx.txid().into_bytes();
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !txo.script_pubkey.is_provably_unspendable() {
+        if is_spendable(txo) {
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,
@@ -739,7 +739,7 @@ fn index_transaction(
         }
     }
     for (txi_index, txi) in tx.input.iter().enumerate() {
-        if is_coinbase(txi) {
+        if !has_prevout(txi) {
             continue;
         }
         let prev_txo = previous_txos_map

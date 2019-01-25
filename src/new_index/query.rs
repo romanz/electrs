@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
-use crate::util::{Bytes, TransactionStatus};
+use crate::util::{Bytes, TransactionStatus, is_spendable};
 
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
@@ -72,7 +72,7 @@ impl Query {
             .par_iter()
             .enumerate()
             .map(|(vout, txout)| {
-                if !txout.script_pubkey.is_provably_unspendable() {
+                if is_spendable(txout) {
                     self.lookup_spend(&OutPoint {
                         txid,
                         vout: vout as u32,

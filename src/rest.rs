@@ -4,6 +4,7 @@ use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
 use crate::util::{
     is_coinbase, full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
+    REGTEST_INITIAL_ISSUANCE_PREVOUT,
 };
 use crate::utils::Address;
 
@@ -383,7 +384,14 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
             // collect lookups
             if config.prevout_enabled {
                 for vin in tx.vin.iter_mut() {
-                    if !vin.is_coinbase {
+
+                    #[cfg(not(feature="liquid"))]
+                    let has_prevout = !vin.is_coinbase;
+
+                    #[cfg(feature="liquid")]
+                    let has_prevout = !vin.is_coinbase && !vin.is_pegin && vin.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+
+                    if has_prevout {
                         let outpoint = OutPoint {
                             txid: vin.txid,
                             vout: vin.vout,
@@ -436,7 +444,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
                 let total_in: u64 = tx
                     .vin
                     .iter()
-                    .map(|vin| vin.clone().prevout.unwrap().value)
+                    .map(|vin| vin.clone().prevout.unwrap().value) // @TODO avoid clone
                     .sum();
                 let total_out: u64 = tx.vout.iter().map(|vout| vout.value).sum();
                 tx.fee = Some(total_in - total_out);
