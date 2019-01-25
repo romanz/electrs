@@ -7,6 +7,9 @@ use crate::util::{
 };
 use crate::utils::Address;
 
+#[cfg(feature = "liquid")]
+use crate::utils::BlockProofValue;
+
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
@@ -50,6 +53,8 @@ struct BlockValue {
     nonce: u32,
     #[cfg(not(feature="liquid"))]
     bits: u32,
+    #[cfg(feature = "liquid")]
+    proof: Option<BlockProofValue>,
 }
 
 impl From<BlockHeaderMeta> for BlockValue {
@@ -74,6 +79,9 @@ impl From<BlockHeaderMeta> for BlockValue {
             bits: header.bits,
             #[cfg(not(feature="liquid"))]
             nonce: header.nonce,
+
+            #[cfg(feature="liquid")]
+            proof: Some(BlockProofValue::from(&header.proof)),
         }
     }
 }
@@ -827,7 +835,14 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
             .get_block_with_meta(&current_hash)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
-        values.push(BlockValue::from(blockhm));
+
+         let mut value = BlockValue::from(blockhm);
+
+        #[cfg(feature="liquid")] {
+            // exclude proof in block list view
+            value.proof = None;
+        }
+        values.push(value);
 
         if &current_hash[..] == &zero[..] {
             break;
