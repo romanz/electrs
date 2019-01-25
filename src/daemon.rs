@@ -337,7 +337,7 @@ impl Daemon {
             // initialblockdownload is unavailable on the 0.14-based elements
             let synced = match info.initialblockdownload {
                 Some(ibd) => !ibd,
-                None => info.verificationprogress > 0.999,
+                None => info.verificationprogress == 1.0,
             };
 
             if synced {
