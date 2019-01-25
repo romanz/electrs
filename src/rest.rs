@@ -98,12 +98,21 @@ impl From<Transaction> for TransactionValue {
             .iter()
             .map(|el| TxInValue::from(el.clone())) // TODO avoid clone
             .collect();
-        let vout = tx
+        let vout: Vec<TxOutValue> = tx
             .output
             .iter()
             .map(|el| TxOutValue::from(el.clone())) // TODO avoid clone
             .collect();
         let bytes = serialize(&tx);
+
+        #[cfg(not(feature="liquid"))]
+        let fee = None; // added later
+        #[cfg(feature="liquid")]
+        let fee = vout
+            .iter()
+            .find(|vout| vout.scriptpubkey_type == "fee")
+            .map(|vout| vout.value.unwrap())
+            .or_else(|| Some(0));
 
         TransactionValue {
             txid: tx.txid(),
@@ -113,7 +122,7 @@ impl From<Transaction> for TransactionValue {
             vout,
             size: bytes.len() as u32,
             weight: tx.get_weight() as u32,
-            fee: None, // added later
+            fee,
             status: None,
         }
     }
