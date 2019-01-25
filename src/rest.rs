@@ -17,7 +17,7 @@ use hyper::service::service_fn_ok;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature="liquid")]
-use elements::confidential::Value;
+use elements::confidential::{Asset,Value};
 
 use serde::Serialize;
 use serde_json;
@@ -180,10 +180,16 @@ struct TxOutValue {
 
     #[cfg(not(feature="liquid"))]
     value: u64,
+
     #[cfg(feature="liquid")]
     value: Option<u64>,
     #[cfg(feature="liquid")]
     valuecommitment: Option<String>,
+
+    #[cfg(feature="liquid")]
+    asset: Option<String>,
+    #[cfg(feature="liquid")]
+    assetcommitment: Option<String>,
 }
 
 impl From<TxOut> for TxOutValue {
@@ -199,6 +205,16 @@ impl From<TxOut> for TxOutValue {
         #[cfg(feature="liquid")]
         let valuecommitment = match txout.value {
             Value::Confidential(..) => Some(hex::encode(serialize(&txout.value))),
+            _ => None,
+        };
+        #[cfg(feature="liquid")]
+        let asset = match txout.asset {
+            Asset::Explicit(value) => Some(value.be_hex_string()),
+            _ => None,
+        };
+        #[cfg(feature="liquid")]
+        let assetcommitment = match txout.asset {
+            Asset::Confidential(..) => Some(hex::encode(serialize(&txout.asset))),
             _ => None,
         };
 
@@ -241,6 +257,10 @@ impl From<TxOut> for TxOutValue {
             value,
             #[cfg(feature="liquid")]
             valuecommitment,
+            #[cfg(feature="liquid")]
+            asset,
+            #[cfg(feature="liquid")]
+            assetcommitment,
         }
     }
 }
