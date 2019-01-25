@@ -1,4 +1,3 @@
-use bitcoin::network::constants::Network;
 use clap::{App, Arg};
 use dirs::home_dir;
 use num_cpus;
@@ -8,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
 
+use crate::chain::Network;
 use crate::daemon::CookieGetter;
 
 use crate::errors::*;
@@ -131,12 +131,7 @@ impl Config {
             .get_matches();
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
-        let network_type = match network_name {
-            "mainnet" => Network::Bitcoin,
-            "testnet" => Network::Testnet,
-            "regtest" => Network::Regtest,
-            _ => panic!("unsupported Bitcoin network: {:?}", network_name),
-        };
+        let network_type = Network::from(network_name);
         let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let db_path = db_dir.join(network_name);
 
@@ -144,21 +139,41 @@ impl Config {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 10099,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 7041,
         };
         let default_electrum_port = match network_type {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 51000,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 51401,
         };
         let default_http_port = match network_type {
             Network::Bitcoin => 3000,
             Network::Testnet => 3001,
             Network::Regtest => 3002,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 3000,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 3002,
         };
         let default_monitoring_port = match network_type {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 34224,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 44224,
         };
 
         let daemon_rpc_addr: SocketAddr = m
@@ -194,6 +209,11 @@ impl Config {
             Network::Bitcoin => (),
             Network::Testnet => daemon_dir.push("testnet3"),
             Network::Regtest => daemon_dir.push("regtest"),
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => daemon_dir.push("liquid"),
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
         }
         let cookie = m.value_of("cookie").map(|s| s.to_owned());
 

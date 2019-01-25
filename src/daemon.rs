@@ -1,6 +1,5 @@
 use base64;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::network::constants::Network;
 use bitcoin::util::hash::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use glob;
@@ -13,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::chain::{Block, BlockHeader, Transaction};
+use crate::chain::{Block, BlockHeader, Transaction, Network};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::HeaderList;

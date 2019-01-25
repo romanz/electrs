@@ -1,4 +1,4 @@
-use crate::chain::{OutPoint, Transaction, TxIn, TxOut};
+use crate::chain::{OutPoint, Transaction, TxIn, TxOut, Network};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
@@ -7,7 +7,6 @@ use crate::util::{
 };
 
 use bitcoin::consensus::encode::{self, serialize};
-use bitcoin::network::constants::Network;
 use bitcoin::util::address::Address;
 use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
@@ -809,8 +808,16 @@ fn to_scripthash(
 
 fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
     let addr = Address::from_str(addr)?;
-    if addr.network != *network
-        && !(addr.network == Network::Testnet && *network == Network::Regtest)
+
+    let addr_network = Network::from(&addr.network);
+
+    #[cfg(not(feature = "liquid"))]
+    let regtest_net = Network::Regtest;
+    #[cfg(feature = "liquid")]
+    let regtest_net = Network::LiquidRegtest;
+
+    if addr_network != *network
+        && !(addr_network == Network::Testnet && *network == regtest_net)
     {
         bail!(HttpError::from("Address on invalid network".to_string()))
     }

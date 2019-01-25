@@ -375,10 +375,11 @@ where
         .unwrap()
 }
 
-use bitcoin::network::constants::Network;
+use crate::chain::Network;
 use bitcoin::util::address::{Address, Payload};
 use bitcoin::util::hash::Hash160;
 use bitcoin::Script;
+use bitcoin::network::constants::Network as BNetwork;
 use bitcoin_bech32::constants::Network as B32Network;
 use bitcoin_bech32::{u5, WitnessProgram};
 
@@ -395,7 +396,7 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
             WitnessProgram::new(
                 u5::try_from_u8(0).expect("0<32"),
                 script[2..22].to_vec(),
-                to_bech_network(network),
+                B32Network::from(network),
             )
             .unwrap(),
         ))
@@ -404,7 +405,7 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
             WitnessProgram::new(
                 u5::try_from_u8(0).expect("0<32"),
                 script[2..34].to_vec(),
-                to_bech_network(network),
+                B32Network::from(network),
             )
             .unwrap(),
         ))
@@ -415,18 +416,10 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
     Some(
         Address {
             payload: payload?,
-            network: *network,
+            network: BNetwork::from(network),
         }
         .to_string(),
     )
-}
-
-fn to_bech_network(network: &Network) -> B32Network {
-    match network {
-        Network::Bitcoin => B32Network::Bitcoin,
-        Network::Testnet => B32Network::Testnet,
-        Network::Regtest => B32Network::Regtest,
-    }
 }
 
 pub fn get_script_asm(script: &Script) -> String {
