@@ -1,9 +1,10 @@
-use crate::chain::{OutPoint, Transaction, TxIn, TxOut, Network};
+use crate::chain::{Network, OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, BlockId, Query, SpendingInput, Utxo};
 use crate::util::{
-    is_coinbase, full_hash, get_script_asm, script_to_address, BlockHeaderMeta, FullHash, TransactionStatus,
+    full_hash, get_script_asm, is_coinbase, script_to_address, BlockHeaderMeta, FullHash,
+    TransactionStatus,
 };
 use crate::utils::Address;
 
@@ -21,8 +22,8 @@ use hyper::rt::{self, Future};
 use hyper::service::service_fn_ok;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-#[cfg(feature="liquid")]
-use elements::confidential::{Asset,Value};
+#[cfg(feature = "liquid")]
+use elements::confidential::{Asset, Value};
 
 use serde::Serialize;
 use serde_json;
@@ -51,9 +52,9 @@ struct BlockValue {
     weight: u32,
     merkle_root: String,
     previousblockhash: Option<String>,
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     nonce: u32,
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     bits: u32,
     #[cfg(feature = "liquid")]
     proof: Option<BlockProofValue>,
@@ -77,12 +78,12 @@ impl From<BlockHeaderMeta> for BlockValue {
                 None
             },
 
-            #[cfg(not(feature="liquid"))]
+            #[cfg(not(feature = "liquid"))]
             bits: header.bits,
-            #[cfg(not(feature="liquid"))]
+            #[cfg(not(feature = "liquid"))]
             nonce: header.nonce,
 
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             proof: Some(BlockProofValue::from(&header.proof)),
         }
     }
@@ -115,9 +116,9 @@ impl From<Transaction> for TransactionValue {
             .collect();
         let bytes = serialize(&tx);
 
-        #[cfg(not(feature="liquid"))]
+        #[cfg(not(feature = "liquid"))]
         let fee = None; // added later
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let fee = vout
             .iter()
             .find(|vout| vout.scriptpubkey_type == "fee")
@@ -157,21 +158,21 @@ struct TxInValue {
     is_coinbase: bool,
     sequence: u32,
 
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     is_pegin: bool,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     issuance: Option<IssuanceValue>,
 }
 
 impl From<TxIn> for TxInValue {
     fn from(txin: TxIn) -> Self {
-        #[cfg(not(feature="liquid"))]
+        #[cfg(not(feature = "liquid"))]
         let witness = if txin.witness.len() > 0 {
             Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
         } else {
             None
         };
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let witness = None; // @TODO
 
         let is_coinbase = is_coinbase(&txin);
@@ -184,10 +185,14 @@ impl From<TxIn> for TxInValue {
             witness,
             is_coinbase,
             sequence: txin.sequence,
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             is_pegin: txin.is_pegin,
-            #[cfg(feature="liquid")]
-            issuance: if txin.has_issuance() { Some(IssuanceValue::from(&txin.asset_issuance)) } else { None },
+            #[cfg(feature = "liquid")]
+            issuance: if txin.has_issuance() {
+                Some(IssuanceValue::from(&txin.asset_issuance))
+            } else {
+                None
+            },
 
             scriptsig: txin.script_sig,
         }
@@ -201,50 +206,50 @@ struct TxOutValue {
     scriptpubkey_address: Option<String>,
     scriptpubkey_type: String,
 
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     value: u64,
 
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     value: Option<u64>,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     valuecommitment: Option<String>,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     asset: Option<String>,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     assetcommitment: Option<String>,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     pegout: Option<PegOutRequest>,
 }
 
 impl From<TxOut> for TxOutValue {
     fn from(txout: TxOut) -> Self {
-        #[cfg(not(feature="liquid"))]
+        #[cfg(not(feature = "liquid"))]
         let value = txout.value;
 
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let value = match txout.value {
             Value::Explicit(value) => Some(value),
             _ => None,
         };
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let valuecommitment = match txout.value {
             Value::Confidential(..) => Some(hex::encode(serialize(&txout.value))),
             _ => None,
         };
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let asset = match txout.asset {
             Asset::Explicit(value) => Some(value.be_hex_string()),
             _ => None,
         };
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let assetcommitment = match txout.asset {
             Asset::Confidential(..) => Some(hex::encode(serialize(&txout.asset))),
             _ => None,
         };
 
-        #[cfg(not(feature="liquid"))]
+        #[cfg(not(feature = "liquid"))]
         let is_fee = false;
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let is_fee = txout.is_fee();
 
         let script = txout.script_pubkey;
@@ -279,13 +284,13 @@ impl From<TxOut> for TxOutValue {
             scriptpubkey_address: None, // added later
             scriptpubkey_type: script_type.to_string(),
             value,
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             valuecommitment,
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             asset,
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             assetcommitment,
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             pegout: None, // added later
         }
     }
@@ -296,24 +301,24 @@ struct UtxoValue {
     txid: Sha256dHash,
     vout: u32,
     status: TransactionStatus,
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     value: u64,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     value: Option<u64>,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     valuecommitment: Option<String>,
 }
 impl From<Utxo> for UtxoValue {
     fn from(utxo: Utxo) -> Self {
-        #[cfg(not(feature="liquid"))]
+        #[cfg(not(feature = "liquid"))]
         let value = utxo.value;
 
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let value = match utxo.value {
             Value::Explicit(value) => Some(value),
             _ => None,
         };
-        #[cfg(feature="liquid")]
+        #[cfg(feature = "liquid")]
         let valuecommitment = match utxo.value {
             Value::Confidential(..) => Some(hex::encode(serialize(&utxo.value))),
             _ => None,
@@ -324,7 +329,7 @@ impl From<Utxo> for UtxoValue {
             vout: utxo.vout,
             value,
             status: TransactionStatus::from(utxo.confirmed),
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             valuecommitment,
         }
     }
@@ -385,12 +390,13 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
             // collect lookups
             if config.prevout_enabled {
                 for vin in tx.vin.iter_mut() {
-
-                    #[cfg(not(feature="liquid"))]
+                    #[cfg(not(feature = "liquid"))]
                     let has_prevout = !vin.is_coinbase;
 
-                    #[cfg(feature="liquid")]
-                    let has_prevout = !vin.is_coinbase && !vin.is_pegin && vin.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+                    #[cfg(feature = "liquid")]
+                    let has_prevout = !vin.is_coinbase
+                        && !vin.is_pegin
+                        && vin.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
 
                     if has_prevout {
                         let outpoint = OutPoint {
@@ -407,8 +413,8 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
                 vout.scriptpubkey_address =
                     script_to_address(&vout.scriptpubkey, &config.network_type);
 
-
-                #[cfg(feature="liquid")] {
+                #[cfg(feature = "liquid")]
+                {
                     vout.pegout = PegOutRequest::parse(
                         &vout.scriptpubkey,
                         &config.parent_network,
@@ -435,7 +441,8 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
     }
 
     // attach tx fee
-    #[cfg(not(feature="liquid"))] {
+    #[cfg(not(feature = "liquid"))]
+    {
         if config.prevout_enabled {
             for mut tx in txs.iter_mut() {
                 if tx.vin.iter().any(|vin| vin.prevout.is_none()) {
@@ -652,7 +659,10 @@ fn handle_request(
 
             attach_txs_data(&mut mempool_txs, config, query);
 
-            json_response(json!({ "chain": chain_txs, "mempool": mempool_txs }), TTL_SHORT)
+            json_response(
+                json!({ "chain": chain_txs, "mempool": mempool_txs }),
+                TTL_SHORT,
+            )
         }
 
         (
@@ -676,7 +686,11 @@ fn handle_request(
 
             let mut txs = query
                 .chain()
-                .history(&script_hash[..], last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
+                .history(
+                    &script_hash[..],
+                    last_seen_txid.as_ref(),
+                    CHAIN_TXS_PER_PAGE,
+                )
                 .into_iter()
                 .map(TransactionValue::from)
                 .collect();
@@ -715,7 +729,14 @@ fn handle_request(
             json_response(txs, TTL_SHORT)
         }
 
-        (&Method::GET, Some(script_type @ &"address"), Some(script_str), Some(&"utxo"), None, None)
+        (
+            &Method::GET,
+            Some(script_type @ &"address"),
+            Some(script_str),
+            Some(&"utxo"),
+            None,
+            None,
+        )
         | (
             &Method::GET,
             Some(script_type @ &"scripthash"),
@@ -864,7 +885,8 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
         #[allow(unused_mut)]
         let mut value = BlockValue::from(blockhm);
 
-        #[cfg(feature="liquid")] {
+        #[cfg(feature = "liquid")]
+        {
             // exclude proof in block list view
             value.proof = None;
         }
@@ -897,9 +919,7 @@ fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, Http
     #[cfg(feature = "liquid")]
     let regtest_net = Network::LiquidRegtest;
 
-    if addr.network != *network
-        && !(addr.network == Network::Testnet && *network == regtest_net)
-    {
+    if addr.network != *network && !(addr.network == Network::Testnet && *network == regtest_net) {
         bail!(HttpError::from("Address on invalid network".to_string()))
     }
     Ok(compute_script_hash(&addr.script_pubkey()))

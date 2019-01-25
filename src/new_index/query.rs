@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
-use crate::util::{Bytes, TransactionStatus, is_spendable};
+use crate::util::{is_spendable, Bytes, TransactionStatus};
 
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only

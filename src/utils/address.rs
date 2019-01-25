@@ -183,10 +183,8 @@ impl Address {
             Network::Regtest => bitcoin_bech32::constants::Network::Regtest,
 
             // this should never actually happen, Liquid does not have bech32 addresses
-            #[cfg(feature="liquid")]
-            Network::Liquid | Network::LiquidRegtest => {
-                bitcoin_bech32::constants::Network::Bitcoin
-            }
+            #[cfg(feature = "liquid")]
+            Network::Liquid | Network::LiquidRegtest => bitcoin_bech32::constants::Network::Bitcoin,
         }
     }
 
@@ -225,9 +223,9 @@ impl Display for Address {
                     Network::Bitcoin => 0,
                     Network::Testnet | Network::Regtest => 111,
 
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::Liquid => 57,
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::LiquidRegtest => 196,
                 };
                 prefixed[1..].copy_from_slice(&hash[..]);
@@ -239,9 +237,9 @@ impl Display for Address {
                     Network::Bitcoin => 0,
                     Network::Testnet | Network::Regtest => 111,
 
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::Liquid => 57,
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::LiquidRegtest => 235,
                 };
                 prefixed[1..].copy_from_slice(&hash[..]);
@@ -253,9 +251,9 @@ impl Display for Address {
                     Network::Bitcoin => 5,
                     Network::Testnet | Network::Regtest => 196,
 
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::Liquid => 39,
-                    #[cfg(feature="liquid")]
+                    #[cfg(feature = "liquid")]
                     Network::LiquidRegtest => 75,
                 };
                 prefixed[1..].copy_from_slice(&hash[..]);
@@ -328,22 +326,22 @@ impl FromStr for Address {
                 Network::Testnet,
                 Payload::ScriptHash(Hash160::from(&data[1..])),
             ),
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             57 => (
                 Network::Liquid,
                 Payload::PubkeyHash(Hash160::from(&data[1..])),
             ),
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             39 => (
                 Network::Liquid,
                 Payload::ScriptHash(Hash160::from(&data[1..])),
             ),
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             235 => (
                 Network::LiquidRegtest,
                 Payload::PubkeyHash(Hash160::from(&data[1..])),
             ),
-            #[cfg(feature="liquid")]
+            #[cfg(feature = "liquid")]
             75 => (
                 Network::LiquidRegtest,
                 Payload::ScriptHash(Hash160::from(&data[1..])),
@@ -351,7 +349,7 @@ impl FromStr for Address {
             x => {
                 return Err(encode::Error::Base58(base58::Error::InvalidVersion(vec![
                     x,
-                ])))
+                ])));
             }
         };
 

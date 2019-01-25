@@ -31,16 +31,18 @@ pub struct Config {
     pub extended_db_enabled: bool,
     pub prevout_enabled: bool,
 
-
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     pub parent_network: Network,
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     pub parent_genesis_hash: String,
 }
 
 impl Config {
     pub fn from_args() -> Config {
-        let network_help = format!("Select Bitcoin network type ({})",  Network::names().join(", "));
+        let network_help = format!(
+            "Select Bitcoin network type ({})",
+            Network::names().join(", ")
+        );
 
         let args = App::new("Electrum Rust Server")
             .version(crate_version!())
@@ -137,14 +139,13 @@ impl Config {
                     .help("Don't attach previous output details to inputs")
             );
 
-        #[cfg(feature="liquid")]
-        let args = args
-            .arg(
-                Arg::with_name("parent_network")
-                    .long("parent-network")
-                    .help("Select parent network type (mainnet, testnet, regtest)")
-                    .takes_value(true),
-            );
+        #[cfg(feature = "liquid")]
+        let args = args.arg(
+            Arg::with_name("parent_network")
+                .long("parent-network")
+                .help("Select parent network type (mainnet, testnet, regtest)")
+                .takes_value(true),
+        );
 
         let m = args.get_matches();
 

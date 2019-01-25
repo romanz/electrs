@@ -15,8 +15,9 @@ use time;
 pub type Bytes = Vec<u8>;
 pub type HeaderMap = HashMap<Sha256dHash, BlockHeader>;
 
-#[cfg(feature="liquid")]
-pub const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str = "cb4953dfe64aba4687d0de08e5ce17d8f7640deeef63be4ac3bac3afdefdfd78";
+#[cfg(feature = "liquid")]
+pub const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str =
+    "cb4953dfe64aba4687d0de08e5ce17d8f7640deeef63be4ac3bac3afdefdfd78";
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;
@@ -424,24 +425,24 @@ pub fn get_script_asm(script: &Script) -> String {
 }
 
 pub fn is_coinbase(txin: &TxIn) -> bool {
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     return txin.previous_output.is_null();
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     return txin.is_coinbase();
 }
 
 pub fn has_prevout(txin: &TxIn) -> bool {
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     return !txin.previous_output.is_null();
-    #[cfg(feature="liquid")]
-    debug!("has_prevout: {} == {}", txin.previous_output.txid.be_hex_string(), REGTEST_INITIAL_ISSUANCE_PREVOUT);
-    #[cfg(feature="liquid")]
-    return !txin.is_coinbase() && !txin.is_pegin && txin.previous_output.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+    #[cfg(feature = "liquid")]
+    return !txin.is_coinbase()
+        && !txin.is_pegin
+        && txin.previous_output.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
 }
 
 pub fn is_spendable(txout: &TxOut) -> bool {
-    #[cfg(not(feature="liquid"))]
+    #[cfg(not(feature = "liquid"))]
     return !txout.script_pubkey.is_provably_unspendable();
-    #[cfg(feature="liquid")]
+    #[cfg(feature = "liquid")]
     return !txout.is_fee() && !txout.script_pubkey.is_provably_unspendable();
 }

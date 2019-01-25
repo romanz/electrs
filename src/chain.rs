@@ -4,10 +4,10 @@ pub use bitcoin::{Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 #[cfg(feature = "liquid")]
 pub use elements::{confidential, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 
-use bitcoin::util::hash::BitcoinHash;
-use bitcoin::util::hash::Sha256dHash;
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
+use bitcoin::util::hash::BitcoinHash;
+use bitcoin::util::hash::Sha256dHash;
 use bitcoin_bech32::constants::Network as B32Network;
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize)]
@@ -43,10 +43,20 @@ impl Network {
 
     pub fn names() -> Vec<String> {
         #[cfg(not(feature = "liquid"))]
-        return vec!["mainnet".to_string(), "testnet".to_string(), "regtest".to_string()];
+        return vec![
+            "mainnet".to_string(),
+            "testnet".to_string(),
+            "regtest".to_string(),
+        ];
 
         #[cfg(feature = "liquid")]
-        return vec!["mainnet".to_string(), "testnet".to_string(), "regtest".to_string(), "liquid".to_string(), "liquidregtest".to_string()];
+        return vec![
+            "mainnet".to_string(),
+            "testnet".to_string(),
+            "regtest".to_string(),
+            "liquid".to_string(),
+            "liquidregtest".to_string(),
+        ];
     }
 }
 
@@ -75,7 +85,7 @@ impl From<&Network> for BNetwork {
             Network::Regtest => BNetwork::Regtest,
 
             #[cfg(feature = "liquid")]
-            Network::Liquid => BNetwork::Bitcoin,   // @FIXME
+            Network::Liquid => BNetwork::Bitcoin, // @FIXME
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => BNetwork::Regtest, // @FIXME
         }
@@ -105,10 +115,10 @@ impl From<&BNetwork> for Network {
             BNetwork::Regtest => Network::Regtest,
 
             #[cfg(feature = "liquid")]
-            BNetwork::Bitcoin => Network::Liquid,        // @FIXME
+            BNetwork::Bitcoin => Network::Liquid, // @FIXME
             #[cfg(feature = "liquid")]
             BNetwork::Regtest => Network::LiquidRegtest, // @FIXME
-            BNetwork::Testnet => Network::Testnet,       // @FIXME
+            BNetwork::Testnet => Network::Testnet, // @FIXME
         }
     }
 }

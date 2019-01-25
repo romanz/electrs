@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::chain::{Block, BlockHeader, Transaction, Network};
+use crate::chain::{Block, BlockHeader, Network, Transaction};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::HeaderList;
@@ -340,7 +340,9 @@ impl Daemon {
                 None => info.verificationprogress > 0.999,
             };
 
-            if synced { break; }
+            if synced {
+                break;
+            }
 
             warn!("wait until bitcoind is synced");
             signal.wait(Duration::from_secs(3))?;

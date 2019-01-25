@@ -8,13 +8,13 @@ use std::sync::Arc;
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
+use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
     compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::Bytes;
-use crate::errors::*;
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
@@ -123,22 +123,22 @@ impl Mempool {
             }
 
             match entry {
-                #[cfg(not(feature="liquid"))]
+                #[cfg(not(feature = "liquid"))]
                 TxHistoryInfo::Funding(info) => {
                     stats.funded_txo_count += 1;
                     stats.funded_txo_sum += info.value;
                 }
-                #[cfg(feature="liquid")]
+                #[cfg(feature = "liquid")]
                 TxHistoryInfo::Funding(_) => {
                     stats.funded_txo_count += 1;
                 }
 
-                #[cfg(not(feature="liquid"))]
+                #[cfg(not(feature = "liquid"))]
                 TxHistoryInfo::Spending(info) => {
                     stats.spent_txo_count += 1;
                     stats.spent_txo_sum += info.value;
                 }
-                #[cfg(feature="liquid")]
+                #[cfg(feature = "liquid")]
                 TxHistoryInfo::Spending(_) => {
                     stats.spent_txo_count += 1;
                 }

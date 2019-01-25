@@ -1,13 +1,13 @@
-use elements::{Proof, AssetIssuance};
-use elements::confidential::Value;
-use bitcoin::Script;
-use bitcoin::consensus::encode::serialize;
 use bitcoin::blockdata::script::Instruction::PushBytes;
+use bitcoin::consensus::encode::serialize;
+use bitcoin::Script;
+use elements::confidential::Value;
+use elements::{AssetIssuance, Proof};
 
 use hex;
 
 use crate::chain::Network;
-use crate::util::{get_script_asm,script_to_address};
+use crate::util::{get_script_asm, script_to_address};
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockProofValue {
@@ -41,7 +41,7 @@ pub struct IssuanceValue {
 
 impl From<&AssetIssuance> for IssuanceValue {
     fn from(issuance: &AssetIssuance) -> Self {
-        let zero = [0u8;32];
+        let zero = [0u8; 32];
         let is_reissuance = issuance.asset_blinding_nonce != zero;
 
         IssuanceValue {
@@ -69,9 +69,7 @@ impl From<&AssetIssuance> for IssuanceValue {
                 _ => None,
             },
             tokenamountcommitment: match issuance.inflation_keys {
-                Value::Confidential(..) => {
-                    Some(hex::encode(serialize(&issuance.inflation_keys)))
-                }
+                Value::Confidential(..) => Some(hex::encode(serialize(&issuance.inflation_keys))),
                 _ => None,
             },
         }
