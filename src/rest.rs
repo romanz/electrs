@@ -8,7 +8,7 @@ use crate::util::{
 use crate::utils::Address;
 
 #[cfg(feature = "liquid")]
-use crate::utils::BlockProofValue;
+use crate::utils::{BlockProofValue,IssuanceValue};
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::util::hash::{HexError, Sha256dHash};
@@ -157,6 +157,8 @@ struct TxInValue {
 
     #[cfg(feature="liquid")]
     is_pegin: bool,
+    #[cfg(feature="liquid")]
+    issuance: Option<IssuanceValue>,
 }
 
 impl From<TxIn> for TxInValue {
@@ -171,19 +173,21 @@ impl From<TxIn> for TxInValue {
         let witness = None; // @TODO
 
         let is_coinbase = is_coinbase(&txin);
-        let script = txin.script_sig;
 
         TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
             prevout: None, // added later
-            scriptsig_asm: get_script_asm(&script),
-            scriptsig: script,
+            scriptsig_asm: get_script_asm(&txin.script_sig),
             witness,
             is_coinbase,
             sequence: txin.sequence,
             #[cfg(feature="liquid")]
             is_pegin: txin.is_pegin,
+            #[cfg(feature="liquid")]
+            issuance: if txin.has_issuance() { Some(IssuanceValue::from(&txin.asset_issuance)) } else { None },
+
+            scriptsig: txin.script_sig,
         }
     }
 }
