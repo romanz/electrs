@@ -1,7 +1,7 @@
 use bitcoin::util::hash::Sha256dHash;
 
 use crate::chain::{TxIn, TxOut};
-use crate::util::{BlockId, HeaderEntry};
+use crate::util::BlockId;
 
 #[cfg(feature = "liquid")]
 use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
@@ -13,23 +13,6 @@ pub struct TransactionStatus {
     pub block_hash: Option<Sha256dHash>,
 }
 
-impl TransactionStatus {
-    pub fn unconfirmed() -> Self {
-        TransactionStatus {
-            confirmed: false,
-            block_height: None,
-            block_hash: None,
-        }
-    }
-    pub fn confirmed(header: &HeaderEntry) -> Self {
-        TransactionStatus {
-            confirmed: true,
-            block_height: Some(header.height()),
-            block_hash: Some(header.hash().clone()),
-        }
-    }
-}
-
 impl From<Option<BlockId>> for TransactionStatus {
     fn from(blockid: Option<BlockId>) -> TransactionStatus {
         match blockid {
@@ -38,7 +21,11 @@ impl From<Option<BlockId>> for TransactionStatus {
                 block_height: Some(b.height as usize),
                 block_hash: Some(b.hash),
             },
-            None => TransactionStatus::unconfirmed(),
+            None => TransactionStatus {
+                confirmed: false,
+                block_height: None,
+                block_hash: None,
+            },
         }
     }
 }

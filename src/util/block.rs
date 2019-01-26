@@ -213,7 +213,7 @@ impl BlockStatus {
 
     pub fn orphaned() -> BlockStatus {
         BlockStatus {
-            in_best_chain: true,
+            in_best_chain: false,
             height: None,
             next_best: None,
         }
