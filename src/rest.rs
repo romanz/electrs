@@ -1,5 +1,6 @@
 use crate::chain::{Network, OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
+use crate::daemon::Daemon;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::Address;
@@ -27,11 +28,12 @@ use elements::confidential::{Asset, Value};
 
 use serde::Serialize;
 use serde_json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
+use url::form_urlencoded;
 
 const CHAIN_TXS_PER_PAGE: usize = 25;
 const MAX_MEMPOOL_TXS: usize = 50;
@@ -461,18 +463,19 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
     }
 }
 
-pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
+pub fn run_server(config: Arc<Config>, query: Arc<Query>, daemon: Arc<Daemon>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 
     let config = Arc::new(config.clone());
 
     let new_service = move || {
-        let query = query.clone();
-        let config = config.clone();
+        let query = Arc::clone(&query);
+        let config = Arc::clone(&config);
+        let daemon = Arc::clone(&daemon);
 
         service_fn_ok(
-            move |req: Request<Body>| match handle_request(req, &query, &config) {
+            move |req: Request<Body>| match handle_request(req, &query, &config, &daemon) {
                 Ok(response) => response,
                 Err(e) => {
                     warn!("{:?}", e);
@@ -516,10 +519,18 @@ fn handle_request(
     req: Request<Body>,
     query: &Query,
     config: &Config,
+    daemon: &Daemon,
 ) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
+    let query_params = match uri.query() {
+        Some(value) => form_urlencoded::parse(&value.as_bytes())
+            .into_owned()
+            .collect::<HashMap<String, String>>(),
+        None => HashMap::new(),
+    };
+
     info!("path {:?}", path);
     match (
         req.method(),
@@ -833,6 +844,17 @@ fn handle_request(
             // @TODO long ttl if all outputs are either spent long ago or unspendable
             json_response(spends, TTL_SHORT)
         }
+        (&Method::POST, Some(&"tx"), None, None, None, None) => {
+            // FIXME read txhex from post body
+            let txhex = query_params
+                .get("txhex")
+                .ok_or_else(|| HttpError::from("Missing txhex".to_string()))?;
+            let txid = daemon
+                .broadcast_raw(&txhex)
+                .map_err(|err| HttpError::from(err.description().to_string()))?;
+            http_message(StatusCode::OK, hex::encode(serialize(&txid)), 0)
+        }
+
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",
             uri.path()

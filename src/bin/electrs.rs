@@ -50,14 +50,14 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
-    let daemon = Daemon::new(
+    let daemon = Arc::new(Daemon::new(
         &config.daemon_dir,
         config.daemon_rpc_addr,
         config.cookie_getter(),
         config.network_type,
         signal.clone(),
         &metrics,
-    )?;
+    )?);
     finish_verification(&daemon, &signal)?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
@@ -68,7 +68,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     mempool.write().unwrap().update(&daemon)?;
     let query = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
 
-    let server = rest::run_server(config, query);
+    let server = rest::run_server(config, query, Arc::clone(&daemon));
 
     loop {
         if let Err(err) = signal.wait(Duration::from_secs(5)) {

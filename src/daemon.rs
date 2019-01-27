@@ -542,8 +542,11 @@ impl Daemon {
     }
 
     pub fn broadcast(&self, tx: &Transaction) -> Result<Sha256dHash> {
-        let tx = hex::encode(serialize(tx));
-        let txid = self.request("sendrawtransaction", json!([tx]))?;
+        self.broadcast_raw(&hex::encode(serialize(tx)))
+    }
+
+    pub fn broadcast_raw(&self, txhex: &String) -> Result<Sha256dHash> {
+        let txid = self.request("sendrawtransaction", json!([txhex]))?;
         Ok(
             Sha256dHash::from_hex(txid.as_str().chain_err(|| "non-string txid")?)
                 .chain_err(|| "failed to parse txid")?,
