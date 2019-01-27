@@ -474,19 +474,21 @@ pub fn run_server(config: Arc<Config>, query: Arc<Query>, daemon: Arc<Daemon>) -
         let config = Arc::clone(&config);
         let daemon = Arc::clone(&daemon);
 
-        service_fn_ok(
-            move |req: Request<Body>| match handle_request(req, &query, &config, &daemon) {
-                Ok(response) => response,
-                Err(e) => {
-                    warn!("{:?}", e);
-                    Response::builder()
-                        .status(e.0)
-                        .header("Content-Type", "text/plain")
-                        .body(Body::from(e.1))
-                        .unwrap()
-                }
-            },
-        )
+        service_fn_ok(move |req: Request<Body>| {
+            let mut resp = handle_request(req, &query, &config, &daemon).unwrap_or_else(|err| {
+                warn!("{:?}", err);
+                Response::builder()
+                    .status(err.0)
+                    .header("Content-Type", "text/plain")
+                    .body(Body::from(err.1))
+                    .unwrap()
+            });
+            if let Some(ref origins) = config.cors {
+                resp.headers_mut()
+                    .insert("Access-Control-Allow-Origin", origins.parse().unwrap());
+            }
+            resp
+        })
     };
 
     let (tx, rx) = oneshot::channel::<()>();

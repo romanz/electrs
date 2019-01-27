@@ -30,6 +30,7 @@ pub struct Config {
     pub tx_cache_size: usize,
     pub extended_db_enabled: bool,
     pub prevout_enabled: bool,
+    pub cors: Option<String>,
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
@@ -137,6 +138,12 @@ impl Config {
                 Arg::with_name("disable_prevout")
                     .long("disable-prevout")
                     .help("Don't attach previous output details to inputs")
+            )
+            .arg(
+                Arg::with_name("cors")
+                    .long("cors")
+                    .help("Origins allowed to make cross-site requests")
+                    .takes_value(true)
             );
 
         #[cfg(feature = "liquid")]
@@ -269,6 +276,7 @@ impl Config {
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
             extended_db_enabled: !m.is_present("light"),
             prevout_enabled: !m.is_present("disable_prevout"),
+            cors: m.value_of("cors").map(|s| s.to_string()),
             #[cfg(feature = "liquid")]
             parent_network,
             #[cfg(feature = "liquid")]
