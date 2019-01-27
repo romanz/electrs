@@ -461,7 +461,7 @@ fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Que
     }
 }
 
-pub fn run_server(config: &Config, query: Arc<Query>) -> Handle {
+pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 

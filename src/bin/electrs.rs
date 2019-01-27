@@ -45,7 +45,7 @@ fn finish_verification(daemon: &Daemon, signal: &Waiter) -> Result<()> {
     }
 }
 
-fn run_server(config: Config) -> Result<()> {
+fn run_server(config: Arc<Config>) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
@@ -66,9 +66,9 @@ fn run_server(config: Config) -> Result<()> {
     let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
     let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain), &metrics)));
     mempool.write().unwrap().update(&daemon)?;
-    let q = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
+    let query = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
 
-    let server = rest::run_server(&config, q);
+    let server = rest::run_server(config, query);
 
     loop {
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
@@ -88,7 +88,7 @@ fn run_server(config: Config) -> Result<()> {
 }
 
 fn main() {
-    let config = Config::from_args();
+    let config = Arc::new(Config::from_args());
     if let Err(e) = run_server(config) {
         error!("server failed: {}", e.display_chain());
         process::exit(1);
