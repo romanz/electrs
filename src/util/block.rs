@@ -15,6 +15,7 @@ use time;
 pub struct BlockId {
     pub height: usize,
     pub hash: Sha256dHash,
+    pub time: u32,
 }
 
 impl From<&HeaderEntry> for BlockId {
@@ -22,6 +23,7 @@ impl From<&HeaderEntry> for BlockId {
         BlockId {
             height: header.height(),
             hash: *header.hash(),
+            time: header.header().time,
         }
     }
 }

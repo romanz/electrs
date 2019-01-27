@@ -11,6 +11,7 @@ pub struct TransactionStatus {
     pub confirmed: bool,
     pub block_height: Option<usize>,
     pub block_hash: Option<Sha256dHash>,
+    pub block_time: Option<u32>,
 }
 
 impl From<Option<BlockId>> for TransactionStatus {
@@ -20,11 +21,13 @@ impl From<Option<BlockId>> for TransactionStatus {
                 confirmed: true,
                 block_height: Some(b.height as usize),
                 block_hash: Some(b.hash),
+                block_time: Some(b.time),
             },
             None => TransactionStatus {
                 confirmed: false,
                 block_height: None,
                 block_hash: None,
+                block_time: None,
             },
         }
     }
