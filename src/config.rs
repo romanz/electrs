@@ -172,7 +172,7 @@ impl Config {
             Network::Regtest => 18443,
 
             #[cfg(feature = "liquid")]
-            Network::Liquid => 10099,
+            Network::Liquid => 7041,
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 7041,
         };
