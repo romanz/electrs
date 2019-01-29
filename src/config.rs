@@ -242,7 +242,7 @@ impl Config {
             Network::Regtest => daemon_dir.push("regtest"),
 
             #[cfg(feature = "liquid")]
-            Network::Liquid => daemon_dir.push("liquid"),
+            Network::Liquid => daemon_dir.push("liquidv1"),
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
         }
