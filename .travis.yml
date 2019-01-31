@@ -13,3 +13,4 @@ script:
   - cargo check --all
   - cargo build --all
   - cargo test --all
+  - cargo build --features "liquid" --all
