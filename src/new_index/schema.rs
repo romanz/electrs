@@ -7,14 +7,11 @@ use crypto::sha2::Sha256;
 use itertools::Itertools;
 use rayon::prelude::*;
 
-#[cfg(feature = "liquid")]
-use elements::confidential::Value;
-
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut};
+use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut, Value};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
@@ -67,9 +64,6 @@ pub struct Utxo {
     pub txid: Sha256dHash,
     pub vout: u32,
     pub confirmed: Option<BlockId>,
-    #[cfg(not(feature = "liquid"))]
-    pub value: u64,
-    #[cfg(feature = "liquid")]
     pub value: Value,
 }
 
@@ -971,9 +965,6 @@ impl BlockRow {
 pub struct FundingInfo {
     pub txid: FullHash, // funding transaction
     pub vout: u16,
-    #[cfg(not(feature = "liquid"))]
-    pub value: u64,
-    #[cfg(feature = "liquid")]
     pub value: Value,
 }
 
@@ -983,9 +974,6 @@ pub struct SpendingInfo {
     pub vin: u16,
     pub prev_txid: FullHash, // funding transaction
     pub prev_vout: u16,
-    #[cfg(not(feature = "liquid"))]
-    pub value: u64,
-    #[cfg(feature = "liquid")]
     pub value: Value,
 }
 

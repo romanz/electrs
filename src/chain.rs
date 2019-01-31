@@ -10,6 +10,11 @@ use bitcoin::util::hash::BitcoinHash;
 use bitcoin::util::hash::Sha256dHash;
 use bitcoin_bech32::constants::Network as B32Network;
 
+#[cfg(not(feature = "liquid"))]
+pub type Value = u64;
+#[cfg(feature = "liquid")]
+pub use confidential::Value;
+
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize)]
 pub enum Network {
     Bitcoin,
