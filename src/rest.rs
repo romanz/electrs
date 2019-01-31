@@ -654,28 +654,27 @@ fn handle_request(
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
 
-            let mut chain_txs = query
-                .chain()
-                .history(&script_hash[..], None, CHAIN_TXS_PER_PAGE)
-                .into_iter()
-                .map(TransactionValue::from)
-                .collect();
+            let mut txs = vec![];
 
-            attach_txs_data(&mut chain_txs, config, query);
+            txs.extend(
+                query
+                    .mempool()
+                    .history(&script_hash[..], MAX_MEMPOOL_TXS)
+                    .into_iter()
+                    .map(|tx| TransactionValue::from((tx, None))),
+            );
 
-            let mut mempool_txs = query
-                .mempool()
-                .history(&script_hash[..], MAX_MEMPOOL_TXS)
-                .into_iter()
-                .map(|tx| TransactionValue::from((tx, None)))
-                .collect();
+            txs.extend(
+                query
+                    .chain()
+                    .history(&script_hash[..], None, CHAIN_TXS_PER_PAGE)
+                    .into_iter()
+                    .map(TransactionValue::from),
+            );
 
-            attach_txs_data(&mut mempool_txs, config, query);
+            attach_txs_data(&mut txs, config, query);
 
-            json_response(
-                json!({ "chain": chain_txs, "mempool": mempool_txs }),
-                TTL_SHORT,
-            )
+            json_response(txs, TTL_SHORT)
         }
 
         (
