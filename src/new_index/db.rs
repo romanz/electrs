@@ -124,6 +124,18 @@ impl DB {
         }
     }
 
+    pub fn iter_scan_from(&self, prefix: &[u8], start_at: &[u8]) -> ScanIterator {
+        let iter = self.db.iterator(rocksdb::IteratorMode::From(
+            start_at,
+            rocksdb::Direction::Forward,
+        ));
+        ScanIterator {
+            prefix: prefix.to_vec(),
+            iter,
+            done: false,
+        }
+    }
+
     pub fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
         let mut iter = self.db.raw_iterator();
         iter.seek_for_prev(prefix_max);

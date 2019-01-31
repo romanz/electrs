@@ -290,15 +290,16 @@ impl ChainQuery {
         })
     }
 
-    fn history_iter_scan(&self, scripthash: &[u8]) -> ScanIterator {
-        self.store
-            .history_db
-            .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
+    fn history_iter_scan(&self, scripthash: &[u8], start_height: usize) -> ScanIterator {
+        self.store.history_db.iter_scan_from(
+            &TxHistoryRow::filter(&scripthash[..]),
+            &TxHistoryRow::prefix_height(&scripthash[..], start_height as u32),
+        )
     }
     fn history_iter_scan_reverse(&self, scripthash: &[u8]) -> ReverseScanIterator {
         self.store.history_db.iter_scan_reverse(
             &TxHistoryRow::filter(&scripthash[..]),
-            &TxHistoryRow::max_key(&scripthash[..]),
+            &TxHistoryRow::prefix_end(&scripthash[..]),
         )
     }
 
@@ -314,6 +315,7 @@ impl ChainQuery {
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             // XXX: unique() requires keeping an in-memory list of all txids, can we avoid that?
             .unique()
+            // TODO seek directly to last seen tx without reading earlier rows
             .skip_while(|txid| {
                 // skip until we reach the last_seen_txid
                 last_seen_txid.map_or(false, |last_seen_txid| last_seen_txid != txid)
@@ -389,10 +391,8 @@ impl ChainQuery {
     ) -> (UtxoMap, Option<Sha256dHash>, usize) {
         let _timer = self.start_timer("utxo_delta");
         let history_iter = self
-            .history_iter_scan(scripthash)
+            .history_iter_scan(scripthash, start_height)
             .map(TxHistoryRow::from_row)
-            // TODO: seek directly to start_height without reading earlier rows
-            .skip_while(|history| (history.key.confirmed_height as usize) < start_height)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|b| (history, b))
@@ -460,10 +460,8 @@ impl ChainQuery {
     ) -> (ScriptStats, Option<Sha256dHash>) {
         let _timer = self.start_timer("stats_delta"); // TODO: measure also the number of txns processed.
         let history_iter = self
-            .history_iter_scan(scripthash)
+            .history_iter_scan(scripthash, start_height)
             .map(TxHistoryRow::from_row)
-            // TODO: seek directly to start_height without reading earlier rows
-            .skip_while(|history| (history.key.confirmed_height as usize) < start_height)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|blockid| (history, blockid))
@@ -1076,8 +1074,15 @@ impl TxHistoryRow {
         [b"H", scripthash_prefix].concat()
     }
 
-    fn max_key(scripthash: &[u8]) -> Bytes {
+    fn prefix_end(scripthash: &[u8]) -> Bytes {
         bincode::serialize(&(b'H', full_hash(&scripthash[..]), std::u32::MAX)).unwrap()
+    }
+
+    fn prefix_height(scripthash: &[u8], height: u32) -> Bytes {
+        bincode::config()
+            .big_endian()
+            .serialize(&(b'H', full_hash(&scripthash[..]), height))
+            .unwrap()
     }
 
     fn to_row(self) -> DBRow {
