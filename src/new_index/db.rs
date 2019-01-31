@@ -37,6 +37,36 @@ impl Iterator for ScanIterator {
     }
 }
 
+pub struct ReverseScanIterator {
+    prefix: Vec<u8>,
+    iter: rocksdb::DBRawIterator,
+    done: bool,
+}
+
+impl Iterator for ReverseScanIterator {
+    type Item = DBRow;
+
+    fn next(&mut self) -> Option<DBRow> {
+        if self.done || !self.iter.valid() {
+            return None;
+        }
+
+        let key = self.iter.key().unwrap().into_boxed_slice();
+        if !key.starts_with(&self.prefix) {
+            self.done = true;
+            return None;
+        }
+        let value = self.iter.value().unwrap().into_boxed_slice();
+
+        self.iter.prev();
+
+        Some(DBRow {
+            key: key.to_vec(),
+            value: value.to_vec(),
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct DB {
     db: rocksdb::DB,
@@ -90,6 +120,17 @@ impl DB {
         ScanIterator {
             prefix: prefix.to_vec(),
             iter: self.db.prefix_iterator(prefix),
+            done: false,
+        }
+    }
+
+    pub fn reverse_iter_scan(&self, prefix: &[u8], max_key: &[u8]) -> ReverseScanIterator {
+        let mut iter = self.db.raw_iterator();
+        iter.seek_for_prev(max_key);
+
+        ReverseScanIterator {
+            prefix: prefix.to_vec(),
+            iter,
             done: false,
         }
     }

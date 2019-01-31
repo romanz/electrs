@@ -23,7 +23,7 @@ use crate::util::{
     HeaderEntry, HeaderList,
 };
 
-use crate::new_index::db::{DBFlush, DBRow, ScanIterator, DB};
+use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 10; // TODO: number TBD
@@ -299,6 +299,12 @@ impl ChainQuery {
             .history_db
             .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
     }
+    fn history_reverse_iter_scan(&self, scripthash: &[u8]) -> ReverseScanIterator {
+        self.store.history_db.reverse_iter_scan(
+            &TxHistoryRow::filter(&scripthash[..]),
+            &TxHistoryRow::max_key(&scripthash[..]),
+        )
+    }
 
     pub fn history(
         &self,
@@ -308,7 +314,7 @@ impl ChainQuery {
     ) -> Vec<(Transaction, Option<BlockId>)> {
         let _timer_scan = self.start_timer("history");
         let txs_conf = self
-            .history_iter_scan(scripthash)
+            .history_reverse_iter_scan(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             // XXX: unique() requires keeping an in-memory list of all txids, can we avoid that?
             .unique()
@@ -1014,6 +1020,10 @@ impl TxHistoryRow {
 
     fn filter(scripthash_prefix: &[u8]) -> Bytes {
         [b"H", scripthash_prefix].concat()
+    }
+
+    fn max_key(scripthash: &[u8]) -> Bytes {
+        bincode::serialize(&(b'H', full_hash(&scripthash[..]), std::u32::MAX)).unwrap()
     }
 
     fn to_row(self) -> DBRow {
