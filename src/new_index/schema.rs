@@ -59,7 +59,7 @@ impl Store {
     }
 }
 
-type UtxoMap = HashMap<(Sha256dHash, u32), (BlockId, Value)>;
+type UtxoMap = HashMap<OutPoint, (BlockId, Value)>;
 
 #[derive(Debug)]
 pub struct Utxo {
@@ -346,9 +346,11 @@ impl ChainQuery {
             .history_db
             .get(&UtxoCacheRow::key(scripthash))
             .map(|c| bincode::deserialize(&c).unwrap())
-            .and_then(|(utxos, blockhash)| {
-                self.height_by_hash(&blockhash).map(|height| (utxos, height))
-            });
+            .and_then(|(utxos_cache, blockhash)| {
+                self.height_by_hash(&blockhash)
+                    .map(|height| (utxos_cache, height))
+            })
+            .map(|(utxos_cache, height)| (UtxoCacheRow::to_utxo_map(utxos_cache, self), height));
         let had_cache = cache.is_some();
 
         // update utxo set with new transactions since
@@ -358,7 +360,6 @@ impl ChainQuery {
         );
 
         // save updated utxo set to cache
-        // TODO: keep just outpoints and block heights in the cache, add the value and block hash/time when reading
         if let Some(lastblock) = lastblock {
             if had_cache || processed_items > MIN_HISTORY_ITEMS_TO_CACHE {
                 self.store.history_db.write(
@@ -371,9 +372,9 @@ impl ChainQuery {
         // format as Utxo objects
         newutxos
             .into_iter()
-            .map(|((txid, vout), (blockid, value))| Utxo {
-                txid,
-                vout,
+            .map(|(outpoint, (blockid, value))| Utxo {
+                txid: outpoint.txid,
+                vout: outpoint.vout,
                 value,
                 confirmed: Some(blockid),
             })
@@ -535,6 +536,15 @@ impl ChainQuery {
             .unwrap()
             .header_by_height(height)
             .cloned()
+    }
+
+    pub fn blockid_by_height(&self, height: usize) -> Option<BlockId> {
+        self.store
+            .indexed_headers
+            .read()
+            .unwrap()
+            .header_by_height(height)
+            .map(BlockId::from)
     }
 
     pub fn best_height(&self) -> usize {
@@ -1094,14 +1104,16 @@ impl TxHistoryRow {
 
     // for funding rows, returns the funded output.
     // for spending rows, returns the spent previous output.
-    // XXX returned as a (txid,vout) tuple rather than as an OutPoint
-    // because it plays nicer with bincode serialization
-    fn get_outpoint(&self) -> (Sha256dHash, u32) {
+    fn get_outpoint(&self) -> OutPoint {
         match self.key.txinfo {
-            TxHistoryInfo::Funding(ref info) => (parse_hash(&info.txid), info.vout as u32),
-            TxHistoryInfo::Spending(ref info) => {
-                (parse_hash(&info.prev_txid), info.prev_vout as u32)
-            }
+            TxHistoryInfo::Funding(ref info) => OutPoint {
+                txid: parse_hash(&info.txid),
+                vout: info.vout as u32,
+            },
+            TxHistoryInfo::Spending(ref info) => OutPoint {
+                txid: parse_hash(&info.prev_txid),
+                vout: info.prev_vout as u32,
+            },
         }
     }
 }
@@ -1189,24 +1201,55 @@ impl StatsCacheRow {
     }
 }
 
+type CachedUtxoMap = HashMap<(Sha256dHash, u32), (u32, Value)>; // (txid,vout) => (block_height,output_value)
+
 struct UtxoCacheRow {
     key: ScriptCacheKey,
     value: Bytes,
 }
 
 impl UtxoCacheRow {
-    fn new(scripthash: &[u8], utxo: &UtxoMap, blockhash: &Sha256dHash) -> Self {
+    fn new(scripthash: &[u8], utxos: &UtxoMap, blockhash: &Sha256dHash) -> Self {
+        let utxos_cache = UtxoCacheRow::to_utxo_cache(utxos);
+
         UtxoCacheRow {
             key: ScriptCacheKey {
                 code: b'U',
                 scripthash: full_hash(scripthash),
             },
-            value: bincode::serialize(&(utxo, blockhash)).unwrap(),
+            value: bincode::serialize(&(utxos_cache, blockhash)).unwrap(),
         }
     }
 
     pub fn key(scripthash: &[u8]) -> Bytes {
         [b"U", scripthash].concat()
+    }
+
+    // keep utxo cache with just the block height (the hash/timestamp are read later from the headers to reconstruct BlockId)
+    // and use a (txid,vout) tuple instead of OutPoints (they don't play nicely with bincode serialization)
+    pub fn to_utxo_cache(utxos: &UtxoMap) -> CachedUtxoMap {
+        utxos
+            .iter()
+            .map(|(outpoint, (blockid, value))| {
+                (
+                    (outpoint.txid, outpoint.vout),
+                    (blockid.height as u32, *value),
+                )
+            })
+            .collect()
+    }
+
+    pub fn to_utxo_map(utxos_cache: CachedUtxoMap, chain: &ChainQuery) -> UtxoMap {
+        utxos_cache
+            .into_iter()
+            .map(|((txid, vout), (height, value))| {
+                let outpoint = OutPoint { txid, vout };
+                let blockid = chain
+                    .blockid_by_height(height as usize)
+                    .expect("missing blockheader for valid utxo cache entry");
+                (outpoint, (blockid, value))
+            })
+            .collect()
     }
 
     fn to_row(self) -> DBRow {
