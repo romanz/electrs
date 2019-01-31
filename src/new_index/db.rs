@@ -124,9 +124,9 @@ impl DB {
         }
     }
 
-    pub fn reverse_iter_scan(&self, prefix: &[u8], max_key: &[u8]) -> ReverseScanIterator {
+    pub fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
         let mut iter = self.db.raw_iterator();
-        iter.seek_for_prev(max_key);
+        iter.seek_for_prev(prefix_max);
 
         ReverseScanIterator {
             prefix: prefix.to_vec(),

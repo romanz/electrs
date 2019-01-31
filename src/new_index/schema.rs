@@ -295,8 +295,8 @@ impl ChainQuery {
             .history_db
             .iter_scan(&TxHistoryRow::filter(&scripthash[..]))
     }
-    fn history_reverse_iter_scan(&self, scripthash: &[u8]) -> ReverseScanIterator {
-        self.store.history_db.reverse_iter_scan(
+    fn history_iter_scan_reverse(&self, scripthash: &[u8]) -> ReverseScanIterator {
+        self.store.history_db.iter_scan_reverse(
             &TxHistoryRow::filter(&scripthash[..]),
             &TxHistoryRow::max_key(&scripthash[..]),
         )
@@ -310,7 +310,7 @@ impl ChainQuery {
     ) -> Vec<(Transaction, Option<BlockId>)> {
         let _timer_scan = self.start_timer("history");
         let txs_conf = self
-            .history_reverse_iter_scan(scripthash)
+            .history_iter_scan_reverse(scripthash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             // XXX: unique() requires keeping an in-memory list of all txids, can we avoid that?
             .unique()
