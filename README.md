@@ -62,6 +62,7 @@ In addition to electrs's original configuration options, a few new options are a
   at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
   Consider setting this if you're using `--light`.
 - `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
+- `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 
 See `$ cargo run --release -- --help` for the full list of options.
 
