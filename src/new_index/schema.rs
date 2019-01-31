@@ -59,6 +59,8 @@ impl Store {
     }
 }
 
+type UtxoMap = HashMap<(Sha256dHash, u32), (BlockId, Value)>;
+
 #[derive(Debug)]
 pub struct Utxo {
     pub txid: Sha256dHash,
@@ -333,39 +335,93 @@ impl ChainQuery {
             .collect()
     }
 
-    // TODO: implement delta updates similarly to stats
+    // TODO: avoid duplication with stats/stats_delta?
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let _timer = self.start_timer("utxo");
-        self.history_iter_scan(scripthash)
-            .map(TxHistoryRow::from_row)
-            .filter_map(|history| {
-                self.tx_confirming_block(&history.get_txid())
-                    .map(|b| (history, b))
-            })
-            .fold(HashMap::new(), |mut utxos, (history, blockid)| {
-                match history.key.txinfo {
-                    TxHistoryInfo::Funding(ref info) => {
-                        utxos.insert(history.get_outpoint(), (blockid, info.value))
-                    }
-                    TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
-                };
-                // TODO: make sure funding rows are processed before spending rows on the same height
-                utxos
-            })
+
+        // get the last known utxo set and the blockhash it was updated for.
+        // invalidates the cache if the block was orphaned.
+        let cache: Option<(UtxoMap, usize)> = self
+            .store
+            .history_db
+            .get(&UtxoCacheRow::key(scripthash))
+            .map(|c| bincode::deserialize(&c).unwrap())
+            .and_then(|(utxos, blockhash)| {
+                self.height_by_hash(&blockhash).map(|height| (utxos, height))
+            });
+        let had_cache = cache.is_some();
+
+        // update utxo set with new transactions since
+        let (newutxos, lastblock, processed_items) = cache.map_or_else(
+            || self.utxo_delta(scripthash, HashMap::new(), 0),
+            |(oldutxos, blockheight)| self.utxo_delta(scripthash, oldutxos, blockheight + 1),
+        );
+
+        // save updated utxo set to cache
+        // TODO: keep just outpoints and block heights in the cache, add the value and block hash/time when reading
+        if let Some(lastblock) = lastblock {
+            if had_cache || processed_items > MIN_HISTORY_ITEMS_TO_CACHE {
+                self.store.history_db.write(
+                    vec![UtxoCacheRow::new(scripthash, &newutxos, &lastblock).to_row()],
+                    DBFlush::Enable,
+                );
+            }
+        }
+
+        // format as Utxo objects
+        newutxos
             .into_iter()
-            .map(|(outpoint, (blockid, value))| Utxo {
-                txid: outpoint.txid,
-                vout: outpoint.vout,
+            .map(|((txid, vout), (blockid, value))| Utxo {
+                txid,
+                vout,
                 value,
                 confirmed: Some(blockid),
             })
             .collect()
     }
 
+    pub fn utxo_delta(
+        &self,
+        scripthash: &[u8],
+        init_utxos: UtxoMap,
+        start_height: usize,
+    ) -> (UtxoMap, Option<Sha256dHash>, usize) {
+        let _timer = self.start_timer("utxo_delta");
+        let history_iter = self
+            .history_iter_scan(scripthash)
+            .map(TxHistoryRow::from_row)
+            // TODO: seek directly to start_height without reading earlier rows
+            .skip_while(|history| (history.key.confirmed_height as usize) < start_height)
+            .filter_map(|history| {
+                self.tx_confirming_block(&history.get_txid())
+                    .map(|b| (history, b))
+            });
+
+        let mut utxos = init_utxos;
+        let mut processed_items = 0;
+        let mut lastblock = None;
+
+        for (history, blockid) in history_iter {
+            processed_items = processed_items + 1;
+            lastblock = Some(blockid.hash);
+
+            // TODO: make sure funding rows are processed before spending rows on the same height
+            match history.key.txinfo {
+                TxHistoryInfo::Funding(ref info) => {
+                    utxos.insert(history.get_outpoint(), (blockid, info.value))
+                }
+                TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
+            };
+        }
+
+        (utxos, lastblock, processed_items)
+    }
+
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {
+        let _timer = self.start_timer("stats");
+
         // get the last known stats and the blockhash they are updated for.
         // invalidates the cache if the block was orphaned.
-        let _timer = self.start_timer("stats");
         let cache: Option<(ScriptStats, usize)> = self
             .store
             .history_db
@@ -387,7 +443,7 @@ impl ChainQuery {
             if newstats.funded_txo_count + newstats.spent_txo_count > MIN_HISTORY_ITEMS_TO_CACHE {
                 self.store.history_db.write(
                     vec![StatsCacheRow::new(scripthash, &newstats, &lastblock).to_row()],
-                    DBFlush::Enable, // @XXX enable flush?
+                    DBFlush::Enable,
                 );
             }
         }
@@ -1038,16 +1094,14 @@ impl TxHistoryRow {
 
     // for funding rows, returns the funded output.
     // for spending rows, returns the spent previous output.
-    fn get_outpoint(&self) -> OutPoint {
+    // XXX returned as a (txid,vout) tuple rather than as an OutPoint
+    // because it plays nicer with bincode serialization
+    fn get_outpoint(&self) -> (Sha256dHash, u32) {
         match self.key.txinfo {
-            TxHistoryInfo::Funding(ref info) => OutPoint {
-                txid: parse_hash(&info.txid),
-                vout: info.vout as u32,
-            },
-            TxHistoryInfo::Spending(ref info) => OutPoint {
-                txid: parse_hash(&info.prev_txid),
-                vout: info.prev_vout as u32,
-            },
+            TxHistoryInfo::Funding(ref info) => (parse_hash(&info.txid), info.vout as u32),
+            TxHistoryInfo::Spending(ref info) => {
+                (parse_hash(&info.prev_txid), info.prev_vout as u32)
+            }
         }
     }
 }
@@ -1102,20 +1156,20 @@ impl TxEdgeRow {
 }
 
 #[derive(Serialize, Deserialize)]
-struct StatsCacheKey {
+struct ScriptCacheKey {
     code: u8,
     scripthash: FullHash,
 }
 
 struct StatsCacheRow {
-    key: StatsCacheKey,
+    key: ScriptCacheKey,
     value: Bytes,
 }
 
 impl StatsCacheRow {
     fn new(scripthash: &[u8], stats: &ScriptStats, blockhash: &Sha256dHash) -> Self {
         StatsCacheRow {
-            key: StatsCacheKey {
+            key: ScriptCacheKey {
                 code: b'A',
                 scripthash: full_hash(scripthash),
             },
@@ -1125,6 +1179,34 @@ impl StatsCacheRow {
 
     pub fn key(scripthash: &[u8]) -> Bytes {
         [b"A", scripthash].concat()
+    }
+
+    fn to_row(self) -> DBRow {
+        DBRow {
+            key: bincode::serialize(&self.key).unwrap(),
+            value: self.value,
+        }
+    }
+}
+
+struct UtxoCacheRow {
+    key: ScriptCacheKey,
+    value: Bytes,
+}
+
+impl UtxoCacheRow {
+    fn new(scripthash: &[u8], utxo: &UtxoMap, blockhash: &Sha256dHash) -> Self {
+        UtxoCacheRow {
+            key: ScriptCacheKey {
+                code: b'U',
+                scripthash: full_hash(scripthash),
+            },
+            value: bincode::serialize(&(utxo, blockhash)).unwrap(),
+        }
+    }
+
+    pub fn key(scripthash: &[u8]) -> Bytes {
+        [b"U", scripthash].concat()
     }
 
     fn to_row(self) -> DBRow {

@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::slice;
 use time;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BlockId {
     pub height: usize,
     pub hash: Sha256dHash,
