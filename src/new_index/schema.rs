@@ -406,7 +406,7 @@ impl ChainQuery {
             .history_iter_scan(scripthash)
             .map(TxHistoryRow::from_row)
             // TODO: seek directly to start_height without reading earlier rows
-            .skip_while(|history| history.key.confirmed_height as usize <= start_height)
+            .skip_while(|history| (history.key.confirmed_height as usize) < start_height)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
                     .map(|blockid| (history, blockid))
