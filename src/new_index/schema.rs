@@ -29,6 +29,7 @@ pub struct Store {
     // TODO: should be column families
     txstore_db: DB,
     history_db: DB,
+    cache_db: DB,
     added_blockhashes: RwLock<HashSet<Sha256dHash>>,
     indexed_blockhashes: RwLock<HashSet<Sha256dHash>>,
     indexed_headers: RwLock<HeaderList>,
@@ -44,9 +45,11 @@ impl Store {
         debug!("{} blocks were indexed", indexed_blockhashes.len());
         let headers_map = load_blockheaders(&txstore_db);
         debug!("{} headers were loaded", headers_map.len());
+        let cache_db = DB::open(&path.join("cache"));
         Store {
             txstore_db,
             history_db,
+            cache_db,
             added_blockhashes: RwLock::new(added_blockhashes),
             indexed_blockhashes: RwLock::new(indexed_blockhashes),
             indexed_headers: RwLock::new(HeaderList::empty()),
@@ -345,7 +348,7 @@ impl ChainQuery {
         // invalidates the cache if the block was orphaned.
         let cache: Option<(UtxoMap, usize)> = self
             .store
-            .history_db
+            .cache_db
             .get(&UtxoCacheRow::key(scripthash))
             .map(|c| bincode::deserialize(&c).unwrap())
             .and_then(|(utxos_cache, blockhash)| {
@@ -364,7 +367,7 @@ impl ChainQuery {
         // save updated utxo set to cache
         if let Some(lastblock) = lastblock {
             if had_cache || processed_items > MIN_HISTORY_ITEMS_TO_CACHE {
-                self.store.history_db.write(
+                self.store.cache_db.write(
                     vec![UtxoCacheRow::new(scripthash, &newutxos, &lastblock).to_row()],
                     DBFlush::Enable,
                 );
@@ -425,7 +428,7 @@ impl ChainQuery {
         // invalidates the cache if the block was orphaned.
         let cache: Option<(ScriptStats, usize)> = self
             .store
-            .history_db
+            .cache_db
             .get(&StatsCacheRow::key(scripthash))
             .map(|c| bincode::deserialize(&c).unwrap())
             .and_then(|(stats, blockhash)| {
@@ -442,7 +445,7 @@ impl ChainQuery {
         // save updated stats to cache
         if let Some(lastblock) = lastblock {
             if newstats.funded_txo_count + newstats.spent_txo_count > MIN_HISTORY_ITEMS_TO_CACHE {
-                self.store.history_db.write(
+                self.store.cache_db.write(
                     vec![StatsCacheRow::new(scripthash, &newstats, &lastblock).to_row()],
                     DBFlush::Enable,
                 );
