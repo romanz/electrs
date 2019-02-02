@@ -51,19 +51,16 @@ impl Iterator for ReverseScanIterator {
             return None;
         }
 
-        let key = self.iter.key().unwrap().into_boxed_slice();
+        let key = self.iter.key().unwrap();
         if !key.starts_with(&self.prefix) {
             self.done = true;
             return None;
         }
-        let value = self.iter.value().unwrap().into_boxed_slice();
+        let value = self.iter.value().unwrap();
 
         self.iter.prev();
 
-        Some(DBRow {
-            key: key.to_vec(),
-            value: value.to_vec(),
-        })
+        Some(DBRow { key, value })
     }
 }
 
