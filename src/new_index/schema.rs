@@ -236,7 +236,7 @@ impl Indexer {
     fn index(&self, blocks: &[BlockEntry]) {
         let previous_txos_map = {
             let _timer = self.start_timer("index_lookup");
-            lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks))
+            lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks), false)
         };
         let rows = {
             let _timer = self.start_timer("index_process");
@@ -595,7 +595,12 @@ impl ChainQuery {
 
     pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
         let _timer = self.start_timer("lookup_txos");
-        lookup_txos(&self.store.txstore_db, outpoints)
+        lookup_txos(&self.store.txstore_db, outpoints, false)
+    }
+
+    pub fn lookup_avail_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+        let _timer = self.start_timer("lookup_available_txos");
+        lookup_txos(&self.store.txstore_db, outpoints, true)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
@@ -720,7 +725,11 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
         .collect()
 }
 
-fn lookup_txos(txstore_db: &DB, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+fn lookup_txos(
+    txstore_db: &DB,
+    outpoints: &BTreeSet<OutPoint>,
+    allow_missing: bool,
+) -> HashMap<OutPoint, TxOut> {
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(16) // we need to saturate SSD IOPS
         .thread_name(|i| format!("lookup-txo-{}", i))
@@ -729,10 +738,15 @@ fn lookup_txos(txstore_db: &DB, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPo
     pool.install(|| {
         outpoints
             .par_iter()
-            .map(|outpoint| {
-                let txo = lookup_txo(&txstore_db, &outpoint)
-                    .expect(&format!("missing txo {} in {:?}", outpoint, txstore_db));
-                (*outpoint, txo)
+            .filter_map(|outpoint| {
+                lookup_txo(&txstore_db, &outpoint)
+                    .or_else(|| {
+                        if !allow_missing {
+                            panic!("missing txo {} in {:?}", outpoint, txstore_db);
+                        }
+                        None
+                    })
+                    .map(|txo| (*outpoint, txo))
             })
             .collect()
     })

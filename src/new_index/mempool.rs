@@ -242,26 +242,29 @@ impl Mempool {
         }
     }
 
-    // @TODO use parallel lookup for confirmed txos?
     pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
         let _timer = self
             .latency
             .with_label_values(&["lookup_txos"])
             .start_timer();
-        outpoints
-            .into_iter()
+
+        let confirmed_txos = self.chain.lookup_avail_txos(outpoints);
+
+        let mempool_txos = outpoints
+            .iter()
+            .filter(|outpoint| !confirmed_txos.contains_key(outpoint))
             .map(|outpoint| {
-                let result = match self.txstore.get(&outpoint.txid) {
-                    Some(txn) => txn.output.get(outpoint.vout as usize).cloned(),
-                    // TODO: do concurrently for non-mempool txns
-                    None => self.chain.lookup_txo(&outpoint),
-                };
-                match result {
-                    Some(txout) => Ok((*outpoint, txout)),
-                    None => bail!("missing outpoint {:?}", outpoint),
-                }
+                self.txstore
+                    .get(&outpoint.txid)
+                    .and_then(|tx| tx.output.get(outpoint.vout as usize).cloned())
+                    .map(|txout| (*outpoint, txout))
+                    .chain_err(|| format!("missing outpoint {:?}", outpoint))
             })
-            .collect()
+            .collect::<Result<HashMap<OutPoint, TxOut>>>()?;
+
+        let mut txos = confirmed_txos;
+        txos.extend(mempool_txos);
+        Ok(txos)
     }
 
     fn get_prevouts(&self, txids: &[Sha256dHash]) -> BTreeSet<OutPoint> {
