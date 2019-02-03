@@ -710,16 +710,12 @@ fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>)
 fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
     block_entries
         .iter()
-        .flat_map(|b| {
-            b.block.txdata.iter().flat_map(|tx| {
-                tx.input.iter().filter_map(|txin| {
-                    if !has_prevout(txin) {
-                        None
-                    } else {
-                        Some(txin.previous_output)
-                    }
-                })
-            })
+        .flat_map(|b| b.block.txdata.iter())
+        .flat_map(|tx| {
+            tx.input
+                .iter()
+                .filter(|txin| has_prevout(txin))
+                .map(|txin| txin.previous_output)
         })
         .collect()
 }

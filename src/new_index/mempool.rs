@@ -14,7 +14,7 @@ use crate::new_index::{
     compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
-use crate::util::Bytes;
+use crate::util::{has_prevout, Bytes};
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
@@ -268,8 +268,12 @@ impl Mempool {
         txids
             .iter()
             .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
-            .map(|tx| tx.input.iter().map(|txin| txin.previous_output))
-            .flatten()
+            .flat_map(|tx| {
+                tx.input
+                    .iter()
+                    .filter(|txin| has_prevout(txin))
+                    .map(|txin| txin.previous_output)
+            })
             .collect()
     }
 
