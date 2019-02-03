@@ -66,7 +66,7 @@ impl Mempool {
     }
 
     pub fn has_spend(&self, outpoint: &OutPoint) -> bool {
-        self.edges.get(outpoint).is_some()
+        self.edges.contains_key(outpoint)
     }
 
     pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
