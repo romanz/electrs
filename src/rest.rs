@@ -5,8 +5,8 @@ use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::Address;
 use crate::util::{
-    full_hash, get_script_asm, is_coinbase, script_to_address, BlockHeaderMeta, BlockId, FullHash,
-    TransactionStatus,
+    full_hash, get_script_asm, has_prevout, is_coinbase, script_to_address, BlockHeaderMeta,
+    BlockId, FullHash, TransactionStatus,
 };
 
 #[cfg(feature = "liquid")]
@@ -28,7 +28,7 @@ use elements::confidential::{Asset, Value};
 
 use serde::Serialize;
 use serde_json;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -104,24 +104,51 @@ struct TransactionValue {
     status: Option<TransactionStatus>,
 }
 
-impl From<Transaction> for TransactionValue {
-    fn from(tx: Transaction) -> Self {
-        let vin = tx
+impl
+    From<(
+        Transaction,
+        Option<BlockId>,
+        &HashMap<OutPoint, TxOut>,
+        &Config,
+    )> for TransactionValue
+{
+    fn from(
+        (tx, blockid, prevouts, config): (
+            Transaction,
+            Option<BlockId>,
+            &HashMap<OutPoint, TxOut>,
+            &Config,
+        ),
+    ) -> Self {
+        let vins: Vec<TxInValue> = tx
             .input
             .iter()
-            .map(|el| TxInValue::from(el.clone())) // TODO avoid clone
+            .map(|txin| {
+                let prevout = prevouts.get(&txin.previous_output);
+                TxInValue::from((txin.clone(), prevout, config)) // TODO avoid clone
+            })
             .collect();
-        let vout: Vec<TxOutValue> = tx
+        let vouts: Vec<TxOutValue> = tx
             .output
             .iter()
-            .map(|el| TxOutValue::from(el.clone())) // TODO avoid clone
+            .map(|txout| TxOutValue::from((txout.clone(), config))) // TODO avoid clone
             .collect();
         let bytes = serialize(&tx);
 
         #[cfg(not(feature = "liquid"))]
-        let fee = None; // added later
+        let fee = if config.prevout_enabled && !vins.iter().any(|vin| vin.prevout.is_none()) {
+            let total_in: u64 = vins
+                .iter()
+                .map(|vin| vin.prevout.as_ref().unwrap().value)
+                .sum();
+            let total_out: u64 = vouts.iter().map(|vout| vout.value).sum();
+            Some(total_in - total_out)
+        } else {
+            None
+        };
+
         #[cfg(feature = "liquid")]
-        let fee = vout
+        let fee = vouts
             .iter()
             .find(|vout| vout.scriptpubkey_type == "fee")
             .map(|vout| vout.value.unwrap())
@@ -131,21 +158,13 @@ impl From<Transaction> for TransactionValue {
             txid: tx.txid(),
             version: tx.version,
             locktime: tx.lock_time,
-            vin,
-            vout,
+            vin: vins,
+            vout: vouts,
             size: bytes.len() as u32,
             weight: tx.get_weight() as u32,
             fee,
-            status: None,
+            status: Some(TransactionStatus::from(blockid)),
         }
-    }
-}
-
-impl From<(Transaction, Option<BlockId>)> for TransactionValue {
-    fn from((tx, blockid): (Transaction, Option<BlockId>)) -> Self {
-        let mut value = TransactionValue::from(tx);
-        value.status = Some(TransactionStatus::from(blockid));
-        value
     }
 }
 
@@ -166,8 +185,8 @@ struct TxInValue {
     issuance: Option<IssuanceValue>,
 }
 
-impl From<TxIn> for TxInValue {
-    fn from(txin: TxIn) -> Self {
+impl From<(TxIn, Option<&TxOut>, &Config)> for TxInValue {
+    fn from((txin, prevout, config): (TxIn, Option<&TxOut>, &Config)) -> Self {
         #[cfg(not(feature = "liquid"))]
         let witness = if txin.witness.len() > 0 {
             Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
@@ -182,7 +201,7 @@ impl From<TxIn> for TxInValue {
         TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
-            prevout: None, // added later
+            prevout: prevout.map(|prevout| TxOutValue::from((prevout.clone(), config))), // TODO avoid clone()
             scriptsig_asm: get_script_asm(&txin.script_sig),
             witness,
             is_coinbase,
@@ -223,8 +242,8 @@ struct TxOutValue {
     pegout: Option<PegOutRequest>,
 }
 
-impl From<TxOut> for TxOutValue {
-    fn from(txout: TxOut) -> Self {
+impl From<(TxOut, &Config)> for TxOutValue {
+    fn from((txout, config): (TxOut, &Config)) -> Self {
         #[cfg(not(feature = "liquid"))]
         let value = txout.value;
 
@@ -256,6 +275,7 @@ impl From<TxOut> for TxOutValue {
 
         let script = txout.script_pubkey;
         let script_asm = get_script_asm(&script);
+        let script_addr = script_to_address(&script, &config.network_type);
 
         // TODO should the following something to put inside rust-elements lib?
         let script_type = if is_fee {
@@ -283,7 +303,7 @@ impl From<TxOut> for TxOutValue {
         TxOutValue {
             scriptpubkey: script,
             scriptpubkey_asm: script_asm,
-            scriptpubkey_address: None, // added later
+            scriptpubkey_address: script_addr,
             scriptpubkey_type: script_type.to_string(),
             value,
             #[cfg(feature = "liquid")]
@@ -293,7 +313,11 @@ impl From<TxOut> for TxOutValue {
             #[cfg(feature = "liquid")]
             assetcommitment,
             #[cfg(feature = "liquid")]
-            pegout: None, // added later
+            pegout: PegOutRequest::parse(
+                &vout.scriptpubkey,
+                &config.parent_network,
+                &config.parent_genesis_hash,
+            ),
         }
     }
 }
@@ -375,92 +399,30 @@ fn ttl_by_depth(height: Option<usize>, query: &Query) -> u32 {
     })
 }
 
-fn attach_tx_data(tx: TransactionValue, config: &Config, query: &Query) -> TransactionValue {
-    let mut txs = vec![tx];
-    attach_txs_data(&mut txs, config, query);
-    txs.remove(0)
-}
-
-fn attach_txs_data(txs: &mut Vec<TransactionValue>, config: &Config, query: &Query) {
-    {
-        // a map of prev txids/vouts to lookup, with a reference to the "next in" that spends them
-        let mut lookups: BTreeMap<OutPoint, &mut TxInValue> = BTreeMap::new();
-        // using BTreeMap ensures the txid keys are in order. querying the db with keys in order leverage memory
-        // locality from empirical test up to 2 or 3 times faster
-
-        for tx in txs.iter_mut() {
-            // collect lookups
-            if config.prevout_enabled {
-                for vin in tx.vin.iter_mut() {
-                    #[cfg(not(feature = "liquid"))]
-                    let has_prevout = !vin.is_coinbase;
-
-                    #[cfg(feature = "liquid")]
-                    let has_prevout = !vin.is_coinbase
-                        && !vin.is_pegin
-                        && vin.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
-
-                    if has_prevout {
-                        let outpoint = OutPoint {
-                            txid: vin.txid,
-                            vout: vin.vout,
-                        };
-                        lookups.insert(outpoint, vin);
-                    }
-                }
-            }
-            // attach encoded address (should ideally happen in TxOutValue::from(), but it cannot
-            // easily access the network)
-            for mut vout in tx.vout.iter_mut() {
-                vout.scriptpubkey_address =
-                    script_to_address(&vout.scriptpubkey, &config.network_type);
-
-                #[cfg(feature = "liquid")]
-                {
-                    vout.pegout = PegOutRequest::parse(
-                        &vout.scriptpubkey,
-                        &config.parent_network,
-                        &config.parent_genesis_hash,
-                    );
-                }
-            }
-        }
-
-        // fetch prevtxs and attach prevouts to nextins
-        if config.prevout_enabled {
-            let outpoints = lookups.keys().cloned().collect();
-            let txos = query.lookup_txos(&outpoints);
-
-            for (outpoint, txo) in txos {
-                let mut prevout = TxOutValue::from(txo);
-                prevout.scriptpubkey_address =
-                    script_to_address(&prevout.scriptpubkey, &config.network_type);
-
-                let nextin = lookups.remove(&outpoint).unwrap();
-                nextin.prevout = Some(prevout);
-            }
-        }
-    }
-
-    // attach tx fee
-    #[cfg(not(feature = "liquid"))]
-    {
-        if config.prevout_enabled {
-            for mut tx in txs.iter_mut() {
-                if tx.vin.iter().any(|vin| vin.prevout.is_none()) {
-                    continue;
-                }
-
-                let total_in: u64 = tx
-                    .vin
+fn prepare_txs(
+    txs: Vec<(Transaction, Option<BlockId>)>,
+    query: &Query,
+    config: &Config,
+) -> Vec<TransactionValue> {
+    let prevouts = if config.prevout_enabled {
+        let outpoints = txs
+            .iter()
+            .flat_map(|(tx, _)| {
+                tx.input
                     .iter()
-                    .map(|vin| vin.clone().prevout.unwrap().value) // @TODO avoid clone
-                    .sum();
-                let total_out: u64 = tx.vout.iter().map(|vout| vout.value).sum();
-                tx.fee = Some(total_in - total_out);
-            }
-        }
-    }
+                    .filter(|txin| has_prevout(txin))
+                    .map(|txin| txin.previous_output)
+            })
+            .collect();
+
+        query.lookup_txos(&outpoints)
+    } else {
+        HashMap::new()
+    };
+
+    txs.into_iter()
+        .map(|(tx, blockid)| TransactionValue::from((tx, blockid, &prevouts, config)))
+        .collect()
 }
 
 pub fn run_server(config: Arc<Config>, query: Arc<Query>, daemon: Arc<Daemon>) -> Handle {
@@ -609,19 +571,21 @@ fn handle_request(
                 )));
             }
 
-            let mut txs = txids
+            let txs = txids
                 .iter()
                 .skip(start_index)
                 .take(CHAIN_TXS_PER_PAGE)
                 .map(|txid| {
                     query
                         .lookup_txn(&txid)
-                        .map(TransactionValue::from)
+                        // FIXME: set blockid correctly, only when the block is non-orphaned
+                        //        alternatively, don't set "status" at all?
+                        .map(|tx| (tx, None))
                         .ok_or_else(|| "missing tx".to_string())
                 })
-                .collect::<Result<Vec<TransactionValue>, _>>()?;
-            attach_txs_data(&mut txs, config, query);
-            json_response(txs, TTL_LONG)
+                .collect::<Result<Vec<(Transaction, Option<BlockId>)>, _>>()?;
+
+            json_response(prepare_txs(txs, query, config), TTL_LONG)
         }
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None, None)
         | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None, None) => {
@@ -661,20 +625,17 @@ fn handle_request(
                     .mempool()
                     .history(&script_hash[..], MAX_MEMPOOL_TXS)
                     .into_iter()
-                    .map(|tx| TransactionValue::from((tx, None))),
+                    .map(|tx| (tx, None)),
             );
 
             txs.extend(
                 query
                     .chain()
                     .history(&script_hash[..], None, CHAIN_TXS_PER_PAGE)
-                    .into_iter()
-                    .map(TransactionValue::from),
+                    .into_iter(),
             );
 
-            attach_txs_data(&mut txs, config, query);
-
-            json_response(txs, TTL_SHORT)
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
         (
@@ -696,20 +657,13 @@ fn handle_request(
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
-            let mut txs = query
-                .chain()
-                .history(
-                    &script_hash[..],
-                    last_seen_txid.as_ref(),
-                    CHAIN_TXS_PER_PAGE,
-                )
-                .into_iter()
-                .map(TransactionValue::from)
-                .collect();
+            let txs = query.chain().history(
+                &script_hash[..],
+                last_seen_txid.as_ref(),
+                CHAIN_TXS_PER_PAGE,
+            );
 
-            attach_txs_data(&mut txs, config, query);
-
-            json_response(txs, TTL_SHORT)
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
         (
             &Method::GET,
@@ -729,16 +683,14 @@ fn handle_request(
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
 
-            let mut txs = query
+            let txs = query
                 .mempool()
                 .history(&script_hash[..], MAX_MEMPOOL_TXS)
                 .into_iter()
-                .map(|tx| TransactionValue::from((tx, None)))
+                .map(|tx| (tx, None))
                 .collect();
 
-            attach_txs_data(&mut txs, config, query);
-
-            json_response(txs, TTL_SHORT)
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
         (
@@ -768,16 +720,15 @@ fn handle_request(
         }
         (&Method::GET, Some(&"tx"), Some(hash), None, None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let transaction = query
+            let tx = query
                 .lookup_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
-            let status = query.get_tx_status(&hash);
-            let ttl = ttl_by_depth(status.block_height, query);
+            let confirmation = query.chain().tx_confirming_block(&hash);
+            let ttl = ttl_by_depth(confirmation.as_ref().map(|c| c.height), query);
 
-            let mut value = TransactionValue::from(transaction);
-            value.status = Some(status);
-            let value = attach_tx_data(value, config, query);
-            json_response(value, ttl)
+            let tx = prepare_txs(vec![(tx, confirmation)], query, config).remove(0);
+
+            json_response(tx, ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
