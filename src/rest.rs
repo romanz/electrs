@@ -10,9 +10,7 @@ use crate::util::{
 };
 
 #[cfg(feature = "liquid")]
-use crate::util::{
-    BlockProofValue, IssuanceValue, PegOutRequest, REGTEST_INITIAL_ISSUANCE_PREVOUT,
-};
+use crate::util::{BlockProofValue, IssuanceValue, PegOutRequest};
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::util::hash::{HexError, Sha256dHash};
@@ -300,6 +298,9 @@ impl From<(TxOut, &Config)> for TxOutValue {
             "unknown"
         };
 
+        let pegout =
+            PegOutRequest::parse(&script, &config.parent_network, &config.parent_genesis_hash);
+
         TxOutValue {
             scriptpubkey: script,
             scriptpubkey_asm: script_asm,
@@ -313,11 +314,7 @@ impl From<(TxOut, &Config)> for TxOutValue {
             #[cfg(feature = "liquid")]
             assetcommitment,
             #[cfg(feature = "liquid")]
-            pegout: PegOutRequest::parse(
-                &vout.scriptpubkey,
-                &config.parent_network,
-                &config.parent_genesis_hash,
-            ),
+            pegout,
         }
     }
 }
