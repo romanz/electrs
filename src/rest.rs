@@ -298,6 +298,7 @@ impl From<(TxOut, &Config)> for TxOutValue {
             "unknown"
         };
 
+        #[cfg(feature = "liquid")]
         let pegout =
             PegOutRequest::parse(&script, &config.parent_network, &config.parent_genesis_hash);
 
