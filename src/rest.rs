@@ -794,11 +794,11 @@ fn handle_request(
             // @TODO long ttl if all outputs are either spent long ago or unspendable
             json_response(spends, TTL_SHORT)
         }
-        (&Method::POST, Some(&"tx"), None, None, None, None) => {
+        (&Method::GET, Some(&"broadcast"), None, None, None, None) => {
             // FIXME read txhex from post body
             let txhex = query_params
-                .get("txhex")
-                .ok_or_else(|| HttpError::from("Missing txhex".to_string()))?;
+                .get("tx")
+                .ok_or_else(|| HttpError::from("Missing tx".to_string()))?;
             let txid = daemon
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
