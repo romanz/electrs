@@ -22,7 +22,7 @@ $ cargo run --features liquid --release -- -vvvv --daemon-dir ~/.liquid
 See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
 Note that our indexes are incompatible with electrs's and has to be created separately.
 
-The indexes require 250GB-300GB of storage after running compaction, but you'll need to have at least 500GB
+The indexes require 440GB of storage after running compaction, but you'll need to have about 1TB
 of free space available for the initial (non-compacted) indexing process.
 Creating the indexes should take a few hours on a beefy machine with SSD.
 
