@@ -516,6 +516,11 @@ impl Daemon {
         Ok(txs)
     }
 
+    pub fn getmempooltx(&self, txhash: &Sha256dHash) -> Result<Transaction> {
+        let value = self.request("getrawtransaction", json!([ txhash.be_hex_string(), /*verbose=*/false ]))?;
+        tx_from_value(value)
+    }
+
     pub fn getmempooltxids(&self) -> Result<HashSet<Sha256dHash>> {
         let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
         let mut result = HashSet::new();

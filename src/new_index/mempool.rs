@@ -69,6 +69,7 @@ impl Mempool {
         self.edges.contains_key(outpoint)
     }
 
+    // TODO: return as Vec<(Transaction,Option<BlockId>)>?
     pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         match self.history.get(scripthash) {
@@ -177,7 +178,7 @@ impl Mempool {
     }
 
     pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Sha256dHash) {
-        if let Some(tx) = daemon.gettransactions(&[&txid]).ok().and_then(|mut txs| txs.pop()) {
+        if let Ok(tx) = daemon.getmempooltx(&txid) {
             self.add(vec![tx])
         }
     }
