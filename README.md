@@ -6,6 +6,8 @@ Used as the backend for the [Esplora block explorer](https://github.com/Blockstr
 
 API documentation [is available here](https://github.com/blockstream/esplora/blob/master/API.md).
 
+Documentation for the database schema and indexing process [is available here](doc/schema.md).
+
 ### Installing & indexing
 
 Install Rust, Bitcoin Core and the `clang` and `cmake` packages, then:
