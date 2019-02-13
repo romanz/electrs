@@ -176,6 +176,12 @@ impl Mempool {
         Ok(())
     }
 
+    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Sha256dHash) {
+        if let Some(tx) = daemon.gettransactions(&[&txid]).ok().and_then(|mut txs| txs.pop()) {
+            self.add(vec![tx])
+        }
+    }
+
     fn add(&mut self, txs: Vec<Transaction>) {
         self.delta
             .with_label_values(&["add"])

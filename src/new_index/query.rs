@@ -2,7 +2,7 @@ use bitcoin::util::hash::Sha256dHash;
 use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
@@ -24,6 +24,10 @@ impl Query {
 
     pub fn mempool(&self) -> RwLockReadGuard<Mempool> {
         self.mempool.read().unwrap()
+    }
+
+    pub fn mempool_write(&self) -> RwLockWriteGuard<Mempool> {
+        self.mempool.write().unwrap()
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {

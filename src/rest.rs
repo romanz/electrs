@@ -802,6 +802,7 @@ fn handle_request(
             let txid = daemon
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
+            query.mempool_write().add_by_txid(daemon, &txid);
             http_message(StatusCode::OK, txid.be_hex_string(), 0)
         }
 
