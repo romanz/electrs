@@ -802,7 +802,7 @@ fn handle_request(
             let txid = daemon
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
-            http_message(StatusCode::OK, hex::encode(serialize(&txid)), 0)
+            http_message(StatusCode::OK, txid.be_hex_string(), 0)
         }
 
         _ => Err(HttpError::not_found(format!(
