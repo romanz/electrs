@@ -26,6 +26,11 @@ The indexes require 440GB of storage after running compaction, but you'll need t
 of free space available for the initial (non-compacted) indexing process.
 Creating the indexes should take a few hours on a beefy machine with SSD.
 
+> Note: the pre-v2 version supported a "light" indexing mode for personal use,
+> where less data is kept on-disk in exchange for a performance hit and more reliance/load on bitcoind.
+> This option is not currently available, but can be enabled with [an older esplora release](https://github.com/Blockstream/esplora/releases/tag/esplora_v1.67).
+> We're hoping to eventually get this feature back. Let us know if you find this important!
+
 To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
 
 ### Notable changes from Electrs:
