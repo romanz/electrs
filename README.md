@@ -12,8 +12,11 @@ Install Rust, Bitcoin Core and the `clang` and `cmake` packages, then:
 
 ```bash
 $ git clone https://github.com/blockstream/electrs && cd electrs
-$ git checkout bitcoin_e # or liquid_e
+$ git checkout new-index
 $ cargo run --release -- -vvvv --daemon-dir ~/.bitcoin
+
+# Or for liquid:
+$ cargo run --features liquid --release -- -vvvv --daemon-dir ~/.liquid
 ```
 
 See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
@@ -44,7 +47,7 @@ To deploy with Docker, follow the [instructions here](https://github.com/Blockst
   periodically for new blocks and for syncing the mempool.
 
 - Support for Liquid and other Elements-based networks, including CT, peg-in/out and multi-asset.
-  (under the `liquid_e` branch)
+  (requires enabling the `liquid` feature flag using `--features liquid`)
 
 ### CLI options
 
