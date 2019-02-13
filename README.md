@@ -23,8 +23,6 @@ The indexes require 250GB-300GB of storage after running compaction, but you'll 
 of free space available for the initial (non-compacted) indexing process.
 Creating the indexes should take a few hours on a beefy machine with SSD.
 
-For personal low-volume use, the storage requirements can be reduced with `--light` (see below under CLI options).
-
 To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
 
 ### Notable changes from Electrs:
@@ -53,14 +51,9 @@ To deploy with Docker, follow the [instructions here](https://github.com/Blockst
 In addition to electrs's original configuration options, a few new options are also available:
 
 - `--http-addr <addr:port>` - HTTP server address/port to listen on (default: `127.0.0.1:3000`).
-- `--light` - enable light resource mode, which disables the `X`, `M` and `t` indexes
-   and queries this information from bitcoind instead.
-   This significantly reduces storage requirements (at the time of writing, by about 250GB),
-   at the cost of more expensive lookups and more reliance on bitcoind.
 - `--disable-prevout` - disable attaching previous output information to inputs.
   This significantly reduces the amount of transaction lookups (and IO/CPU/memory usage),
   at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
-  Consider setting this if you're using `--light`.
 - `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 
