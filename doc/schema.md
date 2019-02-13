@@ -1,31 +1,65 @@
 # Index Schema
 
-The index is stored at a single RocksDB database using the following schema:
+The index is stored as three RocksDB databases:
 
-## Transaction outputs' index
+- `txstore`
+- `history`
+- `cache`
 
-Allows efficiently finding all funding transactions for a specific address:
+### Indexing process
 
-|  Code  | Script Hash Prefix   | Funding TxID Prefix   |   |
-| ------ | -------------------- | --------------------- | - |
-| `b'O'` | `SHA256(script)[:8]` | `txid[:8]`            |   |
+The indexing is done in the two phase, where each can be done concurrently within itself.
+The first phase populates the `txstore` database, the second phase populates the `history` database.
 
-## Transaction inputs' index
+NOTE: in order to construct the history rows for spending inputs in phase #2, we rely on having the transactions being processed at phase #1, so they can be looked up efficiently (using parallel point lookups).
 
-Allows efficiently finding spending transaction of a specific output:
+After the indexing is completed, both funding and spending are indexed as independent rows under `H{scripthash}`, so that they can be queried in-order in one go.
 
-|  Code  | Funding TxID Prefix  | Funding Output Index  | Spending TxID Prefix  |   |
-| ------ | -------------------- | --------------------- | --------------------- | - |
-| `b'I'` | `txid[:8]`           | `uint16`              | `txid[:8]`            |   |
+### `txstore`
+
+Each block results in the following new rows:
+
+ * `"B{blockhash}" → "{header}"`
+
+ * `"X{blockhash}" → "{txids}"` (list of txids included in the block)
+
+ * `"M{blockhash}" → "{metadata}"` (block weight, size and number of txs)
+
+ * `"D{blockhash}" → ""` (signifies the block is done processing)
+
+Each transaction results in the following new rows:
+
+ * `"T{txid}" → "{serialized-transaction}"`
+
+ * `"C{txid}{confirmed-blockhash}" → ""` (a list of blockhashes where `txid` was seen to be confirmed)
+
+Each output results in the following new row:
+
+ * `"O{txid}{vout}" → "{scriptpubkey}{value}"`
+
+### `history`
+
+Each funding output (except for provably unspendable ones) results in the following new row (`H` is for history, `F` is for funding):
+
+ * `"H{funding-scripthash}{funding-height}F{funding-txid:index}" → ""`
+
+Each spending input (except the coinbase) results in the following new rows (`S` is for spending):
+
+ * `"H{funding-scripthash}{spending-height}S{spending-txid:index}{funding-txid:index}" → ""`
+
+ * `"S{funding-txid:index}{spending-txid:index}" → ""`
 
 
-## Full Transaction IDs
+### `cache`
 
-In order to save storage space, we store the full transaction IDs once, and use their 8-byte prefixes for the indexes above.
+Holds a cache for aggregated stats and unspent TXOs of scripthashes.
 
-|  Code  | Transaction ID    |   | Confirmed height   |
-| ------ | ----------------- | - | ------------------ |
-| `b'T'` | `txid` (32 bytes) |   | `uint32`           |
+The cache is created on-demand, the first time the scripthash is requested by a user.
 
-Note that this mapping allows us to use `getrawtransaction` RPC to retrieve actual transaction data from without `-txindex` enabled
-(by explicitly specifying the [blockhash](https://github.com/bitcoin/bitcoin/commit/497d0e014cc79d46531d570e74e4aeae72db602d)).
+The cached data is kept next to the `blockhash` the cache is up-to-date for.
+When requesting data, the cache is updated with the new history rows added since the `blockhash`.
+If the `blockhash` was since orphaned, the cache is removed and re-computed.
+
+ * `"A{scripthash}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `funded_txo_{count,sum}` and `spent_txo_{count,sum}`)
+
+ * `"U{scripthash}" → "{utxo}{blockhash}"` (where `utxo` is a set of `(txid,vout)` outpoints)
