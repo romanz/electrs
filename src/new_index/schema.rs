@@ -60,6 +60,10 @@ impl Store {
     pub fn is_empty(&self) -> bool {
         return self.added_blockhashes.read().unwrap().is_empty();
     }
+
+    pub fn history_db(&self) -> &DB {
+        &self.history_db
+    }
 }
 
 type UtxoMap = HashMap<OutPoint, (BlockId, Value)>;
@@ -1061,11 +1065,11 @@ pub enum TxHistoryInfo {
 }
 
 #[derive(Serialize, Deserialize)]
-struct TxHistoryKey {
-    code: u8,
-    scripthash: FullHash,
-    confirmed_height: u32, // MUST be serialized as big-endian (for correct scans).
-    txinfo: TxHistoryInfo,
+pub struct TxHistoryKey {
+    pub code: u8,
+    pub scripthash: FullHash,
+    pub confirmed_height: u32, // MUST be serialized as big-endian (for correct scans).
+    pub txinfo: TxHistoryInfo,
 }
 
 struct TxHistoryRow {

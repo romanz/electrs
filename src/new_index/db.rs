@@ -113,6 +113,10 @@ impl DB {
         self.db.set_options(&opts).unwrap();
     }
 
+    pub fn raw_iterator(&self) -> rocksdb::DBRawIterator {
+        self.db.raw_iterator()
+    }
+
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
         ScanIterator {
             prefix: prefix.to_vec(),
