@@ -14,7 +14,7 @@ use crate::new_index::{
     compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
-use crate::util::{has_prevout, Bytes};
+use crate::util::{has_prevout, is_spendable, Bytes};
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
@@ -209,32 +209,43 @@ impl Mempool {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
             let txid_bytes = txid.into_bytes();
             // An iterator over (ScriptHash, TxHistoryInfo)
-            let spending = tx.input.iter().enumerate().map(|(index, txi)| {
-                let prev_txo = txos
-                    .get(&txi.previous_output)
-                    .expect(&format!("missing outpoint {:?}", txi.previous_output));
-                (
-                    compute_script_hash(&prev_txo.script_pubkey),
-                    TxHistoryInfo::Spending(SpendingInfo {
-                        txid: txid_bytes,
-                        vin: index as u16,
-                        prev_txid: txi.previous_output.txid.into_bytes(),
-                        prev_vout: txi.previous_output.vout as u16,
-                        value: prev_txo.value,
-                    }),
-                )
-            });
+            let spending = tx
+                .input
+                .iter()
+                .enumerate()
+                .filter(|(_, txi)| has_prevout(txi))
+                .map(|(index, txi)| {
+                    let prev_txo = txos
+                        .get(&txi.previous_output)
+                        .expect(&format!("missing outpoint {:?}", txi.previous_output));
+                    (
+                        compute_script_hash(&prev_txo.script_pubkey),
+                        TxHistoryInfo::Spending(SpendingInfo {
+                            txid: txid_bytes,
+                            vin: index as u16,
+                            prev_txid: txi.previous_output.txid.into_bytes(),
+                            prev_vout: txi.previous_output.vout as u16,
+                            value: prev_txo.value,
+                        }),
+                    )
+                });
+
             // An iterator over (ScriptHash, TxHistoryInfo)
-            let funding = tx.output.iter().enumerate().map(|(index, txo)| {
-                (
-                    compute_script_hash(&txo.script_pubkey),
-                    TxHistoryInfo::Funding(FundingInfo {
-                        txid: txid_bytes,
-                        vout: index as u16,
-                        value: txo.value,
-                    }),
-                )
-            });
+            let funding = tx
+                .output
+                .iter()
+                .enumerate()
+                .filter(|(_, txo)| is_spendable(txo))
+                .map(|(index, txo)| {
+                    (
+                        compute_script_hash(&txo.script_pubkey),
+                        TxHistoryInfo::Funding(FundingInfo {
+                            txid: txid_bytes,
+                            vout: index as u16,
+                            value: txo.value,
+                        }),
+                    )
+                });
 
             for (scripthash, entry) in funding.chain(spending) {
                 self.history
