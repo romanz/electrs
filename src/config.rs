@@ -30,6 +30,7 @@ pub struct Config {
     pub tx_cache_size: usize,
     pub prevout_enabled: bool,
     pub cors: Option<String>,
+    pub precache_scripts: Option<String>,
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
@@ -137,6 +138,12 @@ impl Config {
                 Arg::with_name("cors")
                     .long("cors")
                     .help("Origins allowed to make cross-site requests")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::with_name("precache_scripts")
+                    .long("precache-scripts")
+                    .help("Path to file with list of scripts to pre-cache")
                     .takes_value(true)
             );
 
@@ -270,6 +277,7 @@ impl Config {
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
             prevout_enabled: !m.is_present("disable_prevout"),
             cors: m.value_of("cors").map(|s| s.to_string()),
+            precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
             #[cfg(feature = "liquid")]
             parent_network,
             #[cfg(feature = "liquid")]

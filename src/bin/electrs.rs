@@ -15,7 +15,7 @@ use electrs::{
     daemon::Daemon,
     errors::*,
     metrics::Metrics,
-    new_index::{ChainQuery, FetchFrom, Indexer, Mempool, Query, Store},
+    new_index::{precache, ChainQuery, FetchFrom, Indexer, Mempool, Query, Store},
     rest,
     signal::Waiter,
 };
@@ -64,8 +64,16 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let mut tip = indexer.update(&daemon)?;
 
     let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
+
+    if let Some(ref precache_file) = config.precache_scripts {
+        let precache_scripthashes = precache::scripthashes_from_file(precache_file.to_string())
+            .expect("cannot load scripts to precache");
+        precache::precache(&chain, precache_scripthashes);
+    }
+
     let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain), &metrics)));
     mempool.write().unwrap().update(&daemon)?;
+
     let query = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
 
     let server = rest::run_server(config, query, Arc::clone(&daemon));

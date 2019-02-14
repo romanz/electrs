@@ -1,6 +1,7 @@
 mod db;
 mod fetch;
 mod mempool;
+pub mod precache;
 mod query;
 mod schema;
 
