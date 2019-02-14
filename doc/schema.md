@@ -41,11 +41,11 @@ Each output results in the following new row:
 
 Each funding output (except for provably unspendable ones) results in the following new row (`H` is for history, `F` is for funding):
 
- * `"H{funding-scripthash}{funding-height}F{funding-txid:index}" → ""`
+ * `"H{funding-scripthash}{funding-height}F{funding-txid:index}{value}" → ""`
 
 Each spending input (except the coinbase) results in the following new rows (`S` is for spending):
 
- * `"H{funding-scripthash}{spending-height}S{spending-txid:index}{funding-txid:index}" → ""`
+ * `"H{funding-scripthash}{spending-height}S{spending-txid:index}{funding-txid:index}{value}" → ""`
 
  * `"S{funding-txid:index}{spending-txid:index}" → ""`
 
