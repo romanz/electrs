@@ -15,10 +15,10 @@ Install Rust, Bitcoin Core and the `clang` and `cmake` packages, then:
 ```bash
 $ git clone https://github.com/blockstream/electrs && cd electrs
 $ git checkout new-index
-$ cargo run --release -- -vvvv --daemon-dir ~/.bitcoin
+$ cargo run --release --bin electrs -- -vvvv --daemon-dir ~/.bitcoin
 
 # Or for liquid:
-$ cargo run --features liquid --release -- -vvvv --daemon-dir ~/.liquid
+$ cargo run --features liquid --release --bin electrs -- -vvvv --daemon-dir ~/.liquid
 ```
 
 See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
@@ -67,7 +67,7 @@ In addition to electrs's original configuration options, a few new options are a
 - `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 
-See `$ cargo run --release -- --help` for the full list of options.
+See `$ cargo run --release --bin electrs -- --help` for the full list of options.
 
 ## License
 
