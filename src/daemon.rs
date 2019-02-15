@@ -517,7 +517,10 @@ impl Daemon {
     }
 
     pub fn getmempooltx(&self, txhash: &Sha256dHash) -> Result<Transaction> {
-        let value = self.request("getrawtransaction", json!([ txhash.be_hex_string(), /*verbose=*/false ]))?;
+        let value = self.request(
+            "getrawtransaction",
+            json!([txhash.be_hex_string(), /*verbose=*/ false]),
+        )?;
         tx_from_value(value)
     }
 
