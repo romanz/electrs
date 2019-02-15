@@ -23,7 +23,7 @@ use crate::util::{
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
-const MIN_HISTORY_ITEMS_TO_CACHE: usize = 10; // TODO: number TBD
+const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
 pub struct Store {
     // TODO: should be column families
