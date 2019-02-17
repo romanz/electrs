@@ -879,7 +879,7 @@ fn to_scripthash(
 ) -> Result<FullHash, HttpError> {
     match script_type {
         "address" => address_to_scripthash(script_str, network),
-        "scripthash" => Ok(full_hash(&hex::decode(script_str)?)),
+        "scripthash" => parse_scripthash(script_str),
         _ => bail!("Invalid script type".to_string()),
     }
 }
@@ -896,6 +896,15 @@ fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, Http
         bail!(HttpError::from("Address on invalid network".to_string()))
     }
     Ok(compute_script_hash(&addr.script_pubkey()))
+}
+
+fn parse_scripthash(scripthash: &str) -> Result<FullHash, HttpError> {
+    let bytes = hex::decode(scripthash)?;
+    if bytes.len() != 32 {
+        Err(HttpError::from("Invalid scripthash".to_string()))
+    } else {
+        Ok(full_hash(&bytes))
+    }
 }
 
 #[derive(Debug)]
