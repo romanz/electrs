@@ -74,9 +74,13 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain), &metrics)));
     mempool.write().unwrap().update(&daemon)?;
 
-    let query = Arc::new(Query::new(Arc::clone(&chain), Arc::clone(&mempool)));
+    let query = Arc::new(Query::new(
+        Arc::clone(&chain),
+        Arc::clone(&mempool),
+        Arc::clone(&daemon),
+    ));
 
-    let server = rest::run_server(config, query, Arc::clone(&daemon));
+    let server = rest::run_server(config, query);
 
     loop {
         if let Err(err) = signal.wait(Duration::from_secs(5)) {

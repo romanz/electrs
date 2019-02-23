@@ -1,6 +1,5 @@
 use crate::chain::{Network, OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
-use crate::daemon::Daemon;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::Address;
@@ -423,7 +422,7 @@ fn prepare_txs(
         .collect()
 }
 
-pub fn run_server(config: Arc<Config>, query: Arc<Query>, daemon: Arc<Daemon>) -> Handle {
+pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
 
@@ -432,10 +431,9 @@ pub fn run_server(config: Arc<Config>, query: Arc<Query>, daemon: Arc<Daemon>) -
     let new_service = move || {
         let query = Arc::clone(&query);
         let config = Arc::clone(&config);
-        let daemon = Arc::clone(&daemon);
 
         service_fn_ok(move |req: Request<Body>| {
-            let mut resp = handle_request(req, &query, &config, &daemon).unwrap_or_else(|err| {
+            let mut resp = handle_request(req, &query, &config).unwrap_or_else(|err| {
                 warn!("{:?}", err);
                 Response::builder()
                     .status(err.0)
@@ -481,7 +479,6 @@ fn handle_request(
     req: Request<Body>,
     query: &Query,
     config: &Config,
-    daemon: &Daemon,
 ) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
     let uri = req.uri();
@@ -799,10 +796,9 @@ fn handle_request(
             let txhex = query_params
                 .get("tx")
                 .ok_or_else(|| HttpError::from("Missing tx".to_string()))?;
-            let txid = daemon
+            let txid = query
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
-            query.mempool_write().add_by_txid(daemon, &txid);
             http_message(StatusCode::OK, txid.be_hex_string(), 0)
         }
 

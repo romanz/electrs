@@ -2,20 +2,27 @@ use bitcoin::util::hash::Sha256dHash;
 use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
+use crate::daemon::Daemon;
+use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, Bytes, TransactionStatus};
 
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
     mempool: Arc<RwLock<Mempool>>,
+    daemon: Arc<Daemon>,
 }
 
 impl Query {
-    pub fn new(chain: Arc<ChainQuery>, mempool: Arc<RwLock<Mempool>>) -> Self {
-        Query { chain, mempool }
+    pub fn new(chain: Arc<ChainQuery>, mempool: Arc<RwLock<Mempool>>, daemon: Arc<Daemon>) -> Self {
+        Query {
+            chain,
+            mempool,
+            daemon,
+        }
     }
 
     pub fn chain(&self) -> &ChainQuery {
@@ -26,8 +33,13 @@ impl Query {
         self.mempool.read().unwrap()
     }
 
-    pub fn mempool_write(&self) -> RwLockWriteGuard<Mempool> {
-        self.mempool.write().unwrap()
+    pub fn broadcast_raw(&self, txhex: &String) -> Result<Sha256dHash> {
+        let txid = self.daemon.broadcast_raw(&txhex)?;
+        self.mempool
+            .write()
+            .unwrap()
+            .add_by_txid(&self.daemon, &txid);
+        Ok(txid)
     }
 
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
