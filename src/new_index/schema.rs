@@ -315,7 +315,7 @@ impl ChainQuery {
         scripthash: &[u8],
         last_seen_txid: Option<&Sha256dHash>,
         limit: usize,
-    ) -> Vec<(Transaction, Option<BlockId>)> {
+    ) -> Vec<(Transaction, BlockId)> {
         let _timer_scan = self.start_timer("history");
         let txs_conf = self
             .history_iter_scan_reverse(scripthash)
@@ -340,7 +340,7 @@ impl ChainQuery {
             .expect("failed looking up txs in history index")
             .into_iter()
             .zip(txs_conf)
-            .map(|(tx, (_, blockid))| (tx, Some(blockid)))
+            .map(|(tx, (_, blockid))| (tx, blockid))
             .collect()
     }
 

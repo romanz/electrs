@@ -627,7 +627,8 @@ fn handle_request(
                 query
                     .chain()
                     .history(&script_hash[..], None, CHAIN_TXS_PER_PAGE)
-                    .into_iter(),
+                    .into_iter()
+                    .map(|(tx, blockid)| (tx, Some(blockid))),
             );
 
             json_response(prepare_txs(txs, query, config), TTL_SHORT)
@@ -652,11 +653,16 @@ fn handle_request(
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
-            let txs = query.chain().history(
-                &script_hash[..],
-                last_seen_txid.as_ref(),
-                CHAIN_TXS_PER_PAGE,
-            );
+            let txs = query
+                .chain()
+                .history(
+                    &script_hash[..],
+                    last_seen_txid.as_ref(),
+                    CHAIN_TXS_PER_PAGE,
+                )
+                .into_iter()
+                .map(|(tx, blockid)| (tx, Some(blockid)))
+                .collect();
 
             json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
