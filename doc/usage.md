@@ -81,6 +81,16 @@ $ ./scripts/local-electrum.bash
 <snip>
 ```
 
+You can persist Electrum configuration (see `~/.electrum/config`) using:
+```bash
+$ electrum setconfig oneserver true
+$ electrum setconfig server 127.0.0.1:50001:t
+$ electrum   # will connect only to the local server
+```
+
+
+### SSL connection
+
 In order to use a secure connection, you can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#) by placing the following block in `nginx.conf`.
 
 ```nginx
