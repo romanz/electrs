@@ -344,6 +344,15 @@ impl ChainQuery {
             .collect()
     }
 
+    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
+        let _timer = self.start_timer("history_txids");
+        self.history_iter_scan(scripthash, 0)
+            .map(|row| TxHistoryRow::from_row(row).get_txid())
+            .unique()
+            .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
+            .collect()
+    }
+
     // TODO: avoid duplication with stats/stats_delta?
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let _timer = self.start_timer("utxo");
@@ -541,6 +550,15 @@ impl ChainQuery {
             .unwrap()
             .header_by_height(height)
             .cloned()
+    }
+
+    pub fn hash_by_height(&self, height: usize) -> Option<Sha256dHash> {
+        self.store
+            .indexed_headers
+            .read()
+            .unwrap()
+            .header_by_height(height)
+            .map(|entry| entry.hash().clone())
     }
 
     pub fn blockid_by_height(&self, height: usize) -> Option<BlockId> {

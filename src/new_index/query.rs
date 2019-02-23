@@ -8,7 +8,7 @@ use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
-use crate::util::{is_spendable, Bytes, TransactionStatus};
+use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
@@ -48,6 +48,22 @@ impl Query {
         utxos.retain(|utxo| !mempool.has_spend(&OutPoint::from(utxo)));
         utxos.extend(mempool.utxo(scripthash));
         utxos
+    }
+
+    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<(Sha256dHash, Option<BlockId>)> {
+        let confirmed_txids = self
+            .chain
+            .history_txids(scripthash)
+            .into_iter()
+            .map(|(tx, b)| (tx, Some(b)));
+
+        let mempool_txids = self
+            .mempool()
+            .history_txids(scripthash)
+            .into_iter()
+            .map(|tx| (tx, None));
+
+        confirmed_txids.chain(mempool_txids).collect()
     }
 
     pub fn stats(&self, scripthash: &[u8]) -> (ScriptStats, ScriptStats) {

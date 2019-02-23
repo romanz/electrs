@@ -48,6 +48,7 @@ extern crate serde_json;
 pub mod chain;
 pub mod config;
 pub mod daemon;
+pub mod electrum;
 pub mod errors;
 pub mod metrics;
 pub mod rest;

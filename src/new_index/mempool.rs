@@ -85,6 +85,17 @@ impl Mempool {
         }
     }
 
+    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<Sha256dHash> {
+        let _timer = self
+            .latency
+            .with_label_values(&["history_txids"])
+            .start_timer();
+        match self.history.get(scripthash) {
+            None => return vec![],
+            Some(entries) => entries.iter().map(get_entry_txid).unique().collect(),
+        }
+    }
+
     pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
         let _timer = self.latency.with_label_values(&["utxo"]).start_timer();
         let entries = match self.history.get(scripthash) {
