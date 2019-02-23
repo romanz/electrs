@@ -846,7 +846,7 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?
             .hash()
             .clone(),
-        None => query.chain().best_header().hash().clone(),
+        None => query.chain().best_hash(),
     };
 
     let zero = [0u8; 32];
