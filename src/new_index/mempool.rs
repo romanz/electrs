@@ -168,6 +168,11 @@ impl Mempool {
         self.txstore.keys().collect()
     }
 
+    pub fn txs(&self, limit: usize) -> Vec<Transaction> {
+        // TODO: avoid cloning
+        self.txstore.values().take(limit).cloned().collect()
+    }
+
     pub fn backlog_stats(&self) -> BacklogStats {
         let (count, vsize, total_fee) = self
             .feeinfo
