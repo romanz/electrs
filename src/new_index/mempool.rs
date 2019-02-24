@@ -1,6 +1,7 @@
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::Itertools;
+use serde::Serialize;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
@@ -161,6 +162,21 @@ impl Mempool {
         }
 
         stats
+    }
+
+    pub fn backlog_stats(&self) -> BacklogStats {
+        let (count, vsize, total_fee) = self
+            .feeinfo
+            .values()
+            .fold((0, 0, 0), |(count, vsize, fee), feeinfo| {
+                (count + 1, vsize + feeinfo.vsize, fee + feeinfo.fee)
+            });
+        BacklogStats {
+            count,
+            vsize,
+            total_fee,
+            fee_histogram: self.fee_histogram(),
+        }
     }
 
     pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
@@ -351,6 +367,14 @@ impl Mempool {
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
     }
+}
+
+#[derive(Serialize)]
+pub struct BacklogStats {
+    count: u32,
+    vsize: u32,     // in virtual bytes (= weight/4)
+    total_fee: u64, // in satoshis
+    fee_histogram: Vec<(f32, u32)>,
 }
 
 fn get_entry_txid(entry: &TxHistoryInfo) -> Sha256dHash {

@@ -4,9 +4,9 @@ use std::collections::HashMap;
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
 
 pub struct TxFeeInfo {
-    fee: u64,   // in satoshis
-    vsize: u32, // in virtual bytes (= weight/4)
-    fee_per_vbyte: f32,
+    pub fee: u64,   // in satoshis
+    pub vsize: u32, // in virtual bytes (= weight/4)
+    pub fee_per_vbyte: f32,
 }
 
 impl TxFeeInfo {
