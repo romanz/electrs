@@ -814,6 +814,9 @@ fn handle_request(
         (&Method::GET, Some(&"mempool"), Some(&"fee-histogram"), None, None, None) => {
             json_response(query.mempool().fee_histogram(), TTL_SHORT)
         }
+        (&Method::GET, Some(&"mempool"), Some(&"txids"), None, None, None) => {
+            json_response(query.mempool().txids(), TTL_SHORT)
+        }
 
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",

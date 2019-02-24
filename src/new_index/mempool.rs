@@ -164,6 +164,10 @@ impl Mempool {
         stats
     }
 
+    pub fn txids(&self) -> Vec<&Sha256dHash> {
+        self.txstore.keys().collect()
+    }
+
     pub fn backlog_stats(&self) -> BacklogStats {
         let (count, vsize, total_fee) = self
             .feeinfo
