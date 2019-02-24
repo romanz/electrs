@@ -1,7 +1,6 @@
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::Itertools;
-use serde::Serialize;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;

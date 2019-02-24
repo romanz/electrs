@@ -10,6 +10,10 @@ use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
+const CONF_TARGETS: [u16; 9] = [
+    2u16, 3u16, 4u16, 6u16, 10u16, 20u16, 144u16, 504u16, 1008u16,
+];
+
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
     mempool: Arc<RwLock<Mempool>>,
@@ -118,5 +122,21 @@ impl Query {
 
     pub fn get_tx_status(&self, txid: &Sha256dHash) -> TransactionStatus {
         TransactionStatus::from(self.chain.tx_confirming_block(txid))
+    }
+
+    // TODO cache, only allow getting estimatess for cached items
+    pub fn estimate_fee(&self, conf_target: u16) -> Option<f32> {
+        self.daemon.estimatesmartfee(conf_target).ok()
+    }
+
+    // TODO cache
+    pub fn estimate_fee_targets(&self) -> HashMap<u16, f32> {
+        CONF_TARGETS
+            .iter()
+            .filter_map(|conf_target| {
+                self.estimate_fee(*conf_target)
+                    .map(|feerate| (*conf_target, feerate))
+            })
+            .collect()
     }
 }

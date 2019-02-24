@@ -561,6 +561,18 @@ impl Daemon {
         )
     }
 
+    pub fn estimatesmartfee(&self, conf_target: u16) -> Result<f32> {
+        let feerate = self
+            .request("estimatesmartfee", json!([conf_target]))?
+            .get("feerate")
+            .chain_err(|| "missing feerate")?
+            .as_f64()
+            .chain_err(|| "invalid feerate")?;
+
+        // from BTC/kB to sat/b
+        Ok((feerate * 100_000f64) as f32)
+    }
+
     fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
         let info: Value = self.request("getblockheader", json!([tip.be_hex_string()]))?;
         let tip_height = info

@@ -827,6 +827,10 @@ fn handle_request(
             json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
+        (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {
+            json_response(query.estimate_fee_targets(), TTL_SHORT)
+        }
+
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",
             uri.path()

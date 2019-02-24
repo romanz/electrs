@@ -197,11 +197,14 @@ impl Connection {
         }))
     }
 
-    // FIXME: implement
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
-        //let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
-        let fee_rate = 1; // self.query.estimate_fee(blocks_count); // in BTC/kB
-        Ok(json!(fee_rate))
+        let conf_target = usize_from_value(params.get(0), "blocks_count")?;
+        let fee_rate = self
+            .query
+            .estimate_fee(conf_target as u16)
+            .chain_err(|| format!("cannot estimate fee for {} blocks", conf_target))?;
+        // convert from sat/b to BTC/kB, as expected by Electrum clients
+        Ok(json!(fee_rate / 100_000f32))
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
