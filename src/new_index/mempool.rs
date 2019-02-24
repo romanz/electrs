@@ -14,11 +14,13 @@ use crate::new_index::{
     compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
+use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{has_prevout, is_spendable, Bytes};
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
     txstore: HashMap<Sha256dHash, Transaction>,
+    feeinfo: HashMap<Sha256dHash, TxFeeInfo>,
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
     edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
     // monitoring
@@ -32,6 +34,7 @@ impl Mempool {
         Mempool {
             chain,
             txstore: HashMap::new(),
+            feeinfo: HashMap::new(),
             history: HashMap::new(),
             edges: HashMap::new(),
             latency: metrics.histogram_vec(
@@ -160,6 +163,11 @@ impl Mempool {
         stats
     }
 
+    pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
+        // @TODO cache
+        make_fee_histogram(self.feeinfo.values().collect())
+    }
+
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
         let _timer = self.latency.with_label_values(&["update"]).start_timer();
         let new_txids = daemon
@@ -219,27 +227,38 @@ impl Mempool {
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
             let txid_bytes = txid.into_bytes();
-            // An iterator over (ScriptHash, TxHistoryInfo)
-            let spending = tx
+
+            let prevouts: HashMap<u32, &TxOut> = tx
                 .input
                 .iter()
                 .enumerate()
                 .filter(|(_, txi)| has_prevout(txi))
                 .map(|(index, txi)| {
-                    let prev_txo = txos
-                        .get(&txi.previous_output)
-                        .expect(&format!("missing outpoint {:?}", txi.previous_output));
                     (
-                        compute_script_hash(&prev_txo.script_pubkey),
-                        TxHistoryInfo::Spending(SpendingInfo {
-                            txid: txid_bytes,
-                            vin: index as u16,
-                            prev_txid: txi.previous_output.txid.into_bytes(),
-                            prev_vout: txi.previous_output.vout as u16,
-                            value: prev_txo.value,
-                        }),
+                        index as u32,
+                        txos.get(&txi.previous_output)
+                            .expect(&format!("missing outpoint {:?}", txi.previous_output)),
                     )
-                });
+                })
+                .collect();
+
+            // Cache feerate and size
+            self.feeinfo.insert(txid, TxFeeInfo::new(&tx, &prevouts));
+
+            // An iterator over (ScriptHash, TxHistoryInfo)
+            let spending = prevouts.into_iter().map(|(input_index, prevout)| {
+                let txi = tx.input.get(input_index as usize).unwrap();
+                (
+                    compute_script_hash(&prevout.script_pubkey),
+                    TxHistoryInfo::Spending(SpendingInfo {
+                        txid: txid_bytes,
+                        vin: input_index as u16,
+                        prev_txid: txi.previous_output.txid.into_bytes(),
+                        prev_vout: txi.previous_output.vout as u16,
+                        value: prevout.value,
+                    }),
+                )
+            });
 
             // An iterator over (ScriptHash, TxHistoryInfo)
             let funding = tx
@@ -319,6 +338,9 @@ impl Mempool {
             self.txstore
                 .remove(&txid)
                 .expect(&format!("missing mempool tx {}", txid));
+            self.feeinfo
+                .remove(&txid)
+                .expect(&format!("missing mempool tx feeinfo {}", txid));
         }
         // TODO: make it more efficient (currently it takes O(|mempool|) time)
         self.history.retain(|_scripthash, entries| {

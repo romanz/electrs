@@ -130,9 +130,8 @@ impl Connection {
         Ok(json!([]))
     }
 
-    // FIXME: implement
     fn mempool_get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!([]))
+        Ok(json!(self.query.mempool().fee_histogram()))
     }
 
     fn blockchain_block_header(&self, params: &[Value]) -> Result<Value> {

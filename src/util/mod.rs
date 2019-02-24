@@ -4,6 +4,8 @@ mod merkle;
 mod script;
 mod transaction;
 
+pub mod fees;
+
 #[cfg(feature = "liquid")]
 mod elements;
 

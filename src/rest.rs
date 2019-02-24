@@ -807,6 +807,9 @@ fn handle_request(
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
             http_message(StatusCode::OK, txid.be_hex_string(), 0)
         }
+        (&Method::GET, Some(&"mempool"), Some(&"fee-histogram"), None, None, None) => {
+            json_response(query.mempool().fee_histogram(), TTL_SHORT)
+        }
 
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",
