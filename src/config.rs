@@ -35,9 +35,8 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
     address
         .to_socket_addrs()
         .expect(&format!("unable to resolve {} address", what))
-        .collect::<Vec<_>>()
-        .pop()
-        .unwrap()
+        .next()
+        .expect(&format!("no address found for {}", address))
 }
 
 impl Config {
@@ -162,17 +161,17 @@ impl Config {
 
         let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("daemon_rpc_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port)),
+                .unwrap_or(&format!("localhost:{}", default_daemon_port)),
             "Bitcoin RPC",
         );
         let electrum_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("electrum_rpc_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port)),
+                .unwrap_or(&format!("localhost:{}", default_electrum_port)),
             "Electrum RPC",
         );
         let monitoring_addr: SocketAddr = str_to_socketaddr(
             m.value_of("monitoring_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port)),
+                .unwrap_or(&format!("localhost:{}", default_monitoring_port)),
             "Prometheus monitoring",
         );
 
