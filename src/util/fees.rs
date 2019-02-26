@@ -1,4 +1,4 @@
-use crate::chain::{Transaction, TxOut};
+use crate::chain::{Transaction, TxOut, Value};
 use std::collections::HashMap;
 
 const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
@@ -23,7 +23,10 @@ impl TxFeeInfo {
             .output
             .iter()
             .find(|vout| vout.is_fee())
-            .map_or(0, |vout| vout.value.unwrap());
+            .map_or(0, |vout| match vout.value {
+                Value::Explicit(value) => value,
+                _ => 0u64,
+            });
 
         let vsize = tx.get_weight() / 4;
 
@@ -44,6 +47,7 @@ pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {
     for e in entries.iter().rev() {
         last_fee_rate = Some(e.fee_per_vbyte);
         bin_size += e.vsize;
+        // TODO what happens if there are >100000 bytes of txs paying the same feerate?
         if bin_size > VSIZE_BIN_WIDTH {
             // vsize of transactions paying >= e.fee_per_vbyte
             histogram.push((e.fee_per_vbyte, bin_size));
