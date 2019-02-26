@@ -808,7 +808,7 @@ fn handle_request(
             http_message(StatusCode::OK, txid.be_hex_string(), 0)
         }
 
-        (&Method::GET, Some(&"mempool"), Some(&"stats"), None, None, None) => {
+        (&Method::GET, Some(&"mempool"), None, None, None, None) => {
             json_response(query.mempool().backlog_stats(), TTL_SHORT)
         }
         (&Method::GET, Some(&"mempool"), Some(&"fee-histogram"), None, None, None) => {
