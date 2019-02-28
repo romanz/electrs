@@ -569,6 +569,10 @@ impl Daemon {
             .as_f64()
             .chain_err(|| "invalid feerate")?;
 
+        if feerate == -1f64 {
+            bail!("not enough data to estimate");
+        }
+
         // from BTC/kB to sat/b
         Ok((feerate * 100_000f64) as f32)
     }
