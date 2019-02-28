@@ -164,15 +164,21 @@ impl Mempool {
     }
 
     pub fn txids(&self) -> Vec<&Sha256dHash> {
+        let _timer = self.latency.with_label_values(&["txids"]).start_timer();
         self.txstore.keys().collect()
     }
 
     pub fn txs(&self, limit: usize) -> Vec<Transaction> {
+        let _timer = self.latency.with_label_values(&["txs"]).start_timer();
         // TODO: avoid cloning
         self.txstore.values().take(limit).cloned().collect()
     }
 
     pub fn backlog_stats(&self) -> BacklogStats {
+        let _timer = self
+            .latency
+            .with_label_values(&["backlog_stats"])
+            .start_timer();
         let (count, vsize, total_fee) = self
             .feeinfo
             .values()
@@ -188,6 +194,10 @@ impl Mempool {
     }
 
     pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
+        let _timer = self
+            .latency
+            .with_label_values(&["fee_histogram"])
+            .start_timer();
         // @TODO cache
         make_fee_histogram(self.feeinfo.values().collect())
     }
