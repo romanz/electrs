@@ -224,15 +224,15 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-
         #[cfg(not(feature = "liquid"))]
-        let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
-        #[cfg(not(feature = "liquid"))]
-        let (confirmed_balance, mempool_balance) = (
-            chain_stats.funded_txo_sum - chain_stats.spent_txo_sum,
-            mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum,
-        );
+        let (confirmed_balance, mempool_balance) = {
+            let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+            let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
+            (
+                chain_stats.funded_txo_sum - chain_stats.spent_txo_sum,
+                mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum,
+            )
+        };
 
         #[cfg(feature = "liquid")]
         let (confirmed_balance, mempool_balance) = (0, 0);
