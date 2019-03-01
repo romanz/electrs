@@ -101,34 +101,25 @@ struct TransactionValue {
     status: Option<TransactionStatus>,
 }
 
-impl
-    From<(
-        Transaction,
-        Option<BlockId>,
-        &HashMap<OutPoint, TxOut>,
-        &Config,
-    )> for TransactionValue
-{
-    fn from(
-        (tx, blockid, prevouts, config): (
-            Transaction,
-            Option<BlockId>,
-            &HashMap<OutPoint, TxOut>,
-            &Config,
-        ),
+impl TransactionValue {
+    fn new(
+        tx: Transaction,
+        blockid: Option<BlockId>,
+        prevouts: &HashMap<OutPoint, TxOut>,
+        config: &Config,
     ) -> Self {
         let vins: Vec<TxInValue> = tx
             .input
             .iter()
             .map(|txin| {
                 let prevout = prevouts.get(&txin.previous_output);
-                TxInValue::from((txin.clone(), prevout, config)) // TODO avoid clone
+                TxInValue::new(txin.clone(), prevout, config) // TODO avoid clone
             })
             .collect();
         let vouts: Vec<TxOutValue> = tx
             .output
             .iter()
-            .map(|txout| TxOutValue::from((txout.clone(), config))) // TODO avoid clone
+            .map(|txout| TxOutValue::new(txout.clone(), config)) // TODO avoid clone
             .collect();
         let bytes = serialize(&tx);
 
@@ -182,8 +173,8 @@ struct TxInValue {
     issuance: Option<IssuanceValue>,
 }
 
-impl From<(TxIn, Option<&TxOut>, &Config)> for TxInValue {
-    fn from((txin, prevout, config): (TxIn, Option<&TxOut>, &Config)) -> Self {
+impl TxInValue {
+    fn new(txin: TxIn, prevout: Option<&TxOut>, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let witness = if txin.witness.len() > 0 {
             Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
@@ -198,7 +189,7 @@ impl From<(TxIn, Option<&TxOut>, &Config)> for TxInValue {
         TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
-            prevout: prevout.map(|prevout| TxOutValue::from((prevout.clone(), config))), // TODO avoid clone()
+            prevout: prevout.map(|prevout| TxOutValue::new(prevout.clone(), config)), // TODO avoid clone()
             scriptsig_asm: get_script_asm(&txin.script_sig),
             witness,
             is_coinbase,
@@ -239,8 +230,8 @@ struct TxOutValue {
     pegout: Option<PegOutRequest>,
 }
 
-impl From<(TxOut, &Config)> for TxOutValue {
-    fn from((txout, config): (TxOut, &Config)) -> Self {
+impl TxOutValue {
+    fn new(txout: TxOut, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let value = txout.value;
 
@@ -418,7 +409,7 @@ fn prepare_txs(
     };
 
     txs.into_iter()
-        .map(|(tx, blockid)| TransactionValue::from((tx, blockid, &prevouts, config)))
+        .map(|(tx, blockid)| TransactionValue::new(tx, blockid, &prevouts, config))
         .collect()
 }
 
