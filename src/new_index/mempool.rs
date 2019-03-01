@@ -1,3 +1,4 @@
+use arraydeque::{ArrayDeque, Wrapping};
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::Sha256dHash;
 use itertools::Itertools;
@@ -17,16 +18,30 @@ use crate::new_index::{
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{has_prevout, is_spendable, Bytes};
 
+const RECENT_TXS_SIZE: usize = 50;
+
 pub struct Mempool {
     chain: Arc<ChainQuery>,
     txstore: HashMap<Sha256dHash, Transaction>,
     feeinfo: HashMap<Sha256dHash, TxFeeInfo>,
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
     edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
+    recent: ArrayDeque<[TxOverview; RECENT_TXS_SIZE], Wrapping>, // The N most recent txs to enter the mempool
+
     // monitoring
     latency: HistogramVec, // mempool requests latency
     delta: HistogramVec,   // # of added/removed txs
     count: GaugeVec,       // current state of the mempool
+}
+
+// A simplified transaction view used for the list of most recent transactions
+#[derive(Serialize)]
+pub struct TxOverview {
+    txid: Sha256dHash,
+    fee: u64,
+    vsize: u32,
+    #[cfg(not(feature = "liquid"))]
+    value: u64,
 }
 
 impl Mempool {
@@ -37,6 +52,7 @@ impl Mempool {
             feeinfo: HashMap::new(),
             history: HashMap::new(),
             edges: HashMap::new(),
+            recent: ArrayDeque::new(),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("mempool_latency", "Mempool requests latency (in seconds)"),
                 &["part"],
@@ -163,15 +179,18 @@ impl Mempool {
         stats
     }
 
+    // Get all txids in the mempool
     pub fn txids(&self) -> Vec<&Sha256dHash> {
         let _timer = self.latency.with_label_values(&["txids"]).start_timer();
         self.txstore.keys().collect()
     }
 
-    pub fn txs(&self, limit: usize) -> Vec<Transaction> {
-        let _timer = self.latency.with_label_values(&["txs"]).start_timer();
-        // TODO: avoid cloning
-        self.txstore.values().take(limit).cloned().collect()
+    // Get an overview of the most recent transactions
+    pub fn recent_txs_overview(&self) -> Vec<&TxOverview> {
+        // We don't bother ever deleting elements from the recent list.
+        // It may contain outdated txs that are no longer in the mempool,
+        // until they get pushed out by newer transactions.
+        self.recent.iter().collect()
     }
 
     pub fn backlog_stats(&self) -> BacklogStats {
@@ -276,8 +295,19 @@ impl Mempool {
                 })
                 .collect();
 
-            // Cache feerate and size
-            self.feeinfo.insert(txid, TxFeeInfo::new(&tx, &prevouts));
+            // Get feeinfo for caching and recent tx overview
+            let feeinfo = TxFeeInfo::new(&tx, &prevouts);
+
+            // recent is an ArrayDeque that automatically evicts the oldest elements
+            self.recent.push_front(TxOverview {
+                txid: txid,
+                fee: feeinfo.fee,
+                vsize: feeinfo.vsize,
+                #[cfg(not(feature = "liquid"))]
+                value: prevouts.values().map(|prevout| prevout.value).sum(),
+            });
+
+            self.feeinfo.insert(txid, feeinfo);
 
             // An iterator over (ScriptHash, TxHistoryInfo)
             let spending = prevouts.into_iter().map(|(input_index, prevout)| {
@@ -311,13 +341,13 @@ impl Mempool {
                     )
                 });
 
+            // Index funding/spending history entries and spend edges
             for (scripthash, entry) in funding.chain(spending) {
                 self.history
                     .entry(scripthash)
                     .or_insert_with(|| Vec::new())
                     .push(entry);
             }
-
             for (i, txi) in tx.input.iter().enumerate() {
                 self.edges.insert(txi.previous_output, (txid, i as u32));
             }

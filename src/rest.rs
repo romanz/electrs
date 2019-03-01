@@ -808,14 +808,10 @@ fn handle_request(
         (&Method::GET, Some(&"mempool"), Some(&"txids"), None, None, None) => {
             json_response(query.mempool().txids(), TTL_SHORT)
         }
-        (&Method::GET, Some(&"mempool"), Some(&"txs"), None, None, None) => {
-            let txs = query
-                .mempool()
-                .txs(MAX_MEMPOOL_TXS)
-                .into_iter()
-                .map(|tx| (tx, None))
-                .collect();
-            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        (&Method::GET, Some(&"mempool"), Some(&"recent"), None, None, None) => {
+            let mempool = query.mempool();
+            let recent = mempool.recent_txs_overview();
+            json_response(recent, TTL_SHORT /* TODO: TTL TBD */)
         }
 
         (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {

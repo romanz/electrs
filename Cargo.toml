@@ -16,6 +16,7 @@ default = []
 liquid = ["elements"]
 
 [dependencies]
+arraydeque = "0.4"
 arrayref = "0.3"
 base64 = "0.9"
 bincode = "1.0"
