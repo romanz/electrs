@@ -113,13 +113,13 @@ impl TransactionValue {
             .iter()
             .map(|txin| {
                 let prevout = prevouts.get(&txin.previous_output);
-                TxInValue::new(txin.clone(), prevout, config) // TODO avoid clone
+                TxInValue::new(txin, prevout, config)
             })
             .collect();
         let vouts: Vec<TxOutValue> = tx
             .output
             .iter()
-            .map(|txout| TxOutValue::new(txout.clone(), config)) // TODO avoid clone
+            .map(|txout| TxOutValue::new(txout, config))
             .collect();
         let bytes = serialize(&tx);
 
@@ -174,7 +174,7 @@ struct TxInValue {
 }
 
 impl TxInValue {
-    fn new(txin: TxIn, prevout: Option<&TxOut>, config: &Config) -> Self {
+    fn new(txin: &TxIn, prevout: Option<&TxOut>, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let witness = if txin.witness.len() > 0 {
             Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
@@ -189,7 +189,7 @@ impl TxInValue {
         TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
-            prevout: prevout.map(|prevout| TxOutValue::new(prevout.clone(), config)), // TODO avoid clone()
+            prevout: prevout.map(|prevout| TxOutValue::new(prevout, config)),
             scriptsig_asm: get_script_asm(&txin.script_sig),
             witness,
             is_coinbase,
@@ -203,7 +203,7 @@ impl TxInValue {
                 None
             },
 
-            scriptsig: txin.script_sig,
+            scriptsig: txin.script_sig.clone(),
         }
     }
 }
@@ -231,7 +231,7 @@ struct TxOutValue {
 }
 
 impl TxOutValue {
-    fn new(txout: TxOut, config: &Config) -> Self {
+    fn new(txout: &TxOut, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let value = txout.value;
 
@@ -261,7 +261,7 @@ impl TxOutValue {
         #[cfg(feature = "liquid")]
         let is_fee = txout.is_fee();
 
-        let script = txout.script_pubkey;
+        let script = &txout.script_pubkey;
         let script_asm = get_script_asm(&script);
         let script_addr = script_to_address(&script, &config.network_type);
 
@@ -293,7 +293,7 @@ impl TxOutValue {
             PegOutRequest::parse(&script, &config.parent_network, &config.parent_genesis_hash);
 
         TxOutValue {
-            scriptpubkey: script,
+            scriptpubkey: script.clone(),
             scriptpubkey_asm: script_asm,
             scriptpubkey_address: script_addr,
             scriptpubkey_type: script_type.to_string(),
