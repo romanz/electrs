@@ -18,7 +18,7 @@ use crate::new_index::{
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{has_prevout, is_spendable, Bytes};
 
-const RECENT_TXS_SIZE: usize = 50;
+const RECENT_TXS_SIZE: usize = 25;
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
