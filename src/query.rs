@@ -1,6 +1,8 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::hex::ToHex;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin_hashes::Hash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use lru::LruCache;
@@ -100,7 +102,7 @@ impl Status {
             let mut hash = FullHash::default();
             let mut sha2 = Sha256::new();
             for (height, txn_id) in txns {
-                let part = format!("{}:{}:", txn_id.be_hex_string(), height);
+                let part = format!("{}:{}:", txn_id.to_hex(), height);
                 sha2.input(part.as_bytes());
             }
             sha2.result(&mut hash);
@@ -116,7 +118,7 @@ struct TxnHeight {
 
 fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     let data = [&left[..], &right[..]].concat();
-    Sha256dHash::from_data(&data)
+    Sha256dHash::hash(&data)
 }
 
 fn create_merkle_branch_and_root(

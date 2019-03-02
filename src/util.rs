@@ -1,5 +1,6 @@
 use bitcoin::blockdata::block::BlockHeader;
-use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
+use bitcoin::util::hash::BitcoinHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;

@@ -1,6 +1,7 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::hex::{FromHex, ToHex};
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Value};
@@ -58,7 +59,7 @@ fn unspent_from_status(status: &Status) -> Value {
             .map(|out| json!({
                 "height": out.height,
                 "tx_pos": out.output_index,
-                "tx_hash": out.txn_id.be_hex_string(),
+                "tx_hash": out.txn_id.to_hex(),
                 "value": out.value,
             }))
             .collect()
@@ -137,11 +138,11 @@ impl Connection {
         }
         let (branch, root) = self.query.get_header_merkle_proof(height, cp_height)?;
 
-        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.be_hex_string()).collect();
+        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
 
         return Ok(json!({
             "header": raw_header_hex,
-            "root": root.be_hex_string(),
+            "root": root.to_hex(),
             "branch": branch_vec
         }));
     }
@@ -170,13 +171,13 @@ impl Connection {
             .query
             .get_header_merkle_proof(start_height + (count - 1), cp_height)?;
 
-        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.be_hex_string()).collect();
+        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
 
         Ok(json!({
             "count": headers.len(),
             "hex": headers.join(""),
             "max": 2016,
-            "root": root.be_hex_string(),
+            "root": root.to_hex(),
             "branch" : branch_vec
         }))
     }
@@ -214,7 +215,7 @@ impl Connection {
             status
                 .history()
                 .into_iter()
-                .map(|item| json!({"height": item.0, "tx_hash": item.1.be_hex_string()}))
+                .map(|item| json!({"height": item.0, "tx_hash": item.1.to_hex()}))
                 .collect()
         )))
     }
@@ -234,7 +235,7 @@ impl Connection {
         if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate) {
             warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
         }
-        Ok(json!(txid.be_hex_string()))
+        Ok(json!(txid.to_hex()))
     }
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
@@ -253,10 +254,7 @@ impl Connection {
             .query
             .get_merkle_proof(&tx_hash, height)
             .chain_err(|| "cannot create merkle proof")?;
-        let merkle: Vec<String> = merkle
-            .into_iter()
-            .map(|txid| txid.be_hex_string())
-            .collect();
+        let merkle: Vec<String> = merkle.into_iter().map(|txid| txid.to_hex()).collect();
         Ok(json!({
                 "block_height": height,
                 "merkle": merkle,
@@ -271,16 +269,13 @@ impl Connection {
         let (txid, merkle) = self.query.get_id_from_pos(height, tx_pos, want_merkle)?;
 
         if !want_merkle {
-            return Ok(json!(txid.be_hex_string()));
+            return Ok(json!(txid.to_hex()));
         }
 
-        let merkle_vec: Vec<String> = merkle
-            .into_iter()
-            .map(|entry| entry.be_hex_string())
-            .collect();
+        let merkle_vec: Vec<String> = merkle.into_iter().map(|entry| entry.to_hex()).collect();
 
         Ok(json!({
-            "tx_hash" : txid.be_hex_string(),
+            "tx_hash" : txid.to_hex(),
             "merkle" : merkle_vec}))
     }
 
@@ -359,7 +354,7 @@ impl Connection {
             result.push(json!({
                 "jsonrpc": "2.0",
                 "method": "blockchain.scripthash.subscribe",
-                "params": [script_hash.be_hex_string(), new_status_hash]}));
+                "params": [script_hash.to_hex(), new_status_hash]}));
             *status_hash = new_status_hash;
         }
         timer.observe_duration();

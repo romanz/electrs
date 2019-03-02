@@ -3,7 +3,7 @@ use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use std::collections::{HashMap, HashSet};
@@ -40,7 +40,7 @@ impl TxInRow {
         TxInRow {
             key: TxInKey {
                 code: b'I',
-                prev_hash_prefix: hash_prefix(&input.previous_output.txid.as_bytes()[..]),
+                prev_hash_prefix: hash_prefix(&input.previous_output.txid[..]),
                 prev_index: input.previous_output.vout as u16,
             },
             txid_prefix: hash_prefix(&txid[..]),
