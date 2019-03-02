@@ -122,9 +122,10 @@ $ electrum --oneserver --server=example:50002:s
 ```bash
 $ docker build -t electrs-app .
 $ docker run --network host \
-             --volume /home/roman/.bitcoin:/home/user/.bitcoin:ro \
+             --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
              --volume $PWD:/home/user \
-             --rm -i -t electrs-app
+             --rm -i -t electrs-app \
+             electrs -vvvv --timestamp --db-dir /home/user/db
 ```
 
 ## Monitoring

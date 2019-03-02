@@ -1,14 +1,17 @@
-FROM rust:latest
+FROM rust:1.33.0-slim
 
 RUN apt-get update
 RUN apt-get install -y clang cmake
-
-RUN cargo install electrs
+RUN apt-get install -y libsnappy-dev
 
 RUN adduser --disabled-login --system --shell /bin/false --uid 1000 user
 
 USER user
 WORKDIR /home/user
+COPY ./ /home/user
+
+RUN cargo build --release
+RUN cargo install --path .
 
 # Electrum RPC
 EXPOSE 50001
@@ -17,5 +20,3 @@ EXPOSE 50001
 EXPOSE 4224
 
 STOPSIGNAL SIGINT
-
-CMD ["electrs", "-vvvv", "--timestamp"]
