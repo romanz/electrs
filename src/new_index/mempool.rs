@@ -232,6 +232,10 @@ impl Mempool {
 
         // Update cached backlog stats (if expired)
         if self.backlog_stats.1.elapsed() > Duration::from_secs(BACKLOG_STATS_TTL) {
+            let _timer = self
+                .latency
+                .with_label_values(&["update_backlog_stats"])
+                .start_timer();
             self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
         }
 
