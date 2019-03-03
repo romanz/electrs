@@ -6,6 +6,7 @@ use itertools::Itertools;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
@@ -19,6 +20,7 @@ use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{has_prevout, is_spendable, Bytes};
 
 const RECENT_TXS_SIZE: usize = 25;
+const BACKLOG_STATS_TTL: u64 = 10;
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
@@ -27,6 +29,7 @@ pub struct Mempool {
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
     edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
     recent: ArrayDeque<[TxOverview; RECENT_TXS_SIZE], Wrapping>, // The N most recent txs to enter the mempool
+    backlog_stats: (BacklogStats, Instant),
 
     // monitoring
     latency: HistogramVec, // mempool requests latency
@@ -53,6 +56,10 @@ impl Mempool {
             history: HashMap::new(),
             edges: HashMap::new(),
             recent: ArrayDeque::new(),
+            backlog_stats: (
+                BacklogStats::default(),
+                Instant::now() - Duration::from_secs(BACKLOG_STATS_TTL),
+            ),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("mempool_latency", "Mempool requests latency (in seconds)"),
                 &["part"],
@@ -193,32 +200,8 @@ impl Mempool {
         self.recent.iter().collect()
     }
 
-    pub fn backlog_stats(&self) -> BacklogStats {
-        let _timer = self
-            .latency
-            .with_label_values(&["backlog_stats"])
-            .start_timer();
-        let (count, vsize, total_fee) = self
-            .feeinfo
-            .values()
-            .fold((0, 0, 0), |(count, vsize, fee), feeinfo| {
-                (count + 1, vsize + feeinfo.vsize, fee + feeinfo.fee)
-            });
-        BacklogStats {
-            count,
-            vsize,
-            total_fee,
-            fee_histogram: self.fee_histogram(),
-        }
-    }
-
-    pub fn fee_histogram(&self) -> Vec<(f32, u32)> {
-        let _timer = self
-            .latency
-            .with_label_values(&["fee_histogram"])
-            .start_timer();
-        // @TODO cache
-        make_fee_histogram(self.feeinfo.values().collect())
+    pub fn backlog_stats(&self) -> &BacklogStats {
+        &self.backlog_stats.0
     }
 
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
@@ -246,6 +229,12 @@ impl Mempool {
         self.count
             .with_label_values(&["txs"])
             .set(self.txstore.len() as f64);
+
+        // Update cached backlog stats (if expired)
+        if self.backlog_stats.1.elapsed() > Duration::from_secs(BACKLOG_STATS_TTL) {
+            self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
+        }
+
         Ok(())
     }
 
@@ -419,10 +408,36 @@ impl Mempool {
 
 #[derive(Serialize)]
 pub struct BacklogStats {
-    count: u32,
-    vsize: u32,     // in virtual bytes (= weight/4)
-    total_fee: u64, // in satoshis
-    fee_histogram: Vec<(f32, u32)>,
+    pub count: u32,
+    pub vsize: u32,     // in virtual bytes (= weight/4)
+    pub total_fee: u64, // in satoshis
+    pub fee_histogram: Vec<(f32, u32)>,
+}
+
+impl BacklogStats {
+    fn default() -> Self {
+        BacklogStats {
+            count: 0,
+            vsize: 0,
+            total_fee: 0,
+            fee_histogram: vec![(0.0, 0)],
+        }
+    }
+
+    fn new(feeinfo: &HashMap<Sha256dHash, TxFeeInfo>) -> Self {
+        let (count, vsize, total_fee) = feeinfo
+            .values()
+            .fold((0, 0, 0), |(count, vsize, fee), feeinfo| {
+                (count + 1, vsize + feeinfo.vsize, fee + feeinfo.fee)
+            });
+
+        BacklogStats {
+            count,
+            vsize,
+            total_fee,
+            fee_histogram: make_fee_histogram(feeinfo.values().collect()),
+        }
+    }
 }
 
 fn get_entry_txid(entry: &TxHistoryInfo) -> Sha256dHash {
