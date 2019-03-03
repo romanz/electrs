@@ -19,7 +19,7 @@ use crate::new_index::{
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{has_prevout, is_spendable, Bytes};
 
-const RECENT_TXS_SIZE: usize = 25;
+const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
 
 pub struct Mempool {
