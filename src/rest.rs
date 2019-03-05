@@ -557,6 +557,10 @@ fn handle_request(
                 )));
             }
 
+            // header_by_hash() only returns the BlockId for non-orphaned blocks,
+            // or None for orphaned
+            let confirmed_blockid = query.chain().blockid_by_hash(&hash);
+
             let txs = txids
                 .iter()
                 .skip(start_index)
@@ -564,14 +568,15 @@ fn handle_request(
                 .map(|txid| {
                     query
                         .lookup_txn(&txid)
-                        // FIXME: set blockid correctly, only when the block is non-orphaned
-                        //        alternatively, don't set "status" at all?
-                        .map(|tx| (tx, None))
+                        .map(|tx| (tx, confirmed_blockid.clone()))
                         .ok_or_else(|| "missing tx".to_string())
                 })
                 .collect::<Result<Vec<(Transaction, Option<BlockId>)>, _>>()?;
 
-            json_response(prepare_txs(txs, query, config), TTL_LONG)
+            // XXX orphraned blocks alway get TTL_SHORT
+            let ttl = ttl_by_depth(confirmed_blockid.map(|b| b.height), query);
+
+            json_response(prepare_txs(txs, query, config), ttl)
         }
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None, None)
         | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None, None) => {
@@ -715,10 +720,10 @@ fn handle_request(
             let tx = query
                 .lookup_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
-            let confirmation = query.chain().tx_confirming_block(&hash);
-            let ttl = ttl_by_depth(confirmation.as_ref().map(|c| c.height), query);
+            let blockid = query.chain().tx_confirming_block(&hash);
+            let ttl = ttl_by_depth(blockid.as_ref().map(|b| b.height), query);
 
-            let tx = prepare_txs(vec![(tx, confirmation)], query, config).remove(0);
+            let tx = prepare_txs(vec![(tx, blockid)], query, config).remove(0);
 
             json_response(tx, ttl)
         }

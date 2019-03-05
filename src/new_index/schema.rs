@@ -570,6 +570,16 @@ impl ChainQuery {
             .map(BlockId::from)
     }
 
+    // returns None for orphaned blocks
+    pub fn blockid_by_hash(&self, hash: &Sha256dHash) -> Option<BlockId> {
+        self.store
+            .indexed_headers
+            .read()
+            .unwrap()
+            .header_by_blockhash(hash)
+            .map(BlockId::from)
+    }
+
     pub fn best_height(&self) -> usize {
         self.store.indexed_headers.read().unwrap().len() - 1
     }
