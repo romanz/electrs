@@ -4,8 +4,8 @@ use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::Address;
 use crate::util::{
-    full_hash, get_script_asm, has_prevout, is_coinbase, script_to_address, BlockHeaderMeta,
-    BlockId, FullHash, TransactionStatus,
+    full_hash, get_script_asm, get_tx_merkle_proof, has_prevout, is_coinbase, script_to_address,
+    BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
 };
 
 #[cfg(feature = "liquid")]
@@ -736,22 +736,23 @@ fn handle_request(
             let ttl = ttl_by_depth(status.block_height, query);
             json_response(status, ttl)
         }
-        // TODO: implement merkle proof
-        /*
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkle-proof"), None) => {
+
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkle-proof"), None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
-            let status = query.get_tx_status(&hash);
-            if !status.confirmed {
-                bail!("Transaction is unconfirmed".to_string())
-            };
-            let proof = query.get_merkle_proof(&hash, &status.block_hash.unwrap())?;
-            let ttl = ttl_by_depth(status.block_height, query);
+            let blockid = query.chain().tx_confirming_block(&hash).ok_or_else(|| {
+                HttpError::not_found("Transaction not found or is unconfirmed".to_string())
+            })?;
+            let (merkle, pos) = get_tx_merkle_proof(query.chain(), &hash, &blockid.hash)?;
+            let merkle: Vec<String> = merkle
+                .into_iter()
+                .map(|txid| txid.be_hex_string())
+                .collect();
+            let ttl = ttl_by_depth(Some(blockid.height), query);
             json_response(
-                json!({ "block_height": status.block_height, "merkle": proof.0, "pos": proof.1 }),
+                json!({ "block_height": blockid.height, "merkle": merkle, "pos": pos }),
                 ttl,
             )
         }
-        */
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index), None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let outpoint = OutPoint {

@@ -297,16 +297,24 @@ impl Connection {
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
-        let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
+        let txid = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
         let height = usize_from_value(params.get(1), "height")?;
-        let (merkle, pos) = get_tx_merkle_proof(self.query.chain(), &tx_hash, height)
+        let blockid = self
+            .query
+            .chain()
+            .tx_confirming_block(&txid)
+            .ok_or_else(|| "tx not found or is unconfirmed")?;
+        if blockid.height != height {
+            bail!("invalid confirmation height provided");
+        }
+        let (merkle, pos) = get_tx_merkle_proof(self.query.chain(), &txid, &blockid.hash)
             .chain_err(|| "cannot create merkle proof")?;
         let merkle: Vec<String> = merkle
             .into_iter()
             .map(|txid| txid.be_hex_string())
             .collect();
         Ok(json!({
-                "block_height": height,
+                "block_height": blockid.height,
                 "merkle": merkle,
                 "pos": pos}))
     }

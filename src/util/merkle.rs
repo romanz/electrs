@@ -6,14 +6,11 @@ use crate::new_index::ChainQuery;
 pub fn get_tx_merkle_proof(
     chain: &ChainQuery,
     tx_hash: &Sha256dHash,
-    height: usize,
+    block_hash: &Sha256dHash,
 ) -> Result<(Vec<Sha256dHash>, usize)> {
-    let header_hash = chain
-        .hash_by_height(height)
-        .chain_err(|| format!("missing block #{}", height))?;
     let txids = chain
-        .get_block_txids(&header_hash)
-        .chain_err(|| format!("missing block txids for #{}", height))?;
+        .get_block_txids(&block_hash)
+        .chain_err(|| format!("missing block txids for #{}", block_hash))?;
     let pos = txids
         .iter()
         .position(|txid| txid == tx_hash)
