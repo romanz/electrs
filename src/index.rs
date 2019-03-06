@@ -275,15 +275,24 @@ struct Stats {
 impl Stats {
     fn new(metrics: &Metrics) -> Stats {
         Stats {
-            blocks: metrics.counter(MetricOpts::new("index_blocks", "# of indexed blocks")),
-            txns: metrics.counter(MetricOpts::new("index_txns", "# of indexed transactions")),
-            vsize: metrics.counter(MetricOpts::new("index_vsize", "# of indexed vbytes")),
+            blocks: metrics.counter(MetricOpts::new(
+                "electrs_index_blocks",
+                "# of indexed blocks",
+            )),
+            txns: metrics.counter(MetricOpts::new(
+                "electrs_index_txns",
+                "# of indexed transactions",
+            )),
+            vsize: metrics.counter(MetricOpts::new(
+                "electrs_index_vsize",
+                "# of indexed vbytes",
+            )),
             height: metrics.gauge(MetricOpts::new(
-                "index_height",
+                "electrs_index_height",
                 "Last indexed block's height",
             )),
             duration: metrics.histogram_vec(
-                HistogramOpts::new("index_duration", "indexing duration (in seconds)"),
+                HistogramOpts::new("electrs_index_duration", "indexing duration (in seconds)"),
                 &["step"],
             ),
         }

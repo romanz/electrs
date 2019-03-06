@@ -41,16 +41,19 @@ impl Parser {
             current_headers: load_headers(daemon)?,
             indexed_blockhashes: Mutex::new(indexed_blockhashes),
             duration: metrics.histogram_vec(
-                HistogramOpts::new("parse_duration", "blk*.dat parsing duration (in seconds)"),
+                HistogramOpts::new(
+                    "electrs_parse_duration",
+                    "blk*.dat parsing duration (in seconds)",
+                ),
                 &["step"],
             ),
             block_count: metrics.counter_vec(
-                MetricOpts::new("parse_blocks", "# of block parsed (from blk*.dat)"),
+                MetricOpts::new("electrs_parse_blocks", "# of block parsed (from blk*.dat)"),
                 &["type"],
             ),
 
             bytes_read: metrics.histogram(HistogramOpts::new(
-                "parse_bytes_read",
+                "electrs_parse_bytes_read",
                 "# of bytes read (from blk*.dat)",
             )),
         }))
