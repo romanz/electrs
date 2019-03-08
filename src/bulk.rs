@@ -77,7 +77,7 @@ impl Parser {
         let blob = fs::read(&path).chain_err(|| format!("failed to read {:?}", path))?;
         timer.observe_duration();
         self.bytes_read.observe(blob.len() as f64);
-        return Ok(blob);
+        Ok(blob)
     }
 
     fn index_blkfile(&self, blob: Vec<u8>) -> Result<Vec<Row>> {
@@ -94,7 +94,7 @@ impl Parser {
                     .indexed_blockhashes
                     .lock()
                     .expect("indexed_blockhashes")
-                    .insert(blockhash.clone())
+                    .insert(blockhash)
                 {
                     rows.extend(index_block(&block, header.height()));
                     self.block_count.with_label_values(&["indexed"]).inc();
@@ -134,7 +134,7 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
         let block_size = u32::consensus_decode(&mut cursor).chain_err(|| "no block size")?;
         let start = cursor.position() as usize;
         cursor
-            .seek(SeekFrom::Current(block_size as i64))
+            .seek(SeekFrom::Current(i64::from(block_size)))
             .chain_err(|| format!("seek {} failed", block_size))?;
         let end = cursor.position() as usize;
 

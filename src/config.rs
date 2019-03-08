@@ -34,9 +34,9 @@ pub struct Config {
 fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
     address
         .to_socket_addrs()
-        .expect(&format!("unable to resolve {} address", what))
+        .unwrap_or_else(|e| panic!("unable to resolve {} address: {}", what, e))
         .next()
-        .expect(&format!("no address found for {}", address))
+        .unwrap_or_else(|| panic!("no address found for {}", address))
 }
 
 impl Config {
@@ -177,7 +177,7 @@ impl Config {
 
         let mut daemon_dir = m
             .value_of("daemon_dir")
-            .map(|p| PathBuf::from(p))
+            .map(PathBuf::from)
             .unwrap_or_else(|| {
                 let mut default_dir = home_dir().expect("no homedir");
                 default_dir.push(".bitcoin");

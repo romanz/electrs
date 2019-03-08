@@ -129,7 +129,7 @@ impl TxRow {
                 code: b'T',
                 txid: full_hash(&txid[..]),
             },
-            height: height,
+            height,
         }
     }
 
@@ -239,7 +239,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     while blockhash != null_hash {
         let header = map
             .remove(&blockhash)
-            .expect(&format!("missing {} header in DB", blockhash));
+            .unwrap_or_else(|| panic!("missing {} header in DB", blockhash));
         blockhash = header.prev_blockhash;
         headers.push(header);
     }
@@ -363,9 +363,9 @@ impl Index {
             let indexed_headers = self.headers.read().unwrap();
             indexed_headers.order(daemon.get_new_headers(&indexed_headers, &tip)?)
         };
-        new_headers.last().map(|tip| {
-            info!("{:?} ({} left to index)", tip, new_headers.len());
-        });
+        if let Some(latest_header) = new_headers.last() {
+            info!("{:?} ({} left to index)", latest_header, new_headers.len());
+        };
         let height_map = HashMap::<Sha256dHash, usize>::from_iter(
             new_headers.iter().map(|h| (*h.hash(), h.height())),
         );
@@ -401,7 +401,7 @@ impl Index {
                 let blockhash = block.bitcoin_hash();
                 let height = *height_map
                     .get(&blockhash)
-                    .expect(&format!("missing header for block {}", blockhash));
+                    .unwrap_or_else(|| panic!("missing header for block {}", blockhash));
 
                 let timer = self.stats.start_timer("index");
                 let mut block_rows = index_block(block, height);

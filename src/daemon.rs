@@ -322,7 +322,7 @@ impl Daemon {
         };
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
-        if network_info.version < 00_16_00_00 {
+        if network_info.version < 16_00_00 {
             bail!(
                 "{} is not supported - please use bitcoind 0.16+",
                 network_info.subversion,
@@ -330,11 +330,11 @@ impl Daemon {
         }
         let blockchain_info = daemon.getblockchaininfo()?;
         info!("{:?}", blockchain_info);
-        if blockchain_info.pruned == true {
+        if blockchain_info.pruned {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
         }
         loop {
-            if daemon.getblockchaininfo()?.initialblockdownload == false {
+            if !daemon.getblockchaininfo()?.initialblockdownload {
                 break;
             }
             warn!("wait until bitcoind is synced (i.e. initialblockdownload = false)");
@@ -585,7 +585,7 @@ impl Daemon {
             .expect("missing height")
             .as_u64()
             .expect("non-numeric height") as usize;
-        let all_heights: Vec<usize> = (0..tip_height + 1).collect();
+        let all_heights: Vec<usize> = (0..=tip_height).collect();
         let chunk_size = 100_000;
         let mut result = vec![];
         let null_hash = Sha256dHash::default();

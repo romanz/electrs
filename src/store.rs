@@ -50,7 +50,7 @@ impl DBStore {
         db_opts.set_write_buffer_size(256 << 20);
         db_opts.set_disable_auto_compactions(opts.bulk_import); // for initial bulk load
         db_opts.set_advise_random_on_open(!opts.bulk_import); // bulk load uses sequential I/O
-        if opts.low_memory == false {
+        if !opts.low_memory {
             db_opts.set_compaction_readahead_size(1 << 20);
         }
 
@@ -73,7 +73,7 @@ impl DBStore {
 
     pub fn enable_compaction(self) -> Self {
         let mut opts = self.opts.clone();
-        if opts.bulk_import == true {
+        if opts.bulk_import {
             opts.bulk_import = false;
             info!("enabling auto-compactions");
             let opts = [("disable_auto_compactions", "false")];

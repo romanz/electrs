@@ -33,7 +33,7 @@ impl MempoolStore {
         index_transaction(tx, 0, &mut rows);
         for row in rows {
             let (key, value) = row.into_pair();
-            self.map.entry(key).or_insert(vec![]).push(value);
+            self.map.entry(key).or_insert_with(|| vec![]).push(value);
         }
     }
 
@@ -46,10 +46,10 @@ impl MempoolStore {
                 let values = self
                     .map
                     .get_mut(&key)
-                    .expect(&format!("missing key {} in mempool", hex::encode(&key)));
+                    .unwrap_or_else(|| panic!("missing key {} in mempool", hex::encode(&key)));
                 let last_value = values
                     .pop()
-                    .expect(&format!("no values found for key {}", hex::encode(&key)));
+                    .unwrap_or_else(|| panic!("no values found for key {}", hex::encode(&key)));
                 // TxInRow and TxOutRow have an empty value, TxRow has height=0 as value.
                 assert_eq!(
                     value,
@@ -133,7 +133,9 @@ impl Stats {
         for (fee_rate, vsize) in bands {
             // labels should be ordered by fee_rate value
             let label = format!("≤{:10.0}", fee_rate);
-            self.vsize.with_label_values(&[&label]).set(vsize as f64);
+            self.vsize
+                .with_label_values(&[&label])
+                .set(f64::from(vsize));
         }
     }
 }
@@ -251,7 +253,7 @@ impl Tracker {
         let stats = self
             .items
             .remove(txid)
-            .expect(&format!("missing mempool tx {}", txid));
+            .unwrap_or_else(|| panic!("missing mempool tx {}", txid));
         self.index.remove(&stats.tx);
     }
 

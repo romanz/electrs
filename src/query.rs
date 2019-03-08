@@ -82,7 +82,7 @@ impl Status {
             outputs_map.insert((f.txn_id, f.output_index), f);
         }
         for s in self.spending() {
-            if let None = outputs_map.remove(&s.funding_output) {
+            if outputs_map.remove(&s.funding_output).is_none() {
                 warn!("failed to remove {:?}", s.funding_output);
             }
         }
@@ -128,12 +128,12 @@ fn create_merkle_branch_and_root(
     let mut merkle = vec![];
     while hashes.len() > 1 {
         if hashes.len() % 2 != 0 {
-            let last = hashes.last().unwrap().clone();
+            let last = *hashes.last().unwrap();
             hashes.push(last);
         }
         index = if index % 2 == 0 { index + 1 } else { index - 1 };
         merkle.push(hashes[index]);
-        index = index / 2;
+        index /= 2;
         hashes = hashes
             .chunks(2)
             .map(|pair| merklize(pair[0], pair[1]))
@@ -282,7 +282,7 @@ impl Query {
         for (index, output) in t.txn.output.iter().enumerate() {
             if compute_script_hash(&output.script_pubkey[..]) == script_hash {
                 result.push(FundingOutput {
-                    txn_id: txn_id,
+                    txn_id,
                     height: t.height,
                     output_index: index,
                     value: output.value,
@@ -301,13 +301,11 @@ impl Query {
         let read_store = self.app.read_store();
         let txid_prefixes = txids_by_script_hash(read_store, script_hash);
         // if the limit is enabled
-        if self.txid_limit > 0 {
-            if txid_prefixes.len() > self.txid_limit {
-                bail!(
-                    "{}+ transactions found, query may take a long time",
-                    txid_prefixes.len()
-                );
-            }
+        if self.txid_limit > 0 && txid_prefixes.len() > self.txid_limit {
+            bail!(
+                "{}+ transactions found, query may take a long time",
+                txid_prefixes.len()
+            );
         }
         for t in self.load_txns_by_prefix(read_store, txid_prefixes)? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
@@ -442,7 +440,7 @@ impl Query {
             );
         }
 
-        let heights: Vec<usize> = (0..cp_height + 1).collect();
+        let heights: Vec<usize> = (0..=cp_height).collect();
         let header_hashes: Vec<Sha256dHash> = self
             .get_headers(&heights)
             .into_iter()

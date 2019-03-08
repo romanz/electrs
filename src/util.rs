@@ -20,11 +20,11 @@ pub type FullHash = [u8; HASH_LEN];
 pub type HashPrefix = [u8; HASH_PREFIX_LEN];
 
 pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
-    array_ref![hash, 0, HASH_PREFIX_LEN].clone()
+    *array_ref![hash, 0, HASH_PREFIX_LEN]
 }
 
 pub fn full_hash(hash: &[u8]) -> FullHash {
-    array_ref![hash, 0, HASH_LEN].clone()
+    *array_ref![hash, 0, HASH_LEN]
 }
 
 #[derive(Eq, PartialEq, Clone)]
@@ -50,9 +50,8 @@ impl HeaderEntry {
 
 impl fmt::Debug for HeaderEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_block_time = time::at_utc(time::Timespec::new(self.header().time as i64, 0))
-            .rfc3339()
-            .to_string();
+        let spec = time::Timespec::new(i64::from(self.header().time), 0);
+        let last_block_time = time::at_utc(spec).rfc3339().to_string();
         write!(
             f,
             "best={} height={} @ {}",
@@ -104,14 +103,14 @@ impl HeaderList {
             0
         } else {
             self.header_by_blockhash(&prev_blockhash)
-                .expect(&format!("{} is not part of the blockchain", prev_blockhash))
+                .unwrap_or_else(|| panic!("{} is not part of the blockchain", prev_blockhash))
                 .height()
                 + 1
         };
         (new_height..)
             .zip(hashed_headers.into_iter())
             .map(|(height, hashed_header)| HeaderEntry {
-                height: height,
+                height,
                 hash: hashed_header.blockhash,
                 header: hashed_header.header,
             })
@@ -179,10 +178,7 @@ impl HeaderList {
     pub fn tip(&self) -> &Sha256dHash {
         assert_eq!(
             self.tip,
-            self.headers
-                .last()
-                .map(|h| *h.hash())
-                .unwrap_or(Sha256dHash::default())
+            self.headers.last().map(|h| *h.hash()).unwrap_or_default()
         );
         &self.tip
     }

@@ -140,11 +140,11 @@ impl Connection {
 
         let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
 
-        return Ok(json!({
+        Ok(json!({
             "header": raw_header_hex,
             "root": root.to_hex(),
             "branch": branch_vec
-        }));
+        }))
     }
 
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
@@ -506,7 +506,8 @@ impl RPC {
         let chan = Channel::new();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
-            let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
+            let listener =
+                TcpListener::bind(addr).unwrap_or_else(|e| panic!("bind({}) failed: {}", addr, e));
             info!("RPC server running on {}", addr);
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
@@ -531,7 +532,7 @@ impl RPC {
             )),
         });
         let notification = Channel::new();
-        let handle = RPC {
+        RPC {
             notification: notification.sender(),
             server: Some(spawn_thread("rpc", move || {
                 let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
@@ -560,8 +561,7 @@ impl RPC {
                 }
                 trace!("RPC connections are closed");
             })),
-        };
-        handle
+        }
     }
 
     pub fn notify(&self) {
@@ -573,7 +573,9 @@ impl Drop for RPC {
     fn drop(&mut self) {
         trace!("stop accepting new RPCs");
         self.notification.send(Notification::Exit).unwrap();
-        self.server.take().map(|t| t.join().unwrap());
+        if let Some(handle) = self.server.take() {
+            handle.join().unwrap();
+        }
         trace!("RPC server is stopped");
     }
 }
