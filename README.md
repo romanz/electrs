@@ -16,7 +16,7 @@ thus preserving the privacy of the user's addresses and balances.
 
 ## Features
 
- * Supports Electrum protocol [v1.2](https://electrumx.readthedocs.io/en/latest/protocol.html)
+ * Supports Electrum protocol [v1.4](https://electrumx.readthedocs.io/en/latest/protocol.html)
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
  * Fast synchronization of the Bitcoin blockchain (~2 hours for ~187GB @ July 2018) on [modest hardware](https://gist.github.com/romanz/cd9324474de0c2f121198afe3d063548)
  * Low index storage overhead (~20%), relying on a local full node for transaction retrieval
