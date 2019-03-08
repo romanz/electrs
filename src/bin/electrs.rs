@@ -23,7 +23,7 @@ use electrs::{
 };
 
 fn run_server(config: &Config) -> Result<()> {
-    let signal = Waiter::new();
+    let signal = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 

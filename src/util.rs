@@ -187,6 +187,10 @@ impl HeaderList {
         self.headers.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.headers.is_empty()
+    }
+
     pub fn iter(&self) -> slice::Iter<HeaderEntry> {
         self.headers.iter()
     }
@@ -222,7 +226,7 @@ pub struct Channel<T> {
 }
 
 impl<T> Channel<T> {
-    pub fn new() -> Channel<T> {
+    pub fn unbounded() -> Self {
         let (tx, rx) = channel();
         Channel { tx, rx }
     }

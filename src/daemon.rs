@@ -8,7 +8,7 @@ use bitcoin_hashes::hex::{FromHex, ToHex};
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use glob;
 use hex;
-use serde_json::{from_str, from_value, Value};
+use serde_json::{from_str, from_value, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -55,23 +55,28 @@ fn tx_from_value(value: Value) -> Result<Transaction> {
 
 /// Parse JSONRPC error code, if exists.
 fn parse_error_code(err: &Value) -> Option<i64> {
+    if err.is_null() {
+        return None;
+    }
     err.as_object()?.get("code")?.as_i64()
+}
+
+fn check_error_code(reply_obj: &Map<String, Value>, method: &str) -> Result<()> {
+    if let Some(err) = reply_obj.get("error") {
+        if let Some(code) = parse_error_code(&err) {
+            match code {
+                // RPC_IN_WARMUP -> retry by later reconnection
+                -28 => bail!(ErrorKind::Connection(err.to_string())),
+                _ => bail!("{} RPC error: {}", method, err),
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
-        if let Some(err) = reply_obj.get("error") {
-            if !err.is_null() {
-                if let Some(code) = parse_error_code(&err) {
-                    match code {
-                        // RPC_IN_WARMUP -> retry by later reconnection
-                        -28 => bail!(ErrorKind::Connection(err.to_string())),
-                        _ => (),
-                    }
-                }
-                bail!("{} RPC error: {}", method, err);
-            }
-        }
+        check_error_code(reply_obj, method)?;
         let id = reply_obj
             .get("id")
             .chain_err(|| format!("no id in reply: {:?}", reply_obj))?
@@ -612,7 +617,7 @@ impl Daemon {
         bestblockhash: &Sha256dHash,
     ) -> Result<Vec<BlockHeader>> {
         // Iterate back over headers until known blockash is found:
-        if indexed_headers.len() == 0 {
+        if indexed_headers.is_empty() {
             return self.get_all_headers(bestblockhash);
         }
         debug!(

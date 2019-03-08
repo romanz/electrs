@@ -133,7 +133,7 @@ impl TxRow {
         }
     }
 
-    pub fn filter_prefix(txid_prefix: &HashPrefix) -> Bytes {
+    pub fn filter_prefix(txid_prefix: HashPrefix) -> Bytes {
         [b"T", &txid_prefix[..]].concat()
     }
 

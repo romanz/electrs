@@ -149,9 +149,9 @@ fn txrow_by_txid(store: &ReadStore, txid: &Sha256dHash) -> Option<TxRow> {
     Some(TxRow::from_row(&Row { key, value }))
 }
 
-fn txrows_by_prefix(store: &ReadStore, txid_prefix: &HashPrefix) -> Vec<TxRow> {
+fn txrows_by_prefix(store: &ReadStore, txid_prefix: HashPrefix) -> Vec<TxRow> {
     store
-        .scan(&TxRow::filter_prefix(&txid_prefix))
+        .scan(&TxRow::filter_prefix(txid_prefix))
         .iter()
         .map(|row| TxRow::from_row(row))
         .collect()
@@ -230,7 +230,7 @@ impl Query {
     ) -> Result<Vec<TxnHeight>> {
         let mut txns = vec![];
         for txid_prefix in prefixes {
-            for tx_row in txrows_by_prefix(store, &txid_prefix) {
+            for tx_row in txrows_by_prefix(store, txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
                 let txn = self
                     .tx_cache

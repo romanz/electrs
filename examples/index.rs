@@ -12,7 +12,7 @@ use electrs::{
 use error_chain::ChainedError;
 
 fn run() -> Result<()> {
-    let signal = Waiter::new();
+    let signal = Waiter::start();
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();

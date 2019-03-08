@@ -503,7 +503,7 @@ impl RPC {
     }
 
     fn start_acceptor(addr: SocketAddr) -> Channel<Option<(TcpStream, SocketAddr)>> {
-        let chan = Channel::new();
+        let chan = Channel::unbounded();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
             let listener =
@@ -531,7 +531,7 @@ impl RPC {
                 "# of Electrum subscriptions",
             )),
         });
-        let notification = Channel::new();
+        let notification = Channel::unbounded();
         RPC {
             notification: notification.sender(),
             server: Some(spawn_thread("rpc", move || {
