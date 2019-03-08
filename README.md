@@ -1,6 +1,6 @@
 # Electrum Server in Rust
 
-[![Build Status](https://travis-ci.com/romanz/electrs.svg?branch=master)](https://travis-ci.com/romanz/electrs)
+[![CircleCI](https://circleci.com/gh/romanz/electrs/tree/master.svg?style=svg)](https://circleci.com/gh/romanz/electrs/tree/master)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 [![crates.io](http://meritbadge.herokuapp.com/electrs)](https://crates.io/crates/electrs)
 [![gitter.im](https://badges.gitter.im/romanz/electrs.svg)](https://gitter.im/romanz/electrs)
