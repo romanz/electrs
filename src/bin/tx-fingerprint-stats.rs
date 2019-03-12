@@ -3,6 +3,7 @@ extern crate electrs;
 extern crate log;
 
 use std::sync::Arc;
+use std::collections::HashSet;
 
 use bitcoin::consensus::encode::deserialize;
 use electrs::{
@@ -90,7 +91,7 @@ fn main() {
         let large_out = tx.output.iter().map(|out| out.value).max().unwrap();
 
         let total_in: u64 = prevouts.values().map(|out| out.value).sum();
-        let smallest_in = prevouts.values().map(|out| out.value).min().unwrap_or(0);
+        let smallest_in = prevouts.values().map(|out| out.value).min().unwrap();
 
         let fee = total_in - total_out;
 
@@ -103,7 +104,16 @@ fn main() {
             0
         };
 
-        println!("{},{},{},{}", txid, blockid.height, tx.lock_time, uih);
+        // test for spending multiple coins owned by the same spk
+        let is_multi_spend = {
+            let mut seen = HashSet::new();
+            prevouts.values().any(|out| !seen.insert(&out.script_pubkey))
+        };
+
+        println!(
+            "{},{},{},{},{}",
+            txid, blockid.height, tx.lock_time, uih, is_multi_spend as u8
+        );
 
         total = total + 1;
         uih_totals[uih] = uih_totals[uih] + 1;
