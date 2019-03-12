@@ -15,6 +15,7 @@ use electrs::{
     util::has_prevout,
 };
 
+#[cfg(not(feature = "liquid"))]
 fn main() {
     let signal = Waiter::new();
     let config = Config::from_args();
@@ -109,3 +110,6 @@ fn main() {
     }
     info!("processed {} total txs, UIH counts: {:?}", total, uih_totals);
 }
+
+#[cfg(feature = "liquid")]
+fn main() {}
