@@ -105,10 +105,13 @@ fn main() {
 
         println!("{},{},{},{}", txid, blockid.height, tx.lock_time, uih);
 
-        total = total+1;
-        uih_totals[uih] = uih_totals[uih]+1;
+        total = total + 1;
+        uih_totals[uih] = uih_totals[uih] + 1;
     }
-    info!("processed {} total txs, UIH counts: {:?}", total, uih_totals);
+    info!(
+        "processed {} total txs, UIH counts: {:?}",
+        total, uih_totals
+    );
 }
 
 #[cfg(feature = "liquid")]
