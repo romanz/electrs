@@ -61,6 +61,10 @@ impl Store {
         return self.added_blockhashes.read().unwrap().is_empty();
     }
 
+    pub fn txstore_db(&self) -> &DB {
+        &self.txstore_db
+    }
+
     pub fn history_db(&self) -> &DB {
         &self.history_db
     }
