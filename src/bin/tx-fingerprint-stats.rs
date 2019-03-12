@@ -2,9 +2,10 @@ extern crate electrs;
 #[macro_use]
 extern crate log;
 
-use std::sync::Arc;
 use std::collections::HashSet;
+use std::sync::Arc;
 
+use bitcoin::blockdata::script::Script;
 use bitcoin::consensus::encode::deserialize;
 use electrs::{
     chain::Transaction,
@@ -106,13 +107,26 @@ fn main() {
 
         // test for spending multiple coins owned by the same spk
         let is_multi_spend = {
-            let mut seen = HashSet::new();
-            prevouts.values().any(|out| !seen.insert(&out.script_pubkey))
+            let mut seen_spks = HashSet::new();
+            prevouts
+                .values()
+                .any(|out| !seen_spks.insert(&out.script_pubkey))
+        };
+
+        // test for sending back to one of the spent spks
+        let has_reuse = {
+            let prev_spks: HashSet<Script> = prevouts
+                .values()
+                .map(|out| out.script_pubkey.clone())
+                .collect();
+            tx.output
+                .iter()
+                .any(|out| prev_spks.contains(&out.script_pubkey))
         };
 
         println!(
-            "{},{},{},{},{}",
-            txid, blockid.height, tx.lock_time, uih, is_multi_spend as u8
+            "{},{},{},{},{},{}",
+            txid, blockid.height, tx.lock_time, uih, is_multi_spend as u8, has_reuse as u8
         );
 
         total = total + 1;
