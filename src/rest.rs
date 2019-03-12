@@ -16,8 +16,8 @@ use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
-use hyper::rt::{self, Future};
-use hyper::service::service_fn_ok;
+use hyper::rt::{self, Future, Stream};
+use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
@@ -413,6 +413,8 @@ fn prepare_txs(
         .collect()
 }
 
+type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+
 pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
     info!("REST server running on {}", addr);
@@ -423,20 +425,28 @@ pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
         let query = Arc::clone(&query);
         let config = Arc::clone(&config);
 
-        service_fn_ok(move |req: Request<Body>| {
-            let mut resp = handle_request(req, &query, &config).unwrap_or_else(|err| {
-                warn!("{:?}", err);
-                Response::builder()
-                    .status(err.0)
-                    .header("Content-Type", "text/plain")
-                    .body(Body::from(err.1))
-                    .unwrap()
+        service_fn(move |req: Request<Body>| -> BoxFut {
+            let method = req.method().clone();
+            let uri = req.uri().clone();
+            let query = Arc::clone(&query);
+            let config = Arc::clone(&config);
+            let future = req.into_body().concat2().and_then(move |body| {
+                let mut resp =
+                    handle_request(method, uri, body, &query, &config).unwrap_or_else(|err| {
+                        warn!("{:?}", err);
+                        Response::builder()
+                            .status(err.0)
+                            .header("Content-Type", "text/plain")
+                            .body(Body::from(err.1))
+                            .unwrap()
+                    });
+                if let Some(ref origins) = config.cors {
+                    resp.headers_mut()
+                        .insert("Access-Control-Allow-Origin", origins.parse().unwrap());
+                }
+                Ok(resp)
             });
-            if let Some(ref origins) = config.cors {
-                resp.headers_mut()
-                    .insert("Access-Control-Allow-Origin", origins.parse().unwrap());
-            }
-            resp
+            Box::new(future)
         })
     };
 
@@ -467,12 +477,13 @@ impl Handle {
 }
 
 fn handle_request(
-    req: Request<Body>,
+    method: Method,
+    uri: hyper::Uri,
+    body: hyper::Chunk,
     query: &Query,
     config: &Config,
 ) -> Result<Response<Body>, HttpError> {
     // TODO it looks hyper does not have routing and query parsing :(
-    let uri = req.uri();
     let path: Vec<&str> = uri.path().split('/').skip(1).collect();
     let query_params = match uri.query() {
         Some(value) => form_urlencoded::parse(&value.as_bytes())
@@ -481,9 +492,9 @@ fn handle_request(
         None => HashMap::new(),
     };
 
-    info!("path {:?}", path);
+    info!("handle {:?} {:?}", method, uri);
     match (
-        req.method(),
+        &method,
         path.get(0),
         path.get(1),
         path.get(2),
@@ -794,11 +805,17 @@ fn handle_request(
             // @TODO long ttl if all outputs are either spent long ago or unspendable
             json_response(spends, TTL_SHORT)
         }
-        (&Method::GET, Some(&"broadcast"), None, None, None, None) => {
-            // FIXME read txhex from post body
-            let txhex = query_params
-                .get("tx")
-                .ok_or_else(|| HttpError::from("Missing tx".to_string()))?;
+        (&Method::GET, Some(&"broadcast"), None, None, None, None)
+        | (&Method::POST, Some(&"tx"), None, None, None, None) => {
+            // accept both POST and GET for backward compatibility.
+            // GET will eventually be removed in favor for POST.
+            let txhex = match &method {
+                &Method::POST => String::from_utf8(body.to_vec())?,
+                &Method::GET | _ => query_params
+                    .get("tx")
+                    .cloned()
+                    .ok_or_else(|| HttpError::from("Missing tx".to_string()))?,
+            };
             let txid = query
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
@@ -980,6 +997,12 @@ impl From<encode::Error> for HttpError {
         HttpError::generic()
     }
 }
+impl From<std::string::FromUtf8Error> for HttpError {
+    fn from(_e: std::string::FromUtf8Error) -> Self {
+        HttpError::generic()
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
