@@ -1,4 +1,6 @@
-use crate::chain::{Transaction, TxOut, Value};
+use crate::chain::{Transaction, TxOut};
+#[cfg(feature = "liquid")]
+use crate::chain::Value;
 use std::collections::HashMap;
 
 const VSIZE_BIN_WIDTH: u32 = 50_000; // in vbytes
