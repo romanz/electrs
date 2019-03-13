@@ -12,15 +12,22 @@ pub struct TxFeeInfo {
 }
 
 impl TxFeeInfo {
+    #[cfg(not(feature = "liquid"))]
     pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> Self {
-        #[cfg(not(feature = "liquid"))]
-        let fee = {
-            let total_in: u64 = prevouts.values().map(|prevout| prevout.value).sum();
-            let total_out: u64 = tx.output.iter().map(|vout| vout.value).sum();
-            total_in - total_out
-        };
+        let total_in: u64 = prevouts.values().map(|prevout| prevout.value).sum();
+        let total_out: u64 = tx.output.iter().map(|vout| vout.value).sum();
+        let fee = total_in - total_out;
+        let vsize = tx.get_weight() / 4;
 
-        #[cfg(feature = "liquid")]
+        TxFeeInfo {
+            fee,
+            vsize: vsize as u32,
+            fee_per_vbyte: fee as f32 / vsize as f32,
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn new(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> Self {
         let fee = tx
             .output
             .iter()
