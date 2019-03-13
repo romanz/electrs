@@ -7,15 +7,15 @@ pub use elements::{confidential, Block, BlockHeader, OutPoint, Transaction, TxIn
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin::util::hash::Sha256dHash;
 use bitcoin_bech32::constants::Network as B32Network;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 
 #[cfg(not(feature = "liquid"))]
 pub type Value = u64;
 #[cfg(feature = "liquid")]
 pub use confidential::Value;
 
-#[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
     Bitcoin,
     Testnet,

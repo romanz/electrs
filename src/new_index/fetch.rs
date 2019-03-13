@@ -1,7 +1,8 @@
 use crate::chain::Block;
 
 use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
-use bitcoin::util::hash::{BitcoinHash, Sha256dHash};
+use bitcoin::util::hash::BitcoinHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use rayon::prelude::*;
 
 use std::collections::HashMap;

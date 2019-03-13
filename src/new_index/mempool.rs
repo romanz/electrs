@@ -1,6 +1,6 @@
 use arraydeque::{ArrayDeque, Wrapping};
 use bitcoin::consensus::encode::serialize;
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use itertools::Itertools;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -17,7 +17,7 @@ use crate::new_index::{
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
-use crate::util::{has_prevout, is_spendable, Bytes};
+use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
 
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
@@ -272,7 +272,7 @@ impl Mempool {
         };
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
-            let txid_bytes = txid.into_bytes();
+            let txid_bytes = full_hash(&txid[..]);
 
             let prevouts: HashMap<u32, &TxOut> = tx
                 .input
@@ -310,7 +310,7 @@ impl Mempool {
                     TxHistoryInfo::Spending(SpendingInfo {
                         txid: txid_bytes,
                         vin: input_index as u16,
-                        prev_txid: txi.previous_output.txid.into_bytes(),
+                        prev_txid: full_hash(&txi.previous_output.txid[..]),
                         prev_vout: txi.previous_output.vout as u16,
                         value: prevout.value,
                     }),
@@ -375,7 +375,7 @@ impl Mempool {
     fn get_prevouts(&self, txids: &[Sha256dHash]) -> BTreeSet<OutPoint> {
         txids
             .iter()
-            .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
+            .map(|txid| self.txstore.get(txid).expect("missing mempool tx"))
             .flat_map(|tx| {
                 tx.input
                     .iter()
@@ -393,10 +393,10 @@ impl Mempool {
 
         for txid in &to_remove {
             self.txstore
-                .remove(&txid)
+                .remove(*txid)
                 .expect(&format!("missing mempool tx {}", txid));
             self.feeinfo
-                .remove(&txid)
+                .remove(*txid)
                 .expect(&format!("missing mempool tx feeinfo {}", txid));
         }
         // TODO: make it more efficient (currently it takes O(|mempool|) time)

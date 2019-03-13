@@ -1,4 +1,4 @@
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use std::sync::{Arc, Mutex};
 
 use crate::{daemon, index, signal::Waiter, store};

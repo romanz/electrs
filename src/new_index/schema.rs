@@ -1,7 +1,7 @@
 use bincode;
 use bitcoin::blockdata::script::Script;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
@@ -252,7 +252,7 @@ impl Indexer {
             for b in blocks {
                 let blockhash = b.entry.hash();
                 // TODO: replace by lookup into txstore_db?
-                if !added_blockhashes.contains(&blockhash) {
+                if !added_blockhashes.contains(blockhash) {
                     panic!("cannot index block {} (missing from store)", blockhash);
                 }
             }
@@ -281,7 +281,7 @@ impl ChainQuery {
         let _timer = self.start_timer("get_block_txids");
         self.store
             .txstore_db
-            .get(&BlockRow::txids_key(hash.to_bytes()))
+            .get(&BlockRow::txids_key(full_hash(&hash[..])))
             .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
     }
 
@@ -289,7 +289,7 @@ impl ChainQuery {
         let _timer = self.start_timer("get_block_meta");
         self.store
             .txstore_db
-            .get(&BlockRow::meta_key(hash.to_bytes()))
+            .get(&BlockRow::meta_key(full_hash(&hash[..])))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
     }
 
@@ -721,7 +721,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
         .par_iter() // serialization is CPU-intensive
         .map(|b| {
             let mut rows = vec![];
-            let blockhash = b.entry.hash().to_bytes();
+            let blockhash = full_hash(&b.entry.hash()[..]);
             let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
             for tx in &b.block.txdata {
                 add_transaction(tx, blockhash, &mut rows);
@@ -740,7 +740,7 @@ fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>)
     rows.push(TxRow::new(tx).to_row());
     rows.push(TxConfRow::new(tx, blockhash).to_row());
 
-    let txid = tx.txid().into_bytes();
+    let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if !txo.script_pubkey.is_provably_unspendable() {
             rows.push(TxOutRow::new(&txid, txo_index, txo).to_row());
@@ -806,7 +806,7 @@ fn index_blocks(
                 let height = b.entry.height() as u32;
                 index_transaction(tx, height, previous_txos_map, &mut rows);
             }
-            rows.push(BlockRow::new_done(b.entry.hash().to_bytes()).to_row()); // mark block as "indexed"
+            rows.push(BlockRow::new_done(full_hash(&b.entry.hash()[..])).to_row()); // mark block as "indexed"
             rows
         })
         .flatten()
@@ -825,7 +825,7 @@ fn index_transaction(
     //      H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout} → ""
     // persist "edges" for fast is-this-TXO-spent check
     //      S{funding-txid:vout}{spending-txid:vin} → ""
-    let txid = tx.txid().into_bytes();
+    let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if is_spendable(txo) {
             let history = TxHistoryRow::new(
@@ -854,7 +854,7 @@ fn index_transaction(
             TxHistoryInfo::Spending(SpendingInfo {
                 txid,
                 vin: txi_index as u16,
-                prev_txid: txi.previous_output.txid.into_bytes(),
+                prev_txid: full_hash(&txi.previous_output.txid[..]),
                 prev_vout: txi.previous_output.vout as u16,
                 value: prev_txo.value,
             }),
@@ -862,7 +862,7 @@ fn index_transaction(
         rows.push(history.to_row());
 
         let edge = TxEdgeRow::new(
-            txi.previous_output.txid.into_bytes(),
+            full_hash(&txi.previous_output.txid[..]),
             txi.previous_output.vout as u16,
             txid,
             txi_index as u16,
@@ -899,7 +899,7 @@ struct TxRow {
 
 impl TxRow {
     fn new(txn: &Transaction) -> TxRow {
-        let txid = txn.txid().into_bytes();
+        let txid = full_hash(&txn.txid()[..]);
         TxRow {
             key: TxRowKey { code: b'T', txid },
             value: serialize(txn),
@@ -932,7 +932,7 @@ struct TxConfRow {
 
 impl TxConfRow {
     fn new(txn: &Transaction, blockhash: FullHash) -> TxConfRow {
-        let txid = txn.txid().into_bytes();
+        let txid = full_hash(&txn.txid()[..]);
         TxConfRow {
             key: TxConfKey {
                 code: b'C',
@@ -986,7 +986,7 @@ impl TxOutRow {
     fn key(outpoint: &OutPoint) -> Bytes {
         bincode::serialize(&TxOutKey {
             code: b'O',
-            txid: outpoint.txid.to_bytes(),
+            txid: full_hash(&outpoint.txid[..]),
             vout: outpoint.vout as u16,
         })
         .unwrap()
@@ -1016,7 +1016,7 @@ impl BlockRow {
         BlockRow {
             key: BlockKey {
                 code: b'B',
-                hash: block_entry.entry.hash().to_bytes(),
+                hash: full_hash(&block_entry.entry.hash()[..]),
             },
             value: serialize(&block_entry.block.header),
         }

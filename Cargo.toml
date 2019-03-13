@@ -18,16 +18,16 @@ liquid = ["elements"]
 [dependencies]
 arraydeque = "0.4"
 arrayref = "0.3"
-base64 = "0.9"
+base64 = "0.10"
 bincode = "1.0"
-bitcoin-bech32 = "0.8.0"
+bitcoin-bech32 = "0.8"
 chan = "0.1"
 chan-signal = "0.3"
 clap = "2.31"
 dirs = "1.0"
 error-chain = "0.12"
 futures = "0.1"
-glob = "0.2"
+glob = "0.3"
 hex = "0.3"
 hyper = "0.12"
 itertools = "0.8.0"
@@ -37,11 +37,11 @@ lru = "0.1"
 lru-cache = "0.1.1"
 num_cpus = "1.0"
 page_size = "0.4"
-prometheus = "0.4"
+prometheus = "0.5"
 rayon = "1.0"
 rocksdb = "0.11"
 rust-crypto = "0.2"
-secp256k1 = "0.11"
+secp256k1 = "0.12"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -52,9 +52,12 @@ tiny_http = "0.6"
 url = "1.0"
 
 [dependencies.bitcoin]
-version = "0.15.1"
+version = "0.17"
 features = ["serde"]
 
+[dependencies.bitcoin_hashes]
+version = "0.3"
+features = ["serde"]
 
 [dependencies.elements]
 optional = true

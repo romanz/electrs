@@ -1,4 +1,4 @@
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 
 use crate::chain::{TxIn, TxOut};
 use crate::util::BlockId;
@@ -46,7 +46,7 @@ pub fn has_prevout(txin: &TxIn) -> bool {
     #[cfg(feature = "liquid")]
     return !txin.is_coinbase()
         && !txin.is_pegin
-        && txin.previous_output.txid.be_hex_string() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+        && txin.previous_output.txid.to_hex() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
 }
 
 pub fn is_spendable(txout: &TxOut) -> bool {

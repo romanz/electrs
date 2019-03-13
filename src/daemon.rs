@@ -1,7 +1,8 @@
 use base64;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::hex::{FromHex, ToHex};
+use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
@@ -457,7 +458,7 @@ impl Daemon {
     pub fn getblockheader(&self, blockhash: &Sha256dHash) -> Result<BlockHeader> {
         header_from_value(self.request(
             "getblockheader",
-            json!([blockhash.be_hex_string(), /*verbose=*/ false]),
+            json!([blockhash.to_hex(), /*verbose=*/ false]),
         )?)
     }
 
@@ -476,22 +477,21 @@ impl Daemon {
     }
 
     pub fn getblock(&self, blockhash: &Sha256dHash) -> Result<Block> {
-        let block = block_from_value(self.request(
-            "getblock",
-            json!([blockhash.be_hex_string(), /*verbose=*/ false]),
-        )?)?;
+        let block = block_from_value(
+            self.request("getblock", json!([blockhash.to_hex(), /*verbose=*/ false]))?,
+        )?;
         assert_eq!(block.bitcoin_hash(), *blockhash);
         Ok(block)
     }
 
     pub fn getblock_raw(&self, blockhash: &Sha256dHash, verbose: u32) -> Result<Value> {
-        self.request("getblock", json!([blockhash.be_hex_string(), verbose]))
+        self.request("getblock", json!([blockhash.to_hex(), verbose]))
     }
 
     pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
         let params_list: Vec<Value> = blockhashes
             .iter()
-            .map(|hash| json!([hash.be_hex_string(), /*verbose=*/ false]))
+            .map(|hash| json!([hash.to_hex(), /*verbose=*/ false]))
             .collect();
         let values = self.requests("getblock", &params_list)?;
         let mut blocks = vec![];
@@ -504,7 +504,7 @@ impl Daemon {
     pub fn gettransactions(&self, txhashes: &[&Sha256dHash]) -> Result<Vec<Transaction>> {
         let params_list: Vec<Value> = txhashes
             .iter()
-            .map(|txhash| json!([txhash.be_hex_string(), /*verbose=*/ false]))
+            .map(|txhash| json!([txhash.to_hex(), /*verbose=*/ false]))
             .collect();
 
         let values = self.requests("getrawtransaction", &params_list)?;
@@ -519,7 +519,7 @@ impl Daemon {
     pub fn getmempooltx(&self, txhash: &Sha256dHash) -> Result<Transaction> {
         let value = self.request(
             "getrawtransaction",
-            json!([txhash.be_hex_string(), /*verbose=*/ false]),
+            json!([txhash.to_hex(), /*verbose=*/ false]),
         )?;
         tx_from_value(value)
     }
@@ -534,7 +534,7 @@ impl Daemon {
     }
 
     pub fn getmempoolentry(&self, txid: &Sha256dHash) -> Result<MempoolEntry> {
-        let entry = self.request("getmempoolentry", json!([txid.be_hex_string()]))?;
+        let entry = self.request("getmempoolentry", json!([txid.to_hex()]))?;
         let fee = (entry
             .get("fee")
             .chain_err(|| "missing fee")?
@@ -578,7 +578,7 @@ impl Daemon {
     }
 
     fn get_all_headers(&self, tip: &Sha256dHash) -> Result<Vec<BlockHeader>> {
-        let info: Value = self.request("getblockheader", json!([tip.be_hex_string()]))?;
+        let info: Value = self.request("getblockheader", json!([tip.to_hex()]))?;
         let tip_height = info
             .get("height")
             .expect("missing height")

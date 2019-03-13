@@ -12,8 +12,9 @@ use crate::util::{
 use crate::util::{BlockProofValue, IssuanceValue, PegOutRequest};
 
 use bitcoin::consensus::encode::{self, serialize};
-use bitcoin::util::hash::{HexError, Sha256dHash};
 use bitcoin::{BitcoinHash, Script};
+use bitcoin_hashes::hex::{FromHex, ToHex};
+use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future, Stream};
@@ -63,16 +64,16 @@ impl From<BlockHeaderMeta> for BlockValue {
     fn from(blockhm: BlockHeaderMeta) -> Self {
         let header = blockhm.header_entry.header();
         BlockValue {
-            id: header.bitcoin_hash().be_hex_string(),
+            id: header.bitcoin_hash().to_hex(),
             height: blockhm.header_entry.height() as u32,
             version: header.version,
             timestamp: header.time,
             tx_count: blockhm.meta.tx_count,
             size: blockhm.meta.size,
             weight: blockhm.meta.weight,
-            merkle_root: header.merkle_root.be_hex_string(),
+            merkle_root: header.merkle_root.to_hex(),
             previousblockhash: if &header.prev_blockhash != &Sha256dHash::default() {
-                Some(header.prev_blockhash.be_hex_string())
+                Some(header.prev_blockhash.to_hex())
             } else {
                 None
             },
@@ -247,7 +248,7 @@ impl TxOutValue {
         };
         #[cfg(feature = "liquid")]
         let asset = match txout.asset {
-            Asset::Explicit(value) => Some(value.be_hex_string()),
+            Asset::Explicit(value) => Some(value.to_hex()),
             _ => None,
         };
         #[cfg(feature = "liquid")]
@@ -503,7 +504,7 @@ fn handle_request(
     ) {
         (&Method::GET, Some(&"blocks"), Some(&"tip"), Some(&"hash"), None, None) => http_message(
             StatusCode::OK,
-            query.chain().best_hash().be_hex_string(),
+            query.chain().best_hash().to_hex(),
             TTL_SHORT,
         ),
 
@@ -524,7 +525,7 @@ fn handle_request(
                 .header_by_height(height)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             let ttl = ttl_by_depth(Some(height), query);
-            http_message(StatusCode::OK, header.hash().be_hex_string(), ttl)
+            http_message(StatusCode::OK, header.hash().to_hex(), ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), None, None, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
@@ -759,10 +760,7 @@ fn handle_request(
                 HttpError::not_found("Transaction not found or is unconfirmed".to_string())
             })?;
             let (merkle, pos) = get_tx_merkle_proof(query.chain(), &hash, &blockid.hash)?;
-            let merkle: Vec<String> = merkle
-                .into_iter()
-                .map(|txid| txid.be_hex_string())
-                .collect();
+            let merkle: Vec<String> = merkle.into_iter().map(|txid| txid.to_hex()).collect();
             let ttl = ttl_by_depth(Some(blockid.height), query);
             json_response(
                 json!({ "block_height": blockid.height, "merkle": merkle, "pos": pos }),
@@ -819,7 +817,7 @@ fn handle_request(
             let txid = query
                 .broadcast_raw(&txhex)
                 .map_err(|err| HttpError::from(err.description().to_string()))?;
-            http_message(StatusCode::OK, txid.be_hex_string(), 0)
+            http_message(StatusCode::OK, txid.to_hex(), 0)
         }
 
         (&Method::GET, Some(&"mempool"), None, None, None, None) => {
@@ -962,10 +960,10 @@ impl From<ParseIntError> for HttpError {
         HttpError::from("Invalid number".to_string())
     }
 }
-impl From<HexError> for HttpError {
-    fn from(_e: HexError) -> Self {
+impl From<HashError> for HttpError {
+    fn from(_e: HashError) -> Self {
         //HttpError::from(e.description().to_string())
-        HttpError::from("Invalid hex string".to_string())
+        HttpError::from("Invalid hash string".to_string())
     }
 }
 impl From<FromHexError> for HttpError {
@@ -1002,7 +1000,6 @@ impl From<std::string::FromUtf8Error> for HttpError {
         HttpError::generic()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

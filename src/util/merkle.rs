@@ -1,4 +1,4 @@
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
 
 use crate::errors::*;
 use crate::new_index::ChainQuery;
@@ -74,7 +74,7 @@ pub fn get_id_from_pos(
 
 fn merklize(left: Sha256dHash, right: Sha256dHash) -> Sha256dHash {
     let data = [&left[..], &right[..]].concat();
-    Sha256dHash::from_data(&data)
+    Sha256dHash::hash(&data)
 }
 
 fn create_merkle_branch_and_root(

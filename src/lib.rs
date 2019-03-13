@@ -4,6 +4,7 @@ extern crate base64;
 extern crate bincode;
 extern crate bitcoin;
 extern crate bitcoin_bech32;
+extern crate bitcoin_hashes;
 extern crate chan_signal;
 extern crate crypto;
 extern crate dirs;

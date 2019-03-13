@@ -11,44 +11,61 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
-// **
-// Copied from rust-bitcoin, with modifications to support Liquid-encoded addresses.
-// **
-
 //! Addresses
 //!
 //! Support for ordinary base58 Bitcoin addresses and private keys
 //!
+//! # Example: creating a new address from a randomly-generated key pair
+//!
+//! ```rust
+//! extern crate rand;
+//! extern crate secp256k1;
+//! extern crate bitcoin;
+//!
+//! use bitcoin::network::constants::Network;
+//! use bitcoin::util::address::Address;
+//! use bitcoin::util::key;
+//! use secp256k1::Secp256k1;
+//! use rand::thread_rng;
+//!
+//! fn main() {
+//!     // Generate random key pair
+//!     let s = Secp256k1::new();
+//!     let public_key = key::PublicKey {
+//!         compressed: true,
+//!         key: s.generate_keypair(&mut thread_rng()).1,
+//!     };
+//!
+//!     // Generate pay-to-pubkey-hash address
+//!     let address = Address::p2pkh(&public_key, Network::Bitcoin);
+//! }
+//! ```
 
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
 use bitcoin_bech32::{self, u5, WitnessProgram};
-use secp256k1::key::PublicKey;
+use bitcoin_hashes::{hash160, Hash};
 
+use crate::chain::Network;
 use bitcoin::blockdata::opcodes;
 use bitcoin::blockdata::script;
 use bitcoin::consensus::encode;
 use bitcoin::util::base58;
-use bitcoin::util::hash::Hash160;
-
-use crate::chain::Network;
+use bitcoin::util::key;
 
 /// The method used to produce an address
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Payload {
-    /// pay-to-pubkey
-    Pubkey(PublicKey),
     /// pay-to-pkhash address
-    PubkeyHash(Hash160),
+    PubkeyHash(hash160::Hash),
     /// P2SH address
-    ScriptHash(Hash160),
+    ScriptHash(hash160::Hash),
     /// Segwit address
     WitnessProgram(WitnessProgram),
 }
 
-// Originally was: #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// A Bitcoin address
 pub struct Address {
     /// The type of the address
@@ -61,55 +78,39 @@ impl Address {
     /// Creates a pay to (compressed) public key hash address from a public key
     /// This is the preferred non-witness type address
     #[inline]
-    pub fn p2pkh(pk: &PublicKey, network: Network) -> Address {
-        Address {
-            network: network,
-            payload: Payload::PubkeyHash(Hash160::from_data(&pk.serialize()[..])),
-        }
-    }
+    pub fn p2pkh(pk: &key::PublicKey, network: Network) -> Address {
+        let mut hash_engine = hash160::Hash::engine();
+        pk.write_into(&mut hash_engine);
 
-    /// Creates a pay to uncompressed public key hash address from a public key
-    /// This address type is discouraged as it uses more space but otherwise equivalent to p2pkh
-    /// therefore only adds ambiguity
-    #[inline]
-    pub fn p2upkh(pk: &PublicKey, network: Network) -> Address {
         Address {
             network: network,
-            payload: Payload::PubkeyHash(Hash160::from_data(&pk.serialize_uncompressed()[..])),
-        }
-    }
-
-    /// Creates a pay to public key address from a public key
-    /// This address type was used in the early history of Bitcoin.
-    /// Satoshi's coins are still on addresses of this type.
-    #[inline]
-    pub fn p2pk(pk: &PublicKey, network: Network) -> Address {
-        Address {
-            network: network,
-            payload: Payload::Pubkey(*pk),
+            payload: Payload::PubkeyHash(hash160::Hash::from_engine(hash_engine)),
         }
     }
 
     /// Creates a pay to script hash P2SH address from a script
-    /// This address type was introduced with BIP16 and is the popular ty implement multi-sig these days.
+    /// This address type was introduced with BIP16 and is the popular type to implement multi-sig these days.
     #[inline]
     pub fn p2sh(script: &script::Script, network: Network) -> Address {
         Address {
             network: network,
-            payload: Payload::ScriptHash(Hash160::from_data(&script[..])),
+            payload: Payload::ScriptHash(hash160::Hash::hash(&script[..])),
         }
     }
 
     /// Create a witness pay to public key address from a public key
-    /// This is the native segwit address type for an output redemable with a single signature
-    pub fn p2wpkh(pk: &PublicKey, network: Network) -> Address {
+    /// This is the native segwit address type for an output redeemable with a single signature
+    pub fn p2wpkh(pk: &key::PublicKey, network: Network) -> Address {
+        let mut hash_engine = hash160::Hash::engine();
+        pk.write_into(&mut hash_engine);
+
         Address {
             network: network,
             payload: Payload::WitnessProgram(
                 // unwrap is safe as witness program is known to be correct as above
                 WitnessProgram::new(
                     u5::try_from_u8(0).expect("0<32"),
-                    Hash160::from_data(&pk.serialize()[..])[..].to_vec(),
+                    hash160::Hash::from_engine(hash_engine)[..].to_vec(),
                     Address::bech_network(network),
                 )
                 .unwrap(),
@@ -119,25 +120,24 @@ impl Address {
 
     /// Create a pay to script address that embeds a witness pay to public key
     /// This is a segwit address type that looks familiar (as p2sh) to legacy clients
-    pub fn p2shwpkh(pk: &PublicKey, network: Network) -> Address {
+    pub fn p2shwpkh(pk: &key::PublicKey, network: Network) -> Address {
+        let mut hash_engine = hash160::Hash::engine();
+        pk.write_into(&mut hash_engine);
+
         let builder = script::Builder::new()
             .push_int(0)
-            .push_slice(&Hash160::from_data(&pk.serialize()[..])[..]);
+            .push_slice(&hash160::Hash::from_engine(hash_engine)[..]);
+
         Address {
             network: network,
-            payload: Payload::ScriptHash(Hash160::from_data(builder.into_script().as_bytes())),
+            payload: Payload::ScriptHash(hash160::Hash::hash(builder.into_script().as_bytes())),
         }
     }
 
     /// Create a witness pay to script hash address
     pub fn p2wsh(script: &script::Script, network: Network) -> Address {
-        use crypto::digest::Digest;
-        use crypto::sha2::Sha256;
-
-        let mut digest = Sha256::new();
-        digest.input(script.as_bytes());
-        let mut d = [0u8; 32];
-        digest.result(&mut d);
+        use bitcoin_hashes::sha256;
+        use bitcoin_hashes::Hash;
 
         Address {
             network: network,
@@ -145,7 +145,7 @@ impl Address {
                 // unwrap is safe as witness program is known to be correct as above
                 WitnessProgram::new(
                     u5::try_from_u8(0).expect("0<32"),
-                    d.to_vec(),
+                    sha256::Hash::hash(&script[..])[..].to_vec(),
                     Address::bech_network(network),
                 )
                 .unwrap(),
@@ -156,21 +156,18 @@ impl Address {
     /// Create a pay to script address that embeds a witness pay to script hash address
     /// This is a segwit address type that looks familiar (as p2sh) to legacy clients
     pub fn p2shwsh(script: &script::Script, network: Network) -> Address {
-        use crypto::digest::Digest;
-        use crypto::sha2::Sha256;
+        use bitcoin_hashes::hash160;
+        use bitcoin_hashes::sha256;
+        use bitcoin_hashes::Hash;
 
-        let mut digest = Sha256::new();
-        digest.input(script.as_bytes());
-        let mut d = [0u8; 32];
-        digest.result(&mut d);
         let ws = script::Builder::new()
             .push_int(0)
-            .push_slice(&d)
+            .push_slice(&sha256::Hash::hash(&script[..])[..])
             .into_script();
 
         Address {
             network: network,
-            payload: Payload::ScriptHash(Hash160::from_data(ws.as_bytes())),
+            payload: Payload::ScriptHash(hash160::Hash::hash(&ws[..])),
         }
     }
 
@@ -191,19 +188,16 @@ impl Address {
     /// Generates a script pubkey spending to this address
     pub fn script_pubkey(&self) -> script::Script {
         match self.payload {
-            Payload::Pubkey(ref pk) => script::Builder::new()
-                .push_slice(&pk.serialize_uncompressed()[..])
-                .push_opcode(opcodes::All::OP_CHECKSIG),
             Payload::PubkeyHash(ref hash) => script::Builder::new()
-                .push_opcode(opcodes::All::OP_DUP)
-                .push_opcode(opcodes::All::OP_HASH160)
+                .push_opcode(opcodes::all::OP_DUP)
+                .push_opcode(opcodes::all::OP_HASH160)
                 .push_slice(&hash[..])
-                .push_opcode(opcodes::All::OP_EQUALVERIFY)
-                .push_opcode(opcodes::All::OP_CHECKSIG),
+                .push_opcode(opcodes::all::OP_EQUALVERIFY)
+                .push_opcode(opcodes::all::OP_CHECKSIG),
             Payload::ScriptHash(ref hash) => script::Builder::new()
-                .push_opcode(opcodes::All::OP_HASH160)
+                .push_opcode(opcodes::all::OP_HASH160)
                 .push_slice(&hash[..])
-                .push_opcode(opcodes::All::OP_EQUAL),
+                .push_opcode(opcodes::all::OP_EQUAL),
             Payload::WitnessProgram(ref witprog) => script::Builder::new()
                 .push_int(witprog.version().to_u8() as i64)
                 .push_slice(witprog.program()),
@@ -215,22 +209,6 @@ impl Address {
 impl Display for Address {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         match self.payload {
-            // note: serialization for pay-to-pk is defined, but is irreversible
-            Payload::Pubkey(ref pk) => {
-                let hash = &Hash160::from_data(&pk.serialize_uncompressed()[..]);
-                let mut prefixed = [0; 21];
-                prefixed[0] = match self.network {
-                    Network::Bitcoin => 0,
-                    Network::Testnet | Network::Regtest => 111,
-
-                    #[cfg(feature = "liquid")]
-                    Network::Liquid => 57,
-                    #[cfg(feature = "liquid")]
-                    Network::LiquidRegtest => 196,
-                };
-                prefixed[1..].copy_from_slice(&hash[..]);
-                base58::check_encode_slice_to_fmt(fmt, &prefixed[..])
-            }
             Payload::PubkeyHash(ref hash) => {
                 let mut prefixed = [0; 21];
                 prefixed[0] = match self.network {
@@ -312,19 +290,19 @@ impl FromStr for Address {
         let (network, payload) = match data[0] {
             0 => (
                 Network::Bitcoin,
-                Payload::PubkeyHash(Hash160::from(&data[1..])),
+                Payload::PubkeyHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             5 => (
                 Network::Bitcoin,
-                Payload::ScriptHash(Hash160::from(&data[1..])),
+                Payload::ScriptHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             111 => (
                 Network::Testnet,
-                Payload::PubkeyHash(Hash160::from(&data[1..])),
+                Payload::PubkeyHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             196 => (
                 Network::Testnet,
-                Payload::ScriptHash(Hash160::from(&data[1..])),
+                Payload::ScriptHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             #[cfg(feature = "liquid")]
             57 => (
