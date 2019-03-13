@@ -224,21 +224,12 @@ impl Connection {
         Ok(status_hash)
     }
 
+    #[cfg(not(feature = "liquid"))]
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        #[cfg(not(feature = "liquid"))]
-        let (confirmed_balance, mempool_balance) = {
-            let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-            let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
-            (
-                chain_stats.funded_txo_sum - chain_stats.spent_txo_sum,
-                mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum,
-            )
-        };
+        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
 
-        #[cfg(feature = "liquid")]
-        let (confirmed_balance, mempool_balance) = (0, 0);
-
-        Ok(json!({ "confirmed": confirmed_balance, "unconfirmed": mempool_balance }))
+        Ok(json!({ "confirmed": chain_stats.funded_txo_sum - chain_stats.spent_txo_sum, "unconfirmed": mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum}))
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
@@ -347,6 +338,7 @@ impl Connection {
             "blockchain.estimatefee" => self.blockchain_estimatefee(&params),
             "blockchain.headers.subscribe" => self.blockchain_headers_subscribe(),
             "blockchain.relayfee" => self.blockchain_relayfee(),
+            #[cfg(not(feature = "liquid"))]
             "blockchain.scripthash.get_balance" => self.blockchain_scripthash_get_balance(&params),
             "blockchain.scripthash.get_history" => self.blockchain_scripthash_get_history(&params),
             "blockchain.scripthash.listunspent" => self.blockchain_scripthash_listunspent(&params),
