@@ -307,22 +307,22 @@ impl FromStr for Address {
             #[cfg(feature = "liquid")]
             57 => (
                 Network::Liquid,
-                Payload::PubkeyHash(Hash160::from(&data[1..])),
+                Payload::PubkeyHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             #[cfg(feature = "liquid")]
             39 => (
                 Network::Liquid,
-                Payload::ScriptHash(Hash160::from(&data[1..])),
+                Payload::ScriptHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             #[cfg(feature = "liquid")]
             235 => (
                 Network::LiquidRegtest,
-                Payload::PubkeyHash(Hash160::from(&data[1..])),
+                Payload::PubkeyHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             #[cfg(feature = "liquid")]
             75 => (
                 Network::LiquidRegtest,
-                Payload::ScriptHash(Hash160::from(&data[1..])),
+                Payload::ScriptHash(hash160::Hash::from_slice(&data[1..]).unwrap()),
             ),
             x => {
                 return Err(encode::Error::Base58(base58::Error::InvalidVersion(vec![

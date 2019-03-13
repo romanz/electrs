@@ -5,6 +5,8 @@ use crate::util::BlockId;
 
 #[cfg(feature = "liquid")]
 use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
+#[cfg(feature = "liquid")]
+use bitcoin_hashes::hex::ToHex;
 
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {

@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
 
+#[cfg(feature = "liquid")]
+use bitcoin_hashes::hex::ToHex;
+
 use crate::chain::Network;
 use crate::daemon::CookieGetter;
 
@@ -165,7 +168,7 @@ impl Config {
         #[cfg(feature = "liquid")]
         let parent_network = Network::from(m.value_of("parent_network").unwrap_or("mainnet"));
         #[cfg(feature = "liquid")]
-        let parent_genesis_hash = parent_network.genesis_hash().le_hex_string();
+        let parent_genesis_hash = parent_network.genesis_hash().to_hex();
 
         let default_daemon_port = match network_type {
             Network::Bitcoin => 8332,
