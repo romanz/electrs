@@ -2,23 +2,23 @@ extern crate electrs;
 #[macro_use]
 extern crate log;
 
-use std::collections::HashSet;
-use std::sync::Arc;
-
-use bitcoin::blockdata::script::Script;
-use bitcoin::consensus::encode::deserialize;
-use electrs::{
-    chain::Transaction,
-    config::Config,
-    daemon::Daemon,
-    metrics::Metrics,
-    new_index::{ChainQuery, FetchFrom, Indexer, Store},
-    signal::Waiter,
-    util::has_prevout,
-};
-
 #[cfg(not(feature = "liquid"))]
 fn main() {
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    use bitcoin::blockdata::script::Script;
+    use bitcoin::consensus::encode::deserialize;
+    use electrs::{
+        chain::Transaction,
+        config::Config,
+        daemon::Daemon,
+        metrics::Metrics,
+        new_index::{ChainQuery, FetchFrom, Indexer, Store},
+        signal::Waiter,
+        util::has_prevout,
+    };
+
     let signal = Waiter::new();
     let config = Config::from_args();
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
