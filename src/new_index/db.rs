@@ -12,13 +12,13 @@ pub struct DBRow {
     pub value: Vec<u8>,
 }
 
-pub struct ScanIterator {
+pub struct ScanIterator<'a> {
     prefix: Vec<u8>,
-    iter: rocksdb::DBIterator,
+    iter: rocksdb::DBIterator<'a>,
     done: bool,
 }
 
-impl Iterator for ScanIterator {
+impl<'a> Iterator for ScanIterator<'a> {
     type Item = DBRow;
 
     fn next(&mut self) -> Option<DBRow> {
@@ -37,13 +37,13 @@ impl Iterator for ScanIterator {
     }
 }
 
-pub struct ReverseScanIterator {
+pub struct ReverseScanIterator<'a> {
     prefix: Vec<u8>,
-    iter: rocksdb::DBRawIterator,
+    iter: rocksdb::DBRawIterator<'a>,
     done: bool,
 }
 
-impl Iterator for ReverseScanIterator {
+impl<'a> Iterator for ReverseScanIterator<'a> {
     type Item = DBRow;
 
     fn next(&mut self) -> Option<DBRow> {
@@ -104,7 +104,7 @@ impl DB {
     pub fn full_compaction(&self) {
         // TODO: make sure this doesn't fail silently
         debug!("starting full compaction on {:?}", self.db);
-        self.db.compact_range(None, None);
+        self.db.compact_range(None::<&[u8]>, None::<&[u8]>);
         debug!("finished full compaction on {:?}", self.db);
     }
 
