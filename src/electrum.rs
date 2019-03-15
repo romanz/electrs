@@ -229,7 +229,9 @@ impl Connection {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
 
-        Ok(json!({ "confirmed": chain_stats.funded_txo_sum - chain_stats.spent_txo_sum, "unconfirmed": mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum}))
+        Ok(
+            json!({ "confirmed": chain_stats.funded_txo_sum - chain_stats.spent_txo_sum, "unconfirmed": mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum}),
+        )
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
