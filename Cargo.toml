@@ -67,3 +67,8 @@ features = ["serde-feature"] # Doesn't look to work by now
 
 [dev-dependencies]
 tempfile = "3.0"
+
+[profile.release]
+lto = true
+panic = 'abort'
+codegen-units = 1
