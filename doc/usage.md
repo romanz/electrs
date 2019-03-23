@@ -34,7 +34,7 @@ Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/021218
 
 First index sync should take ~1.5 hours:
 ```bash
-$ cargo run --release -- -vvv --timestamp --db-dir ./db [--cookie="USER:PASSWORD"]
+$ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
 2018-08-17T18:27:42 - INFO - NetworkInfo { version: 179900, subversion: "/Satoshi:0.17.99/" }
 2018-08-17T18:27:42 - INFO - BlockchainInfo { chain: "main", blocks: 537204, headers: 537204, bestblockhash: "0000000000000000002956768ca9421a8ddf4e53b1d81e429bd0125a383e3636", pruned: false, initialblockdownload: false }
 2018-08-17T18:27:42 - DEBUG - opening DB at "./db/mainnet"
@@ -61,7 +61,7 @@ $ cargo run --release -- -vvv --timestamp --db-dir ./db [--cookie="USER:PASSWORD
 If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an Odroid HC1 with 8 cpu cores @ 2GHz, 2GB RAM, and an SSD using the following command.
 
 ```bash
-$ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db [--cookie="USER:PASSWORD"]
+$ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
 ```
 
 The index database is stored here:
@@ -118,6 +118,29 @@ $ sudo systemctl restart nginx
 $ electrum --oneserver --server=example:50002:s
 ```
 
+### Sample Systemd Unit File
+
+You may wish to have systemd manage electrs so that it's "always on." Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
+
+```
+[Unit]
+Description=Electrs
+After=bitcoind.service
+
+[Service]
+WorkingDirectory=/home/bitcoin/electrs
+ExecStart=/home/bitcoin/electrs/target/release/electrs --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
+User=bitcoin
+Group=bitcoin
+Type=simple
+KillMode=process
+TimeoutSec=60
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
 ## Docker
 ```bash
 $ docker build -t electrs-app .
