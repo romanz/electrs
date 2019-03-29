@@ -118,6 +118,15 @@ $ sudo systemctl restart nginx
 $ electrum --oneserver --server=example:50002:s
 ```
 
+Note: If you are connecting to electrs from Eclair Mobile or another similar client which does not allow self-signed SSL certificates, you can obtain a free SSL certificate as follows:
+
+1. Follow the instructions at https://certbot.eff.org/ to install the certbot on your system.
+2. When certbot obtains the SSL certificates for you, change the SSL paths in the nginx template above as follows:
+```
+ssl_certificate /etc/letsencrypt/live/<your-domain>/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/<your-domain>/privkey.pem;
+```
+
 ### Sample Systemd Unit File
 
 You may wish to have systemd manage electrs so that it's "always on." Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
