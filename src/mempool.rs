@@ -213,20 +213,19 @@ impl Tracker {
                 }
             })
             .collect();
-        if entries.is_empty() {
-            return Ok(());
-        }
-        let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
-        let txs = match daemon.gettransactions(&txids) {
-            Ok(txs) => txs,
-            Err(err) => {
-                warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
-                return Ok(()); // keep the mempool until next update()
+        if !entries.is_empty() {
+            let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
+            let txs = match daemon.gettransactions(&txids) {
+                Ok(txs) => txs,
+                Err(err) => {
+                    warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
+                    return Ok(()); // keep the mempool until next update()
+                }
+            };
+            for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
+                assert_eq!(tx.txid(), *txid);
+                self.add(txid, tx, entry);
             }
-        };
-        for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
-            assert_eq!(tx.txid(), *txid);
-            self.add(txid, tx, entry);
         }
         timer.observe_duration();
 
