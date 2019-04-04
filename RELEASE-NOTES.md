@@ -1,6 +1,15 @@
-# TBD
+# 0.6.0 (TBD)
+
+* Prefix Prometheus metrics with 'electrs_'
+* Update RocksDB crate to 0.12.1
+* Update Bitcoin crate to 0.18
+* Support latest bitcoind mempool entry vsize field name
+
+# 0.5.0 (3 Mar 2019)
 
 * Limit query results, to prevent RPC server to get stuck (see `--txid-limit` flag)
+* Update RocksDB crate to 0.11
+* Update Bitcoin crate to 0.17
 
 # 0.4.3 (23 Dec 2018)
 
