@@ -17,8 +17,8 @@ use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::query::{Query, Status};
 use crate::util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
 
-const ELECTRS_VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const PROTOCOL_VERSION: &'static str = "1.4";
+const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PROTOCOL_VERSION: &str = "1.4";
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
