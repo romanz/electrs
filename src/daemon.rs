@@ -568,9 +568,10 @@ impl Daemon {
             * 100_000_000f64) as u64;
         let vsize = entry
             .get("size")
-            .chain_err(|| "missing size")?
+            .or_else(|| entry.get("vsize")) // (https://github.com/bitcoin/bitcoin/pull/15637)
+            .chain_err(|| "missing vsize")?
             .as_u64()
-            .chain_err(|| "non-integer size")? as u32;
+            .chain_err(|| "non-integer vsize")? as u32;
         Ok(MempoolEntry::new(fee, vsize))
     }
 
