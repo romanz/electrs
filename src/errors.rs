@@ -13,7 +13,7 @@ error_chain! {
 
         Interrupt(signal: Signal) {
             description("Interruption by external signal")
-            display("Iterrupted by SIG{:?}", signal)
+            display("Interrupted by SIG{:?}", signal)
         }
     }
 }
