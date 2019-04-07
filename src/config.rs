@@ -12,6 +12,8 @@ use stderrlog;
 use crate::daemon::CookieGetter;
 use crate::errors::*;
 
+const DEFAULT_SERVER_ADDRESS: &str = "127.0.0.1"; // by default, serve on IPv4 localhost
+
 #[derive(Debug)]
 pub struct Config {
     // See below for the documentation of each field:
@@ -160,18 +162,24 @@ impl Config {
         };
 
         let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("daemon_rpc_addr")
-                .unwrap_or(&format!("localhost:{}", default_daemon_port)),
+            m.value_of("daemon_rpc_addr").unwrap_or(&format!(
+                "{}:{}",
+                DEFAULT_SERVER_ADDRESS, default_daemon_port
+            )),
             "Bitcoin RPC",
         );
         let electrum_rpc_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("electrum_rpc_addr")
-                .unwrap_or(&format!("localhost:{}", default_electrum_port)),
+            m.value_of("electrum_rpc_addr").unwrap_or(&format!(
+                "{}:{}",
+                DEFAULT_SERVER_ADDRESS, default_electrum_port
+            )),
             "Electrum RPC",
         );
         let monitoring_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("monitoring_addr")
-                .unwrap_or(&format!("localhost:{}", default_monitoring_port)),
+            m.value_of("monitoring_addr").unwrap_or(&format!(
+                "{}:{}",
+                DEFAULT_SERVER_ADDRESS, default_monitoring_port
+            )),
             "Prometheus monitoring",
         );
 
