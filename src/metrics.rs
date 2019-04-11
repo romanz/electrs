@@ -102,7 +102,8 @@ struct Stats {
 }
 
 fn parse_stats() -> Result<Stats> {
-    let value = fs::read_to_string("/proc/self/stat").chain_err(|| "failed to read stats")?;
+    let value =
+        fs::read_to_string("/proc/self/stat").chain_err(|| "failed to read /proc/self/stat")?;
     let parts: Vec<&str> = value.split_whitespace().collect();
     let page_size = page_size::get() as u64;
     let ticks_per_second = sysconf::raw::sysconf(sysconf::raw::SysconfVariable::ScClkTck)
@@ -120,7 +121,7 @@ fn parse_stats() -> Result<Stats> {
     let utime = parse_part(13, "utime")? as f64 / ticks_per_second;
     let rss = parse_part(23, "rss")? * page_size;
     let fds = fs::read_dir("/proc/self/fd")
-        .chain_err(|| "failed to read fd directory")?
+        .chain_err(|| "failed to read /proc/self/fd directory")?
         .count();
     Ok(Stats { utime, rss, fds })
 }
@@ -148,7 +149,10 @@ fn start_process_exporter(metrics: &Metrics) {
                 rss.set(stats.rss as i64);
                 fds.set(stats.fds as i64);
             }
-            Err(e) => warn!("failed to export stats: {}", e),
+            Err(e) => {
+                warn!("failed to export process stats: {}", e);
+                return;
+            }
         }
         thread::sleep(Duration::from_secs(5));
     });
