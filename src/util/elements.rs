@@ -100,7 +100,9 @@ impl PegOutRequest {
         }
 
         let genesis_hash = if let PushBytes(data) = nulldata[0] {
-            hex::encode(data.to_vec())
+            let mut data = data.to_vec();
+            data.reverse();
+            hex::encode(data)
         } else {
             return None;
         };
