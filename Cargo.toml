@@ -20,7 +20,7 @@ arraydeque = "0.4"
 arrayref = "0.3"
 base64 = "0.10"
 bincode = "1.0"
-bitcoin-bech32 = "0.8"
+bitcoin-bech32 = "0.9.0"
 chan = "0.1"
 chan-signal = "0.3"
 clap = "2.31"
@@ -29,7 +29,7 @@ error-chain = "0.12"
 futures = "0.1"
 glob = "0.3"
 hex = "0.3"
-hyper = "0.12"
+hyper = "0.12.27"
 itertools = "0.8.0"
 libc = "0.2"
 log = "0.4"
@@ -39,7 +39,7 @@ num_cpus = "1.0"
 page_size = "0.4"
 prometheus = "0.5"
 rayon = "1.0"
-rocksdb = "0.12"
+rocksdb = "0.12.1"
 rust-crypto = "0.2"
 secp256k1 = "0.12"
 serde = "1.0"
@@ -52,7 +52,7 @@ tiny_http = "0.6"
 url = "1.0"
 
 [dependencies.bitcoin]
-version = "0.17"
+version = "0.18"
 features = ["serde"]
 
 [dependencies.bitcoin_hashes]
@@ -61,8 +61,7 @@ features = ["serde"]
 
 [dependencies.elements]
 optional = true
-git = "https://github.com/ElementsProject/rust-elements/"
-rev = "17cd94a09ea0d7f868a3d512484a1ff6147991c4" # from master branch
+version = "0.7.0"
 features = ["serde-feature"] # Doesn't look to work by now
 
 [dev-dependencies]
