@@ -395,10 +395,13 @@ impl Mempool {
             self.txstore
                 .remove(*txid)
                 .expect(&format!("missing mempool tx {}", txid));
-            self.feeinfo
-                .remove(*txid)
-                .expect(&format!("missing mempool tx feeinfo {}", txid));
+
+            self.feeinfo.remove(*txid).or_else(|| {
+                warn!("missing mempool tx feeinfo {}", txid);
+                None
+            });
         }
+
         // TODO: make it more efficient (currently it takes O(|mempool|) time)
         self.history.retain(|_scripthash, entries| {
             entries.retain(|entry| !to_remove.contains(&get_entry_txid(entry)));
