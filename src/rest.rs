@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    full_hash, get_script_asm, get_tx_merkle_proof, has_prevout, is_coinbase, script_to_address,
-    BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
+    full_hash, get_innerscripts, get_script_asm, get_tx_merkle_proof, has_prevout, is_coinbase,
+    script_to_address, BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
 };
 
 #[cfg(feature = "liquid")]
@@ -167,6 +167,11 @@ struct TxInValue {
     is_coinbase: bool,
     sequence: u32,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inner_redeemscript_asm: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inner_witnessscript_asm: Option<String>,
+
     #[cfg(feature = "liquid")]
     is_pegin: bool,
     #[cfg(feature = "liquid")]
@@ -186,12 +191,24 @@ impl TxInValue {
 
         let is_coinbase = is_coinbase(&txin);
 
+        let innerscripts = prevout.map(|prevout| get_innerscripts(&txin, &prevout));
+
         TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
             prevout: prevout.map(|prevout| TxOutValue::new(prevout, config)),
             scriptsig_asm: get_script_asm(&txin.script_sig),
             witness,
+
+            inner_redeemscript_asm: innerscripts
+                .as_ref()
+                .and_then(|i| i.redeem_script.as_ref())
+                .map(get_script_asm),
+            inner_witnessscript_asm: innerscripts
+                .as_ref()
+                .and_then(|i| i.witness_script.as_ref())
+                .map(get_script_asm),
+
             is_coinbase,
             sequence: txin.sequence,
             #[cfg(feature = "liquid")]
