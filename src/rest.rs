@@ -1,8 +1,7 @@
-use crate::chain::{Network, OutPoint, Transaction, TxIn, TxOut};
+use crate::chain::{address, Network, OutPoint, Transaction, TxIn, TxOut};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
-use crate::util::Address;
 use crate::util::{
     full_hash, get_script_asm, get_tx_merkle_proof, has_prevout, is_coinbase, script_to_address,
     BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
@@ -914,17 +913,24 @@ fn to_scripthash(
     }
 }
 
+#[allow(unused_variables)] // `network` is unused in liquid mode
 fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
-    let addr = Address::from_str(addr)?;
+    let addr = address::Address::from_str(addr)?;
 
     #[cfg(not(feature = "liquid"))]
-    let regtest_net = Network::Regtest;
-    #[cfg(feature = "liquid")]
-    let regtest_net = Network::LiquidRegtest;
+    let is_expected_net = {
+        let addr_network = Network::from(&addr.network);
+        (addr_network == *network
+            || (addr_network == Network::Testnet && *network == Network::Regtest))
+    };
 
-    if addr.network != *network && !(addr.network == Network::Testnet && *network == regtest_net) {
+    #[cfg(feature = "liquid")]
+    let is_expected_net = addr.params == network.address_params();
+
+    if !is_expected_net {
         bail!(HttpError::from("Address on invalid network".to_string()))
     }
+
     Ok(compute_script_hash(&addr.script_pubkey()))
 }
 
@@ -998,6 +1004,13 @@ impl From<encode::Error> for HttpError {
 impl From<std::string::FromUtf8Error> for HttpError {
     fn from(_e: std::string::FromUtf8Error) -> Self {
         HttpError::generic()
+    }
+}
+
+#[cfg(feature = "liquid")]
+impl From<address::AddressError> for HttpError {
+    fn from(e: address::AddressError) -> Self {
+        HttpError::from(e.to_string())
     }
 }
 

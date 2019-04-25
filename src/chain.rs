@@ -1,8 +1,12 @@
+#[cfg(not(feature = "liquid"))]
+pub use bitcoin::util::address;
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
 pub use bitcoin::{Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 
 #[cfg(feature = "liquid")]
-pub use elements::{confidential, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
+pub use elements::address;
+#[cfg(feature = "liquid")]
+pub use elements::{confidential, Address, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
@@ -43,6 +47,16 @@ impl Network {
             Network::Liquid => 0xDAB5BFFA,
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 0xDAB5BFFA,
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn address_params(&self) -> &'static address::AddressParams {
+        // Liquid regtest uses elements's address params
+        match self {
+            Network::Liquid => &address::AddressParams::LIQUID,
+            Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
+            _ => panic!("the liquid-only address_params() called with non-liquid network"),
         }
     }
 

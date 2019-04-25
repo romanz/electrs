@@ -1,6 +1,7 @@
+use crate::chain::address::Address;
 use crate::errors::*;
 use crate::new_index::ChainQuery;
-use crate::util::{full_hash, Address, FullHash};
+use crate::util::{full_hash, FullHash};
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;

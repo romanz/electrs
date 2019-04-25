@@ -61,7 +61,8 @@ features = ["serde"]
 
 [dependencies.elements]
 optional = true
-version = "0.7.0"
+git = "https://github.com/stevenroose/rust-elements"
+rev = "35de5e3190712dec6ac266cc27f834d4dbf59cd6" # address branch
 features = ["serde-feature"] # Doesn't look to work by now
 
 [dev-dependencies]
