@@ -18,10 +18,6 @@ pub use self::transaction::{has_prevout, is_coinbase, is_spendable, TransactionS
 #[cfg(feature = "liquid")]
 pub use self::elements::{BlockProofValue, IssuanceValue, PegOutRequest};
 
-#[cfg(feature = "liquid")]
-pub const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str =
-    "cb4953dfe64aba4687d0de08e5ce17d8f7640deeef63be4ac3bac3afdefdfd78";
-
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use std::thread;

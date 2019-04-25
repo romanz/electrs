@@ -1,12 +1,13 @@
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+#[cfg(feature = "liquid")]
+use bitcoin_hashes::hex::ToHex;
 
 use crate::chain::{TxIn, TxOut};
 use crate::util::BlockId;
 
 #[cfg(feature = "liquid")]
-use crate::util::REGTEST_INITIAL_ISSUANCE_PREVOUT;
-#[cfg(feature = "liquid")]
-use bitcoin_hashes::hex::ToHex;
+const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str =
+    "50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5";
 
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {
