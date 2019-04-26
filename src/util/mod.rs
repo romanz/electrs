@@ -10,10 +10,8 @@ mod elements;
 
 pub use self::block::{BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, HeaderEntry, HeaderList};
 pub use self::merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
-pub use self::script::{get_script_asm, script_to_address};
-pub use self::transaction::{
-    get_innerscripts, has_prevout, is_coinbase, is_spendable, TransactionStatus,
-};
+pub use self::script::{get_innerscripts, get_script_asm, script_to_address};
+pub use self::transaction::{has_prevout, is_coinbase, is_spendable, TransactionStatus};
 
 #[cfg(feature = "liquid")]
 pub use self::elements::{BlockProofValue, IssuanceValue, PegOutRequest};

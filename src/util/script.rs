@@ -1,12 +1,18 @@
+use bitcoin::blockdata::script::{Instruction::PushBytes, Script};
 #[cfg(not(feature = "liquid"))]
 use bitcoin::network::constants::Network as BNetwork;
-use bitcoin::Script;
 #[cfg(not(feature = "liquid"))]
 use bitcoin_bech32::constants::Network as B32Network;
 use bitcoin_bech32::{self, u5};
 use bitcoin_hashes::{hash160::Hash as Hash160, Hash};
 
 use crate::chain::{address, Network};
+use crate::chain::{TxIn, TxOut};
+
+pub struct InnerScripts {
+    pub redeem_script: Option<Script>,
+    pub witness_script: Option<Script>,
+}
 
 // @XXX we can't use any of the Address:p2{...}h utility methods, since they expect the pre-image data, which we don't have.
 // we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
@@ -58,4 +64,37 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
 pub fn get_script_asm(script: &Script) -> String {
     let asm = format!("{:?}", script);
     (&asm[7..asm.len() - 1]).to_string()
+}
+
+// Returns the witnessScript in the case of p2wsh, or the redeemScript in the case of p2sh.
+pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {
+    // Wrapped redeemScript for P2SH spends
+    let redeem_script = if prevout.script_pubkey.is_p2sh() {
+        if let Some(PushBytes(redeemscript)) = txin.script_sig.iter(true).last() {
+            Some(Script::from(redeemscript.to_vec()))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Wrapped witnessScript for P2WSH or P2SH-P2WSH spends
+    #[cfg(not(feature = "liquid"))]
+    let witness_script = if prevout.script_pubkey.is_v0_p2wsh()
+        || redeem_script.as_ref().map_or(false, |s| s.is_v0_p2wsh())
+    {
+        txin.witness.iter().last().cloned().map(Script::from)
+    } else {
+        None
+    };
+
+    // TODO: witness for elements
+    #[cfg(feature = "liquid")]
+    let witness_script = None;
+
+    InnerScripts {
+        redeem_script,
+        witness_script,
+    }
 }
