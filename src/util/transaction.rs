@@ -83,7 +83,6 @@ pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {
     let witness_script = if prevout.script_pubkey.is_v0_p2wsh()
         || redeem_script.as_ref().map_or(false, |s| s.is_v0_p2wsh())
     {
-        debug!("latest: {:?}", txin.witness.iter().last().cloned());
         txin.witness.iter().last().cloned().map(Script::from)
     } else {
         None

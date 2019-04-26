@@ -11,7 +11,6 @@ use crate::chain::{address, Network};
 // @XXX we can't use any of the Address:p2{...}h utility methods, since they expect the pre-image data, which we don't have.
 // we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
 // ideally, this should be implemented as part of the rust-bitcoin lib.
-#[allow(unused_variables)] // `network` is unused in liquid mode
 pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
     let payload = if script.is_p2pkh() {
         address::Payload::PubkeyHash(Hash160::from_slice(&script[3..23]).ok()?)
