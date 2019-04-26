@@ -1,10 +1,11 @@
 use bitcoin::blockdata::script::{Instruction::PushBytes, Script};
 #[cfg(not(feature = "liquid"))]
-use bitcoin::network::constants::Network as BNetwork;
-#[cfg(not(feature = "liquid"))]
-use bitcoin_bech32::constants::Network as B32Network;
-use bitcoin_bech32::{self, u5};
-use bitcoin_hashes::{hash160::Hash as Hash160, Hash};
+use {
+    bitcoin::network::constants::Network as BNetwork,
+    bitcoin_bech32::constants::Network as B32Network,
+    bitcoin_bech32::{self, u5},
+    bitcoin_hashes::{hash160::Hash as Hash160, Hash},
+};
 
 use crate::chain::{address, Network};
 use crate::chain::{TxIn, TxOut};
@@ -14,51 +15,46 @@ pub struct InnerScripts {
     pub witness_script: Option<Script>,
 }
 
-// @XXX we can't use any of the Address:p2{...}h utility methods, since they expect the pre-image data, which we don't have.
-// we must instead create the Payload manually, which results in code duplication with the p2{...}h methods, especially for witness programs.
-// ideally, this should be implemented as part of the rust-bitcoin lib.
 pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
-    let payload = if script.is_p2pkh() {
-        address::Payload::PubkeyHash(Hash160::from_slice(&script[3..23]).ok()?)
-    } else if script.is_p2sh() {
-        address::Payload::ScriptHash(Hash160::from_slice(&script[2..22]).ok()?)
-    } else if script.is_v0_p2wpkh() || script.is_v0_p2wsh() {
-        let version = u5::try_from_u8(0).expect("0<32");
-        let program = if script.is_v0_p2wpkh() {
-            script[2..22].to_vec()
+    // rust-elements provides an Address::from_script() utility that's not yet
+    // available in rust-bitcoin, but should be soon
+    #[cfg(feature = "liquid")]
+    return address::Address::from_script(script, None, network.address_params())
+        .map(|a| a.to_string());
+
+    #[cfg(not(feature = "liquid"))]
+    {
+        let payload = if script.is_p2pkh() {
+            address::Payload::PubkeyHash(Hash160::from_slice(&script[3..23]).ok()?)
+        } else if script.is_p2sh() {
+            address::Payload::ScriptHash(Hash160::from_slice(&script[2..22]).ok()?)
+        } else if script.is_v0_p2wpkh() || script.is_v0_p2wsh() {
+            let program = if script.is_v0_p2wpkh() {
+                script[2..22].to_vec()
+            } else {
+                script[2..34].to_vec()
+            };
+
+            address::Payload::WitnessProgram(
+                bitcoin_bech32::WitnessProgram::new(
+                    u5::try_from_u8(0).expect("0<32"),
+                    program,
+                    B32Network::from(network),
+                )
+                .unwrap(),
+            )
         } else {
-            script[2..34].to_vec()
+            return None;
         };
 
-        #[cfg(not(feature = "liquid"))]
-        {
-            address::Payload::WitnessProgram(
-                bitcoin_bech32::WitnessProgram::new(version, program, B32Network::from(network))
-                    .unwrap(),
-            )
-        }
-        #[cfg(feature = "liquid")]
-        {
-            address::Payload::WitnessProgram { version, program }
-        }
-    } else {
-        return None;
-    };
-
-    Some(
-        address::Address {
-            payload,
-
-            #[cfg(not(feature = "liquid"))]
-            network: BNetwork::from(network),
-
-            #[cfg(feature = "liquid")]
-            params: network.address_params(),
-            #[cfg(feature = "liquid")]
-            blinding_pubkey: None,
-        }
-        .to_string(),
-    )
+        Some(
+            address::Address {
+                payload,
+                network: BNetwork::from(network),
+            }
+            .to_string(),
+        )
+    }
 }
 
 pub fn get_script_asm(script: &Script) -> String {
