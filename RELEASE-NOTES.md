@@ -4,6 +4,7 @@
 * Update RocksDB crate to 0.12.1
 * Update Bitcoin crate to 0.18
 * Support latest bitcoind mempool entry vsize field name
+* Fix "chain-trimming" reorgs
 
 # 0.5.0 (3 Mar 2019)
 
