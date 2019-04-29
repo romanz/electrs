@@ -254,7 +254,7 @@ fn read_indexed_headers(store: &ReadStore) -> HeaderList {
     assert_eq!(
         headers
             .last()
-            .map(|h| h.bitcoin_hash())
+            .map(BitcoinHash::bitcoin_hash)
             .unwrap_or(null_hash),
         latest_blockhash
     );

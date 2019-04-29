@@ -367,7 +367,7 @@ impl Daemon {
         info!("listing block files at {:?}", path);
         let mut paths: Vec<PathBuf> = glob::glob(path.to_str().unwrap())
             .chain_err(|| "failed to list blk*.dat files")?
-            .map(|res| res.unwrap())
+            .map(std::result::Result::unwrap)
             .collect();
         paths.sort();
         Ok(paths)

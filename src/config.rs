@@ -196,7 +196,7 @@ impl Config {
             Network::Testnet => daemon_dir.push("testnet3"),
             Network::Regtest => daemon_dir.push("regtest"),
         }
-        let cookie = m.value_of("cookie").map(|s| s.to_owned());
+        let cookie = m.value_of("cookie").map(std::borrow::ToOwned::to_owned);
 
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
