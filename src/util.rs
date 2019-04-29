@@ -2,6 +2,7 @@ use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::util::hash::BitcoinHash;
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt;
 use std::iter::FromIterator;
 use std::slice;
@@ -20,11 +21,13 @@ pub type FullHash = [u8; HASH_LEN];
 pub type HashPrefix = [u8; HASH_PREFIX_LEN];
 
 pub fn hash_prefix(hash: &[u8]) -> HashPrefix {
-    *array_ref![hash, 0, HASH_PREFIX_LEN]
+    hash[..HASH_PREFIX_LEN]
+        .try_into()
+        .expect("failed to convert into HashPrefix")
 }
 
 pub fn full_hash(hash: &[u8]) -> FullHash {
-    *array_ref![hash, 0, HASH_LEN]
+    hash.try_into().expect("failed to convert into FullHash")
 }
 
 #[derive(Eq, PartialEq, Clone)]
