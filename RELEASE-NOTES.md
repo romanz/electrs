@@ -1,5 +1,6 @@
 # 0.6.0 (TBD)
 
+* Update to Rust 1.34
 * Prefix Prometheus metrics with 'electrs_'
 * Update RocksDB crate to 0.12.1
 * Update Bitcoin crate to 0.18
