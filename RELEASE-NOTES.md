@@ -1,4 +1,4 @@
-# 0.6.0 (TBD)
+# 0.6.0 (29 Apr 2019)
 
 * Update to Rust 1.34
 * Prefix Prometheus metrics with 'electrs_'
@@ -6,6 +6,7 @@
 * Update Bitcoin crate to 0.18
 * Support latest bitcoind mempool entry vsize field name
 * Fix "chain-trimming" reorgs
+* Serve by default on IPv4 localhost
 
 # 0.5.0 (3 Mar 2019)
 
