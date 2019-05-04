@@ -232,9 +232,7 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn = self
-                    .tx_cache
-                    .get_or_else(&txid, || self.load_txn(&txid, tx_row.height))?;
+                let txn = self.load_txn(&txid, Some(tx_row.height))?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
@@ -377,9 +375,11 @@ impl Query {
     }
 
     // Internal API for transaction retrieval
-    fn load_txn(&self, tx_hash: &Sha256dHash, block_height: u32) -> Result<Transaction> {
-        let blockhash = self.lookup_confirmed_blockhash(tx_hash, Some(block_height))?;
-        self.app.daemon().gettransaction(tx_hash, blockhash)
+    fn load_txn(&self, txid: &Sha256dHash, block_height: Option<u32>) -> Result<Transaction> {
+        self.tx_cache.get_or_else(&txid, || {
+            let blockhash = self.lookup_confirmed_blockhash(txid, block_height)?;
+            self.app.daemon().gettransaction(txid, blockhash)
+        })
     }
 
     // Public API for transaction retrieval (for Electrum RPC)
