@@ -126,6 +126,12 @@ impl HeaderList {
     }
 
     pub fn apply(&mut self, new_headers: Vec<HeaderEntry>, tip: Sha256dHash) {
+        if tip == Sha256dHash::default() {
+            assert!(new_headers.is_empty());
+            self.heights.clear();
+            self.headers.clear();
+            return;
+        }
         // new_headers[i] -> new_headers[i - 1] (i.e. new_headers.last() is the tip)
         for i in 1..new_headers.len() {
             assert_eq!(new_headers[i - 1].height() + 1, new_headers[i].height());
@@ -291,6 +297,7 @@ mod tests {
         assert_eq!(header_list.tip(), null_hash);
         let ordered = header_list.order(vec![]);
         assert_eq!(ordered.len(), 0);
+        header_list.apply(vec![], null_hash);
 
         let merkle_root = Sha256dHash::hash(&[255]);
         let mut headers = vec![BlockHeader {
