@@ -1,3 +1,8 @@
+# 0.6.1 (TBD)
+
+* Fix crash during initial sync
+* Switch to `signal-hook` crate
+
 # 0.6.0 (29 Apr 2019)
 
 * Update to Rust 1.34
