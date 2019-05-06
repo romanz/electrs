@@ -1,8 +1,6 @@
 #![recursion_limit = "1024"]
 
 #[macro_use]
-extern crate chan;
-#[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate error_chain;
