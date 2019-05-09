@@ -1,4 +1,4 @@
-# 0.6.1 (TBD)
+# 0.6.1 (9 May 2019)
 
 * Fix crash during initial sync
 * Switch to `signal-hook` crate
