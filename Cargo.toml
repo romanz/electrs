@@ -12,6 +12,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+arrayref = "0.3"
 base64 = "0.10"
 bincode = "1.0"
 bitcoin = "0.18"
