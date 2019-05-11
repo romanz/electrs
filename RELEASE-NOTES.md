@@ -1,3 +1,7 @@
+# 0.6.2 (TBD)
+
+* Support Rust 1.32 (for Debian)
+
 # 0.6.1 (9 May 2019)
 
 * Fix crash during initial sync
