@@ -305,6 +305,10 @@ impl Stats {
         for tx in &block.txdata {
             self.vsize.inc_by(tx.get_weight() as i64 / 4);
         }
+        self.update_height(height);
+    }
+
+    fn update_height(&self, height: usize) {
         self.height.set(height as i64);
     }
 
@@ -422,6 +426,7 @@ impl Index {
         fetcher.join().expect("block fetcher failed");
         self.headers.write().unwrap().apply(new_headers, tip);
         assert_eq!(tip, self.headers.read().unwrap().tip());
+        self.stats.update_height(self.headers.read().unwrap().len() - 1);
         Ok(tip)
     }
 }
