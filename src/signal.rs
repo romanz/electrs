@@ -18,7 +18,7 @@ fn notify(signals: &[i32]) -> channel::Receiver<i32> {
     thread::spawn(move || {
         for signal in signals.forever() {
             s.send(signal)
-                .expect(&format!("failed to send signal {}", signal));
+                .unwrap_or_else(|_| panic!("failed to send signal {}", signal));
         }
     });
     r
