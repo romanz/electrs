@@ -514,7 +514,10 @@ impl RPC {
         spawn_thread("acceptor", move || {
             let listener =
                 TcpListener::bind(addr).unwrap_or_else(|e| panic!("bind({}) failed: {}", addr, e));
-            info!("RPC server running on {}", addr);
+            info!(
+                "Electrum RPC server running on {} (protocol {})",
+                addr, PROTOCOL_VERSION
+            );
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
                 stream
