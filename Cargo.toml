@@ -61,9 +61,9 @@ features = ["serde"]
 
 [dependencies.elements]
 optional = true
-git = "https://github.com/stevenroose/rust-elements"
-rev = "35de5e3190712dec6ac266cc27f834d4dbf59cd6" # address branch
-features = ["serde-feature"] # Doesn't look to work by now
+git = "https://github.com/elementsproject/rust-elements"
+rev = "c7fb7a704ff381d48bef188ea4c6760ca1daf21c" # current master, with the new Address type
+features = ["serde-feature"]
 
 [dev-dependencies]
 tempfile = "3.0"
