@@ -65,7 +65,7 @@ impl From<&AssetIssuance> for IssuanceValue {
                 _ => None,
             },
             tokenamount: match issuance.inflation_keys {
-                Value::Explicit(value) => Some(value / 100000000), // https://github.com/ElementsProject/rust-elements/issues/7
+                Value::Explicit(value) => Some(value),
                 _ => None,
             },
             tokenamountcommitment: match issuance.inflation_keys {
