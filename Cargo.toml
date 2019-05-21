@@ -62,7 +62,7 @@ features = ["serde"]
 [dependencies.elements]
 optional = true
 git = "https://github.com/elementsproject/rust-elements"
-rev = "c7fb7a704ff381d48bef188ea4c6760ca1daf21c" # current master, with the new Address type
+rev = "ae548a4748508775653a65daa828bb5a0207a325"
 features = ["serde-feature"]
 
 [dev-dependencies]
