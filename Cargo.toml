@@ -60,6 +60,9 @@ features = ["serde"]
 version = "0.3"
 features = ["serde"]
 
+[patch.crates-io]
+bitcoin_hashes = { git = "https://github.com/stevenroose/bitcoin_hashes", rev = "2dab3d6cb77ede5201eae067c93020f55cc1b9a4" }
+
 [dependencies.elements]
 optional = true
 git = "https://github.com/elementsproject/rust-elements"

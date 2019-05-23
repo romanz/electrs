@@ -1,13 +1,15 @@
 use bitcoin::blockdata::script::Instruction::PushBytes;
 use bitcoin::consensus::encode::serialize;
 use bitcoin::Script;
+use bitcoin_hashes::{hex::ToHex, sha256, Hash};
 use elements::confidential::Value;
-use elements::{AssetIssuance, Proof};
+use elements::{Proof, TxIn};
 
 use hex;
 
 use crate::chain::Network;
-use crate::util::{get_script_asm, script_to_address};
+use crate::errors::*;
+use crate::util::{get_script_asm, script_to_address, AssetId};
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockProofValue {
@@ -30,6 +32,7 @@ impl From<&Proof> for BlockProofValue {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {
+    pub asset_id: Option<String>,
     pub is_reissuance: bool,
     pub asset_blinding_nonce: Option<String>,
     pub asset_entropy: Option<String>,
@@ -39,12 +42,22 @@ pub struct IssuanceValue {
     pub tokenamountcommitment: Option<String>,
 }
 
-impl From<&AssetIssuance> for IssuanceValue {
-    fn from(issuance: &AssetIssuance) -> Self {
+impl From<&TxIn> for IssuanceValue {
+    fn from(txin: &TxIn) -> Self {
         let zero = [0u8; 32];
+
+        let issuance = txin.asset_issuance;
         let is_reissuance = issuance.asset_blinding_nonce != zero;
+        let asset_id = if is_reissuance {
+            None // TODO
+        } else {
+            get_issuance_assetid(txin).ok().map(|s| s.to_hex())
+        };
+
+        debug!("issuance: {:?}", issuance);
 
         IssuanceValue {
+            asset_id,
             is_reissuance,
             asset_blinding_nonce: if is_reissuance {
                 Some(hex::encode(issuance.asset_blinding_nonce))
@@ -74,6 +87,18 @@ impl From<&AssetIssuance> for IssuanceValue {
             },
         }
     }
+}
+
+fn get_issuance_assetid(txin: &TxIn) -> Result<AssetId> {
+    if !txin.has_issuance {
+        bail!("input has no issuance");
+    }
+
+    let contract_hash = sha256::Hash::from_slice(&txin.asset_issuance.asset_entropy)
+        .chain_err(|| "invalid entropy")?;
+    let entropy = AssetId::generate_asset_entropy(txin.previous_output.clone(), contract_hash);
+
+    Ok(AssetId::from_entropy(entropy))
 }
 
 #[derive(Serialize, Deserialize, Clone)]

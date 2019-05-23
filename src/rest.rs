@@ -221,7 +221,7 @@ impl TxInValue {
             is_pegin: txin.is_pegin,
             #[cfg(feature = "liquid")]
             issuance: if txin.has_issuance() {
-                Some(IssuanceValue::from(&txin.asset_issuance))
+                Some(IssuanceValue::from(txin))
             } else {
                 None
             },
