@@ -23,6 +23,9 @@ use crate::util::{
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
+#[cfg(feature = "liquid")]
+use crate::util::elements::{index_elements_transaction, IssuanceInfo};
+
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
 pub struct Store {
@@ -317,16 +320,16 @@ impl ChainQuery {
         })
     }
 
-    fn history_iter_scan(&self, scripthash: &[u8], start_height: usize) -> ScanIterator {
+    fn history_iter_scan(&self, code: u8, hash: &[u8], start_height: usize) -> ScanIterator {
         self.store.history_db.iter_scan_from(
-            &TxHistoryRow::filter(&scripthash[..]),
-            &TxHistoryRow::prefix_height(&scripthash[..], start_height as u32),
+            &TxHistoryRow::filter(code, &hash[..]),
+            &TxHistoryRow::prefix_height(code, &hash[..], start_height as u32),
         )
     }
-    fn history_iter_scan_reverse(&self, scripthash: &[u8]) -> ReverseScanIterator {
+    fn history_iter_scan_reverse(&self, code: u8, hash: &[u8]) -> ReverseScanIterator {
         self.store.history_db.iter_scan_reverse(
-            &TxHistoryRow::filter(&scripthash[..]),
-            &TxHistoryRow::prefix_end(&scripthash[..]),
+            &TxHistoryRow::filter(code, &hash[..]),
+            &TxHistoryRow::prefix_end(code, &hash[..]),
         )
     }
 
@@ -336,9 +339,20 @@ impl ChainQuery {
         last_seen_txid: Option<&Sha256dHash>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
+        // scripthash lookup
+        self._history(b'H', scripthash, last_seen_txid, limit)
+    }
+
+    fn _history(
+        &self,
+        code: u8,
+        hash: &[u8],
+        last_seen_txid: Option<&Sha256dHash>,
+        limit: usize,
+    ) -> Vec<(Transaction, BlockId)> {
         let _timer_scan = self.start_timer("history");
         let txs_conf = self
-            .history_iter_scan_reverse(scripthash)
+            .history_iter_scan_reverse(code, hash)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             // XXX: unique() requires keeping an in-memory list of all txids, can we avoid that?
             .unique()
@@ -365,8 +379,13 @@ impl ChainQuery {
     }
 
     pub fn history_txids(&self, scripthash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
+        // scripthash lookup
+        self._history_txids(b'H', scripthash)
+    }
+
+    fn _history_txids(&self, code: u8, hash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
         let _timer = self.start_timer("history_txids");
-        self.history_iter_scan(scripthash, 0)
+        self.history_iter_scan(code, hash, 0)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .unique()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
@@ -438,7 +457,7 @@ impl ChainQuery {
     ) -> (UtxoMap, Option<Sha256dHash>, usize) {
         let _timer = self.start_timer("utxo_delta");
         let history_iter = self
-            .history_iter_scan(scripthash, start_height)
+            .history_iter_scan(b'H', scripthash, start_height)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
@@ -459,6 +478,8 @@ impl ChainQuery {
                     utxos.insert(history.get_outpoint(), (blockid, info.value))
                 }
                 TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Issuance(_) => unreachable!(),
             };
         }
 
@@ -507,7 +528,7 @@ impl ChainQuery {
     ) -> (ScriptStats, Option<Sha256dHash>) {
         let _timer = self.start_timer("stats_delta"); // TODO: measure also the number of txns processed.
         let history_iter = self
-            .history_iter_scan(scripthash, start_height)
+            .history_iter_scan(b'H', scripthash, start_height)
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
@@ -533,21 +554,26 @@ impl ChainQuery {
                     stats.funded_txo_count += 1;
                     stats.funded_txo_sum += info.value;
                 }
-                #[cfg(feature = "liquid")]
-                TxHistoryInfo::Funding(_) => {
-                    stats.funded_txo_count += 1;
-                }
 
                 #[cfg(not(feature = "liquid"))]
                 TxHistoryInfo::Spending(ref info) => {
                     stats.spent_txo_count += 1;
                     stats.spent_txo_sum += info.value;
                 }
+
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Funding(_) => {
+                    stats.funded_txo_count += 1;
+                }
+
                 #[cfg(feature = "liquid")]
                 TxHistoryInfo::Spending(_) => {
                     stats.spent_txo_count += 1;
                 }
-            };
+
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Issuance(_) => unreachable!(),
+            }
 
             lastblock = Some(blockid.hash);
         }
@@ -896,6 +922,9 @@ fn index_transaction(
         );
         rows.push(edge.to_row());
     }
+
+    #[cfg(feature = "liquid")]
+    index_elements_transaction(tx, confirmed_height, previous_txos_map, rows);
 }
 
 // TODO: replace by a separate opaque type (similar to Sha256dHash, but without the "double")
@@ -1101,14 +1130,14 @@ impl BlockRow {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FundingInfo {
     pub txid: FullHash, // funding transaction
     pub vout: u16,
     pub value: Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SpendingInfo {
     pub txid: FullHash, // spending transaction
     pub vin: u16,
@@ -1117,51 +1146,64 @@ pub struct SpendingInfo {
     pub value: Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum TxHistoryInfo {
     Funding(FundingInfo),
     Spending(SpendingInfo),
+    #[cfg(feature = "liquid")]
+    Issuance(IssuanceInfo),
+}
+
+impl TxHistoryInfo {
+    pub fn get_txid(&self) -> Sha256dHash {
+        match self {
+            TxHistoryInfo::Funding(info) => parse_hash(&info.txid),
+            TxHistoryInfo::Spending(info) => parse_hash(&info.txid),
+            #[cfg(feature = "liquid")]
+            TxHistoryInfo::Issuance(info) => parse_hash(&info.txid),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct TxHistoryKey {
-    pub code: u8,
-    pub scripthash: FullHash,
+    pub code: u8,              // H for script history or I for asset history (elements only)
+    pub hash: FullHash, // either a scripthash (always on bitcoin) or an asset id (elements only)
     pub confirmed_height: u32, // MUST be serialized as big-endian (for correct scans).
     pub txinfo: TxHistoryInfo,
 }
 
-struct TxHistoryRow {
-    key: TxHistoryKey,
+pub struct TxHistoryRow {
+    pub key: TxHistoryKey,
 }
 
 impl TxHistoryRow {
     fn new(script: &Script, confirmed_height: u32, txinfo: TxHistoryInfo) -> Self {
         let key = TxHistoryKey {
             code: b'H',
-            scripthash: compute_script_hash(&script),
+            hash: compute_script_hash(&script),
             confirmed_height,
             txinfo,
         };
         TxHistoryRow { key }
     }
 
-    fn filter(scripthash_prefix: &[u8]) -> Bytes {
-        [b"H", scripthash_prefix].concat()
+    fn filter(code: u8, hash_prefix: &[u8]) -> Bytes {
+        [&[code], hash_prefix].concat()
     }
 
-    fn prefix_end(scripthash: &[u8]) -> Bytes {
-        bincode::serialize(&(b'H', full_hash(&scripthash[..]), std::u32::MAX)).unwrap()
+    fn prefix_end(code: u8, hash: &[u8]) -> Bytes {
+        bincode::serialize(&(code, full_hash(&hash[..]), std::u32::MAX)).unwrap()
     }
 
-    fn prefix_height(scripthash: &[u8], height: u32) -> Bytes {
+    fn prefix_height(code: u8, hash: &[u8], height: u32) -> Bytes {
         bincode::config()
             .big_endian()
-            .serialize(&(b'H', full_hash(&scripthash[..]), height))
+            .serialize(&(code, full_hash(&hash[..]), height))
             .unwrap()
     }
 
-    fn to_row(self) -> DBRow {
+    pub fn to_row(self) -> DBRow {
         DBRow {
             key: bincode::config().big_endian().serialize(&self.key).unwrap(),
             value: vec![],
@@ -1177,10 +1219,7 @@ impl TxHistoryRow {
     }
 
     fn get_txid(&self) -> Sha256dHash {
-        match self.key.txinfo {
-            TxHistoryInfo::Funding(ref info) => parse_hash(&info.txid),
-            TxHistoryInfo::Spending(ref info) => parse_hash(&info.txid),
-        }
+        self.key.txinfo.get_txid()
     }
     fn get_outpoint(&self) -> OutPoint {
         self.key.txinfo.get_outpoint()
@@ -1200,6 +1239,8 @@ impl TxHistoryInfo {
                 txid: parse_hash(&info.prev_txid),
                 vout: info.prev_vout as u32,
             },
+            #[cfg(feature = "liquid")]
+            TxHistoryInfo::Issuance(_) => unreachable!(),
         }
     }
 }

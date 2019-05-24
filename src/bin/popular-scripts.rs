@@ -28,12 +28,12 @@ fn main() {
             .deserialize(&key)
             .expect("failed to deserialize TxHistoryKey");
 
-        if curr_scripthash != entry.scripthash {
+        if curr_scripthash != entry.hash {
             if total_entries > 100 {
                 println!("{} {}", hex::encode(&curr_scripthash), total_entries);
             }
 
-            curr_scripthash = entry.scripthash;
+            curr_scripthash = entry.hash;
             total_entries = 0;
         }
 

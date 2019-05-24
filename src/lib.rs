@@ -28,9 +28,6 @@ extern crate time;
 extern crate tiny_http;
 extern crate url;
 
-#[cfg(feature = "liquid")]
-extern crate elements;
-
 #[macro_use]
 extern crate chan;
 #[macro_use]
@@ -46,6 +43,8 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+#[cfg(feature = "liquid")]
+extern crate elements;
 #[cfg(feature = "liquid")]
 #[macro_use]
 extern crate lazy_static;

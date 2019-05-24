@@ -42,6 +42,12 @@ impl From<Option<BlockId>> for TransactionStatus {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct TxInput {
+    pub txid: Sha256dHash,
+    pub vin: u16,
+}
+
 pub fn is_coinbase(txin: &TxIn) -> bool {
     #[cfg(not(feature = "liquid"))]
     return txin.previous_output.is_null();

@@ -45,14 +45,20 @@ When the indexer is synced up to the tip of the chain, the hash of the tip is sa
 
 Each funding output (except for provably unspendable ones) results in the following new row (`H` is for history, `F` is for funding):
 
- * `"H{funding-scripthash}{funding-height}F{funding-txid:index}{value}" → ""`
+ * `"H{funding-scripthash}{funding-height}F{funding-txid:vout}{value}" → ""`
 
 Each spending input (except the coinbase) results in the following new rows (`S` is for spending):
 
- * `"H{funding-scripthash}{spending-height}S{spending-txid:index}{funding-txid:index}{value}" → ""`
+ * `"H{funding-scripthash}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value}" → ""`
 
- * `"S{funding-txid:index}{spending-txid:index}" → ""`
+ * `"S{funding-txid:vout}{spending-txid:vin}" → ""`
 
+Liquid/elements chains also have the following indexes for issued assets:
+
+ * `"i{asset-id}" → "{issuing-txid:vin}{prev-txid:vout}{issuance}"`
+ * `"I{asset-id}{issuance-height}I{issuing-txid:vin}" → ""`
+ * `"I{asset-id}{funding-height}F{funding-txid:vout}{value}" → ""`
+ * `"I{asset-id}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value}" → ""`
 
 ### `cache`
 

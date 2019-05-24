@@ -3,8 +3,9 @@ mod fetch;
 mod mempool;
 pub mod precache;
 mod query;
-mod schema;
+pub mod schema;
 
+pub use self::db::{DBRow, DB};
 pub use self::fetch::{BlockEntry, FetchFrom};
 pub use self::mempool::Mempool;
 pub use self::query::Query;

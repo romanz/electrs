@@ -102,7 +102,7 @@ impl Mempool {
             None => return vec![],
             Some(entries) => entries
                 .iter()
-                .map(get_entry_txid)
+                .map(|e| e.get_txid())
                 .unique()
                 .take(limit)
                 .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
@@ -118,7 +118,7 @@ impl Mempool {
             .start_timer();
         match self.history.get(scripthash) {
             None => return vec![],
-            Some(entries) => entries.iter().map(get_entry_txid).unique().collect(),
+            Some(entries) => entries.iter().map(|e| e.get_txid()).unique().collect(),
         }
     }
 
@@ -145,6 +145,8 @@ impl Mempool {
                         .asset,
                 }),
                 TxHistoryInfo::Spending(..) => None,
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Issuance(..) => unreachable!(),
             })
             .filter(|utxo| !self.has_spend(&OutPoint::from(utxo)))
             .collect()
@@ -162,7 +164,7 @@ impl Mempool {
         };
 
         for entry in entries {
-            if seen_txids.insert(get_entry_txid(entry)) {
+            if seen_txids.insert(entry.get_txid()) {
                 stats.tx_count += 1;
             }
 
@@ -172,20 +174,24 @@ impl Mempool {
                     stats.funded_txo_count += 1;
                     stats.funded_txo_sum += info.value;
                 }
-                #[cfg(feature = "liquid")]
-                TxHistoryInfo::Funding(_) => {
-                    stats.funded_txo_count += 1;
-                }
 
                 #[cfg(not(feature = "liquid"))]
                 TxHistoryInfo::Spending(info) => {
                     stats.spent_txo_count += 1;
                     stats.spent_txo_sum += info.value;
                 }
+
+                // elements
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Funding(_) => {
+                    stats.funded_txo_count += 1;
+                }
                 #[cfg(feature = "liquid")]
                 TxHistoryInfo::Spending(_) => {
                     stats.spent_txo_count += 1;
                 }
+                #[cfg(feature = "liquid")]
+                TxHistoryInfo::Issuance(..) => unreachable!(),
             };
         }
 
@@ -416,7 +422,7 @@ impl Mempool {
 
         // TODO: make it more efficient (currently it takes O(|mempool|) time)
         self.history.retain(|_scripthash, entries| {
-            entries.retain(|entry| !to_remove.contains(&get_entry_txid(entry)));
+            entries.retain(|entry| !to_remove.contains(&entry.get_txid()));
             !entries.is_empty()
         });
 
@@ -456,12 +462,5 @@ impl BacklogStats {
             total_fee,
             fee_histogram: make_fee_histogram(feeinfo.values().collect()),
         }
-    }
-}
-
-fn get_entry_txid(entry: &TxHistoryInfo) -> Sha256dHash {
-    match entry {
-        TxHistoryInfo::Funding(info) => parse_hash(&info.txid),
-        TxHistoryInfo::Spending(info) => parse_hash(&info.txid),
     }
 }
