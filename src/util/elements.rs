@@ -307,6 +307,13 @@ fn asset_history_row(asset: &Asset, confirmed_height: u32, txinfo: TxHistoryInfo
     }
 }
 
+pub fn lookup_asset(history_db: &DB, asset_hash: &[u8]) -> Option<AssetEntry> {
+    history_db
+        .get(&[b"i", &asset_hash[..]].concat())
+        .map(|val| bincode::deserialize(&val).expect("failed to parse AssetRowValue"))
+        .map(|row_val| AssetEntry::from_row(asset_hash, &row_val))
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PegOutRequest {
     pub genesis_hash: String,

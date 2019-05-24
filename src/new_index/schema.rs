@@ -24,7 +24,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::util::elements::{index_elements_transaction, IssuanceInfo};
+use crate::util::elements::{index_elements_transaction, lookup_asset, AssetEntry, IssuanceInfo};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -740,6 +740,26 @@ impl ChainQuery {
                 )
             },
         )
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn lookup_asset(&self, asset_hash: &[u8]) -> Option<AssetEntry> {
+        lookup_asset(&self.store.history_db, asset_hash)
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn asset_history(
+        &self,
+        asset_hash: &[u8],
+        last_seen_txid: Option<&Sha256dHash>,
+        limit: usize,
+    ) -> Vec<(Transaction, BlockId)> {
+        self._history(b'I', asset_hash, last_seen_txid, limit)
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn asset_history_txids(&self, asset_hash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
+        self._history_txids(b'I', asset_hash)
     }
 }
 

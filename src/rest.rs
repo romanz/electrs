@@ -7,12 +7,12 @@ use crate::util::{
     script_to_address, BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
 };
 
-#[cfg(feature = "liquid")]
-use crate::util::{BlockProofValue, IssuanceValue, PegOutRequest};
-
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::{BitcoinHash, Script};
-use bitcoin_hashes::hex::{FromHex, ToHex};
+use bitcoin_hashes::{
+    hex::{FromHex, ToHex},
+    Hash,
+};
 use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
@@ -20,6 +20,8 @@ use hyper::rt::{self, Future, Stream};
 use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
+#[cfg(feature = "liquid")]
+use crate::util::elements::{AssetValue, BlockProofValue, IssuanceValue, PegOutRequest};
 #[cfg(feature = "liquid")]
 use elements::confidential::{Asset, Value};
 
@@ -889,6 +891,34 @@ fn handle_request(
 
         (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {
             json_response(query.estimate_fee_targets(), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"asset"), Some(asset_str), None, None, None) => {
+            let asset_hash = Sha256dHash::from_hex(asset_str)?.into_inner();
+            let asset_entry = query
+                .chain()
+                .lookup_asset(&asset_hash[..])
+                .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
+
+            // XXX medium ttl?
+            json_response(AssetValue::from(asset_entry), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), last_seen_txid, None) => {
+            let asset_hash = Sha256dHash::from_hex(asset_str)?;
+            let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
+
+            // XXX currently supports on-chain transactions only
+            let txs = query
+                .chain()
+                .asset_history(&asset_hash[..], last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
+                .into_iter()
+                .map(|(tx, blockid)| (tx, Some(blockid)))
+                .collect();
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
         _ => Err(HttpError::not_found(format!(
