@@ -14,7 +14,7 @@ mod assetid;
 mod registry;
 
 use asset::get_issuance_assetid;
-pub use asset::{lookup_asset, AssetEntry, AssetValue};
+pub use asset::{lookup_asset, AssetEntry};
 pub use assetid::AssetId;
 pub use registry::AssetRegistry;
 

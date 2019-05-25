@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin_hashes::{hex::FromHex, hex::ToHex, sha256, sha256d, Hash};
+use bitcoin_hashes::{hex::FromHex, sha256, sha256d, Hash};
 use elements::confidential::Asset;
 use elements::{AssetIssuance, OutPoint, Transaction, TxIn, TxOut};
 
@@ -14,7 +14,7 @@ use crate::util::{full_hash, has_prevout, is_spendable, Bytes, FullHash, TxInput
 
 use crate::elements::{
     registry::{AssetMeta, AssetRegistry},
-    AssetId, IssuanceValue,
+    AssetId,
 };
 
 lazy_static! {
@@ -27,11 +27,12 @@ lazy_static! {
 }
 
 // Internal representation
+#[derive(Serialize)]
 pub struct AssetEntry {
     pub asset_id: sha256d::Hash,
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub issuance: AssetIssuance,
+    pub contract_hash: sha256::Hash,
 
     // optional metadata from registry
     pub meta: Option<AssetMeta>,
@@ -47,33 +48,12 @@ pub struct AssetRowValue {
     pub issuance: Bytes, // bincode does not like dealing with AssetIssuance, deserialization fails with "invalid type: sequence, expected a struct"
 }
 
-// JSON representation for external HTTP API
-#[derive(Serialize, Deserialize)]
-pub struct AssetValue {
-    pub asset_id: sha256d::Hash,
-    pub issuance_txin: TxInput,
-    pub issuance_prevout: OutPoint,
-    pub issuance: IssuanceValue,
-    #[serde(flatten)]
-    pub meta: Option<AssetMeta>,
-}
-
-impl From<AssetEntry> for AssetValue {
-    fn from(entry: AssetEntry) -> Self {
-        let issuance = IssuanceValue::new(Some(entry.asset_id.to_hex()), &entry.issuance);
-
-        Self {
-            asset_id: entry.asset_id,
-            issuance_txin: entry.issuance_txin,
-            issuance_prevout: entry.issuance_prevout,
-            issuance: issuance,
-            meta: entry.meta,
-        }
-    }
-}
-
 impl AssetEntry {
     pub fn new(asset_hash: &[u8], asset: AssetRowValue, meta: Option<AssetMeta>) -> Self {
+        let issuance: AssetIssuance =
+            deserialize(&asset.issuance).expect("failed parsing AssetIssuance");
+        let contract_hash = sha256::Hash::from_inner(issuance.asset_entropy);
+
         Self {
             asset_id: parse_hash(&full_hash(&asset_hash[..])),
             issuance_txin: TxInput {
@@ -84,7 +64,7 @@ impl AssetEntry {
                 txid: parse_hash(&asset.prev_txid),
                 vout: asset.prev_vout as u32,
             },
-            issuance: deserialize(&asset.issuance).expect("failed parsing AssetIssuance"),
+            contract_hash,
             meta,
         }
     }

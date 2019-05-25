@@ -21,7 +21,7 @@ use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
-use crate::elements::{AssetValue, BlockProofValue, IssuanceValue, PegOutRequest};
+use crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest};
 #[cfg(feature = "liquid")]
 use elements::confidential::{Asset, Value};
 
@@ -901,7 +901,7 @@ fn handle_request(
                 .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
 
             // XXX medium ttl?
-            json_response(AssetValue::from(asset_entry), TTL_SHORT)
+            json_response(asset_entry, TTL_SHORT)
         }
 
         #[cfg(feature = "liquid")]
