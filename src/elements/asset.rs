@@ -32,7 +32,7 @@ pub struct AssetEntry {
     pub asset_id: sha256d::Hash,
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub contract_hash: sha256::Hash,
+    pub contract_hash: sha256d::Hash,
 
     // optional metadata from registry
     #[serde(flatten)]
@@ -53,7 +53,10 @@ impl AssetEntry {
     pub fn new(asset_hash: &[u8], asset: AssetRowValue, meta: Option<AssetMeta>) -> Self {
         let issuance: AssetIssuance =
             deserialize(&asset.issuance).expect("failed parsing AssetIssuance");
-        let contract_hash = sha256::Hash::from_inner(issuance.asset_entropy);
+
+        // XXX this isn't really a double-hash, sha256d is only being used to get backward
+        // serialization that matches the one used by elements-cpp
+        let contract_hash = sha256d::Hash::from_inner(issuance.asset_entropy);
 
         Self {
             asset_id: parse_hash(&full_hash(&asset_hash[..])),
