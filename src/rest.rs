@@ -9,10 +9,7 @@ use crate::util::{
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::{BitcoinHash, Script};
-use bitcoin_hashes::{
-    hex::{FromHex, ToHex},
-    Hash,
-};
+use bitcoin_hashes::hex::{FromHex, ToHex};
 use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
@@ -21,9 +18,11 @@ use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
-use crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest};
-#[cfg(feature = "liquid")]
-use elements::confidential::{Asset, Value};
+use {
+    crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
+    bitcoin_hashes::Hash,
+    elements::confidential::{Asset, Value},
+};
 
 use serde::Serialize;
 use serde_json;
