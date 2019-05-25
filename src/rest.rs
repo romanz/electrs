@@ -236,9 +236,10 @@ impl TxInValue {
 struct TxOutValue {
     scriptpubkey: Script,
     scriptpubkey_asm: String,
+    scriptpubkey_type: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     scriptpubkey_address: Option<String>,
-    scriptpubkey_type: String,
 
     #[cfg(not(feature = "liquid"))]
     value: u64,

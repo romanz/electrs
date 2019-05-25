@@ -42,6 +42,7 @@ pub struct PegOutRequest {
     pub genesis_hash: String,
     pub scriptpubkey: Script,
     pub scriptpubkey_asm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scriptpubkey_address: Option<String>,
 }
 
@@ -94,11 +95,17 @@ impl PegOutRequest {
 pub struct IssuanceValue {
     pub asset_id: String,
     pub is_reissuance: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_blinding_nonce: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_entropy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub assetamount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub assetamountcommitment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tokenamount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tokenamountcommitment: Option<String>,
 }
 
