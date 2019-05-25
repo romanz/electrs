@@ -24,7 +24,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::{index_elements_transaction, lookup_asset, AssetEntry, IssuanceInfo};
+use crate::elements::asset::{index_elements_transaction, IssuanceInfo};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -290,6 +290,10 @@ impl ChainQuery {
                 &["name"],
             ),
         }
+    }
+
+    pub fn store(&self) -> &Store {
+        &self.store
     }
 
     fn start_timer(&self, name: &str) -> HistogramTimer {
@@ -740,11 +744,6 @@ impl ChainQuery {
                 )
             },
         )
-    }
-
-    #[cfg(feature = "liquid")]
-    pub fn lookup_asset(&self, asset_hash: &[u8]) -> Option<AssetEntry> {
-        lookup_asset(&self.store.history_db, asset_hash)
     }
 
     #[cfg(feature = "liquid")]

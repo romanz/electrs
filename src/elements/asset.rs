@@ -5,13 +5,17 @@ use bitcoin_hashes::{hex::FromHex, hex::ToHex, sha256, sha256d, Hash};
 use elements::confidential::Asset;
 use elements::{AssetIssuance, OutPoint, Transaction, TxIn, TxOut};
 
-use crate::elements::{AssetId, IssuanceValue};
 use crate::errors::*;
 use crate::new_index::schema::{
     FundingInfo, SpendingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow,
 };
 use crate::new_index::{parse_hash, DBRow, DB};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes, FullHash, TxInput};
+
+use crate::elements::{
+    registry::{AssetMeta, AssetRegistry},
+    AssetId, IssuanceValue,
+};
 
 lazy_static! {
     static ref NATIVE_ASSET_ID: sha256d::Hash =
@@ -23,12 +27,14 @@ lazy_static! {
 }
 
 // Internal representation
-#[derive(Serialize, Deserialize)]
 pub struct AssetEntry {
     pub asset_id: sha256d::Hash,
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
     pub issuance: AssetIssuance,
+
+    // optional metadata from registry
+    pub meta: Option<AssetMeta>,
 }
 
 // DB representation
@@ -48,27 +54,26 @@ pub struct AssetValue {
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
     pub issuance: IssuanceValue,
+    #[serde(flatten)]
+    pub meta: Option<AssetMeta>,
 }
 
 impl From<AssetEntry> for AssetValue {
     fn from(entry: AssetEntry) -> Self {
-        let AssetEntry {
-            asset_id,
-            issuance_txin,
-            issuance_prevout,
-            issuance,
-        } = entry;
+        let issuance = IssuanceValue::new(Some(entry.asset_id.to_hex()), &entry.issuance);
+
         Self {
-            asset_id,
-            issuance_txin,
-            issuance_prevout,
-            issuance: IssuanceValue::new(Some(asset_id.to_hex()), &issuance),
+            asset_id: entry.asset_id,
+            issuance_txin: entry.issuance_txin,
+            issuance_prevout: entry.issuance_prevout,
+            issuance: issuance,
+            meta: entry.meta,
         }
     }
 }
 
 impl AssetEntry {
-    pub fn from_row(asset_hash: &[u8], asset: &AssetRowValue) -> Self {
+    pub fn new(asset_hash: &[u8], asset: AssetRowValue, meta: Option<AssetMeta>) -> Self {
         Self {
             asset_id: parse_hash(&full_hash(&asset_hash[..])),
             issuance_txin: TxInput {
@@ -80,6 +85,7 @@ impl AssetEntry {
                 vout: asset.prev_vout as u32,
             },
             issuance: deserialize(&asset.issuance).expect("failed parsing AssetIssuance"),
+            meta,
         }
     }
 }
@@ -204,11 +210,19 @@ fn asset_history_row(asset: &Asset, confirmed_height: u32, txinfo: TxHistoryInfo
     }
 }
 
-pub fn lookup_asset(history_db: &DB, asset_hash: &[u8]) -> Option<AssetEntry> {
-    history_db
-        .get(&[b"i", &asset_hash[..]].concat())
-        .map(|val| bincode::deserialize(&val).expect("failed to parse AssetRowValue"))
-        .map(|row_val| AssetEntry::from_row(asset_hash, &row_val))
+pub fn lookup_asset(
+    history_db: &DB,
+    registry: Option<&AssetRegistry>,
+    asset_hash: &[u8],
+) -> Result<Option<AssetEntry>> {
+    if let Some(row) = history_db.get(&[b"i", &asset_hash[..]].concat()) {
+        let row = bincode::deserialize(&row).expect("failed to parse AssetRowValue");
+        let asset_id = sha256d::Hash::from_slice(asset_hash).chain_err(|| "invalid asset hash")?;
+        let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
+        Ok(Some(AssetEntry::new(asset_hash, row, meta)))
+    } else {
+        Ok(None)
+    }
 }
 
 pub fn get_issuance_assetid(txin: &TxIn) -> Result<AssetId> {

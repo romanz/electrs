@@ -11,6 +11,9 @@ use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
+#[cfg(feature = "liquid")]
+use crate::elements::{lookup_asset, AssetEntry, AssetRegistry};
+
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
 const CONF_TARGETS: [u16; 9] = [
@@ -22,9 +25,13 @@ pub struct Query {
     mempool: Arc<RwLock<Mempool>>,
     daemon: Arc<Daemon>,
     cached_estimates: RwLock<Option<(HashMap<u16, f32>, Instant)>>,
+
+    #[cfg(feature = "liquid")]
+    asset_db: Option<AssetRegistry>,
 }
 
 impl Query {
+    #[cfg(not(feature = "liquid"))]
     pub fn new(chain: Arc<ChainQuery>, mempool: Arc<RwLock<Mempool>>, daemon: Arc<Daemon>) -> Self {
         Query {
             chain,
@@ -153,5 +160,30 @@ impl Query {
         *self.cached_estimates.write().unwrap() = Some((fresh.clone(), Instant::now()));
 
         fresh
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn new(
+        chain: Arc<ChainQuery>,
+        mempool: Arc<RwLock<Mempool>>,
+        daemon: Arc<Daemon>,
+        asset_db: Option<AssetRegistry>,
+    ) -> Self {
+        Query {
+            chain,
+            mempool,
+            daemon,
+            asset_db,
+            cached_estimates: RwLock::new(None),
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn lookup_asset(&self, asset_hash: &[u8]) -> Result<Option<AssetEntry>> {
+        lookup_asset(
+            &self.chain.store().history_db(),
+            self.asset_db.as_ref(),
+            asset_hash,
+        )
     }
 }

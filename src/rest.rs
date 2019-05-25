@@ -897,8 +897,7 @@ fn handle_request(
         (&Method::GET, Some(&"asset"), Some(asset_str), None, None, None) => {
             let asset_hash = Sha256dHash::from_hex(asset_str)?.into_inner();
             let asset_entry = query
-                .chain()
-                .lookup_asset(&asset_hash[..])
+                .lookup_asset(&asset_hash[..])?
                 .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
 
             // XXX medium ttl?

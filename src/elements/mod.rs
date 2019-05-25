@@ -11,10 +11,12 @@ use crate::util::{get_script_asm, script_to_address};
 
 pub mod asset;
 mod assetid;
+mod registry;
 
 use asset::get_issuance_assetid;
-pub use asset::AssetValue;
+pub use asset::{lookup_asset, AssetEntry, AssetValue};
 pub use assetid::AssetId;
+pub use registry::AssetRegistry;
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockProofValue {

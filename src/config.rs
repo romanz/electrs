@@ -39,6 +39,8 @@ pub struct Config {
     pub parent_network: Network,
     #[cfg(feature = "liquid")]
     pub parent_genesis_hash: String,
+    #[cfg(feature = "liquid")]
+    pub asset_db_path: Option<PathBuf>,
 }
 
 impl Config {
@@ -151,12 +153,19 @@ impl Config {
             );
 
         #[cfg(feature = "liquid")]
-        let args = args.arg(
-            Arg::with_name("parent_network")
-                .long("parent-network")
-                .help("Select parent network type (mainnet, testnet, regtest)")
-                .takes_value(true),
-        );
+        let args = args
+            .arg(
+                Arg::with_name("parent_network")
+                    .long("parent-network")
+                    .help("Select parent network type (mainnet, testnet, regtest)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("asset_db_path")
+                    .long("asset-db-path")
+                    .help("Directory for liquid/elements asset db")
+                    .takes_value(true),
+            );
 
         let m = args.get_matches();
 
@@ -169,6 +178,8 @@ impl Config {
         let parent_network = Network::from(m.value_of("parent_network").unwrap_or("mainnet"));
         #[cfg(feature = "liquid")]
         let parent_genesis_hash = parent_network.genesis_hash().to_hex();
+        #[cfg(feature = "liquid")]
+        let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
 
         let default_daemon_port = match network_type {
             Network::Bitcoin => 8332,
@@ -285,6 +296,8 @@ impl Config {
             parent_network,
             #[cfg(feature = "liquid")]
             parent_genesis_hash,
+            #[cfg(feature = "liquid")]
+            asset_db_path,
         };
         eprintln!("{:?}", config);
         config
