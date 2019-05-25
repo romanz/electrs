@@ -21,7 +21,7 @@ use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
-use crate::util::elements::{AssetValue, BlockProofValue, IssuanceValue, PegOutRequest};
+use crate::elements::{AssetValue, BlockProofValue, IssuanceValue, PegOutRequest};
 #[cfg(feature = "liquid")]
 use elements::confidential::{Asset, Value};
 

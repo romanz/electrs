@@ -24,7 +24,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::util::elements::{index_elements_transaction, lookup_asset, AssetEntry, IssuanceInfo};
+use crate::elements::asset::{index_elements_transaction, lookup_asset, AssetEntry, IssuanceInfo};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
