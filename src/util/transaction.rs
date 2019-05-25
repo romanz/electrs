@@ -1,13 +1,15 @@
 #[cfg(feature = "liquid")]
-use bitcoin_hashes::hex::ToHex;
+use bitcoin_hashes::hex::FromHex;
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 
 use crate::chain::{TxIn, TxOut};
 use crate::util::BlockId;
 
 #[cfg(feature = "liquid")]
-const REGTEST_INITIAL_ISSUANCE_PREVOUT: &str =
-    "50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5";
+lazy_static! {
+    static ref REGTEST_INITIAL_ISSUANCE_PREVOUT: Sha256dHash =
+        Sha256dHash::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5").unwrap();
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {
@@ -49,7 +51,7 @@ pub fn has_prevout(txin: &TxIn) -> bool {
     #[cfg(feature = "liquid")]
     return !txin.is_coinbase()
         && !txin.is_pegin
-        && txin.previous_output.txid.to_hex() != REGTEST_INITIAL_ISSUANCE_PREVOUT;
+        && txin.previous_output.txid != *REGTEST_INITIAL_ISSUANCE_PREVOUT;
 }
 
 pub fn is_spendable(txout: &TxOut) -> bool {
