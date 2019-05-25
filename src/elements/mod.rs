@@ -92,7 +92,7 @@ impl PegOutRequest {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {
-    pub asset_id: Option<String>,
+    pub asset_id: String,
     pub is_reissuance: bool,
     pub asset_blinding_nonce: Option<String>,
     pub asset_entropy: Option<String>,
@@ -104,22 +104,13 @@ pub struct IssuanceValue {
 
 impl From<&TxIn> for IssuanceValue {
     fn from(txin: &TxIn) -> Self {
-        let zero = [0u8; 32];
-
-        let issuance = txin.asset_issuance;
-        let is_reissuance = issuance.asset_blinding_nonce != zero;
-        let asset_id = if is_reissuance {
-            None // TODO
-        } else {
-            get_issuance_assetid(txin).ok().map(|s| s.to_hex())
-        };
-
-        IssuanceValue::new(asset_id, &issuance)
+        let asset_id = get_issuance_assetid(txin).expect("invalid issuance");
+        IssuanceValue::new(asset_id.to_hex(), &txin.asset_issuance)
     }
 }
 
 impl IssuanceValue {
-    fn new(asset_id: Option<String>, issuance: &AssetIssuance) -> Self {
+    fn new(asset_id: String, issuance: &AssetIssuance) -> Self {
         let zero = [0u8; 32];
         let is_reissuance = issuance.asset_blinding_nonce != zero;
 
