@@ -254,8 +254,7 @@ pub struct AssetStats {
     pub tx_count: usize,
     pub issuance_count: usize,
     pub issued_amount: u64,
-    // false if there was at least one blinded (re)issuance
-    pub issued_amount_known: bool,
+    pub has_blinded_issuances: bool,
 }
 
 impl AssetStats {
@@ -264,7 +263,7 @@ impl AssetStats {
             tx_count: 0,
             issuance_count: 0,
             issued_amount: 0,
-            issued_amount_known: true,
+            has_blinded_issuances: false,
         }
     }
 }
@@ -348,7 +347,7 @@ fn asset_stats_delta(
 
                 match issuance.issued_amount {
                     Some(amount) => stats.issued_amount += amount,
-                    None => stats.issued_amount_known = false,
+                    None => stats.has_blinded_issuances = true,
                 }
             }
         }
