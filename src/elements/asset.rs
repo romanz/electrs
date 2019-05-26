@@ -104,17 +104,22 @@ pub fn index_elements_transaction(
     //      I{asset-id}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value} → ""
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !is_spendable(txo) || !is_issued_asset(&txo.asset) {
+        if !is_issued_asset(&txo.asset) {
             continue;
         }
+        let funding_info = FundingInfo {
+            txid,
+            vout: txo_index as u16,
+            value: txo.value,
+        };
         let history = asset_history_row(
             &txo.asset,
             confirmed_height,
-            TxHistoryInfo::Funding(FundingInfo {
-                txid,
-                vout: txo_index as u16,
-                value: txo.value,
-            }),
+            if is_spendable(txo) {
+                TxHistoryInfo::Funding(funding_info)
+            } else {
+                TxHistoryInfo::Burning(funding_info)
+            },
         );
         rows.push(history.to_row())
     }
@@ -254,6 +259,7 @@ pub struct AssetStats {
     pub tx_count: usize,
     pub issuance_count: usize,
     pub issued_amount: u64,
+    pub burned_amount: u64,
     pub has_blinded_issuances: bool,
 }
 
@@ -263,6 +269,7 @@ impl AssetStats {
             tx_count: 0,
             issuance_count: 0,
             issued_amount: 0,
+            burned_amount: 0,
             has_blinded_issuances: false,
         }
     }
@@ -338,9 +345,9 @@ fn asset_stats_delta(
         }
 
         match history.key.txinfo {
-            TxHistoryInfo::Funding(_) => {}
-
-            TxHistoryInfo::Spending(_) => {}
+            TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
+                // no fund/spend stats for now
+            }
 
             TxHistoryInfo::Issuance(issuance) => {
                 stats.issuance_count += 1;
@@ -348,6 +355,12 @@ fn asset_stats_delta(
                 match issuance.issued_amount {
                     Some(amount) => stats.issued_amount += amount,
                     None => stats.has_blinded_issuances = true,
+                }
+            }
+
+            TxHistoryInfo::Burning(info) => {
+                if let Value::Explicit(value) = info.value {
+                    stats.burned_amount += value;
                 }
             }
         }

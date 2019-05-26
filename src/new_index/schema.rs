@@ -487,7 +487,7 @@ impl ChainQuery {
                 }
                 TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) => unreachable!(),
+                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             };
         }
 
@@ -580,7 +580,7 @@ impl ChainQuery {
                 }
 
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) => unreachable!(),
+                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             }
 
             lastblock = Some(blockid.hash);
@@ -1173,17 +1173,22 @@ pub struct SpendingInfo {
 pub enum TxHistoryInfo {
     Funding(FundingInfo),
     Spending(SpendingInfo),
+
     #[cfg(feature = "liquid")]
     Issuance(IssuanceInfo),
+    #[cfg(feature = "liquid")]
+    Burning(FundingInfo),
 }
 
 impl TxHistoryInfo {
     pub fn get_txid(&self) -> Sha256dHash {
         match self {
-            TxHistoryInfo::Funding(info) => parse_hash(&info.txid),
-            TxHistoryInfo::Spending(info) => parse_hash(&info.txid),
+            TxHistoryInfo::Funding(FundingInfo { txid, .. })
+            | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => parse_hash(&txid),
+
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuance(info) => parse_hash(&info.txid),
+            TxHistoryInfo::Issuance(IssuanceInfo { txid, .. })
+            | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => parse_hash(&txid),
         }
     }
 }
@@ -1263,7 +1268,7 @@ impl TxHistoryInfo {
                 vout: info.prev_vout as u32,
             },
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuance(_) => unreachable!(),
+            TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
         }
     }
 }
