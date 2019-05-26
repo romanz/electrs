@@ -1,4 +1,4 @@
-mod db;
+pub mod db;
 mod fetch;
 mod mempool;
 pub mod precache;

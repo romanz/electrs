@@ -73,3 +73,7 @@ If the `blockhash` was since orphaned, the cache is removed and re-computed.
  * `"A{scripthash}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `funded_txo_{count,sum}` and `spent_txo_{count,sum}`)
 
  * `"U{scripthash}" → "{utxo}{blockhash}"` (where `utxo` is a set of `(txid,vout)` outpoints)
+
+Elements only:
+
+ * `"z{asset-id}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `total_issuances`, `issued_amount`, `issued_amount_known`)

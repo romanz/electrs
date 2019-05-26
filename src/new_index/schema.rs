@@ -74,6 +74,10 @@ impl Store {
         &self.history_db
     }
 
+    pub fn cache_db(&self) -> &DB {
+        &self.cache_db
+    }
+
     pub fn done_initial_sync(&self) -> bool {
         self.txstore_db.get(b"t").is_some()
     }
@@ -324,7 +328,7 @@ impl ChainQuery {
         })
     }
 
-    fn history_iter_scan(&self, code: u8, hash: &[u8], start_height: usize) -> ScanIterator {
+    pub fn history_iter_scan(&self, code: u8, hash: &[u8], start_height: usize) -> ScanIterator {
         self.store.history_db.iter_scan_from(
             &TxHistoryRow::filter(code, &hash[..]),
             &TxHistoryRow::prefix_height(code, &hash[..], start_height as u32),
@@ -595,7 +599,7 @@ impl ChainQuery {
     }
 
     // Get the height of a blockhash, only if its part of the best chain
-    fn height_by_hash(&self, hash: &Sha256dHash) -> Option<usize> {
+    pub fn height_by_hash(&self, hash: &Sha256dHash) -> Option<usize> {
         self.store
             .indexed_headers
             .read()
@@ -1229,7 +1233,7 @@ impl TxHistoryRow {
         }
     }
 
-    fn from_row(row: DBRow) -> Self {
+    pub fn from_row(row: DBRow) -> Self {
         let key = bincode::config()
             .big_endian()
             .deserialize(&row.key)
@@ -1237,7 +1241,7 @@ impl TxHistoryRow {
         TxHistoryRow { key }
     }
 
-    fn get_txid(&self) -> Sha256dHash {
+    pub fn get_txid(&self) -> Sha256dHash {
         self.key.txinfo.get_txid()
     }
     fn get_outpoint(&self) -> OutPoint {
