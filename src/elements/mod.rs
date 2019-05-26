@@ -130,7 +130,10 @@ impl IssuanceValue {
                 None
             },
             asset_entropy: if issuance.asset_entropy != zero {
-                Some(hex::encode(issuance.asset_entropy))
+                // reverse to match the format used by elements-cpp
+                let mut entropy = issuance.asset_entropy;
+                entropy.reverse();
+                Some(hex::encode(entropy))
             } else {
                 None
             },
