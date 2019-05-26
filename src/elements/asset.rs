@@ -28,10 +28,11 @@ lazy_static! {
 
 #[derive(Serialize)]
 pub struct AssetEntry {
-    pub asset_id: sha256d::Hash,
+    pub asset_id: sha256d::Hash, // not really a sha256d
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub contract_hash: sha256d::Hash,
+    pub contract_hash: sha256d::Hash, // not really a sha256d
+    pub reissuance_token: sha256d::Hash, // not really a sha256d
 
     pub chain_stats: AssetStats,
 
@@ -48,6 +49,7 @@ pub struct AssetRowValue {
     pub prev_txid: FullHash,
     pub prev_vout: u16,
     pub issuance: Bytes, // bincode does not like dealing with AssetIssuance, deserialization fails with "invalid type: sequence, expected a struct"
+    pub reissuance_token: FullHash,
 }
 
 impl AssetEntry {
@@ -63,6 +65,7 @@ impl AssetEntry {
         // XXX this isn't really a double-hash, sha256d is only being used to get backward
         // serialization that matches the one used by elements-cpp
         let contract_hash = sha256d::Hash::from_inner(issuance.asset_entropy);
+        let reissuance_token = sha256d::Hash::from_inner(asset.reissuance_token);
 
         Self {
             asset_id: parse_hash(&full_hash(&asset_hash[..])),
@@ -75,6 +78,7 @@ impl AssetEntry {
                 vout: asset.prev_vout as u32,
             },
             contract_hash,
+            reissuance_token,
             chain_stats,
             meta,
         }
@@ -88,6 +92,7 @@ pub struct IssuanceInfo {
     pub is_reissuance: bool,
     // None for blinded issuances
     pub issued_amount: Option<u64>,
+    pub token_amount: Option<u64>,
 }
 
 // TODO: index mempool transactions
@@ -98,8 +103,8 @@ pub fn index_elements_transaction(
     rows: &mut Vec<DBRow>,
 ) {
     // persist asset and its history index:
-    //      i{asset-id} → {issuance-txid:vin}{prev-txid:vout}{issuance}
-    //      I{asset-id}{issuance-height}I{issuance-txid:vin} → ""
+    //      i{asset-id} → {issuance-txid:vin}{prev-txid:vout}{issuance}{reissuance_token}
+    //      I{asset-id}{issuance-height}I{issuance-txid:vin}{is_reissuance}{amount}{tokens} → ""
     //      I{asset-id}{funding-height}F{funding-txid:vout}{value} → ""
     //      I{asset-id}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value} → ""
     let txid = full_hash(&tx.txid()[..]);
@@ -150,12 +155,18 @@ pub fn index_elements_transaction(
         if txi.has_issuance() {
             let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
-            let asset_id = get_issuance_assetid(txi).expect("invalid issuance");
+            let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
+            let asset_id = AssetId::from_entropy(asset_entropy.clone());
             let asset_hash = asset_id.into_inner().into_inner();
             let asset = Asset::Explicit(sha256d::Hash::from_inner(asset_hash.clone()));
 
             let issued_amount = match txi.asset_issuance.amount {
                 Value::Explicit(amount) => Some(amount),
+                _ => None,
+            };
+            let token_amount = match txi.asset_issuance.inflation_keys {
+                Value::Explicit(amount) => Some(amount),
+                Value::Null => Some(0),
                 _ => None,
             };
 
@@ -171,17 +182,25 @@ pub fn index_elements_transaction(
                     vin: txi_index as u16,
                     is_reissuance,
                     issued_amount,
+                    token_amount,
                 }),
             );
             rows.push(history.to_row());
 
             if !is_reissuance {
+                let is_confidential = match txi.asset_issuance.inflation_keys {
+                    Value::Confidential(..) => true,
+                    _ => false,
+                };
+                let reissuance_token = AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential).into_inner();
+
                 let asset_row = AssetRowValue {
                     issuance_txid: txid,
                     issuance_vin: txi_index as u16,
                     prev_txid: full_hash(&txi.previous_output.txid[..]),
                     prev_vout: txi.previous_output.vout as u16,
                     issuance: serialize(&txi.asset_issuance),
+                    reissuance_token: full_hash(&reissuance_token[..]),
                 };
                 rows.push(DBRow {
                     key: [b"i", &asset_hash[..]].concat(),
@@ -223,10 +242,10 @@ pub fn lookup_asset(
     let history_db = chain.store().history_db();
 
     if let Some(row) = history_db.get(&[b"i", &asset_hash[..]].concat()) {
-        let row = bincode::deserialize(&row).expect("failed to parse AssetRowValue");
+        let row = bincode::deserialize::<AssetRowValue>(&row).expect("failed to parse AssetRowValue");
         let asset_id = sha256d::Hash::from_slice(asset_hash).chain_err(|| "invalid asset hash")?;
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
-        let chain_stats = asset_stats(chain, asset_hash);
+        let chain_stats = asset_stats(chain, asset_hash, &row.reissuance_token);
         Ok(Some(AssetEntry::new(asset_hash, row, chain_stats, meta)))
     } else {
         Ok(None)
@@ -234,22 +253,25 @@ pub fn lookup_asset(
 }
 
 pub fn get_issuance_assetid(txin: &TxIn) -> Result<AssetId> {
+    let entropy = get_issuance_entropy(txin)?;
+    Ok(AssetId::from_entropy(entropy))
+}
+
+fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
     if !txin.has_issuance {
         bail!("input has no issuance");
     }
 
     let is_reissuance = txin.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
-    let entropy = if !is_reissuance {
+    Ok(if !is_reissuance {
         let contract_hash = sha256::Hash::from_slice(&txin.asset_issuance.asset_entropy)
             .chain_err(|| "invalid entropy (contract hash)")?;
         AssetId::generate_asset_entropy(txin.previous_output.clone(), contract_hash)
     } else {
         sha256::Midstate::from_slice(&txin.asset_issuance.asset_entropy)
             .chain_err(|| "invalid entropy (reissuance)")?
-    };
-
-    Ok(AssetId::from_entropy(entropy))
+    })
 }
 
 // Asset stats
@@ -261,6 +283,8 @@ pub struct AssetStats {
     pub issued_amount: u64,
     pub burned_amount: u64,
     pub has_blinded_issuances: bool,
+    pub reissuance_tokens: Option<u64>, // none if confidential
+    pub burned_reissuance_tokens: u64,
 }
 
 impl AssetStats {
@@ -271,6 +295,8 @@ impl AssetStats {
             issued_amount: 0,
             burned_amount: 0,
             has_blinded_issuances: false,
+            reissuance_tokens: None,
+            burned_reissuance_tokens: 0,
         }
     }
 }
@@ -285,7 +311,13 @@ fn asset_cache_row(asset_hash: &[u8], stats: &AssetStats, blockhash: &sha256d::H
     }
 }
 
-pub fn asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
+fn asset_stats(chain: &ChainQuery, asset_hash: &[u8], reissuance_token: &[u8]) -> AssetStats {
+    let mut stats = _asset_stats(chain, asset_hash);
+    stats.burned_reissuance_tokens = _asset_stats(chain, reissuance_token).burned_amount;
+    stats
+}
+
+fn _asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
     // get the last known stats and the blockhash they are updated for.
     // invalidates the cache if the block was orphaned.
     let cache: Option<(AssetStats, usize)> = chain
@@ -355,6 +387,10 @@ fn asset_stats_delta(
                 match issuance.issued_amount {
                     Some(amount) => stats.issued_amount += amount,
                     None => stats.has_blinded_issuances = true,
+                }
+
+                if !issuance.is_reissuance {
+                    stats.reissuance_tokens = issuance.token_amount;
                 }
             }
 

@@ -55,8 +55,8 @@ Each spending input (except the coinbase) results in the following new rows (`S`
 
 Liquid/elements chains also have the following indexes for issued assets:
 
- * `"i{asset-id}" → "{issuing-txid:vin}{prev-txid:vout}{issuance}"`
- * `"I{asset-id}{issuance-height}I{issuing-txid:vin}" → ""`
+ * `"i{asset-id}" → "{issuing-txid:vin}{prev-txid:vout}{issuance}{reissuance_token}"`
+ * `"I{asset-id}{issuance-height}I{issuing-txid:vin}{is_reissuance}{amount}{tokens}" → ""`
  * `"I{asset-id}{funding-height}F{funding-txid:vout}{value}" → ""`
  * `"I{asset-id}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value}" → ""`
 
@@ -76,4 +76,4 @@ If the `blockhash` was since orphaned, the cache is removed and re-computed.
 
 Elements only:
 
- * `"z{asset-id}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `total_issuances`, `issued_amount`, `issued_amount_known`)
+ * `"z{asset-id}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `issuance_count`, `issued_amount`, `burned_amount`, `has_blinded_issuances`, `reissuance_tokens`, `burned_reissuance_tokens`)
