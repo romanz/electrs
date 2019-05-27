@@ -31,8 +31,10 @@ pub struct AssetEntry {
     pub asset_id: sha256d::Hash, // not really a sha256d
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub contract_hash: sha256d::Hash,    // not really a sha256d
     pub reissuance_token: sha256d::Hash, // not really a sha256d
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_hash: Option<sha256d::Hash>, // not really a sha256d
 
     pub chain_stats: AssetStats,
 
@@ -64,8 +66,12 @@ impl AssetEntry {
 
         // XXX this isn't really a double-hash, sha256d is only being used to get backward
         // serialization that matches the one used by elements-cpp
-        let contract_hash = sha256d::Hash::from_inner(issuance.asset_entropy);
         let reissuance_token = sha256d::Hash::from_inner(asset.reissuance_token);
+        let contract_hash = if issuance.asset_entropy != [0u8; 32] {
+            Some(sha256d::Hash::from_inner(issuance.asset_entropy))
+        } else {
+            None
+        };
 
         Self {
             asset_id: parse_hash(&full_hash(&asset_hash[..])),
