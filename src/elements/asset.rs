@@ -31,7 +31,7 @@ pub struct AssetEntry {
     pub asset_id: sha256d::Hash, // not really a sha256d
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub contract_hash: sha256d::Hash, // not really a sha256d
+    pub contract_hash: sha256d::Hash,    // not really a sha256d
     pub reissuance_token: sha256d::Hash, // not really a sha256d
 
     pub chain_stats: AssetStats,
@@ -192,7 +192,9 @@ pub fn index_elements_transaction(
                     Value::Confidential(..) => true,
                     _ => false,
                 };
-                let reissuance_token = AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential).into_inner();
+                let reissuance_token =
+                    AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential)
+                        .into_inner();
 
                 let asset_row = AssetRow {
                     issuance_txid: txid,
