@@ -180,6 +180,11 @@ impl Query {
 
     #[cfg(feature = "liquid")]
     pub fn lookup_asset(&self, asset_hash: &[u8]) -> Result<Option<AssetEntry>> {
-        lookup_asset(&self.chain, self.asset_db.as_ref(), asset_hash)
+        lookup_asset(
+            &self.chain(),
+            &self.mempool(),
+            self.asset_db.as_ref(),
+            asset_hash,
+        )
     }
 }

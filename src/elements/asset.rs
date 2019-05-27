@@ -9,7 +9,7 @@ use crate::errors::*;
 use crate::new_index::schema::{
     FundingInfo, SpendingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow,
 };
-use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow};
+use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes, FullHash, TxInput};
 
 use crate::elements::{
@@ -37,6 +37,7 @@ pub struct AssetEntry {
     pub contract_hash: Option<sha256d::Hash>, // not really a sha256d
 
     pub chain_stats: AssetStats,
+    pub mempool_stats: AssetStats,
 
     // optional metadata from registry
     #[serde(flatten)]
@@ -58,7 +59,7 @@ impl AssetEntry {
     pub fn new(
         asset_hash: &[u8],
         asset: AssetRow,
-        chain_stats: AssetStats,
+        (chain_stats, mempool_stats): (AssetStats, AssetStats),
         meta: Option<AssetMeta>,
     ) -> Self {
         let issuance: AssetIssuance =
@@ -86,6 +87,7 @@ impl AssetEntry {
             contract_hash,
             reissuance_token,
             chain_stats,
+            mempool_stats,
             meta,
         }
     }
@@ -278,6 +280,7 @@ fn asset_history_row(
 
 pub fn lookup_asset(
     chain: &ChainQuery,
+    mempool: &Mempool,
     registry: Option<&AssetRegistry>,
     asset_hash: &[u8],
 ) -> Result<Option<AssetEntry>> {
@@ -287,8 +290,8 @@ pub fn lookup_asset(
         let row = bincode::deserialize::<AssetRow>(&row).expect("failed to parse AssetRow");
         let asset_id = sha256d::Hash::from_slice(asset_hash).chain_err(|| "invalid asset hash")?;
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
-        let chain_stats = asset_stats(chain, asset_hash, &row.reissuance_token);
-        Ok(Some(AssetEntry::new(asset_hash, row, chain_stats, meta)))
+        let stats = asset_stats(chain, mempool, asset_hash, &row.reissuance_token);
+        Ok(Some(AssetEntry::new(asset_hash, row, stats, meta)))
     } else {
         Ok(None)
     }
@@ -353,13 +356,26 @@ fn asset_cache_row(asset_hash: &[u8], stats: &AssetStats, blockhash: &sha256d::H
     }
 }
 
-fn asset_stats(chain: &ChainQuery, asset_hash: &[u8], reissuance_token: &[u8]) -> AssetStats {
-    let mut stats = _asset_stats(chain, asset_hash);
-    stats.burned_reissuance_tokens = _asset_stats(chain, reissuance_token).burned_amount;
-    stats
+fn asset_stats(
+    chain: &ChainQuery,
+    mempool: &Mempool,
+    asset_hash: &[u8],
+    reissuance_token: &[u8],
+) -> (AssetStats, AssetStats) {
+    let mut chain_stats = chain_asset_stats(chain, asset_hash);
+    chain_stats.burned_reissuance_tokens = chain_asset_stats(chain, reissuance_token).burned_amount;
+
+    let asset_id = sha256d::Hash::from_slice(asset_hash).unwrap();
+    let reissuance_token = sha256d::Hash::from_slice(reissuance_token).unwrap();
+
+    let mut mempool_stats = mempool_asset_stats(mempool, &asset_id);
+    mempool_stats.burned_reissuance_tokens =
+        mempool_asset_stats(mempool, &reissuance_token).burned_amount;
+
+    (chain_stats, mempool_stats)
 }
 
-fn _asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
+fn chain_asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
     // get the last known stats and the blockhash they are updated for.
     // invalidates the cache if the block was orphaned.
     let cache: Option<(AssetStats, usize)> = chain
@@ -409,42 +425,61 @@ fn asset_stats_delta(
     let mut seen_txids = HashSet::new();
     let mut lastblock = None;
 
-    for (history, blockid) in history_iter {
+    for (row, blockid) in history_iter {
         if lastblock != Some(blockid.hash) {
             seen_txids.clear();
         }
-
-        if seen_txids.insert(history.get_txid()) {
-            stats.tx_count += 1;
-        }
-
-        match history.key.txinfo {
-            TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
-                // no fund/spend stats for now
-            }
-
-            TxHistoryInfo::Issuing(issuance) => {
-                stats.issuance_count += 1;
-
-                match issuance.issued_amount {
-                    Some(amount) => stats.issued_amount += amount,
-                    None => stats.has_blinded_issuances = true,
-                }
-
-                if !issuance.is_reissuance {
-                    stats.reissuance_tokens = issuance.token_amount;
-                }
-            }
-
-            TxHistoryInfo::Burning(info) => {
-                if let Value::Explicit(value) = info.value {
-                    stats.burned_amount += value;
-                }
-            }
-        }
-
+        apply_asset_stats(&row.key.txinfo, &mut stats, &mut seen_txids);
         lastblock = Some(blockid.hash);
     }
 
     (stats, lastblock)
+}
+
+pub fn mempool_asset_stats(mempool: &Mempool, asset_id: &sha256d::Hash) -> AssetStats {
+    let mut stats = AssetStats::default();
+
+    if let Some(history) = mempool.asset_history.get(asset_id) {
+        let mut seen_txids = HashSet::new();
+        for info in history {
+            apply_asset_stats(info, &mut stats, &mut seen_txids)
+        }
+    }
+
+    stats
+}
+
+fn apply_asset_stats(
+    info: &TxHistoryInfo,
+    stats: &mut AssetStats,
+    seen_txids: &mut HashSet<sha256d::Hash>,
+) {
+    if seen_txids.insert(info.get_txid()) {
+        stats.tx_count += 1;
+    }
+
+    match info {
+        TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
+            // no fund/spend stats for now
+        }
+
+        TxHistoryInfo::Issuing(issuance) => {
+            stats.issuance_count += 1;
+
+            match issuance.issued_amount {
+                Some(amount) => stats.issued_amount += amount,
+                None => stats.has_blinded_issuances = true,
+            }
+
+            if !issuance.is_reissuance {
+                stats.reissuance_tokens = issuance.token_amount;
+            }
+        }
+
+        TxHistoryInfo::Burning(info) => {
+            if let Value::Explicit(value) = info.value {
+                stats.burned_amount += value;
+            }
+        }
+    }
 }

@@ -41,7 +41,7 @@ pub struct Mempool {
 
     // elements only
     #[cfg(feature = "liquid")]
-    asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
+    pub asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // asset_id -> {history_entries}
 }
 
 // A simplified transaction view used for the list of most recent transactions
