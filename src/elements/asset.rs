@@ -43,7 +43,7 @@ pub struct AssetEntry {
 
 // DB representation
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AssetRowValue {
+pub struct AssetRow {
     pub issuance_txid: FullHash,
     pub issuance_vin: u16,
     pub prev_txid: FullHash,
@@ -55,7 +55,7 @@ pub struct AssetRowValue {
 impl AssetEntry {
     pub fn new(
         asset_hash: &[u8],
-        asset: AssetRowValue,
+        asset: AssetRow,
         chain_stats: AssetStats,
         meta: Option<AssetMeta>,
     ) -> Self {
@@ -86,7 +86,7 @@ impl AssetEntry {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct IssuanceInfo {
+pub struct IssuingInfo {
     pub txid: FullHash,
     pub vin: u16,
     pub is_reissuance: bool,
@@ -177,7 +177,7 @@ pub fn index_elements_transaction(
             let history = asset_history_row(
                 &asset,
                 confirmed_height,
-                TxHistoryInfo::Issuance(IssuanceInfo {
+                TxHistoryInfo::Issuing(IssuingInfo {
                     txid,
                     vin: txi_index as u16,
                     is_reissuance,
@@ -194,7 +194,7 @@ pub fn index_elements_transaction(
                 };
                 let reissuance_token = AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential).into_inner();
 
-                let asset_row = AssetRowValue {
+                let asset_row = AssetRow {
                     issuance_txid: txid,
                     issuance_vin: txi_index as u16,
                     prev_txid: full_hash(&txi.previous_output.txid[..]),
@@ -242,7 +242,7 @@ pub fn lookup_asset(
     let history_db = chain.store().history_db();
 
     if let Some(row) = history_db.get(&[b"i", &asset_hash[..]].concat()) {
-        let row = bincode::deserialize::<AssetRowValue>(&row).expect("failed to parse AssetRowValue");
+        let row = bincode::deserialize::<AssetRow>(&row).expect("failed to parse AssetRow");
         let asset_id = sha256d::Hash::from_slice(asset_hash).chain_err(|| "invalid asset hash")?;
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
         let chain_stats = asset_stats(chain, asset_hash, &row.reissuance_token);
@@ -381,7 +381,7 @@ fn asset_stats_delta(
                 // no fund/spend stats for now
             }
 
-            TxHistoryInfo::Issuance(issuance) => {
+            TxHistoryInfo::Issuing(issuance) => {
                 stats.issuance_count += 1;
 
                 match issuance.issued_amount {

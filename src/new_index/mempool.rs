@@ -146,7 +146,7 @@ impl Mempool {
                 }),
                 TxHistoryInfo::Spending(_) => None,
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             })
             .filter(|utxo| !self.has_spend(&OutPoint::from(utxo)))
             .collect()
@@ -191,7 +191,7 @@ impl Mempool {
                     stats.spent_txo_count += 1;
                 }
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             };
         }
 

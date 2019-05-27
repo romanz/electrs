@@ -24,7 +24,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::{index_elements_transaction, IssuanceInfo};
+use crate::elements::asset::{index_elements_transaction, IssuingInfo};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -487,7 +487,7 @@ impl ChainQuery {
                 }
                 TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             };
         }
 
@@ -580,7 +580,7 @@ impl ChainQuery {
                 }
 
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
             }
 
             lastblock = Some(blockid.hash);
@@ -1175,7 +1175,7 @@ pub enum TxHistoryInfo {
     Spending(SpendingInfo),
 
     #[cfg(feature = "liquid")]
-    Issuance(IssuanceInfo),
+    Issuing(IssuingInfo),
     #[cfg(feature = "liquid")]
     Burning(FundingInfo),
 }
@@ -1187,7 +1187,7 @@ impl TxHistoryInfo {
             | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => parse_hash(&txid),
 
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuance(IssuanceInfo { txid, .. })
+            TxHistoryInfo::Issuing(IssuingInfo { txid, .. })
             | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => parse_hash(&txid),
         }
     }
@@ -1268,7 +1268,7 @@ impl TxHistoryInfo {
                 vout: info.prev_vout as u32,
             },
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuance(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+            TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
         }
     }
 }
