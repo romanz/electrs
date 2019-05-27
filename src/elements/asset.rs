@@ -101,38 +101,59 @@ pub struct IssuingInfo {
     pub token_amount: Option<u64>,
 }
 
-// TODO: index mempool transactions
-pub fn index_elements_transaction(
+// Index confirmed transaction and write histoy entries as db rows into `rows`
+pub fn index_confirmed_tx_assets(
     tx: &Transaction,
     confirmed_height: u32,
     previous_txos_map: &HashMap<OutPoint, TxOut>,
     rows: &mut Vec<DBRow>,
 ) {
-    // persist asset and its history index:
-    //      i{asset-id} → {issuance-txid:vin}{prev-txid:vout}{issuance}{reissuance_token}
-    //      I{asset-id}{issuance-height}I{issuance-txid:vin}{is_reissuance}{amount}{tokens} → ""
-    //      I{asset-id}{funding-height}F{funding-txid:vout}{value} → ""
-    //      I{asset-id}{spending-height}S{spending-txid:vin}{funding-txid:vout}{value} → ""
+    let (history, issuances) = index_tx_assets(tx, previous_txos_map);
+
+    rows.extend(
+        history
+            .into_iter()
+            .map(|(asset_id, info)| asset_history_row(&asset_id, confirmed_height, info).to_row()),
+    );
+
+    // the initial issuance is kept twice: once in the history index under I<asset><height><txid:vin>,
+    // and once separately under i<asset> for asset lookup with some more associated metadata.
+    // reissuances are only kept under the history index.
+    rows.extend(issuances.into_iter().map(|(asset_id, asset_row)| DBRow {
+        key: [b"i", &asset_id[..]].concat(),
+        value: bincode::serialize(&asset_row).unwrap(),
+    }));
+}
+
+// Internal utility function, index atransaction and return its history entries and issuances
+fn index_tx_assets(
+    tx: &Transaction,
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
+) -> (
+    Vec<(sha256d::Hash, TxHistoryInfo)>,
+    Vec<(sha256d::Hash, AssetRow)>,
+) {
+    let mut history = vec![];
+    let mut issuances = vec![];
+
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !is_issued_asset(&txo.asset) {
-            continue;
+        if let Some(asset_id) = get_user_asset_id(&txo.asset) {
+            let funding_info = FundingInfo {
+                txid,
+                vout: txo_index as u16,
+                value: txo.value,
+            };
+
+            history.push((
+                asset_id,
+                if is_spendable(txo) {
+                    TxHistoryInfo::Funding(funding_info)
+                } else {
+                    TxHistoryInfo::Burning(funding_info)
+                },
+            ));
         }
-        let funding_info = FundingInfo {
-            txid,
-            vout: txo_index as u16,
-            value: txo.value,
-        };
-        let history = asset_history_row(
-            &txo.asset,
-            confirmed_height,
-            if is_spendable(txo) {
-                TxHistoryInfo::Funding(funding_info)
-            } else {
-                TxHistoryInfo::Burning(funding_info)
-            },
-        );
-        rows.push(history.to_row())
     }
 
     for (txi_index, txi) in tx.input.iter().enumerate() {
@@ -143,10 +164,9 @@ pub fn index_elements_transaction(
             .get(&txi.previous_output)
             .expect(&format!("missing previous txo {}", txi.previous_output));
 
-        if is_issued_asset(&prev_txo.asset) {
-            let history = asset_history_row(
-                &prev_txo.asset,
-                confirmed_height,
+        if let Some(asset_id) = get_user_asset_id(&prev_txo.asset) {
+            history.push((
+                asset_id,
                 TxHistoryInfo::Spending(SpendingInfo {
                     txid,
                     vin: txi_index as u16,
@@ -154,8 +174,7 @@ pub fn index_elements_transaction(
                     prev_vout: txi.previous_output.vout as u16,
                     value: prev_txo.value,
                 }),
-            );
-            rows.push(history.to_row());
+            ));
         }
 
         if txi.has_issuance() {
@@ -163,8 +182,8 @@ pub fn index_elements_transaction(
 
             let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
             let asset_id = AssetId::from_entropy(asset_entropy.clone());
-            let asset_hash = asset_id.into_inner().into_inner();
-            let asset = Asset::Explicit(sha256d::Hash::from_inner(asset_hash.clone()));
+            // ugh, should eventually switch to using AssetIds everywhere
+            let asset_id = sha256d::Hash::from_inner(asset_id.into_inner().into_inner());
 
             let issued_amount = match txi.asset_issuance.amount {
                 Value::Explicit(amount) => Some(amount),
@@ -176,13 +195,8 @@ pub fn index_elements_transaction(
                 _ => None,
             };
 
-            // the initial issuance is kept twice: once in the history index under I<asset><height><txid:vin>,
-            // and once separately under i<asset> for asset lookup with some more associated metadata.
-            // reissuances are only kept under the history index.
-
-            let history = asset_history_row(
-                &asset,
-                confirmed_height,
+            history.push((
+                asset_id,
                 TxHistoryInfo::Issuing(IssuingInfo {
                     txid,
                     vin: txi_index as u16,
@@ -190,8 +204,7 @@ pub fn index_elements_transaction(
                     issued_amount,
                     token_amount,
                 }),
-            );
-            rows.push(history.to_row());
+            ));
 
             if !is_reissuance {
                 let is_confidential = match txi.asset_issuance.inflation_keys {
@@ -202,44 +215,48 @@ pub fn index_elements_transaction(
                     AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential)
                         .into_inner();
 
-                let asset_row = AssetRow {
-                    issuance_txid: txid,
-                    issuance_vin: txi_index as u16,
-                    prev_txid: full_hash(&txi.previous_output.txid[..]),
-                    prev_vout: txi.previous_output.vout as u16,
-                    issuance: serialize(&txi.asset_issuance),
-                    reissuance_token: full_hash(&reissuance_token[..]),
-                };
-                rows.push(DBRow {
-                    key: [b"i", &asset_hash[..]].concat(),
-                    value: bincode::serialize(&asset_row).unwrap(),
-                });
+                issuances.push((
+                    asset_id,
+                    AssetRow {
+                        issuance_txid: txid,
+                        issuance_vin: txi_index as u16,
+                        prev_txid: full_hash(&txi.previous_output.txid[..]),
+                        prev_vout: txi.previous_output.vout as u16,
+                        issuance: serialize(&txi.asset_issuance),
+                        reissuance_token: full_hash(&reissuance_token[..]),
+                    },
+                ));
             }
         }
     }
+
+    (history, issuances)
 }
 
-fn is_issued_asset(asset: &Asset) -> bool {
+// returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
+fn get_user_asset_id(asset: &Asset) -> Option<sha256d::Hash> {
     match asset {
-        Asset::Null | Asset::Confidential(..) => false,
-        Asset::Explicit(asset_hash) => {
-            asset_hash != &*NATIVE_ASSET_ID && asset_hash != &*NATIVE_ASSET_ID_TESTNET
+        Asset::Explicit(asset_hash)
+            if asset_hash != &*NATIVE_ASSET_ID && asset_hash != &*NATIVE_ASSET_ID_TESTNET =>
+        {
+            Some(*asset_hash)
         }
+        _ => None,
     }
 }
 
-fn asset_history_row(asset: &Asset, confirmed_height: u32, txinfo: TxHistoryInfo) -> TxHistoryRow {
-    if let Asset::Explicit(asset_hash) = asset {
-        let key = TxHistoryKey {
-            code: b'I',
-            hash: full_hash(&asset_hash[..]),
-            confirmed_height,
-            txinfo,
-        };
-        TxHistoryRow { key }
-    } else {
-        unreachable!();
-    }
+fn asset_history_row(
+    asset_id: &sha256d::Hash,
+    confirmed_height: u32,
+    txinfo: TxHistoryInfo,
+) -> TxHistoryRow {
+    let key = TxHistoryKey {
+        code: b'I',
+        hash: full_hash(&asset_id[..]),
+        confirmed_height,
+        txinfo,
+    };
+    TxHistoryRow { key }
 }
 
 pub fn lookup_asset(

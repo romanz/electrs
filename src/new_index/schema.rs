@@ -24,7 +24,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::{index_elements_transaction, IssuingInfo};
+use crate::elements::asset::{index_confirmed_tx_assets, IssuingInfo};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -947,7 +947,7 @@ fn index_transaction(
     }
 
     #[cfg(feature = "liquid")]
-    index_elements_transaction(tx, confirmed_height, previous_txos_map, rows);
+    index_confirmed_tx_assets(tx, confirmed_height, previous_txos_map, rows);
 }
 
 // TODO: replace by a separate opaque type (similar to Sha256dHash, but without the "double")
