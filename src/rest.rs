@@ -905,16 +905,61 @@ fn handle_request(
         }
 
         #[cfg(feature = "liquid")]
-        (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), last_seen_txid, None) => {
-            let asset_hash = Sha256dHash::from_hex(asset_str)?;
+        (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), None, None) => {
+            let asset_id = Sha256dHash::from_hex(asset_str)?;
+
+            let mut txs = vec![];
+
+            txs.extend(
+                query
+                    .mempool()
+                    .asset_history(&asset_id, MAX_MEMPOOL_TXS)
+                    .into_iter()
+                    .map(|tx| (tx, None)),
+            );
+
+            txs.extend(
+                query
+                    .chain()
+                    .asset_history(&asset_id, None, CHAIN_TXS_PER_PAGE)
+                    .into_iter()
+                    .map(|(tx, blockid)| (tx, Some(blockid))),
+            );
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (
+            &Method::GET,
+            Some(&"asset"),
+            Some(asset_str),
+            Some(&"txs"),
+            Some(&"chain"),
+            last_seen_txid,
+        ) => {
+            let asset_id = Sha256dHash::from_hex(asset_str)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
 
-            // XXX currently supports on-chain transactions only
             let txs = query
                 .chain()
-                .asset_history(&asset_hash[..], last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
+                .asset_history(&asset_id, last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
                 .into_iter()
                 .map(|(tx, blockid)| (tx, Some(blockid)))
+                .collect();
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), Some(&"mempool"), None) => {
+            let asset_id = Sha256dHash::from_hex(asset_str)?;
+
+            let txs = query
+                .mempool()
+                .asset_history(&asset_id, MAX_MEMPOOL_TXS)
+                .into_iter()
+                .map(|tx| (tx, None))
                 .collect();
 
             json_response(prepare_txs(txs, query, config), TTL_SHORT)

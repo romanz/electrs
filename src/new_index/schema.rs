@@ -753,11 +753,11 @@ impl ChainQuery {
     #[cfg(feature = "liquid")]
     pub fn asset_history(
         &self,
-        asset_hash: &[u8],
+        asset_id: &Sha256dHash,
         last_seen_txid: Option<&Sha256dHash>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
-        self._history(b'I', asset_hash, last_seen_txid, limit)
+        self._history(b'I', &asset_id[..], last_seen_txid, limit)
     }
 
     #[cfg(feature = "liquid")]

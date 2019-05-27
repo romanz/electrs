@@ -125,6 +125,23 @@ pub fn index_confirmed_tx_assets(
     }));
 }
 
+// Index confirmed transaction and write histoy entries as db rows into `rows`
+pub fn index_mempool_tx_assets(
+    tx: &Transaction,
+    previous_txos_map: &HashMap<OutPoint, TxOut>,
+    asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
+) {
+    let (history, _) = index_tx_assets(tx, previous_txos_map);
+    // unconfirmed issuances are discarded, we're only interested in history items
+
+    for (asset_id, info) in history {
+        asset_history
+            .entry(asset_id)
+            .or_insert_with(|| Vec::new())
+            .push(info);
+    }
+}
+
 // Internal utility function, index atransaction and return its history entries and issuances
 fn index_tx_assets(
     tx: &Transaction,

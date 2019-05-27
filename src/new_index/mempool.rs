@@ -19,6 +19,9 @@ use crate::new_index::{
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
 
+#[cfg(feature = "liquid")]
+use crate::elements::asset::index_mempool_tx_assets;
+
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
 
@@ -35,6 +38,10 @@ pub struct Mempool {
     latency: HistogramVec, // mempool requests latency
     delta: HistogramVec,   // # of added/removed txs
     count: GaugeVec,       // current state of the mempool
+
+    // elements only
+    #[cfg(feature = "liquid")]
+    asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
 }
 
 // A simplified transaction view used for the list of most recent transactions
@@ -72,6 +79,9 @@ impl Mempool {
                 MetricOpts::new("mempool_count", "# of elements currently at the mempool"),
                 &["type"],
             ),
+
+            #[cfg(feature = "liquid")]
+            asset_history: HashMap::new(),
         }
     }
 
@@ -95,20 +105,23 @@ impl Mempool {
         self.edges.contains_key(outpoint)
     }
 
-    // TODO: return as Vec<(Transaction,Option<BlockId>)>?
+    // XXX return as Vec<(Transaction,Option<BlockId>)>?
     pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
+        self.history
+            .get(scripthash)
+            .map_or_else(|| vec![], |entries| self._history(entries, limit))
+    }
+
+    fn _history(&self, entries: &Vec<TxHistoryInfo>, limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
-        match self.history.get(scripthash) {
-            None => return vec![],
-            Some(entries) => entries
-                .iter()
-                .map(|e| e.get_txid())
-                .unique()
-                .take(limit)
-                .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
-                .cloned()
-                .collect(),
-        }
+        entries
+            .iter()
+            .map(|e| e.get_txid())
+            .unique()
+            .take(limit)
+            .map(|txid| self.txstore.get(&txid).expect("missing mempool tx"))
+            .cloned()
+            .collect()
     }
 
     pub fn history_txids(&self, scripthash: &[u8]) -> Vec<Sha256dHash> {
@@ -356,6 +369,10 @@ impl Mempool {
             for (i, txi) in tx.input.iter().enumerate() {
                 self.edges.insert(txi.previous_output, (txid, i as u32));
             }
+
+            // Index issued assets
+            #[cfg(feature = "liquid")]
+            index_mempool_tx_assets(&tx, &txos, &mut self.asset_history);
         }
     }
 
@@ -428,6 +445,13 @@ impl Mempool {
 
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn asset_history(&self, asset_id: &Sha256dHash, limit: usize) -> Vec<Transaction> {
+        self.asset_history
+            .get(asset_id)
+            .map_or_else(|| vec![], |entries| self._history(entries, limit))
     }
 }
 
