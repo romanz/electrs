@@ -21,7 +21,7 @@ pub trait ReadStore: Sync {
 }
 
 pub trait WriteStore: Sync {
-    fn write(&self, rows: Vec<Row>);
+    fn write<I: IntoIterator<Item=Row>>(&self, rows: I);
     fn flush(&self);
 }
 
@@ -148,7 +148,7 @@ impl ReadStore for DBStore {
 }
 
 impl WriteStore for DBStore {
-    fn write(&self, rows: Vec<Row>) {
+    fn write<I: IntoIterator<Item=Row>>(&self, rows: I) {
         let mut batch = rocksdb::WriteBatch::default();
         for row in rows {
             batch.put(row.key.as_slice(), row.value.as_slice()).unwrap();

@@ -13,7 +13,7 @@ impl ReadStore for FakeStore {
 }
 
 impl WriteStore for FakeStore {
-    fn write(&self, _rows: Vec<Row>) {}
+    fn write<I: IntoIterator<Item=Row>>(&self, _rows: I) {}
     fn flush(&self) {}
 }
 
