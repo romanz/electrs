@@ -168,21 +168,17 @@ fn index_tx_assets(
 
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if let Some(asset_id) = get_user_asset_id(&txo.asset) {
-            let funding_info = FundingInfo {
-                txid,
-                vout: txo_index as u16,
-                value: txo.value,
-            };
-
-            history.push((
-                asset_id,
-                if is_spendable(txo) {
-                    TxHistoryInfo::Funding(funding_info)
-                } else {
-                    TxHistoryInfo::Burning(funding_info)
-                },
-            ));
+        if !is_spendable(txo) {
+            if let Some(asset_id) = get_user_asset_id(&txo.asset) {
+                history.push((
+                    asset_id,
+                    TxHistoryInfo::Burning(FundingInfo {
+                        txid,
+                        vout: txo_index as u16,
+                        value: txo.value,
+                    }),
+                ));
+            }
         }
     }
 
@@ -193,19 +189,6 @@ fn index_tx_assets(
         let prev_txo = previous_txos_map
             .get(&txi.previous_output)
             .expect(&format!("missing previous txo {}", txi.previous_output));
-
-        if let Some(asset_id) = get_user_asset_id(&prev_txo.asset) {
-            history.push((
-                asset_id,
-                TxHistoryInfo::Spending(SpendingInfo {
-                    txid,
-                    vin: txi_index as u16,
-                    prev_txid: full_hash(&txi.previous_output.txid[..]),
-                    prev_vout: txi.previous_output.vout as u16,
-                    value: prev_txo.value,
-                }),
-            ));
-        }
 
         if txi.has_issuance() {
             let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
@@ -474,10 +457,6 @@ fn apply_asset_stats(
     }
 
     match info {
-        TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
-            // no fund/spend stats for now
-        }
-
         TxHistoryInfo::Issuing(issuance) => {
             stats.issuance_count += 1;
 
@@ -495,6 +474,11 @@ fn apply_asset_stats(
             if let Value::Explicit(value) = info.value {
                 stats.burned_amount += value;
             }
+        }
+
+        TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
+            // we don't keep funding/spending entries for assets
+            unreachable!();
         }
     }
 }
