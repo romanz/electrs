@@ -57,7 +57,7 @@ pub struct AssetRow {
 
 impl AssetEntry {
     pub fn new(
-        asset_hash: &[u8],
+        asset_id: &sha256d::Hash,
         asset: AssetRow,
         (chain_stats, mempool_stats): (AssetStats, AssetStats),
         meta: Option<AssetMeta>,
@@ -75,7 +75,7 @@ impl AssetEntry {
         };
 
         Self {
-            asset_id: parse_hash(&full_hash(&asset_hash[..])),
+            asset_id: parse_hash(&full_hash(&asset_id[..])),
             issuance_txin: TxInput {
                 txid: parse_hash(&asset.issuance_txid),
                 vin: asset.issuance_vin,
@@ -255,10 +255,10 @@ fn index_tx_assets(
 // returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
 fn get_user_asset_id(asset: &Asset) -> Option<sha256d::Hash> {
     match asset {
-        Asset::Explicit(asset_hash)
-            if asset_hash != &*NATIVE_ASSET_ID && asset_hash != &*NATIVE_ASSET_ID_TESTNET =>
+        Asset::Explicit(asset_id)
+            if asset_id != &*NATIVE_ASSET_ID && asset_id != &*NATIVE_ASSET_ID_TESTNET =>
         {
-            Some(*asset_hash)
+            Some(*asset_id)
         }
         _ => None,
     }
@@ -282,16 +282,19 @@ pub fn lookup_asset(
     chain: &ChainQuery,
     mempool: &Mempool,
     registry: Option<&AssetRegistry>,
-    asset_hash: &[u8],
+    asset_id: &sha256d::Hash,
 ) -> Result<Option<AssetEntry>> {
     let history_db = chain.store().history_db();
 
-    if let Some(row) = history_db.get(&[b"i", &asset_hash[..]].concat()) {
-        let row = bincode::deserialize::<AssetRow>(&row).expect("failed to parse AssetRow");
-        let asset_id = sha256d::Hash::from_slice(asset_hash).chain_err(|| "invalid asset hash")?;
+    if let Some(row) = history_db.get(&[b"i", &asset_id[..]].concat()) {
+        let row = bincode::deserialize::<AssetRow>(&row).expect("failed parsing AssetRow");
+        let reissuance_token = sha256d::Hash::from_slice(&row.reissuance_token)
+            .expect("failed parsing reissuance_token");
+
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
-        let stats = asset_stats(chain, mempool, asset_hash, &row.reissuance_token);
-        Ok(Some(AssetEntry::new(asset_hash, row, stats, meta)))
+        let stats = asset_stats(chain, mempool, asset_id, &reissuance_token);
+
+        Ok(Some(AssetEntry::new(asset_id, row, stats, meta)))
     } else {
         Ok(None)
     }
@@ -346,12 +349,16 @@ impl AssetStats {
     }
 }
 
-fn asset_cache_key(asset_hash: &[u8]) -> Bytes {
-    [b"z", asset_hash].concat()
+fn asset_cache_key(asset_id: &sha256d::Hash) -> Bytes {
+    [b"z", &asset_id[..]].concat()
 }
-fn asset_cache_row(asset_hash: &[u8], stats: &AssetStats, blockhash: &sha256d::Hash) -> DBRow {
+fn asset_cache_row(
+    asset_id: &sha256d::Hash,
+    stats: &AssetStats,
+    blockhash: &sha256d::Hash,
+) -> DBRow {
     DBRow {
-        key: asset_cache_key(asset_hash),
+        key: asset_cache_key(asset_id),
         value: bincode::serialize(&(stats, blockhash)).unwrap(),
     }
 }
@@ -359,14 +366,11 @@ fn asset_cache_row(asset_hash: &[u8], stats: &AssetStats, blockhash: &sha256d::H
 fn asset_stats(
     chain: &ChainQuery,
     mempool: &Mempool,
-    asset_hash: &[u8],
-    reissuance_token: &[u8],
+    asset_id: &sha256d::Hash,
+    reissuance_token: &sha256d::Hash,
 ) -> (AssetStats, AssetStats) {
-    let mut chain_stats = chain_asset_stats(chain, asset_hash);
+    let mut chain_stats = chain_asset_stats(chain, asset_id);
     chain_stats.burned_reissuance_tokens = chain_asset_stats(chain, reissuance_token).burned_amount;
-
-    let asset_id = sha256d::Hash::from_slice(asset_hash).unwrap();
-    let reissuance_token = sha256d::Hash::from_slice(reissuance_token).unwrap();
 
     let mut mempool_stats = mempool_asset_stats(mempool, &asset_id);
     mempool_stats.burned_reissuance_tokens =
@@ -375,13 +379,13 @@ fn asset_stats(
     (chain_stats, mempool_stats)
 }
 
-fn chain_asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
+fn chain_asset_stats(chain: &ChainQuery, asset_id: &sha256d::Hash) -> AssetStats {
     // get the last known stats and the blockhash they are updated for.
     // invalidates the cache if the block was orphaned.
     let cache: Option<(AssetStats, usize)> = chain
         .store()
         .cache_db()
-        .get(&asset_cache_key(asset_hash))
+        .get(&asset_cache_key(asset_id))
         .map(|c| bincode::deserialize(&c).unwrap())
         .and_then(|(stats, blockhash)| {
             chain
@@ -391,14 +395,14 @@ fn chain_asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
 
     // update stats with new transactions since
     let (newstats, lastblock) = cache.map_or_else(
-        || asset_stats_delta(chain, asset_hash, AssetStats::default(), 0),
-        |(oldstats, blockheight)| asset_stats_delta(chain, asset_hash, oldstats, blockheight + 1),
+        || asset_stats_delta(chain, asset_id, AssetStats::default(), 0),
+        |(oldstats, blockheight)| asset_stats_delta(chain, asset_id, oldstats, blockheight + 1),
     );
 
     // save updated stats to cache
     if let Some(lastblock) = lastblock {
         chain.store().cache_db().write(
-            vec![asset_cache_row(asset_hash, &newstats, &lastblock)],
+            vec![asset_cache_row(asset_id, &newstats, &lastblock)],
             DBFlush::Enable,
         );
     }
@@ -408,12 +412,12 @@ fn chain_asset_stats(chain: &ChainQuery, asset_hash: &[u8]) -> AssetStats {
 
 fn asset_stats_delta(
     chain: &ChainQuery,
-    asset_hash: &[u8],
+    asset_id: &sha256d::Hash,
     init_stats: AssetStats,
     start_height: usize,
 ) -> (AssetStats, Option<sha256d::Hash>) {
     let history_iter = chain
-        .history_iter_scan(b'I', asset_hash, start_height)
+        .history_iter_scan(b'I', &asset_id[..], start_height)
         .map(TxHistoryRow::from_row)
         .filter_map(|history| {
             chain

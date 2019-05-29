@@ -20,7 +20,6 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
-    bitcoin_hashes::Hash,
     elements::confidential::{Asset, Value},
 };
 
@@ -895,12 +894,11 @@ fn handle_request(
 
         #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"asset"), Some(asset_str), None, None, None) => {
-            let asset_hash = Sha256dHash::from_hex(asset_str)?.into_inner();
+            let asset_id = Sha256dHash::from_hex(asset_str)?;
             let asset_entry = query
-                .lookup_asset(&asset_hash[..])?
+                .lookup_asset(&asset_id)?
                 .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
 
-            // XXX medium ttl?
             json_response(asset_entry, TTL_SHORT)
         }
 

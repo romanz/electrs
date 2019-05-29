@@ -761,8 +761,8 @@ impl ChainQuery {
     }
 
     #[cfg(feature = "liquid")]
-    pub fn asset_history_txids(&self, asset_hash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
-        self._history_txids(b'I', asset_hash)
+    pub fn asset_history_txids(&self, asset_id: &Sha256dHash) -> Vec<(Sha256dHash, BlockId)> {
+        self._history_txids(b'I', &asset_id[..])
     }
 }
 
