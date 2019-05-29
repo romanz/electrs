@@ -20,7 +20,7 @@ use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::index_mempool_tx_assets;
+use crate::elements::asset::{index_mempool_tx_assets, remove_mempool_tx_assets};
 
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
@@ -442,6 +442,9 @@ impl Mempool {
             entries.retain(|entry| !to_remove.contains(&entry.get_txid()));
             !entries.is_empty()
         });
+
+        #[cfg(feature = "liquid")]
+        remove_mempool_tx_assets(&to_remove, &mut self.asset_history);
 
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));

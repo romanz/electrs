@@ -144,6 +144,17 @@ pub fn index_mempool_tx_assets(
     }
 }
 
+// Index confirmed transaction and write histoy entries as db rows into `rows`
+pub fn remove_mempool_tx_assets(
+    to_remove: &HashSet<&sha256d::Hash>,
+    asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
+) {
+    asset_history.retain(|_assethash, entries| {
+        entries.retain(|entry| !to_remove.contains(&entry.get_txid()));
+        !entries.is_empty()
+    });
+}
+
 // Internal utility function, index atransaction and return its history entries and issuances
 fn index_tx_assets(
     tx: &Transaction,
