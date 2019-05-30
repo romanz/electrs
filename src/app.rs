@@ -27,7 +27,7 @@ impl App {
         }))
     }
 
-    fn write_store(&self) -> &store::WriteStore {
+    fn write_store(&self) -> &impl store::WriteStore {
         &self.store
     }
     // TODO: use index for queries.

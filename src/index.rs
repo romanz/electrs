@@ -170,38 +170,47 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     hash
 }
 
-pub fn index_transaction(txn: &Transaction, height: usize, rows: &mut Vec<Row>) {
+pub fn index_transaction<'a>(
+    txn: &'a Transaction,
+    height: usize,
+) -> impl 'a + Iterator<Item = Row> {
     let null_hash = Sha256dHash::default();
     let txid: Sha256dHash = txn.txid();
-    for input in &txn.input {
+
+    let inputs = txn.input.iter().filter_map(move |input| {
         if input.previous_output.txid == null_hash {
-            continue;
+            None
+        } else {
+            Some(TxInRow::new(&txid, &input).to_row())
         }
-        rows.push(TxInRow::new(&txid, &input).to_row());
-    }
-    for output in &txn.output {
-        rows.push(TxOutRow::new(&txid, &output).to_row());
-    }
+    });
+    let outputs = txn
+        .output
+        .iter()
+        .map(move |output| TxOutRow::new(&txid, &output).to_row());
+
     // Persist transaction ID and confirmed height
-    rows.push(TxRow::new(&txid, height as u32).to_row());
+    inputs
+        .chain(outputs)
+        .chain(std::iter::once(TxRow::new(&txid, height as u32).to_row()))
 }
 
-pub fn index_block(block: &Block, height: usize) -> Vec<Row> {
-    let mut rows = vec![];
-    for txn in &block.txdata {
-        index_transaction(&txn, height, &mut rows);
-    }
+pub fn index_block<'a>(block: &'a Block, height: usize) -> impl 'a + Iterator<Item = Row> {
     let blockhash = block.bitcoin_hash();
     // Persist block hash and header
-    rows.push(Row {
+    let row = Row {
         key: bincode::serialize(&BlockKey {
             code: b'B',
             hash: full_hash(&blockhash[..]),
         })
         .unwrap(),
         value: serialize(&block.header),
-    });
-    rows
+    };
+    block
+        .txdata
+        .iter()
+        .flat_map(move |txn| index_transaction(&txn, height))
+        .chain(std::iter::once(row))
 }
 
 pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
@@ -361,7 +370,7 @@ impl Index {
             .cloned()
     }
 
-    pub fn update(&self, store: &WriteStore, waiter: &Waiter) -> Result<Sha256dHash> {
+    pub fn update(&self, store: &impl WriteStore, waiter: &Waiter) -> Result<Sha256dHash> {
         let daemon = self.daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers: Vec<HeaderEntry> = {
@@ -401,22 +410,18 @@ impl Index {
                 break;
             }
 
-            let mut rows = vec![];
-            for block in &batch {
+            let rows_iter = batch.iter().flat_map(|block| {
                 let blockhash = block.bitcoin_hash();
                 let height = *height_map
                     .get(&blockhash)
                     .unwrap_or_else(|| panic!("missing header for block {}", blockhash));
 
-                let timer = self.stats.start_timer("index");
-                let mut block_rows = index_block(block, height);
-                block_rows.push(last_indexed_block(&blockhash));
-                rows.extend(block_rows);
-                timer.observe_duration();
-                self.stats.update(block, height);
-            }
-            let timer = self.stats.start_timer("write");
-            store.write(rows);
+                self.stats.update(block, height); // TODO: update stats after the block is indexed
+                index_block(block, height).chain(std::iter::once(last_indexed_block(&blockhash)))
+            });
+
+            let timer = self.stats.start_timer("index+write");
+            store.write(rows_iter);
             timer.observe_duration();
         }
         let timer = self.stats.start_timer("flush");

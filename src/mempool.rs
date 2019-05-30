@@ -29,8 +29,7 @@ impl MempoolStore {
     }
 
     fn add(&mut self, tx: &Transaction) {
-        let mut rows = vec![];
-        index_transaction(tx, 0, &mut rows);
+        let rows = index_transaction(tx, 0);
         for row in rows {
             let (key, value) = row.into_pair();
             self.map.entry(key).or_insert_with(|| vec![]).push(value);
@@ -38,8 +37,7 @@ impl MempoolStore {
     }
 
     fn remove(&mut self, tx: &Transaction) {
-        let mut rows = vec![];
-        index_transaction(tx, 0, &mut rows);
+        let rows = index_transaction(tx, 0);
         for row in rows {
             let (key, value) = row.into_pair();
             let no_values_left = {
