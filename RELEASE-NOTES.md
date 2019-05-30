@@ -1,6 +1,7 @@
 # 0.6.2 (TBD)
 
 * Support Rust 1.32 (for Debian)
+* Build with LTO
 
 # 0.6.1 (9 May 2019)
 
