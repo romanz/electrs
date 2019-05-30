@@ -410,21 +410,18 @@ impl Index {
                 break;
             }
 
-            let rows = batch.iter().flat_map(|block| {
+            let rows_iter = batch.iter().flat_map(|block| {
                 let blockhash = block.bitcoin_hash();
                 let height = *height_map
                     .get(&blockhash)
                     .unwrap_or_else(|| panic!("missing header for block {}", blockhash));
 
-                let timer = self.stats.start_timer("index");
-                let block_rows = index_block(block, height);
-                timer.observe_duration();
-                self.stats.update(block, height);
-                block_rows.chain(std::iter::once(last_indexed_block(&blockhash)))
+                self.stats.update(block, height); // TODO: update stats after the block is indexed
+                index_block(block, height).chain(std::iter::once(last_indexed_block(&blockhash)))
             });
 
-            let timer = self.stats.start_timer("write");
-            store.write(rows);
+            let timer = self.stats.start_timer("index+write");
+            store.write(rows_iter);
             timer.observe_duration();
         }
         let timer = self.stats.start_timer("flush");
