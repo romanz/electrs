@@ -170,7 +170,10 @@ pub fn compute_script_hash(data: &[u8]) -> FullHash {
     hash
 }
 
-pub fn index_transaction<'a>(txn: &'a Transaction, height: usize) -> impl 'a + Iterator<Item=Row> {
+pub fn index_transaction<'a>(
+    txn: &'a Transaction,
+    height: usize,
+) -> impl 'a + Iterator<Item = Row> {
     let null_hash = Sha256dHash::default();
     let txid: Sha256dHash = txn.txid();
 
@@ -181,13 +184,18 @@ pub fn index_transaction<'a>(txn: &'a Transaction, height: usize) -> impl 'a + I
             Some(TxInRow::new(&txid, &input).to_row())
         }
     });
-    let outputs = txn.output.iter().map(move |output| TxOutRow::new(&txid, &output).to_row());
+    let outputs = txn
+        .output
+        .iter()
+        .map(move |output| TxOutRow::new(&txid, &output).to_row());
 
     // Persist transaction ID and confirmed height
-    inputs.chain(outputs).chain(std::iter::once(TxRow::new(&txid, height as u32).to_row()))
+    inputs
+        .chain(outputs)
+        .chain(std::iter::once(TxRow::new(&txid, height as u32).to_row()))
 }
 
-pub fn index_block<'a>(block: &'a Block, height: usize) -> impl 'a + Iterator<Item=Row> {
+pub fn index_block<'a>(block: &'a Block, height: usize) -> impl 'a + Iterator<Item = Row> {
     let blockhash = block.bitcoin_hash();
     // Persist block hash and header
     let row = Row {
@@ -198,7 +206,11 @@ pub fn index_block<'a>(block: &'a Block, height: usize) -> impl 'a + Iterator<It
         .unwrap(),
         value: serialize(&block.header),
     };
-    block.txdata.iter().flat_map(move |txn| index_transaction(&txn, height)).chain(std::iter::once(row))
+    block
+        .txdata
+        .iter()
+        .flat_map(move |txn| index_transaction(&txn, height))
+        .chain(std::iter::once(row))
 }
 
 pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
