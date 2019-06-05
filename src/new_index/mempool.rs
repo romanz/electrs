@@ -372,7 +372,7 @@ impl Mempool {
 
             // Index issued assets
             #[cfg(feature = "liquid")]
-            index_mempool_tx_assets(&tx, &txos, &mut self.asset_history);
+            index_mempool_tx_assets(&tx, &mut self.asset_history);
         }
     }
 

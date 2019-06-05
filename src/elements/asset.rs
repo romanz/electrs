@@ -3,14 +3,12 @@ use std::collections::{HashMap, HashSet};
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin_hashes::{hex::FromHex, sha256, sha256d, Hash};
 use elements::confidential::{Asset, Value};
-use elements::{AssetIssuance, OutPoint, Transaction, TxIn, TxOut};
+use elements::{AssetIssuance, OutPoint, Transaction, TxIn};
 
 use crate::errors::*;
-use crate::new_index::schema::{
-    FundingInfo, SpendingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow,
-};
+use crate::new_index::schema::{FundingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
 use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool};
-use crate::util::{full_hash, has_prevout, is_spendable, Bytes, FullHash, TxInput};
+use crate::util::{full_hash, is_spendable, Bytes, FullHash, TxInput};
 
 use crate::elements::{
     registry::{AssetMeta, AssetRegistry},
@@ -104,13 +102,8 @@ pub struct IssuingInfo {
 }
 
 // Index confirmed transaction and write histoy entries as db rows into `rows`
-pub fn index_confirmed_tx_assets(
-    tx: &Transaction,
-    confirmed_height: u32,
-    previous_txos_map: &HashMap<OutPoint, TxOut>,
-    rows: &mut Vec<DBRow>,
-) {
-    let (history, issuances) = index_tx_assets(tx, previous_txos_map);
+pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: &mut Vec<DBRow>) {
+    let (history, issuances) = index_tx_assets(tx);
 
     rows.extend(
         history
@@ -130,10 +123,9 @@ pub fn index_confirmed_tx_assets(
 // Index confirmed transaction and write histoy entries as db rows into `rows`
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
-    previous_txos_map: &HashMap<OutPoint, TxOut>,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
 ) {
-    let (history, _) = index_tx_assets(tx, previous_txos_map);
+    let (history, _) = index_tx_assets(tx);
     // unconfirmed issuances are discarded, we're only interested in history items
 
     for (asset_id, info) in history {
@@ -158,7 +150,6 @@ pub fn remove_mempool_tx_assets(
 // Internal utility function, index atransaction and return its history entries and issuances
 fn index_tx_assets(
     tx: &Transaction,
-    previous_txos_map: &HashMap<OutPoint, TxOut>,
 ) -> (
     Vec<(sha256d::Hash, TxHistoryInfo)>,
     Vec<(sha256d::Hash, AssetRow)>,
@@ -183,13 +174,6 @@ fn index_tx_assets(
     }
 
     for (txi_index, txi) in tx.input.iter().enumerate() {
-        if !has_prevout(txi) {
-            continue;
-        }
-        let prev_txo = previous_txos_map
-            .get(&txi.previous_output)
-            .expect(&format!("missing previous txo {}", txi.previous_output));
-
         if txi.has_issuance() {
             let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
 

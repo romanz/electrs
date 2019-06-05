@@ -947,7 +947,7 @@ fn index_transaction(
     }
 
     #[cfg(feature = "liquid")]
-    index_confirmed_tx_assets(tx, confirmed_height, previous_txos_map, rows);
+    index_confirmed_tx_assets(tx, confirmed_height, rows);
 }
 
 // TODO: replace by a separate opaque type (similar to Sha256dHash, but without the "double")
