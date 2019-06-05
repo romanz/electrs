@@ -8,7 +8,8 @@ use crate::util::BlockId;
 #[cfg(feature = "liquid")]
 lazy_static! {
     static ref REGTEST_INITIAL_ISSUANCE_PREVOUT: Sha256dHash =
-        Sha256dHash::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5").unwrap();
+        Sha256dHash::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5")
+            .unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
