@@ -141,9 +141,9 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
         // If Core's WriteBlockToDisk ftell fails, only the magic byte and size will be written
         // and the block body will be unwritten data. skip that's data.
         let mut tmp_cursor = Cursor::new(&blob[start..(start + 4)]);
-        match u32::consensus_decode(&mut tmp_cursor){
+        match u32::consensus_decode(&mut tmp_cursor) {
             Ok(value) => {
-                if magic == value{
+                if magic == value {
                     cursor.set_position(start as u64);
                     continue;
                 }
