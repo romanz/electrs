@@ -3,12 +3,15 @@ use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::time::{Duration, Instant};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
+
+const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
 const CONF_TARGETS: [u16; 9] = [
     2u16, 3u16, 4u16, 6u16, 10u16, 20u16, 144u16, 504u16, 1008u16,
@@ -18,6 +21,7 @@ pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
     mempool: Arc<RwLock<Mempool>>,
     daemon: Arc<Daemon>,
+    cached_estimates: RwLock<Option<(HashMap<u16, f32>, Instant)>>,
 }
 
 impl Query {
@@ -26,6 +30,7 @@ impl Query {
             chain,
             mempool,
             daemon,
+            cached_estimates: RwLock::new(None),
         }
     }
 
@@ -124,19 +129,29 @@ impl Query {
         TransactionStatus::from(self.chain.tx_confirming_block(txid))
     }
 
-    // TODO cache, only allow getting estimatess for cached items
     pub fn estimate_fee(&self, conf_target: u16) -> Option<f32> {
-        self.daemon.estimatesmartfee(conf_target).ok()
+        self.estimate_fee_targets().get(&conf_target).cloned()
     }
 
-    // TODO cache
     pub fn estimate_fee_targets(&self) -> HashMap<u16, f32> {
-        CONF_TARGETS
+        if let Some(ref cached) = *self.cached_estimates.read().unwrap() {
+            if cached.1.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
+                return cached.0.clone();
+            }
+        }
+
+        let fresh = CONF_TARGETS
             .iter()
             .filter_map(|conf_target| {
-                self.estimate_fee(*conf_target)
+                self.daemon
+                    .estimatesmartfee(*conf_target)
+                    .ok()
                     .map(|feerate| (*conf_target, feerate))
             })
-            .collect()
+            .collect::<HashMap<u16, f32>>();
+
+        *self.cached_estimates.write().unwrap() = Some((fresh.clone(), Instant::now()));
+
+        fresh
     }
 }
