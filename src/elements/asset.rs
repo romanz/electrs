@@ -7,8 +7,8 @@ use elements::{AssetIssuance, OutPoint, Transaction, TxIn};
 
 use crate::errors::*;
 use crate::new_index::schema::{FundingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
-use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool};
-use crate::util::{full_hash, is_spendable, Bytes, FullHash, TxInput};
+use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool, Query};
+use crate::util::{full_hash, is_spendable, Bytes, FullHash, TransactionStatus, TxInput};
 
 use crate::elements::{
     registry::{AssetMeta, AssetRegistry},
@@ -34,6 +34,9 @@ pub struct AssetEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract_hash: Option<sha256d::Hash>, // not really a sha256d
 
+    // the confirmation status of the initial issuance transaction
+    pub status: TransactionStatus,
+
     pub chain_stats: AssetStats,
     pub mempool_stats: AssetStats,
 
@@ -56,9 +59,10 @@ pub struct AssetRow {
 impl AssetEntry {
     pub fn new(
         asset_id: &sha256d::Hash,
-        asset: AssetRow,
+        asset: &AssetRow,
         (chain_stats, mempool_stats): (AssetStats, AssetStats),
         meta: Option<AssetMeta>,
+        status: TransactionStatus,
     ) -> Self {
         let issuance: AssetIssuance =
             deserialize(&asset.issuance).expect("failed parsing AssetIssuance");
@@ -84,6 +88,7 @@ impl AssetEntry {
             },
             contract_hash,
             reissuance_token,
+            status,
             chain_stats,
             mempool_stats,
             meta,
@@ -124,8 +129,9 @@ pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: 
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
+    asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
 ) {
-    let (history, _) = index_tx_assets(tx);
+    let (history, issuances) = index_tx_assets(tx);
     // unconfirmed issuances are discarded, we're only interested in history items
 
     for (asset_id, info) in history {
@@ -134,17 +140,25 @@ pub fn index_mempool_tx_assets(
             .or_insert_with(|| Vec::new())
             .push(info);
     }
+    for (asset_id, issuance) in issuances {
+        asset_issuance.insert(asset_id, issuance);
+    }
 }
 
 // Index confirmed transaction and write histoy entries as db rows into `rows`
 pub fn remove_mempool_tx_assets(
     to_remove: &HashSet<&sha256d::Hash>,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
+    asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
 ) {
+    // TODO optimize
     asset_history.retain(|_assethash, entries| {
         entries.retain(|entry| !to_remove.contains(&entry.get_txid()));
         !entries.is_empty()
     });
+
+    asset_issuance
+        .retain(|_assethash, issuance| !to_remove.contains(&parse_hash(&issuance.issuance_txid)));
 }
 
 // Internal utility function, index atransaction and return its history entries and issuances
@@ -257,25 +271,33 @@ fn asset_history_row(
 }
 
 pub fn lookup_asset(
-    chain: &ChainQuery,
-    mempool: &Mempool,
+    query: &Query,
     registry: Option<&AssetRegistry>,
     asset_id: &sha256d::Hash,
 ) -> Result<Option<AssetEntry>> {
-    let history_db = chain.store().history_db();
+    let history_db = query.chain().store().history_db();
+    let mempool_issuances = &query.mempool().asset_issuance;
 
-    if let Some(row) = history_db.get(&[b"i", &asset_id[..]].concat()) {
-        let row = bincode::deserialize::<AssetRow>(&row).expect("failed parsing AssetRow");
+    let chain_row = history_db
+        .get(&[b"i", &asset_id[..]].concat())
+        .map(|row| bincode::deserialize::<AssetRow>(&row).expect("failed parsing AssetRow"));
+
+    let row = chain_row
+        .as_ref()
+        .or_else(|| mempool_issuances.get(asset_id));
+
+    Ok(if let Some(row) = row {
         let reissuance_token = sha256d::Hash::from_slice(&row.reissuance_token)
             .expect("failed parsing reissuance_token");
 
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
-        let stats = asset_stats(chain, mempool, asset_id, &reissuance_token);
+        let stats = asset_stats(query, asset_id, &reissuance_token);
+        let status = query.get_tx_status(&parse_hash(&row.issuance_txid));
 
-        Ok(Some(AssetEntry::new(asset_id, row, stats, meta)))
+        Some(AssetEntry::new(asset_id, row, stats, meta, status))
     } else {
-        Ok(None)
-    }
+        None
+    })
 }
 
 pub fn get_issuance_assetid(txin: &TxIn) -> Result<AssetId> {
@@ -342,17 +364,18 @@ fn asset_cache_row(
 }
 
 fn asset_stats(
-    chain: &ChainQuery,
-    mempool: &Mempool,
+    query: &Query,
     asset_id: &sha256d::Hash,
     reissuance_token: &sha256d::Hash,
 ) -> (AssetStats, AssetStats) {
+    let chain = query.chain();
     let mut chain_stats = chain_asset_stats(chain, asset_id);
     chain_stats.burned_reissuance_tokens = chain_asset_stats(chain, reissuance_token).burned_amount;
 
-    let mut mempool_stats = mempool_asset_stats(mempool, &asset_id);
+    let mempool = query.mempool();
+    let mut mempool_stats = mempool_asset_stats(&mempool, &asset_id);
     mempool_stats.burned_reissuance_tokens =
-        mempool_asset_stats(mempool, &reissuance_token).burned_amount;
+        mempool_asset_stats(&mempool, &reissuance_token).burned_amount;
 
     (chain_stats, mempool_stats)
 }

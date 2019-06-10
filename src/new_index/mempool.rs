@@ -20,7 +20,7 @@ use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::{index_mempool_tx_assets, remove_mempool_tx_assets};
+use crate::elements::asset;
 
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
@@ -42,6 +42,8 @@ pub struct Mempool {
     // elements only
     #[cfg(feature = "liquid")]
     pub asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // asset_id -> {history_entries}
+    #[cfg(feature = "liquid")]
+    pub asset_issuance: HashMap<Sha256dHash, asset::AssetRow>, // asset_id -> {history_entries}
 }
 
 // A simplified transaction view used for the list of most recent transactions
@@ -82,6 +84,8 @@ impl Mempool {
 
             #[cfg(feature = "liquid")]
             asset_history: HashMap::new(),
+            #[cfg(feature = "liquid")]
+            asset_issuance: HashMap::new(),
         }
     }
 
@@ -372,7 +376,7 @@ impl Mempool {
 
             // Index issued assets
             #[cfg(feature = "liquid")]
-            index_mempool_tx_assets(&tx, &mut self.asset_history);
+            asset::index_mempool_tx_assets(&tx, &mut self.asset_history, &mut self.asset_issuance);
         }
     }
 
@@ -444,7 +448,11 @@ impl Mempool {
         });
 
         #[cfg(feature = "liquid")]
-        remove_mempool_tx_assets(&to_remove, &mut self.asset_history);
+        asset::remove_mempool_tx_assets(
+            &to_remove,
+            &mut self.asset_history,
+            &mut self.asset_issuance,
+        );
 
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
