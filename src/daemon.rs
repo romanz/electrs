@@ -13,6 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
+#[cfg(feature = "latest_rust")]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -266,10 +268,29 @@ impl Connection {
     }
 }
 
+#[cfg(feature = "latest_rust")]
+struct Counter {
+    value: AtomicU64,
+}
+
+#[cfg(feature = "latest_rust")]
+impl Counter {
+    fn new() -> Self {
+        Counter { value: 0.into() }
+    }
+
+    fn next(&self) -> u64 {
+        // fetch_add() returns previous value, we want current one
+        self.value.fetch_add(1, Ordering::Relaxed) + 1
+    }
+}
+
+#[cfg(not(feature = "latest_rust"))]
 struct Counter {
     value: Mutex<u64>,
 }
 
+#[cfg(not(feature = "latest_rust"))]
 impl Counter {
     fn new() -> Self {
         Counter {
