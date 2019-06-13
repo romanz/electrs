@@ -1,7 +1,15 @@
-# 0.6.2 (TBD)
+# 0.7.0 (13 June 2019)
+
+* Support Bitcoin Core 0.18
+* Build with LTO
+* Allow building with latest Rust (via feature flag)
+* Use iterators instead of returning vectors (@Kixunil)
+* Use atomics instead of `Mutex<u64>` (@Kixunil)
+* Better handling invalid blocks (@azuchi)
+
+# 0.6.2 (17 May 2019)
 
 * Support Rust 1.32 (for Debian)
-* Build with LTO
 
 # 0.6.1 (9 May 2019)
 
