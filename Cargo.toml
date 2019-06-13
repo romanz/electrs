@@ -11,6 +11,9 @@ documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
 
+[features]
+latest_rust = []  # use latest Rust features (otherwise, support Rust 1.32)
+
 [dependencies]
 arrayref = "0.3"
 base64 = "0.10"
