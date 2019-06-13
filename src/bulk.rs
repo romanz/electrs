@@ -5,7 +5,7 @@ use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use libc;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{Cursor, Seek, SeekFrom};
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::{
     mpsc::{Receiver, SyncSender},
@@ -120,40 +120,37 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<Block>> {
     let mut blocks = vec![];
     let max_pos = blob.len() as u64;
     while cursor.position() < max_pos {
+        let offset = cursor.position();
         match u32::consensus_decode(&mut cursor) {
             Ok(value) => {
                 if magic != value {
-                    cursor
-                        .seek(SeekFrom::Current(-3))
-                        .expect("failed to seek back");
+                    cursor.set_position(offset + 1);
                     continue;
                 }
             }
             Err(_) => break, // EOF
         };
         let block_size = u32::consensus_decode(&mut cursor).chain_err(|| "no block size")?;
-        let start = cursor.position() as usize;
-        cursor
-            .seek(SeekFrom::Current(i64::from(block_size)))
-            .chain_err(|| format!("seek {} failed", block_size))?;
-        let end = cursor.position() as usize;
+        let start = cursor.position();
+        let end = start + block_size as u64;
 
-        // If Core's WriteBlockToDisk ftell fails, only the magic byte and size will be written
-        // and the block body will be unwritten data. skip that's data.
-        let mut tmp_cursor = Cursor::new(&blob[start..(start + 4)]);
-        match u32::consensus_decode(&mut tmp_cursor) {
+        // If Core's WriteBlockToDisk ftell fails, only the magic bytes and size will be written
+        // and the block body won't be written to the blk*.dat file.
+        // Since the first 4 bytes should contain the block's version, we can skip such blocks
+        // by peeking the cursor (and skipping previous `magic` and `block_size`).
+        match u32::consensus_decode(&mut cursor) {
             Ok(value) => {
                 if magic == value {
-                    cursor.set_position(start as u64);
+                    cursor.set_position(start);
                     continue;
                 }
             }
             Err(_) => break, // EOF
         }
-
-        let block: Block = deserialize(&blob[start..end])
+        let block: Block = deserialize(&blob[start as usize..end as usize])
             .chain_err(|| format!("failed to parse block at {}..{}", start, end))?;
         blocks.push(block);
+        cursor.set_position(end as u64);
     }
     Ok(blocks)
 }
