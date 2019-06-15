@@ -130,7 +130,7 @@ impl Query {
     }
 
     pub fn estimate_fee(&self, conf_target: u16) -> Option<f32> {
-        self.estimate_fee_targets().get(&conf_target).cloned()
+        self.estimate_fee_targets().remove(&conf_target)
     }
 
     pub fn estimate_fee_targets(&self) -> HashMap<u16, f32> {
