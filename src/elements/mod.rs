@@ -3,7 +3,7 @@ use bitcoin::consensus::encode::serialize;
 use bitcoin::Script;
 use bitcoin_hashes::hex::ToHex;
 use elements::confidential::Value;
-use elements::{AssetIssuance, Proof, TxIn};
+use elements::{Proof, TxIn};
 use hex;
 
 use crate::chain::Network;
@@ -13,7 +13,7 @@ pub mod asset;
 mod assetid;
 mod registry;
 
-use asset::get_issuance_assetid;
+use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, AssetEntry};
 pub use assetid::AssetId;
 pub use registry::AssetRegistry;
@@ -98,7 +98,8 @@ pub struct IssuanceValue {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_blinding_nonce: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub asset_entropy: Option<String>,
+    pub contract_hash: Option<String>,
+    pub asset_entropy: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assetamount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,29 +112,28 @@ pub struct IssuanceValue {
 
 impl From<&TxIn> for IssuanceValue {
     fn from(txin: &TxIn) -> Self {
-        let asset_id = get_issuance_assetid(txin).expect("invalid issuance");
-        IssuanceValue::new(asset_id.to_hex(), &txin.asset_issuance)
-    }
-}
+        let issuance = &txin.asset_issuance;
+        let is_reissuance = issuance.asset_blinding_nonce != [0u8; 32];
 
-impl IssuanceValue {
-    fn new(asset_id: String, issuance: &AssetIssuance) -> Self {
-        let zero = [0u8; 32];
-        let is_reissuance = issuance.asset_blinding_nonce != zero;
+        let asset_entropy = get_issuance_entropy(txin).expect("invalid issuance");
+        let asset_id = AssetId::from_entropy(asset_entropy.clone());
+
+        let contract_hash = if !is_reissuance {
+            // reverse to match the format used by elements-cpp
+            let mut entropy = issuance.asset_entropy;
+            entropy.reverse();
+            Some(hex::encode(entropy))
+        } else {
+            None
+        };
 
         IssuanceValue {
-            asset_id,
+            asset_id: asset_id.to_hex(),
+            asset_entropy: asset_entropy.to_hex(),
+            contract_hash,
             is_reissuance,
             asset_blinding_nonce: if is_reissuance {
                 Some(hex::encode(issuance.asset_blinding_nonce))
-            } else {
-                None
-            },
-            asset_entropy: if issuance.asset_entropy != zero {
-                // reverse to match the format used by elements-cpp
-                let mut entropy = issuance.asset_entropy;
-                entropy.reverse();
-                Some(hex::encode(entropy))
             } else {
                 None
             },

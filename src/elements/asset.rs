@@ -300,12 +300,7 @@ pub fn lookup_asset(
     })
 }
 
-pub fn get_issuance_assetid(txin: &TxIn) -> Result<AssetId> {
-    let entropy = get_issuance_entropy(txin)?;
-    Ok(AssetId::from_entropy(entropy))
-}
-
-fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
+pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
     if !txin.has_issuance {
         bail!("input has no issuance");
     }
