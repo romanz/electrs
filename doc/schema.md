@@ -37,6 +37,10 @@ Each output results in the following new row:
 
  * `"O{txid}{vout}" → "{scriptpubkey}{value}"`
 
+Once the initial sync is done, the following is set:
+
+ * `"I" →  ""`
+
 ### `history`
 
 Each funding output (except for provably unspendable ones) results in the following new row (`H` is for history, `F` is for funding):

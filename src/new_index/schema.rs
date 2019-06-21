@@ -68,6 +68,10 @@ impl Store {
     pub fn history_db(&self) -> &DB {
         &self.history_db
     }
+
+    pub fn done_initial_sync(&self) -> bool {
+        self.txstore_db.get(b"I").is_some()
+    }
 }
 
 type UtxoMap = HashMap<OutPoint, (BlockId, Value)>;
@@ -216,10 +220,15 @@ impl Indexer {
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
 
+        if let FetchFrom::BlkFiles = self.from {
+            self.from = FetchFrom::Bitcoind;
+            self.store.txstore_db.put(b"I", &[]);
+        }
+
         self.flush = DBFlush::Enable;
         self.store.txstore_db.write(vec![], self.flush);
         self.store.history_db.write(vec![], self.flush);
-        self.from = FetchFrom::Bitcoind;
+
         Ok(tip)
     }
 

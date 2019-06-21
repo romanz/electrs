@@ -24,7 +24,8 @@ use electrs::{
 fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
     let mut jsonrpc_import = config.jsonrpc_import;
     if !jsonrpc_import {
-        jsonrpc_import = !store.is_empty();
+        // switch over to jsonrpc after the initial sync is done
+        jsonrpc_import = store.done_initial_sync();
     }
     match jsonrpc_import {
         true => FetchFrom::Bitcoind, // slower, uses JSONRPC (good for incremental updates)
