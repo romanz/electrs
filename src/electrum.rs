@@ -64,11 +64,11 @@ fn get_status_hash(txs: Vec<(Sha256dHash, Option<BlockId>)>) -> Option<FullHash>
         let mut hash = FullHash::default();
         let mut sha2 = Sha256::new();
         for (txid, blockid) in txs {
-            // TODO: use height of 0 to indicate a mempool tx with confirmed inputs
+            // TODO: use height of 0 to indicate an unconfirmed tx with confirmed inputs, or -1 for unconfirmed tx with unconfirmed inputs
             let part = format!(
                 "{}:{}:",
                 txid.to_hex(),
-                blockid.map_or(-1, |b| b.height as isize)
+                blockid.map_or(0, |b| b.height)
             );
             sha2.input(part.as_bytes());
         }
