@@ -34,13 +34,15 @@ fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
 
 fn finish_verification(daemon: &Daemon, signal: &Waiter) -> Result<()> {
     loop {
-        let progress = daemon.getblockchaininfo()?.verificationprogress;
-        if progress > 0.9999 {
+        let info = daemon.getblockchaininfo()?;
+        if !info.initialblockdownload.unwrap_or(false) && info.blocks == info.headers {
             return Ok(());
         }
         warn!(
-            "waiting for verification to finish: {:.3}%",
-            progress * 100.0
+            "waiting for sync to finish: {}/{} blocks, vertification progress: {:.3}%",
+            info.blocks,
+            info.headers,
+            info.verificationprogress * 100.0
         );
         signal.wait(Duration::from_secs(5))?;
     }
