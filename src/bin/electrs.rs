@@ -33,22 +33,6 @@ fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
     }
 }
 
-fn finish_verification(daemon: &Daemon, signal: &Waiter) -> Result<()> {
-    loop {
-        let info = daemon.getblockchaininfo()?;
-        if !info.initialblockdownload.unwrap_or(false) && info.blocks == info.headers {
-            return Ok(());
-        }
-        warn!(
-            "waiting for sync to finish: {}/{} blocks, vertification progress: {:.3}%",
-            info.blocks,
-            info.headers,
-            info.verificationprogress * 100.0
-        );
-        signal.wait(Duration::from_secs(5))?;
-    }
-}
-
 fn run_server(config: Arc<Config>) -> Result<()> {
     let signal = Waiter::new();
     let metrics = Metrics::new(config.monitoring_addr);
@@ -62,7 +46,6 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         signal.clone(),
         &metrics,
     )?);
-    finish_verification(&daemon, &signal)?;
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
     let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
     let mut tip = indexer.update(&daemon)?;

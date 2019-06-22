@@ -335,18 +335,17 @@ impl Daemon {
         loop {
             let info = daemon.getblockchaininfo()?;
 
-            // initialblockdownload is unavailable on the 0.14-based elements
-            let synced = match info.initialblockdownload {
-                Some(ibd) => !ibd,
-                None => info.verificationprogress == 1.0,
-            };
-
-            if synced {
+            if !info.initialblockdownload.unwrap_or(false) && info.blocks == info.headers {
                 break;
             }
 
-            warn!("wait until bitcoind is synced");
-            signal.wait(Duration::from_secs(3))?;
+            warn!(
+                "waiting for bitcoind sync to finish: {}/{} blocks, vertification progress: {:.3}%",
+                info.blocks,
+                info.headers,
+                info.verificationprogress * 100.0
+            );
+            signal.wait(Duration::from_secs(5))?;
         }
         Ok(daemon)
     }
