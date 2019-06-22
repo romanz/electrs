@@ -46,19 +46,21 @@ impl Store {
         let headers_map = load_blockheaders(&txstore_db);
         debug!("{} headers were loaded", headers_map.len());
         let cache_db = DB::open(&path.join("cache"));
+
+        let headers = if let Some(tip_hash) = txstore_db.get(b"t") {
+            HeaderList::new(headers_map, deserialize(&tip_hash).expect("invalid tip"))
+        } else {
+            HeaderList::empty()
+        };
+
         Store {
             txstore_db,
             history_db,
             cache_db,
             added_blockhashes: RwLock::new(added_blockhashes),
             indexed_blockhashes: RwLock::new(indexed_blockhashes),
-            indexed_headers: RwLock::new(HeaderList::empty()),
+            indexed_headers: RwLock::new(headers),
         }
-    }
-
-    /// Used to decide whether to use "blk*.dat" files for faster initial indexing
-    pub fn is_empty(&self) -> bool {
-        return self.added_blockhashes.read().unwrap().is_empty();
     }
 
     pub fn txstore_db(&self) -> &DB {
@@ -70,7 +72,7 @@ impl Store {
     }
 
     pub fn done_initial_sync(&self) -> bool {
-        self.txstore_db.get(b"I").is_some()
+        self.txstore_db.get(b"t").is_some()
     }
 }
 
@@ -220,9 +222,11 @@ impl Indexer {
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
 
+        // update the most recently indexed block
+        self.store.txstore_db.put(b"t", &serialize(&tip));
+
         if let FetchFrom::BlkFiles = self.from {
             self.from = FetchFrom::Bitcoind;
-            self.store.txstore_db.put(b"I", &[]);
         }
 
         self.flush = DBFlush::Enable;

@@ -37,9 +37,9 @@ Each output results in the following new row:
 
  * `"O{txid}{vout}" → "{scriptpubkey}{value}"`
 
-Once the initial sync is done, the following is set:
+The most recently indexed block is saved as:
 
- * `"I" →  ""`
+ * `"t" →  "{blockhash}"`
 
 ### `history`
 

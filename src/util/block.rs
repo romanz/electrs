@@ -80,6 +80,40 @@ impl HeaderList {
         }
     }
 
+    pub fn new(
+        mut headers_map: HashMap<Sha256dHash, BlockHeader>,
+        tip_hash: Sha256dHash,
+    ) -> HeaderList {
+        trace!(
+            "processing {} headers, tip at {:?}",
+            headers_map.len(),
+            tip_hash
+        );
+
+        let mut blockhash = tip_hash;
+        let mut headers_chain = vec![];
+        let null_hash = Sha256dHash::default();
+
+        while blockhash != null_hash {
+            let header = headers_map
+                .remove(&blockhash)
+                .expect("missing expected blockhash in headers map");
+            blockhash = header.prev_blockhash.clone();
+            headers_chain.push(header);
+        }
+        headers_chain.reverse();
+
+        trace!(
+            "{} chained headers ({} orphan blocks left)",
+            headers_chain.len(),
+            headers_map.len()
+        );
+
+        let mut headers = HeaderList::empty();
+        headers.apply(headers.order(headers_chain));
+        headers
+    }
+
     pub fn order(&self, new_headers: Vec<BlockHeader>) -> Vec<HeaderEntry> {
         // header[i] -> header[i-1] (i.e. header.last() is the tip)
         struct HashedHeader {
