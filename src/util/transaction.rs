@@ -15,8 +15,11 @@ lazy_static! {
 #[derive(Serialize, Deserialize)]
 pub struct TransactionStatus {
     pub confirmed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub block_height: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub block_hash: Option<Sha256dHash>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub block_time: Option<u32>,
 }
 

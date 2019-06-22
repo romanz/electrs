@@ -56,6 +56,7 @@ struct BlockValue {
     #[cfg(not(feature = "liquid"))]
     bits: u32,
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     proof: Option<BlockProofValue>,
 }
 
@@ -97,7 +98,9 @@ struct TransactionValue {
     vout: Vec<TxOutValue>,
     size: u32,
     weight: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     fee: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<TransactionStatus>,
 }
 
@@ -163,6 +166,7 @@ struct TxInValue {
     prevout: Option<TxOutValue>,
     scriptsig: Script,
     scriptsig_asm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     witness: Option<Vec<String>>,
     is_coinbase: bool,
     sequence: u32,
@@ -175,6 +179,7 @@ struct TxInValue {
     #[cfg(feature = "liquid")]
     is_pegin: bool,
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     issuance: Option<IssuanceValue>,
 }
 
@@ -229,6 +234,7 @@ impl TxInValue {
 struct TxOutValue {
     scriptpubkey: Script,
     scriptpubkey_asm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     scriptpubkey_address: Option<String>,
     scriptpubkey_type: String,
 
@@ -236,14 +242,23 @@ struct TxOutValue {
     value: u64,
 
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<u64>,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     valuecommitment: Option<String>,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     asset: Option<String>,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     assetcommitment: Option<String>,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pegout: Option<PegOutRequest>,
 }
 
@@ -332,11 +347,16 @@ struct UtxoValue {
     txid: Sha256dHash,
     vout: u32,
     status: TransactionStatus,
+
     #[cfg(not(feature = "liquid"))]
     value: u64,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<u64>,
+
     #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     valuecommitment: Option<String>,
 }
 impl From<Utxo> for UtxoValue {
@@ -369,8 +389,11 @@ impl From<Utxo> for UtxoValue {
 #[derive(Serialize)]
 struct SpendingValue {
     spent: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     txid: Option<Sha256dHash>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     vin: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<TransactionStatus>,
 }
 impl From<SpendingInput> for SpendingValue {
