@@ -7,11 +7,8 @@ use crate::util::BlockId;
 
 #[cfg(feature = "liquid")]
 lazy_static! {
-    static ref LIQUID_REGTEST_INITIAL_ISSUANCE_PREVOUT: Sha256dHash =
+    static ref REGTEST_INITIAL_ISSUANCE_PREVOUT: Sha256dHash =
         Sha256dHash::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5")
-            .unwrap();
-    static ref ELEMENTS_REGTEST_INITIAL_ISSUANCE_PREVOUT: Sha256dHash =
-        Sha256dHash::from_hex("3b54c66b83c81d0bb4ca0c1bec275e98009d1eb2dcd60cbaff9b8132842f096a")
             .unwrap();
 }
 
@@ -58,8 +55,7 @@ pub fn has_prevout(txin: &TxIn) -> bool {
     #[cfg(feature = "liquid")]
     return !txin.is_coinbase()
         && !txin.is_pegin
-        && txin.previous_output.txid != *LIQUID_REGTEST_INITIAL_ISSUANCE_PREVOUT
-        && txin.previous_output.txid != *ELEMENTS_REGTEST_INITIAL_ISSUANCE_PREVOUT;
+        && txin.previous_output.txid != *REGTEST_INITIAL_ISSUANCE_PREVOUT;
 }
 
 pub fn is_spendable(txout: &TxOut) -> bool {
