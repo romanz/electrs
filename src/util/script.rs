@@ -79,18 +79,16 @@ pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {
     };
 
     // Wrapped witnessScript for P2WSH or P2SH-P2WSH spends
-    #[cfg(not(feature = "liquid"))]
     let witness_script = if prevout.script_pubkey.is_v0_p2wsh()
         || redeem_script.as_ref().map_or(false, |s| s.is_v0_p2wsh())
     {
-        txin.witness.iter().last().cloned().map(Script::from)
+        let witness = &txin.witness;
+        #[cfg(feature = "liquid")]
+        let witness = &witness.script_witness;
+        witness.iter().last().cloned().map(Script::from)
     } else {
         None
     };
-
-    // TODO: witness for elements
-    #[cfg(feature = "liquid")]
-    let witness_script = None;
 
     InnerScripts {
         redeem_script,

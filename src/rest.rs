@@ -185,14 +185,15 @@ struct TxInValue {
 
 impl TxInValue {
     fn new(txin: &TxIn, prevout: Option<&TxOut>, config: &Config) -> Self {
-        #[cfg(not(feature = "liquid"))]
-        let witness = if txin.witness.len() > 0 {
-            Some(txin.witness.iter().map(|w| hex::encode(w)).collect())
+        let witness = &txin.witness;
+        #[cfg(feature = "liquid")]
+        let witness = &witness.script_witness;
+
+        let witness = if !witness.is_empty() {
+            Some(witness.iter().map(hex::encode).collect())
         } else {
             None
         };
-        #[cfg(feature = "liquid")]
-        let witness = None; // @TODO
 
         let is_coinbase = is_coinbase(&txin);
 
