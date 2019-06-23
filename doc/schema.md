@@ -37,7 +37,7 @@ Each output results in the following new row:
 
  * `"O{txid}{vout}" → "{scriptpubkey}{value}"`
 
-The most recently indexed block is saved as:
+When the indexer is synced up to the tip of the chain, the hash of the tip is saved as following:
 
  * `"t" →  "{blockhash}"`
 
