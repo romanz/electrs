@@ -358,30 +358,45 @@ struct UtxoValue {
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
     valuecommitment: Option<String>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    asset: Option<String>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assetcommitment: Option<String>,
 }
 impl From<Utxo> for UtxoValue {
     fn from(utxo: Utxo) -> Self {
-        #[cfg(not(feature = "liquid"))]
-        let value = utxo.value;
-
-        #[cfg(feature = "liquid")]
-        let value = match utxo.value {
-            Value::Explicit(value) => Some(value),
-            _ => None,
-        };
-        #[cfg(feature = "liquid")]
-        let valuecommitment = match utxo.value {
-            Value::Confidential(..) => Some(hex::encode(serialize(&utxo.value))),
-            _ => None,
-        };
-
         UtxoValue {
             txid: utxo.txid,
             vout: utxo.vout,
-            value,
             status: TransactionStatus::from(utxo.confirmed),
+
+            #[cfg(not(feature = "liquid"))]
+            value: utxo.value,
+
             #[cfg(feature = "liquid")]
-            valuecommitment,
+            value: match utxo.value {
+                Value::Explicit(value) => Some(value),
+                _ => None,
+            },
+            #[cfg(feature = "liquid")]
+            valuecommitment: match utxo.value {
+                Value::Confidential(..) => Some(hex::encode(serialize(&utxo.value))),
+                _ => None,
+            },
+            #[cfg(feature = "liquid")]
+            asset: match utxo.asset {
+                Asset::Explicit(asset) => Some(asset.to_hex()),
+                _ => None,
+            },
+            #[cfg(feature = "liquid")]
+            assetcommitment: match utxo.asset {
+                Asset::Confidential(..) => Some(hex::encode(serialize(&utxo.asset))),
+                _ => None,
+            },
         }
     }
 }

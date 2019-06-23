@@ -84,6 +84,9 @@ pub struct Utxo {
     pub vout: u32,
     pub confirmed: Option<BlockId>,
     pub value: Value,
+
+    #[cfg(feature = "liquid")]
+    pub asset: elements::confidential::Asset,
 }
 
 impl From<&Utxo> for OutPoint {
@@ -407,11 +410,22 @@ impl ChainQuery {
         // format as Utxo objects
         newutxos
             .into_iter()
-            .map(|(outpoint, (blockid, value))| Utxo {
-                txid: outpoint.txid,
-                vout: outpoint.vout,
-                value,
-                confirmed: Some(blockid),
+            .map(|(outpoint, (blockid, value))| {
+                // in elements/liquid chains, we have to lookup the txo in order to get its
+                // associated asset. the asset information could be kept in the db history rows
+                // alongside the value to avoid this.
+                #[cfg(feature = "liquid")]
+                let txo = self.lookup_txo(&outpoint).expect("missing utxo");
+
+                Utxo {
+                    txid: outpoint.txid,
+                    vout: outpoint.vout,
+                    value,
+                    confirmed: Some(blockid),
+
+                    #[cfg(feature = "liquid")]
+                    asset: txo.asset,
+                }
             })
             .collect()
     }
@@ -1168,11 +1182,16 @@ impl TxHistoryRow {
             TxHistoryInfo::Spending(ref info) => parse_hash(&info.txid),
         }
     }
+    fn get_outpoint(&self) -> OutPoint {
+        self.key.txinfo.get_outpoint()
+    }
+}
 
+impl TxHistoryInfo {
     // for funding rows, returns the funded output.
     // for spending rows, returns the spent previous output.
-    fn get_outpoint(&self) -> OutPoint {
-        match self.key.txinfo {
+    pub fn get_outpoint(&self) -> OutPoint {
+        match self {
             TxHistoryInfo::Funding(ref info) => OutPoint {
                 txid: parse_hash(&info.txid),
                 vout: info.vout as u32,

@@ -137,6 +137,12 @@ impl Mempool {
                     vout: info.vout as u32,
                     value: info.value,
                     confirmed: None,
+
+                    #[cfg(feature = "liquid")]
+                    asset: self
+                        .lookup_txo(&entry.get_outpoint())
+                        .expect("missing txo")
+                        .asset,
                 }),
                 TxHistoryInfo::Spending(..) => None,
             })
@@ -345,6 +351,12 @@ impl Mempool {
                 self.edges.insert(txi.previous_output, (txid, i as u32));
             }
         }
+    }
+
+    pub fn lookup_txo(&self, outpoint: &OutPoint) -> Result<TxOut> {
+        let mut outpoints = BTreeSet::new();
+        outpoints.insert(*outpoint);
+        Ok(self.lookup_txos(&outpoints)?.remove(outpoint).unwrap())
     }
 
     pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
