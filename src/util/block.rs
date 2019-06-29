@@ -97,7 +97,7 @@ impl HeaderList {
         while blockhash != null_hash {
             let header = headers_map
                 .remove(&blockhash)
-                .expect("missing expected blockhash in headers map");
+                .expect(&format!("missing expected blockhash in headers map: {:?}", blockhash));
             blockhash = header.prev_blockhash.clone();
             headers_chain.push(header);
         }
