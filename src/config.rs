@@ -31,6 +31,7 @@ pub struct Config {
     pub tx_cache_size: usize,
     pub txid_limit: usize,
     pub server_banner: String,
+    pub blocktxids_cache_size: usize,
 }
 
 fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
@@ -125,6 +126,11 @@ impl Config {
                     .help("Number of transactions to keep in for query LRU cache")
                     .default_value("10000")  // should be enough for a small wallet.
             )
+            .arg(
+                Arg::with_name("blocktxids_cache_size")
+                    .long("blocktxids-cache-size")
+                    .help("Number of blocks to cache transactions IDs in LRU cache")
+                    .default_value("100")) // Needs ~0.305MB per per block at 10k txs each
             .arg(
                 Arg::with_name("txid_limit")
                     .long("txid-limit")
@@ -227,6 +233,7 @@ impl Config {
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
+            blocktxids_cache_size: value_t_or_exit!(m, "blocktxids_cache_size", usize),
             txid_limit: value_t_or_exit!(m, "txid_limit", usize),
             server_banner: value_t_or_exit!(m, "server_banner", String),
         };

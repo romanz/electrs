@@ -6,11 +6,13 @@ extern crate log;
 
 use error_chain::ChainedError;
 use std::process;
+use std::sync::Arc;
 use std::time::Duration;
 
 use electrs::{
     app::App,
     bulk,
+    cache::BlockTxIDsCache,
     config::Config,
     daemon::Daemon,
     errors::*,
@@ -26,6 +28,7 @@ fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
+    let blocktxids_cache = Arc::new(BlockTxIDsCache::new(config.blocktxids_cache_size));
 
     let daemon = Daemon::new(
         &config.daemon_dir,
@@ -33,6 +36,7 @@ fn run_server(config: &Config) -> Result<()> {
         config.cookie_getter(),
         config.network_type,
         signal.clone(),
+        blocktxids_cache,
         &metrics,
     )?;
     // Perform initial indexing from local blk*.dat block files.

@@ -6,16 +6,18 @@ extern crate error_chain;
 extern crate log;
 
 use electrs::{
-    config::Config, daemon::Daemon, errors::*, fake::FakeStore, index::Index, metrics::Metrics,
-    signal::Waiter,
+    cache::BlockTxIDsCache, config::Config, daemon::Daemon, errors::*, fake::FakeStore,
+    index::Index, metrics::Metrics, signal::Waiter,
 };
 use error_chain::ChainedError;
+use std::sync::Arc;
 
 fn run() -> Result<()> {
     let signal = Waiter::start();
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
+    let cache = Arc::new(BlockTxIDsCache::new(0));
 
     let daemon = Daemon::new(
         &config.daemon_dir,
@@ -23,6 +25,7 @@ fn run() -> Result<()> {
         config.cookie_getter(),
         config.network_type,
         signal.clone(),
+        cache,
         &metrics,
     )?;
     let fake_store = FakeStore {};

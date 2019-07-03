@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::cache::BlockTxIDsCache;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
@@ -311,6 +312,7 @@ pub struct Daemon {
     conn: Mutex<Connection>,
     message_id: Counter, // for monotonic JSONRPC 'id'
     signal: Waiter,
+    blocktxids_cache: Arc<BlockTxIDsCache>,
 
     // monitoring
     latency: HistogramVec,
@@ -324,6 +326,7 @@ impl Daemon {
         cookie_getter: Arc<CookieGetter>,
         network: Network,
         signal: Waiter,
+        blocktxids_cache: Arc<BlockTxIDsCache>,
         metrics: &Metrics,
     ) -> Result<Daemon> {
         let daemon = Daemon {
@@ -335,6 +338,7 @@ impl Daemon {
                 signal.clone(),
             )?),
             message_id: Counter::new(),
+            blocktxids_cache: blocktxids_cache,
             signal: signal.clone(),
             latency: metrics.histogram_vec(
                 HistogramOpts::new("electrs_daemon_rpc", "Bitcoind RPC latency (in seconds)"),
@@ -376,6 +380,7 @@ impl Daemon {
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             message_id: Counter::new(),
             signal: self.signal.clone(),
+            blocktxids_cache: Arc::clone(&self.blocktxids_cache),
             latency: self.latency.clone(),
             size: self.size.clone(),
         })
@@ -506,7 +511,7 @@ impl Daemon {
         Ok(block)
     }
 
-    pub fn getblocktxids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
+    fn load_blocktxids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
         self.request("getblock", json!([blockhash.to_hex(), /*verbose=*/ 1]))?
             .get("tx")
             .chain_err(|| "block missing txids")?
@@ -515,6 +520,11 @@ impl Daemon {
             .iter()
             .map(parse_hash)
             .collect::<Result<Vec<Sha256dHash>>>()
+    }
+
+    pub fn getblocktxids(&self, blockhash: &Sha256dHash) -> Result<Vec<Sha256dHash>> {
+        self.blocktxids_cache
+            .get_or_else(&blockhash, || self.load_blocktxids(blockhash))
     }
 
     pub fn getblocks(&self, blockhashes: &[Sha256dHash]) -> Result<Vec<Block>> {
