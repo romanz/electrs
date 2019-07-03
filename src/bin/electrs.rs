@@ -28,7 +28,7 @@ fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
-    let blocktxids_cache = Arc::new(BlockTxIDsCache::new(config.blocktxids_cache_size));
+    let blocktxids_cache = Arc::new(BlockTxIDsCache::new(config.blocktxids_cache_size, &metrics));
 
     let daemon = Daemon::new(
         &config.daemon_dir,

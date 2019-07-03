@@ -17,7 +17,7 @@ fn run() -> Result<()> {
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
-    let cache = Arc::new(BlockTxIDsCache::new(0));
+    let cache = Arc::new(BlockTxIDsCache::new(0, &metrics));
 
     let daemon = Daemon::new(
         &config.daemon_dir,
