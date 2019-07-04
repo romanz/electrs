@@ -44,3 +44,54 @@ impl BlockTxIDsCache {
         Ok(txids)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin_hashes::Hash;
+
+    fn gen_hash(seed: u8) -> Sha256dHash {
+        let bytes: Vec<u8> = (seed..seed + 32).collect();
+        Sha256dHash::hash(&bytes[..])
+    }
+
+    #[test]
+    fn test_cache_hit_and_miss() {
+        let block1 = gen_hash(1);
+        let block2 = gen_hash(2);
+        let block3 = gen_hash(3);
+        let txids = vec![gen_hash(4), gen_hash(5)];
+
+        let misses: Mutex<usize> = Mutex::new(0);
+        let miss_func = || {
+            *misses.lock().unwrap() += 1;
+            Ok(txids.clone())
+        };
+
+        let dummy_metrics = Metrics::new("127.0.0.1:60000".parse().unwrap());
+        let cache = BlockTxIDsCache::new(2, &dummy_metrics);
+
+        // cache miss
+        let result = cache.get_or_else(&block1, &miss_func).unwrap();
+        assert_eq!(1, *misses.lock().unwrap());
+        assert_eq!(txids, result);
+
+        // cache hit
+        let result = cache.get_or_else(&block1, &miss_func).unwrap();
+        assert_eq!(1, *misses.lock().unwrap());
+        assert_eq!(txids, result);
+
+        // cache size is 2, test that blockhash1 falls out of cache
+        cache.get_or_else(&block2, &miss_func).unwrap();
+        assert_eq!(2, *misses.lock().unwrap());
+        cache.get_or_else(&block3, &miss_func).unwrap();
+        assert_eq!(3, *misses.lock().unwrap());
+        cache.get_or_else(&block1, &miss_func).unwrap();
+        assert_eq!(4, *misses.lock().unwrap());
+
+        // cache hits
+        cache.get_or_else(&block3, &miss_func).unwrap();
+        cache.get_or_else(&block1, &miss_func).unwrap();
+        assert_eq!(4, *misses.lock().unwrap());
+    }
+}
