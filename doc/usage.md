@@ -158,6 +158,8 @@ On your client machine, run the following command (assuming Tor proxy service ru
 $ electrum --oneserver --server <your-onion-address>.onion:50001:t --proxy socks5:127.0.0.1:9050
 ```
 
+For more details, see http://docs.electrum.org/en/latest/tor.html.
+
 ### Sample Systemd Unit File
 
 You may wish to have systemd manage electrs so that it's "always on." Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
