@@ -46,15 +46,9 @@ impl Store {
         let history_db = DB::open(&path.join("history"));
         let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
         debug!("{} blocks were indexed", indexed_blockhashes.len());
-        let headers_map = load_blockheaders(&txstore_db);
-        debug!("{} headers were loaded", headers_map.len());
         let cache_db = DB::open(&path.join("cache"));
 
-        let headers = if let Some(tip_hash) = txstore_db.get(b"t") {
-            HeaderList::new(headers_map, deserialize(&tip_hash).expect("invalid tip"))
-        } else {
-            HeaderList::empty()
-        };
+        let headers = HeaderList::empty();
 
         Store {
             txstore_db,
