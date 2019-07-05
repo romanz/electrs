@@ -127,6 +127,37 @@ ssl_certificate /etc/letsencrypt/live/<your-domain>/fullchain.pem;
 ssl_certificate_key /etc/letsencrypt/live/<your-domain>/privkey.pem;
 ```
 
+### Tor hidden service
+
+Install Tor on your server and client machines (assuming Ubuntu/Debian):
+
+```
+$ sudo apt install tor
+```
+
+Add the following config to `/etc/tor/torrc`:
+```
+HiddenServiceDir /var/lib/tor/hidden_service/
+HiddenServiceVersion 3
+HiddenServicePort 50001 127.0.0.1:50001
+```
+
+Restart the service:
+```
+$ sudo systemctl restart tor
+```
+
+Note: your server's onion address is stored under:
+```
+$ sudo cat /var/lib/tor/hidden_service/hostname
+<your-onion-address>.onion
+```
+
+On your client machine, run the following command (assuming Tor proxy service runs on port 9050):
+```
+$ electrum --oneserver --server <your-onion-address>.onion:50001:t --proxy socks5:127.0.0.1:9050
+```
+
 ### Sample Systemd Unit File
 
 You may wish to have systemd manage electrs so that it's "always on." Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
