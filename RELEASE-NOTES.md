@@ -1,3 +1,8 @@
+# 0.7.1 (27 July 2019)
+
+* Allow stopping bulk indexing via SIGINT/SIGTERM
+* Cache list of transaction IDs for blocks
+
 # 0.7.0 (13 June 2019)
 
 * Support Bitcoin Core 0.18
