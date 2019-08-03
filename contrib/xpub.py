@@ -15,7 +15,7 @@ script_for_address = BitcoinMainnet.ui.script_for_address
 log = Logger(__name__)
 
 def main():
-    conn = client.Connection(('localhost', 50001))
+    conn = client.Client(('localhost', 50001))
     xpub, = sys.argv[1:]
     total = 0
     k = pycoin.ui.key_from_text.key_from_text(xpub)

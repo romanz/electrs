@@ -1,7 +1,7 @@
 import json
 import socket
 
-class Connection:
+class Client:
     def __init__(self, addr):
         self.s = socket.create_connection(addr)
         self.f = self.s.makefile('r')

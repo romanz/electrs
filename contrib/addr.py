@@ -20,7 +20,7 @@ def main():
         Network = BitcoinMainnet
         port = 50001
 
-    conn = client.Connection(('localhost', port))
+    conn = client.Client(('localhost', port))
     for addr in args.address:
         script = Network.ui.script_for_address(addr)
         script_hash = hashlib.sha256(script).digest()[::-1].hex()
