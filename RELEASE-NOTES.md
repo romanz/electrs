@@ -1,3 +1,7 @@
+# 0.7.2 (TBD)
+
+* Cache capacity is now defined in megabytes, rather than number of entries. (see `--tx-cache-size` and `--blocktxids-cache-size` flags)
+
 # 0.7.1 (27 July 2019)
 
 * Allow stopping bulk indexing via SIGINT/SIGTERM

@@ -42,6 +42,10 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
         .unwrap_or_else(|| panic!("no address found for {}", address))
 }
 
+fn mb_to_bytes(mb: usize) -> usize {
+    mb * 1000
+}
+
 impl Config {
     pub fn from_args() -> Config {
         let default_banner = format!(
@@ -123,14 +127,14 @@ impl Config {
             .arg(
                 Arg::with_name("tx_cache_size")
                     .long("tx-cache-size")
-                    .help("Number of transactions to keep in for query LRU cache")
-                    .default_value("10000")  // should be enough for a small wallet.
+                    .help("Size of transaction cache in MB")
+                    .default_value("3")  // should be enough for a small wallet.
             )
             .arg(
                 Arg::with_name("blocktxids_cache_size")
                     .long("blocktxids-cache-size")
-                    .help("Number of blocks to cache transactions IDs in LRU cache")
-                    .default_value("100")) // Needs ~0.305MB per per block at 10k txs each
+                    .help("Size of cache in MB for transaction IDs in blocks")
+                    .default_value("30")) // Needs ~0.305MB per per block at 10k txs each
             .arg(
                 Arg::with_name("txid_limit")
                     .long("txid-limit")
@@ -232,8 +236,8 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
-            tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
-            blocktxids_cache_size: value_t_or_exit!(m, "blocktxids_cache_size", usize),
+            tx_cache_size: mb_to_bytes(value_t_or_exit!(m, "tx_cache_size", usize)),
+            blocktxids_cache_size: mb_to_bytes(value_t_or_exit!(m, "blocktxids_cache_size", usize)),
             txid_limit: value_t_or_exit!(m, "txid_limit", usize),
             server_banner: value_t_or_exit!(m, "server_banner", String),
         };
