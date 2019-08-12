@@ -24,6 +24,7 @@ pub mod index;
 pub mod mempool;
 pub mod metrics;
 pub mod query;
+pub mod rndcache;
 pub mod rpc;
 pub mod signal;
 pub mod store;

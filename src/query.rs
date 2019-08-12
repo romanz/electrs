@@ -1,11 +1,10 @@
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::consensus::encode::deserialize;
+use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin_hashes::hex::ToHex;
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use bitcoin_hashes::Hash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use lru::LruCache;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -15,6 +14,7 @@ use crate::errors::*;
 use crate::index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use crate::mempool::Tracker;
 use crate::metrics::Metrics;
+use crate::rndcache::RndCache;
 use crate::store::{ReadStore, Row};
 use crate::util::{FullHash, HashPrefix, HeaderEntry};
 
@@ -178,13 +178,13 @@ fn txids_by_funding_output(
 }
 
 pub struct TransactionCache {
-    map: Mutex<LruCache<Sha256dHash, Transaction>>,
+    map: Mutex<RndCache<Sha256dHash, Transaction>>,
 }
 
 impl TransactionCache {
     pub fn new(capacity: usize) -> TransactionCache {
         TransactionCache {
-            map: Mutex::new(LruCache::new(capacity)),
+            map: Mutex::new(RndCache::new(capacity)),
         }
     }
 
@@ -196,7 +196,10 @@ impl TransactionCache {
             return Ok(txn.clone());
         }
         let txn = load_txn_func()?;
-        self.map.lock().unwrap().put(*txid, txn.clone());
+        self.map
+            .lock()
+            .unwrap()
+            .put(*txid, txn.clone(), serialize(&txn).len())?;
         Ok(txn)
     }
 }
