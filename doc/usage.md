@@ -32,7 +32,7 @@ Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/021218
 
 ## Usage
 
-First index sync should take ~1.5 hours:
+First index sync should take ~1.5 hours (on a dual core Intel CPU @ 3.3 GHz, 8 GB RAM, 1TB WD Blue HDD):
 ```bash
 $ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
 2018-08-17T18:27:42 - INFO - NetworkInfo { version: 179900, subversion: "/Satoshi:0.17.99/" }
@@ -57,8 +57,9 @@ $ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127
 2018-08-17T19:58:28 - DEBUG - applying 14 new headers from height 537205
 2018-08-17T19:58:29 - INFO - RPC server running on 127.0.0.1:50001
 ```
+Note that the final DB size should be ~20% of the `blk*.dat` files, but it may increase to ~35% at the end of the inital sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
 
-If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an Odroid HC1 with 8 cpu cores @ 2GHz, 2GB RAM, and an SSD using the following command.
+If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the following command:
 
 ```bash
 $ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
