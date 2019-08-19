@@ -1,8 +1,8 @@
 use base64;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};

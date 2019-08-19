@@ -1,6 +1,6 @@
 #[cfg(feature = "liquid")]
-use bitcoin_hashes::hex::FromHex;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::hex::FromHex;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 use crate::chain::{TxIn, TxOut};
 use crate::util::BlockId;

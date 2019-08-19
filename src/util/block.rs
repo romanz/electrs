@@ -4,7 +4,7 @@ use crate::new_index::BlockEntry;
 
 use bitcoin::consensus::encode::serialize;
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 use std::collections::HashMap;
 use std::fmt;

@@ -1,9 +1,4 @@
 use bitcoin::blockdata::script::{Instruction::PushBytes, Script};
-use bitcoin::network::constants::Network as BNetwork;
-use bitcoin::util::address;
-use bitcoin_bech32::constants::Network as B32Network;
-use bitcoin_bech32::{self, u5};
-use bitcoin_hashes::{hash160::Hash as Hash160, Hash};
 
 #[cfg(feature = "liquid")]
 use elements::address as elements_address;
@@ -28,36 +23,7 @@ pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
         _ => (),
     };
 
-    let payload = if script.is_p2pkh() {
-        address::Payload::PubkeyHash(Hash160::from_slice(&script[3..23]).ok()?)
-    } else if script.is_p2sh() {
-        address::Payload::ScriptHash(Hash160::from_slice(&script[2..22]).ok()?)
-    } else if script.is_v0_p2wpkh() || script.is_v0_p2wsh() {
-        let program = if script.is_v0_p2wpkh() {
-            script[2..22].to_vec()
-        } else {
-            script[2..34].to_vec()
-        };
-
-        address::Payload::WitnessProgram(
-            bitcoin_bech32::WitnessProgram::new(
-                u5::try_from_u8(0).expect("0<32"),
-                program,
-                B32Network::from(network),
-            )
-            .unwrap(),
-        )
-    } else {
-        return None;
-    };
-
-    Some(
-        address::Address {
-            payload,
-            network: BNetwork::from(network),
-        }
-        .to_string(),
-    )
+    bitcoin::Address::from_script(script, network.into()).map(|s| s.to_string())
 }
 
 pub fn get_script_asm(script: &Script) -> String {

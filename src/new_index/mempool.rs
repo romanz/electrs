@@ -1,6 +1,6 @@
 use arraydeque::{ArrayDeque, Wrapping};
 use bitcoin::consensus::encode::serialize;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use itertools::Itertools;
 
 use std::collections::{BTreeSet, HashMap, HashSet};

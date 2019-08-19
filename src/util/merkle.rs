@@ -1,4 +1,4 @@
-use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
+use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
 
 use crate::errors::*;
 use crate::new_index::ChainQuery;

@@ -1,6 +1,6 @@
 use bitcoin::consensus::encode::serialize;
-use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use error_chain::ChainedError;

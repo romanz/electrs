@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin_hashes::{hex::FromHex, sha256, sha256d, Hash};
+use bitcoin::hashes::{hex::FromHex, sha256, sha256d, Hash};
 use elements::confidential::{Asset, Value};
 use elements::{AssetIssuance, OutPoint, Transaction, TxIn};
 

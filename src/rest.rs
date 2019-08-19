@@ -9,8 +9,8 @@ use crate::util::{
 
 use bitcoin::consensus::encode::{self, serialize};
 use bitcoin::{BitcoinHash, Script};
-use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
+use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future, Stream};
@@ -1104,6 +1104,18 @@ impl From<FromHexError> for HttpError {
     fn from(_e: FromHexError) -> Self {
         //HttpError::from(e.description().to_string())
         HttpError::from("Invalid hex string".to_string())
+    }
+}
+impl From<bitcoin::hashes::hex::Error> for HttpError {
+    fn from(_e: bitcoin::hashes::hex::Error) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::from("Invalid hex string".to_string())
+    }
+}
+impl From<bitcoin::util::address::Error> for HttpError {
+    fn from(_e: bitcoin::util::address::Error) -> Self {
+        //HttpError::from(e.description().to_string())
+        HttpError::from("Invalid Bitcoin address".to_string())
     }
 }
 impl From<errors::Error> for HttpError {

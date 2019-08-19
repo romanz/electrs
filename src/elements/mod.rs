@@ -1,7 +1,7 @@
 use bitcoin::blockdata::script::Instruction::PushBytes;
 use bitcoin::consensus::encode::serialize;
 use bitcoin::Script;
-use bitcoin_hashes::hex::ToHex;
+use bitcoin::hashes::hex::ToHex;
 use elements::confidential::Value;
 use elements::{Proof, TxIn};
 use hex;

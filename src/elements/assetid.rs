@@ -1,7 +1,7 @@
 // Copeid from https://github.com/ElementsProject/rust-elements/pull/19 pending merge
 
 use bitcoin::consensus::Encodable;
-use bitcoin_hashes::{hex, sha256, sha256d, Error, Hash, HashEngine};
+use bitcoin::hashes::{hex, sha256, sha256d, Error, Hash, HashEngine};
 use elements::OutPoint;
 
 /// The zero hash.
@@ -107,7 +107,7 @@ impl ::std::fmt::LowerHex for AssetId {
 #[cfg(feature = "serde")]
 impl ::serde::Serialize for AssetId {
     fn serialize<S: ::serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use bitcoin_hashes::hex::ToHex;
+        use bitcoin::hashes::hex::ToHex;
         if s.is_human_readable() {
             s.serialize_str(&self.to_hex())
         } else {
@@ -119,8 +119,8 @@ impl ::serde::Serialize for AssetId {
 #[cfg(feature = "serde")]
 impl<'de> ::serde::Deserialize<'de> for AssetId {
     fn deserialize<D: ::serde::Deserializer<'de>>(d: D) -> Result<AssetId, D::Error> {
-        use bitcoin_hashes::hex::FromHex;
-        use bitcoin_hashes::sha256;
+        use bitcoin::hashes::hex::FromHex;
+        use bitcoin::hashes::sha256;
 
         if d.is_human_readable() {
             struct HexVisitor;

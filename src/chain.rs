@@ -11,8 +11,7 @@ pub use elements::{confidential, Address, Block, BlockHeader, OutPoint, Transact
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin_bech32::constants::Network as B32Network;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 #[cfg(not(feature = "liquid"))]
 pub type Value = u64;
@@ -107,20 +106,6 @@ impl From<&Network> for BNetwork {
             Network::Liquid => BNetwork::Bitcoin, // @FIXME
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => BNetwork::Regtest, // @FIXME
-        }
-    }
-}
-
-impl From<&Network> for B32Network {
-    fn from(network: &Network) -> Self {
-        match network {
-            Network::Bitcoin => B32Network::Bitcoin,
-            Network::Testnet => B32Network::Testnet,
-            Network::Regtest => B32Network::Regtest,
-            #[cfg(feature = "liquid")]
-            Network::Liquid => B32Network::Bitcoin, // @FIXME
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => B32Network::Regtest, // @FIXME
         }
     }
 }

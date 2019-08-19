@@ -1,7 +1,7 @@
 use bincode;
 use bitcoin::blockdata::script::Script;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
