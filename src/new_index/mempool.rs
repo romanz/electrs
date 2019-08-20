@@ -1,7 +1,11 @@
 use arraydeque::{ArrayDeque, Wrapping};
-use bitcoin::consensus::encode::serialize;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use itertools::Itertools;
+
+#[cfg(not(feature = "liquid"))]
+use bitcoin::consensus::encode::serialize;
+#[cfg(feature = "liquid")]
+use elements::encode::serialize;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;

@@ -1,7 +1,7 @@
 // Copeid from https://github.com/ElementsProject/rust-elements/pull/19 pending merge
 
-use bitcoin::consensus::Encodable;
-use bitcoin::hashes::{hex, sha256, sha256d, Error, Hash, HashEngine};
+use bitcoin::hashes::{hex, sha256, sha256d, Hash, HashEngine};
+use elements::encode::Encodable;
 use elements::OutPoint;
 
 /// The zero hash.
@@ -78,9 +78,9 @@ fn outpoint_hash(out: &OutPoint) -> sha256d::Hash {
 }
 
 impl hex::FromHex for AssetId {
-    fn from_byte_iter<I>(iter: I) -> Result<Self, Error>
+    fn from_byte_iter<I>(iter: I) -> Result<Self, hex::Error>
     where
-        I: Iterator<Item = Result<u8, Error>> + ExactSizeIterator + DoubleEndedIterator,
+        I: Iterator<Item = Result<u8, hex::Error>> + ExactSizeIterator + DoubleEndedIterator,
     {
         sha256::Midstate::from_byte_iter(iter).map(AssetId)
     }

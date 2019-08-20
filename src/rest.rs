@@ -7,7 +7,8 @@ use crate::util::{
     script_to_address, BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
 };
 
-use bitcoin::consensus::encode::{self, serialize};
+#[cfg(not(feature = "liquid"))]
+use bitcoin::consensus::encode;
 use bitcoin::{BitcoinHash, Script};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
@@ -20,6 +21,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
+    elements::encode,
     elements::confidential::{Asset, Value},
 };
 
@@ -124,7 +126,7 @@ impl TransactionValue {
             .iter()
             .map(|txout| TxOutValue::new(txout, config))
             .collect();
-        let bytes = serialize(&tx);
+        let bytes = encode::serialize(&tx);
 
         #[cfg(not(feature = "liquid"))]
         let fee = if config.prevout_enabled && !vins.iter().any(|vin| vin.prevout.is_none()) {
@@ -276,7 +278,7 @@ impl TxOutValue {
         };
         #[cfg(feature = "liquid")]
         let valuecommitment = match txout.value {
-            Value::Confidential(..) => Some(hex::encode(serialize(&txout.value))),
+            Value::Confidential(..) => Some(hex::encode(encode::serialize(&txout.value))),
             _ => None,
         };
         #[cfg(feature = "liquid")]
@@ -286,7 +288,7 @@ impl TxOutValue {
         };
         #[cfg(feature = "liquid")]
         let assetcommitment = match txout.asset {
-            Asset::Confidential(..) => Some(hex::encode(serialize(&txout.asset))),
+            Asset::Confidential(..) => Some(hex::encode(encode::serialize(&txout.asset))),
             _ => None,
         };
 
@@ -386,7 +388,7 @@ impl From<Utxo> for UtxoValue {
             },
             #[cfg(feature = "liquid")]
             valuecommitment: match utxo.value {
-                Value::Confidential(..) => Some(hex::encode(serialize(&utxo.value))),
+                Value::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.value))),
                 _ => None,
             },
             #[cfg(feature = "liquid")]
@@ -396,7 +398,7 @@ impl From<Utxo> for UtxoValue {
             },
             #[cfg(feature = "liquid")]
             assetcommitment: match utxo.asset {
-                Asset::Confidential(..) => Some(hex::encode(serialize(&utxo.asset))),
+                Asset::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.asset))),
                 _ => None,
             },
         }
@@ -1146,7 +1148,6 @@ impl From<std::string::FromUtf8Error> for HttpError {
         HttpError::generic()
     }
 }
-
 #[cfg(feature = "liquid")]
 impl From<address::AddressError> for HttpError {
     fn from(e: address::AddressError) -> Self {

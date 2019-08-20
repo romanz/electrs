@@ -1,16 +1,21 @@
-use crate::chain::{Block, BlockHeader};
-use crate::errors::*;
-use crate::new_index::BlockEntry;
-
-use bitcoin::consensus::encode::serialize;
-use bitcoin::util::hash::BitcoinHash;
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::slice;
+
+use bitcoin::util::hash::BitcoinHash;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use time;
+
+#[cfg(not(feature = "liquid"))]
+use bitcoin::consensus::encode::serialize;
+#[cfg(feature = "liquid")]
+use elements::encode::serialize;
+
+use crate::chain::{Block, BlockHeader};
+use crate::errors::*;
+use crate::new_index::BlockEntry;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockId {

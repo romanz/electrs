@@ -1,17 +1,22 @@
-use base64;
-use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::util::hash::BitcoinHash;
-use bitcoin::hashes::hex::{FromHex, ToHex};
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
-use glob;
-use hex;
-use serde_json::{from_str, from_value, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+use base64;
+use bitcoin::util::hash::BitcoinHash;
+use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use glob;
+use hex;
+use serde_json::{from_str, from_value, Value};
+
+#[cfg(not(feature = "liquid"))]
+use bitcoin::consensus::encode::{deserialize, serialize};
+#[cfg(feature = "liquid")]
+use elements::encode::{deserialize, serialize};
 
 use crate::chain::{Block, BlockHeader, Network, Transaction};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
