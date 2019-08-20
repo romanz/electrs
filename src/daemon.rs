@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64;
-use bitcoin::util::hash::BitcoinHash;
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::util::hash::BitcoinHash;
 use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};

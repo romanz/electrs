@@ -1,11 +1,10 @@
-
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::slice;
 
-use bitcoin::util::hash::BitcoinHash;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::util::hash::BitcoinHash;
 use time;
 
 #[cfg(not(feature = "liquid"))]
@@ -100,9 +99,10 @@ impl HeaderList {
         let null_hash = Sha256dHash::default();
 
         while blockhash != null_hash {
-            let header = headers_map
-                .remove(&blockhash)
-                .expect(&format!("missing expected blockhash in headers map: {:?}", blockhash));
+            let header = headers_map.remove(&blockhash).expect(&format!(
+                "missing expected blockhash in headers map: {:?}",
+                blockhash
+            ));
             blockhash = header.prev_blockhash.clone();
             headers_chain.push(header);
         }

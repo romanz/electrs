@@ -9,9 +9,9 @@ use crate::util::{
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
-use bitcoin::{BitcoinHash, Script};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
+use bitcoin::{BitcoinHash, Script};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future, Stream};
@@ -21,8 +21,8 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
-    elements::encode,
     elements::confidential::{Asset, Value},
+    elements::encode,
 };
 
 use serde::Serialize;

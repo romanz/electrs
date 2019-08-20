@@ -1,6 +1,6 @@
 use bitcoin::blockdata::script::Instruction::PushBytes;
-use bitcoin::Script;
 use bitcoin::hashes::hex::ToHex;
+use bitcoin::Script;
 use elements::confidential::Value;
 use elements::encode::serialize;
 use elements::{Proof, TxIn};
