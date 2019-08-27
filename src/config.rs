@@ -42,10 +42,6 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
         .unwrap_or_else(|| panic!("no address found for {}", address))
 }
 
-fn mb_to_bytes(mb: usize) -> usize {
-    mb * 1000
-}
-
 impl Config {
     pub fn from_args() -> Config {
         let default_banner = format!(
@@ -236,8 +232,8 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
-            tx_cache_size: mb_to_bytes(value_t_or_exit!(m, "tx_cache_size", usize)),
-            blocktxids_cache_size: mb_to_bytes(value_t_or_exit!(m, "blocktxids_cache_size", usize)),
+            tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
+            blocktxids_cache_size: value_t_or_exit!(m, "blocktxids_cache_size", usize),
             txid_limit: value_t_or_exit!(m, "txid_limit", usize),
             server_banner: value_t_or_exit!(m, "server_banner", String),
         };
