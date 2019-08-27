@@ -196,10 +196,11 @@ impl TransactionCache {
             return Ok(txn.clone());
         }
         let txn = load_txn_func()?;
-        self.map
+        let _ignored_err = self
+            .map
             .lock()
             .unwrap()
-            .put(*txid, txn.clone(), serialize(&txn).len())?;
+            .put(*txid, txn.clone(), serialize(&txn).len());
         Ok(txn)
     }
 }

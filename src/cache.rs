@@ -41,10 +41,11 @@ impl BlockTxIDsCache {
         self.misses.inc();
         let txids = load_txids_func()?;
         let size_in_bytes = txids.len() * 32;
-        self.map
+        let _ignored_err = self
+            .map
             .lock()
             .unwrap()
-            .put(*blockhash, txids.clone(), size_in_bytes)?;
+            .put(*blockhash, txids.clone(), size_in_bytes);
         Ok(txids)
     }
 
@@ -110,5 +111,20 @@ mod tests {
             }
         }
         assert_eq!(1, in_cache)
+    }
+
+    #[test]
+    /// Fetching items that don't fit in cache should work
+    fn too_big_tx() {
+        let dummy_metrics = Metrics::new("127.0.0.1:60000".parse().unwrap());
+        let capacity = 1;
+
+        let cache = BlockTxIDsCache::new(capacity, &dummy_metrics);
+
+        let txids = vec![gen_hash(0), gen_hash(1)];
+        let miss_func = || Ok(txids.clone());
+        let block = gen_hash(2);
+        let result = cache.get_or_else(&block, &miss_func).unwrap();
+        assert_eq!(txids, result);
     }
 }
