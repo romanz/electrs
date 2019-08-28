@@ -12,7 +12,7 @@ use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
 #[cfg(feature = "liquid")]
-use crate::elements::{lookup_asset, AssetEntry, AssetRegistry};
+use crate::elements::{lookup_asset, AssetRegistry, LiquidAsset};
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
@@ -179,7 +179,7 @@ impl Query {
     }
 
     #[cfg(feature = "liquid")]
-    pub fn lookup_asset(&self, asset_id: &Sha256dHash) -> Result<Option<AssetEntry>> {
+    pub fn lookup_asset(&self, asset_id: &Sha256dHash) -> Result<Option<LiquidAsset>> {
         lookup_asset(&self, self.asset_db.as_ref(), asset_id)
     }
 }

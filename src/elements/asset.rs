@@ -22,10 +22,34 @@ lazy_static! {
     static ref NATIVE_ASSET_ID_TESTNET: sha256d::Hash =
         sha256d::Hash::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
             .unwrap();
+    static ref NATIVE_ASSET: NativeAsset = NativeAsset {
+        asset_id: *NATIVE_ASSET_ID,
+        meta: AssetMeta {
+            contract: json!(null),
+            entity: json!(null),
+            precision: 8,
+            name: "Liquid Bitcoin".into(),
+            ticker: Some("L-BTC".into()),
+        }
+    };
 }
 
 #[derive(Serialize)]
-pub struct AssetEntry {
+#[serde(untagged)]
+pub enum LiquidAsset {
+    Issued(IssuedAsset),
+    Native(NativeAsset),
+}
+
+#[derive(Serialize, Clone)]
+pub struct NativeAsset {
+    pub asset_id: sha256d::Hash, // not really a sha256d
+    #[serde(flatten)]
+    pub meta: AssetMeta,
+}
+
+#[derive(Serialize)]
+pub struct IssuedAsset {
     pub asset_id: sha256d::Hash, // not really a sha256d
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
@@ -45,7 +69,7 @@ pub struct AssetEntry {
     pub meta: Option<AssetMeta>,
 }
 
-// DB representation
+// DB representation (issued assets only)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AssetRow {
     pub issuance_txid: FullHash,
@@ -56,7 +80,7 @@ pub struct AssetRow {
     pub reissuance_token: FullHash,
 }
 
-impl AssetEntry {
+impl IssuedAsset {
     pub fn new(
         asset_id: &sha256d::Hash,
         asset: &AssetRow,
@@ -172,7 +196,7 @@ fn index_tx_assets(
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if !is_spendable(txo) {
-            if let Some(asset_id) = get_user_asset_id(&txo.asset) {
+            if let Some(asset_id) = get_issued_asset_id(&txo.asset) {
                 history.push((
                     asset_id,
                     TxHistoryInfo::Burning(FundingInfo {
@@ -243,7 +267,7 @@ fn index_tx_assets(
 }
 
 // returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
-fn get_user_asset_id(asset: &Asset) -> Option<sha256d::Hash> {
+fn get_issued_asset_id(asset: &Asset) -> Option<sha256d::Hash> {
     match asset {
         Asset::Explicit(asset_id)
             if asset_id != &*NATIVE_ASSET_ID && asset_id != &*NATIVE_ASSET_ID_TESTNET =>
@@ -272,7 +296,11 @@ pub fn lookup_asset(
     query: &Query,
     registry: Option<&AssetRegistry>,
     asset_id: &sha256d::Hash,
-) -> Result<Option<AssetEntry>> {
+) -> Result<Option<LiquidAsset>> {
+    if asset_id == &*NATIVE_ASSET_ID {
+        return Ok(Some(LiquidAsset::Native(NATIVE_ASSET.clone())));
+    }
+
     let history_db = query.chain().store().history_db();
     let mempool_issuances = &query.mempool().asset_issuance;
 
@@ -292,7 +320,9 @@ pub fn lookup_asset(
         let stats = asset_stats(query, asset_id, &reissuance_token);
         let status = query.get_tx_status(&parse_hash(&row.issuance_txid));
 
-        Some(AssetEntry::new(asset_id, row, stats, meta, status))
+        let asset = IssuedAsset::new(asset_id, row, stats, meta, status);
+
+        Some(LiquidAsset::Issued(asset))
     } else {
         None
     })

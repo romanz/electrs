@@ -31,7 +31,7 @@ impl AssetRegistry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AssetMeta {
     pub contract: JsonValue,
     pub entity: JsonValue,
