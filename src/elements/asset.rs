@@ -106,7 +106,7 @@ pub struct IssuingInfo {
     pub token_amount: Option<u64>,
 }
 
-// Index confirmed transaction and write histoy entries as db rows into `rows`
+// Index confirmed transaction issuances and save as db rows
 pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: &mut Vec<DBRow>) {
     let (history, issuances) = index_tx_assets(tx);
 
@@ -125,15 +125,13 @@ pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: 
     }));
 }
 
-// Index confirmed transaction and write histoy entries as db rows into `rows`
+// Index mempool transaction issuances and save to in-memory store
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
     asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
 ) {
     let (history, issuances) = index_tx_assets(tx);
-    // unconfirmed issuances are discarded, we're only interested in history items
-
     for (asset_id, info) in history {
         asset_history
             .entry(asset_id)
@@ -145,7 +143,7 @@ pub fn index_mempool_tx_assets(
     }
 }
 
-// Index confirmed transaction and write histoy entries as db rows into `rows`
+// Remove mempool transaction issuances from in-memory store
 pub fn remove_mempool_tx_assets(
     to_remove: &HashSet<&sha256d::Hash>,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
@@ -161,7 +159,7 @@ pub fn remove_mempool_tx_assets(
         .retain(|_assethash, issuance| !to_remove.contains(&parse_hash(&issuance.issuance_txid)));
 }
 
-// Internal utility function, index atransaction and return its history entries and issuances
+// Internal utility function, index a transaction and return its history entries and issuances
 fn index_tx_assets(
     tx: &Transaction,
 ) -> (
