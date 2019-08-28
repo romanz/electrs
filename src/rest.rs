@@ -608,6 +608,18 @@ fn handle_request(
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
         }
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"txid"), Some(index), None) => {
+            let hash = Sha256dHash::from_hex(hash)?;
+            let index: usize = index.parse()?;
+            let txids = query
+                .chain()
+                .get_block_txids(&hash)
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
+            if index >= txids.len() {
+                bail!(HttpError::not_found("tx index out of range".to_string()));
+            }
+            http_message(StatusCode::OK, txids[index].to_hex(), TTL_LONG)
+        }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index, None) => {
             let hash = Sha256dHash::from_hex(hash)?;
             let txids = query
