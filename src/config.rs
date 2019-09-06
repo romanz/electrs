@@ -150,13 +150,13 @@ impl Config {
 
         let (mut config, _) = internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
-        let network_name = match config.network {
-            Network::Bitcoin => "bitcoin",
+        let db_subdir = match config.network {
+            Network::Bitcoin => "mainnet",
             Network::Testnet => "testnet",
             Network::Regtest => "regtest",
         };
 
-        config.db_dir.push(network_name);
+        config.db_dir.push(db_subdir);
 
         let default_daemon_port = match config.network {
             Network::Bitcoin => 8332,
