@@ -1,18 +1,114 @@
 use bitcoin::network::constants::Network;
-use clap::{App, Arg};
 use dirs::home_dir;
 use num_cpus;
 use std::fs;
+use std::fmt;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::str::FromStr;
+use std::ffi::{OsStr, OsString};
+use std::convert::TryInto;
 use stderrlog;
 
 use crate::daemon::CookieGetter;
 use crate::errors::*;
 
-const DEFAULT_SERVER_ADDRESS: &str = "127.0.0.1"; // by default, serve on IPv4 localhost
+const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on IPv4 localhost
+
+mod internal {
+    #![allow(unused)]
+
+    include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
+}
+
+pub enum AddressError {
+    InvalidUtf8(OsString),
+    ResolvError { addr: String, err: std::io::Error },
+    NoAddrError(String),
+}
+
+impl fmt::Display for AddressError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AddressError::InvalidUtf8(val) => write!(f, "{:?} isn't a valid UTF-8 sequence", val),
+            AddressError::ResolvError { addr, err } => write!(f, "Failed to resolve address {}: {}", addr, err),
+            AddressError::NoAddrError(addr) => write!(f, "No address found for {}", addr),
+        }
+    }
+}
+
+
+#[derive(Deserialize)]
+pub struct ResolvAddr(SocketAddr);
+
+impl ::configure_me::parse_arg::ParseArg for ResolvAddr {
+    type Error = AddressError;
+
+    fn parse_arg(arg: &OsStr) -> std::result::Result<Self, Self::Error> {
+        let arg = arg
+            .to_str()
+            .ok_or_else(|| AddressError::InvalidUtf8(arg.to_owned()))?;
+
+        arg
+            .to_socket_addrs().map_err(|err| AddressError::ResolvError { addr: arg.to_owned(), err })?
+            .next()
+            .ok_or_else(|| AddressError::NoAddrError(arg.to_owned()))
+            .map(ResolvAddr)
+    }
+
+    fn parse_owned_arg(arg: OsString) -> std::result::Result<Self, Self::Error> {
+        let arg = arg
+            .into_string()
+            .map_err(|orig| AddressError::InvalidUtf8(orig))?;
+
+        match arg.to_socket_addrs() {
+            Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(arg)).map(ResolvAddr),
+            Err(err) => Err(AddressError::ResolvError { addr: arg, err }),
+        }
+    }
+
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
+        write!(writer, "a network address (will be resolved if needed)")
+    }
+}
+
+impl Into<SocketAddr> for ResolvAddr {
+    fn into(self) -> SocketAddr {
+        self.0
+    }
+}
+
+// `Network` uses "bitcoin" instead of "mainnet", so we have to reimplement it.
+#[derive(Deserialize)]
+pub struct BitcoinNetwork(Network);
+
+impl Default for BitcoinNetwork {
+    fn default() -> Self {
+        BitcoinNetwork(Network::Bitcoin)
+    }
+}
+
+impl FromStr for BitcoinNetwork {
+    type Err = <Network as FromStr>::Err;
+
+    fn from_str(string: &str) -> std::result::Result<Self, Self::Err> {
+        Network::from_str(string).map(BitcoinNetwork)
+    }
+}
+
+impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> std::fmt::Result {
+        write!(writer, "either 'bitcoin', 'testnet' or 'regtest'")
+    }
+}
+
+impl Into<Network> for BitcoinNetwork {
+    fn into(self) -> Network {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct Config {
@@ -34,208 +130,86 @@ pub struct Config {
     pub blocktxids_cache_size: usize,
 }
 
-fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
-    address
-        .to_socket_addrs()
-        .unwrap_or_else(|e| panic!("unable to resolve {} address: {}", what, e))
-        .next()
-        .unwrap_or_else(|| panic!("no address found for {}", address))
+fn default_daemon_dir() -> PathBuf {
+    // TODO: would be better to avoid expect()
+    let mut home = home_dir().expect("Unknown home directory");
+    home.push(".bitcoin");
+    home
 }
 
 impl Config {
     pub fn from_args() -> Config {
-        let default_banner = format!(
-            "Welcome to electrs {} (Electrum Rust Server)!",
-            env!("CARGO_PKG_VERSION")
-        );
-        let m = App::new("Electrum Rust Server")
-            .version(crate_version!())
-            .arg(
-                Arg::with_name("verbosity")
-                    .short("v")
-                    .multiple(true)
-                    .help("Increase logging verbosity"),
-            )
-            .arg(
-                Arg::with_name("timestamp")
-                    .long("timestamp")
-                    .help("Prepend log lines with a timestamp"),
-            )
-            .arg(
-                Arg::with_name("db_dir")
-                    .long("db-dir")
-                    .help("Directory to store index database (default: ./db/)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("daemon_dir")
-                    .long("daemon-dir")
-                    .help("Data directory of Bitcoind (default: ~/.bitcoin/)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("cookie")
-                    .long("cookie")
-                    .help("JSONRPC authentication cookie ('USER:PASSWORD', default: read from ~/.bitcoin/.cookie)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("network")
-                    .long("network")
-                    .help("Select Bitcoin network type ('mainnet', 'testnet' or 'regtest')")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("electrum_rpc_addr")
-                    .long("electrum-rpc-addr")
-                    .help("Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("daemon_rpc_addr")
-                    .long("daemon-rpc-addr")
-                    .help("Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("monitoring_addr")
-                    .long("monitoring-addr")
-                    .help("Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet and 127.0.0.1:24224 for regtest)")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("jsonrpc_import")
-                    .long("jsonrpc-import")
-                    .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
-            )
-            .arg(
-                Arg::with_name("index_batch_size")
-                    .long("index-batch-size")
-                    .help("Number of blocks to get in one JSONRPC request from bitcoind")
-                    .default_value("100"),
-            )
-            .arg(
-                Arg::with_name("bulk_index_threads")
-                    .long("bulk-index-threads")
-                    .help("Number of threads used for bulk indexing (default: use the # of CPUs)")
-                    .default_value("0")
-            )
-            .arg(
-                Arg::with_name("tx_cache_size")
-                    .long("tx-cache-size")
-                    .help("Number of transactions to keep in for query LRU cache")
-                    .default_value("10000")  // should be enough for a small wallet.
-            )
-            .arg(
-                Arg::with_name("blocktxids_cache_size")
-                    .long("blocktxids-cache-size")
-                    .help("Number of blocks to cache transactions IDs in LRU cache")
-                    .default_value("100")) // Needs ~0.305MB per per block at 10k txs each
-            .arg(
-                Arg::with_name("txid_limit")
-                    .long("txid-limit")
-                    .help("Number of transactions to lookup before returning an error, to prevent \"too popular\" addresses from causing the RPC server to get stuck (0 - disable the limit)")
-                    .default_value("100")  // should take a few seconds on a HDD
-            )
-            .arg(
-                Arg::with_name("server_banner")
-                    .long("server-banner")
-                    .help("The banner to be shown in the Electrum console")
-                    .default_value(&default_banner)
-            )
-            .get_matches();
+        use internal::ResultExt;
 
-        let network_name = m.value_of("network").unwrap_or("mainnet");
-        let network_type = match network_name {
-            "mainnet" => Network::Bitcoin,
-            "testnet" => Network::Testnet,
-            "regtest" => Network::Regtest,
-            _ => panic!("unsupported Bitcoin network: {:?}", network_name),
+        let system_config: &OsStr = "/etc/electrs/config.toml".as_ref();
+        let home_config = home_dir().map(|mut dir| { dir.push(".electrs/config.toml"); dir });
+        let configs = std::iter::once(system_config)
+            .chain(home_config.as_ref().map(AsRef::as_ref));
+        let (mut config, _) = internal::Config::including_optional_config_files(configs).unwrap_or_exit();
+
+        let network_name = match config.network {
+            Network::Bitcoin => "bitcoin",
+            Network::Testnet => "testnet",
+            Network::Regtest => "regtest",
         };
-        let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
-        let db_path = db_dir.join(network_name);
 
-        let default_daemon_port = match network_type {
+        config.db_dir.push(network_name);
+
+        let default_daemon_port = match config.network {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
         };
-        let default_electrum_port = match network_type {
+        let default_electrum_port = match config.network {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
         };
-        let default_monitoring_port = match network_type {
+        let default_monitoring_port = match config.network {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
         };
 
-        let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("daemon_rpc_addr").unwrap_or(&format!(
-                "{}:{}",
-                DEFAULT_SERVER_ADDRESS, default_daemon_port
-            )),
-            "Bitcoin RPC",
-        );
-        let electrum_rpc_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("electrum_rpc_addr").unwrap_or(&format!(
-                "{}:{}",
-                DEFAULT_SERVER_ADDRESS, default_electrum_port
-            )),
-            "Electrum RPC",
-        );
-        let monitoring_addr: SocketAddr = str_to_socketaddr(
-            m.value_of("monitoring_addr").unwrap_or(&format!(
-                "{}:{}",
-                DEFAULT_SERVER_ADDRESS, default_monitoring_port
-            )),
-            "Prometheus monitoring",
-        );
+        let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_daemon_port).into());
+        let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_electrum_port).into());
+        let monitoring_addr: SocketAddr = config.monitoring_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_monitoring_port).into());
 
-        let mut daemon_dir = m
-            .value_of("daemon_dir")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                let mut default_dir = home_dir().expect("no homedir");
-                default_dir.push(".bitcoin");
-                default_dir
-            });
-        match network_type {
+        match config.network {
             Network::Bitcoin => (),
-            Network::Testnet => daemon_dir.push("testnet3"),
-            Network::Regtest => daemon_dir.push("regtest"),
+            Network::Testnet => config.daemon_dir.push("testnet3"),
+            Network::Regtest => config.daemon_dir.push("regtest"),
         }
-        let cookie = m.value_of("cookie").map(std::borrow::ToOwned::to_owned);
 
         let mut log = stderrlog::new();
-        log.verbosity(m.occurrences_of("verbosity") as usize);
-        log.timestamp(if m.is_present("timestamp") {
+        log.verbosity(config.verbose.try_into().expect("Overflow: Running electrs on less than 32 bit devices is unsupported"));
+        log.timestamp(if config.timestamp {
             stderrlog::Timestamp::Millisecond
         } else {
             stderrlog::Timestamp::Off
         });
         log.init().expect("logging initialization failed");
-        let mut bulk_index_threads = value_t_or_exit!(m, "bulk_index_threads", usize);
-        if bulk_index_threads == 0 {
-            bulk_index_threads = num_cpus::get();
+        // Could have been default, but it's useful to allow the user to specify 0 when overriding
+        // configs.
+        if config.bulk_index_threads == 0 {
+            config.bulk_index_threads = num_cpus::get();
         }
         let config = Config {
             log,
-            network_type,
-            db_path,
-            daemon_dir,
+            network_type: config.network,
+            db_path: config.db_dir,
+            daemon_dir: config.daemon_dir,
             daemon_rpc_addr,
-            cookie,
+            cookie: config.cookie,
             electrum_rpc_addr,
             monitoring_addr,
-            jsonrpc_import: m.is_present("jsonrpc_import"),
-            index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
-            bulk_index_threads,
-            tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
-            blocktxids_cache_size: value_t_or_exit!(m, "blocktxids_cache_size", usize),
-            txid_limit: value_t_or_exit!(m, "txid_limit", usize),
-            server_banner: value_t_or_exit!(m, "server_banner", String),
+            jsonrpc_import: config.jsonrpc_import,
+            index_batch_size: config.index_batch_size,
+            bulk_index_threads: config.bulk_index_threads,
+            tx_cache_size: config.tx_cache_size,
+            blocktxids_cache_size: config.blocktxids_cache_size,
+            txid_limit: config.txid_limit,
+            server_banner: config.server_banner,
         };
         eprintln!("{:?}", config);
         config

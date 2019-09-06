@@ -1,0 +1,101 @@
+[general]
+env_prefix = "ELECTRS"
+doc = """
+An efficient re-implementation of Electrum Server, inspired by ElectrumX, Electrum Personal Server and bitcoincore-indexd.
+
+The motivation behind this project is to enable a user to run his own Electrum server, with required hardware resources not much beyond those of a full node. The server indexes the entire Bitcoin blockchain, and the resulting index enables fast queries for any given user wallet, allowing the user to keep real-time track of his balances and his transaction history using the Electrum wallet. Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers, thus preserving the privacy of the user's addresses and balances."""
+
+[[switch]]
+name = "verbose"
+abbr = "v"
+doc = "Increase logging verbosity"
+count = true
+
+[[switch]]
+name = "timestamp"
+doc = "Prepend log lines with a timestamp"
+
+[[param]]
+name = "db_dir"
+type = "std::path::PathBuf"
+doc = "Directory to store index database (default: ./db/)"
+default = "\"./db\".into()"
+
+[[param]]
+name = "daemon_dir"
+type = "std::path::PathBuf"
+doc = "Data directory of Bitcoind (default: ~/.bitcoin/)"
+default = "crate::config::default_daemon_dir()"
+
+[[param]]
+name = "cookie"
+type = "String"
+doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from ~/.bitcoin/.cookie)"
+# Force the user to use config file in order to avoid password leaks
+argument = false
+env_var = false
+
+[[param]]
+name = "network"
+type = "crate::config::BitcoinNetwork"
+convert_into = "::bitcoin::network::constants::Network"
+doc = "Select Bitcoin network type ('mainnet', 'testnet' or 'regtest')"
+default = "Default::default()"
+
+[[param]]
+name = "electrum_rpc_addr"
+type = "crate::config::ResolvAddr"
+convert_into = "std::net::SocketAddr"
+doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)"
+
+[[param]]
+name = "daemon_rpc_addr"
+type = "crate::config::ResolvAddr"
+convert_into = "std::net::SocketAddr"
+doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)"
+
+[[param]]
+name = "monitoring_addr"
+type = "crate::config::ResolvAddr"
+convert_into = "std::net::SocketAddr"
+doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet and 127.0.0.1:24224 for regtest)"
+
+[[switch]]
+name = "jsonrpc_import"
+doc = "Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"
+
+[[param]]
+name = "index_batch_size"
+type = "usize"
+doc = "Number of blocks to get in one JSONRPC request from bitcoind"
+default = "100"
+
+[[param]]
+name = "bulk_index_threads"
+type = "usize"
+doc = "Number of threads used for bulk indexing (default: use the # of CPUs)"
+default = "0"
+
+[[param]]
+name = "tx_cache_size"
+type = "usize"
+doc = "Number of transactions to keep in for query LRU cache"
+default = "10000"
+
+[[param]]
+name = "blocktxids_cache_size"
+type = "usize"
+doc = "Number of blocks to cache transactions IDs in LRU cache"
+default = "100"
+
+[[param]]
+name = "txid_limit"
+type = "usize"
+doc = "Number of transactions to lookup before returning an error, to prevent 'too popular' addresses from causing the RPC server to get stuck (0 - disable the limit)"
+default = "100"
+
+[[param]]
+name = "server_banner"
+type = "String"
+doc = "The banner to be shown in the Electrum console"
+default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Electrum Rust Server)!\").to_owned()"

@@ -10,6 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
+build = "build.rs"
 
 [profile.release]
 lto = true
@@ -21,9 +22,9 @@ latest_rust = []  # use latest Rust features (otherwise, support Rust 1.32)
 arrayref = "0.3"
 base64 = "0.10"
 bincode = "1.0"
-bitcoin = "0.18"
+bitcoin = { version = "0.18", features = ["use-serde"] }
 bitcoin_hashes = "0.3"
-clap = "2.31"
+configure_me = "0.3.2"
 crossbeam-channel = "0.3"
 dirs = "1.0"
 error-chain = "0.12"
@@ -45,3 +46,6 @@ stderrlog = "0.4.1"
 sysconf = ">=0.3.4"
 time = "0.1"
 tiny_http = "0.6"
+
+[build-dependencies]
+configure_me_codegen = "0.3.4"
