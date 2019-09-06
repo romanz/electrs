@@ -23,6 +23,7 @@ mod internal {
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
 
+/// A simple error type representing invalid UTF-8 input.
 pub struct InvalidUtf8(OsString);
 
 impl fmt::Display for InvalidUtf8 {
@@ -32,7 +33,7 @@ impl fmt::Display for InvalidUtf8 {
 }
 
 
-/// An error that might happen when attempting to convert an argument into an address
+/// An error that might happen when resolving an address
 pub enum AddressError {
     ResolvError { addr: String, err: std::io::Error },
     NoAddrError(String),
@@ -47,7 +48,10 @@ impl fmt::Display for AddressError {
     }
 }
 
-
+/// Newtype for an address that is parsed as `String`
+///
+/// The main point of this newtype is to provide better description than what `String` type
+/// provides.
 #[derive(Deserialize)]
 pub struct ResolvAddr(String);
 
@@ -71,6 +75,7 @@ impl ::configure_me::parse_arg::ParseArg for ResolvAddr {
 }
 
 impl ResolvAddr {
+    /// Resolves the address.
     fn resolve(self) -> std::result::Result<SocketAddr, AddressError> {
         match self.0.to_socket_addrs() {
             Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(self.0)),
@@ -78,6 +83,7 @@ impl ResolvAddr {
         }
     }
 
+    /// Resolves the address, but prints error and exits in case of failure.
     fn resolve_or_exit(self) -> SocketAddr {
         self.resolve().unwrap_or_else(|err| {
             eprintln!("Error: {}", err);
@@ -86,7 +92,7 @@ impl ResolvAddr {
     }
 }
 
-// `Network` uses "bitcoin" instead of "mainnet", so we have to reimplement it.
+/// This newtype implements `ParseArg` for `Network`.
 #[derive(Deserialize)]
 pub struct BitcoinNetwork(Network);
 
@@ -116,6 +122,7 @@ impl Into<Network> for BitcoinNetwork {
     }
 }
 
+/// Parsed and post-processed configuration
 #[derive(Debug)]
 pub struct Config {
     // See below for the documentation of each field:
@@ -136,19 +143,23 @@ pub struct Config {
     pub blocktxids_cache_size: usize,
 }
 
+/// Returns default daemon directory
 fn default_daemon_dir() -> PathBuf {
-    // TODO: would be better to avoid expect()
-    let mut home = home_dir().expect("Unknown home directory");
+    let mut home = home_dir().unwrap_or_else(|| {
+        eprintln!("Error: unknown home directory");
+        std::process::exit(1)
+    });
     home.push(".bitcoin");
     home
 }
 
 impl Config {
+    /// Parses args, env vars, config files and post-processes them
     pub fn from_args() -> Config {
         use internal::ResultExt;
 
         let system_config: &OsStr = "/etc/electrs/config.toml".as_ref();
-        let home_config = home_dir().map(|mut dir| { dir.push(".electrs/config.toml"); dir });
+        let home_config = home_dir().map(|mut dir| { dir.extend(&[".electrs", "config.toml"]); dir });
         let cwd_config: &OsStr = "electrs.toml".as_ref();
         let configs = std::iter::once(cwd_config)
             .chain(home_config.as_ref().map(AsRef::as_ref))
@@ -157,6 +168,7 @@ impl Config {
         let (mut config, _) = internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
         let db_subdir = match config.network {
+            // We must keep the name "mainnet" due to backwards compatibility
             Network::Bitcoin => "mainnet",
             Network::Testnet => "testnet",
             Network::Regtest => "regtest",
@@ -197,7 +209,10 @@ impl Config {
         } else {
             stderrlog::Timestamp::Off
         });
-        log.init().expect("logging initialization failed");
+        log.init().unwrap_or_else(|err| {
+            eprintln!("Error: logging initialization failed: {}", err);
+            std::process::exit(1)
+        });
         // Could have been default, but it's useful to allow the user to specify 0 when overriding
         // configs.
         if config.bulk_index_threads == 0 {
