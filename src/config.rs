@@ -143,8 +143,11 @@ impl Config {
 
         let system_config: &OsStr = "/etc/electrs/config.toml".as_ref();
         let home_config = home_dir().map(|mut dir| { dir.push(".electrs/config.toml"); dir });
-        let configs = std::iter::once(system_config)
-            .chain(home_config.as_ref().map(AsRef::as_ref));
+        let cwd_config: &OsStr = "electrs.toml".as_ref();
+        let configs = std::iter::once(cwd_config)
+            .chain(home_config.as_ref().map(AsRef::as_ref))
+            .chain(std::iter::once(system_config));
+
         let (mut config, _) = internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
         let network_name = match config.network {
