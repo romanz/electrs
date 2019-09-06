@@ -27,14 +27,14 @@ Allow Bitcoin daemon to sync before starting Electrum server:
 $ bitcoind -server=1 -txindex=0 -prune=0
 ```
 
-If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `--cookie="USER:PASSWORD"` command-line flag.
+If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` for authentication, please use `cookie="USER:PASSWORD"` option in one of the config files.
 Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be read, allowing this server to use bitcoind JSONRPC interface.
 
 ## Usage
 
 First index sync should take ~1.5 hours (on a dual core Intel CPU @ 3.3 GHz, 8 GB RAM, 1TB WD Blue HDD):
 ```bash
-$ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
+$ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
 2018-08-17T18:27:42 - INFO - NetworkInfo { version: 179900, subversion: "/Satoshi:0.17.99/" }
 2018-08-17T18:27:42 - INFO - BlockchainInfo { chain: "main", blocks: 537204, headers: 537204, bestblockhash: "0000000000000000002956768ca9421a8ddf4e53b1d81e429bd0125a383e3636", pruned: false, initialblockdownload: false }
 2018-08-17T18:27:42 - DEBUG - opening DB at "./db/mainnet"
@@ -57,12 +57,14 @@ $ cargo run --release -- -vvv --timestamp --db-dir ./db --electrum-rpc-addr="127
 2018-08-17T19:58:28 - DEBUG - applying 14 new headers from height 537205
 2018-08-17T19:58:29 - INFO - RPC server running on 127.0.0.1:50001
 ```
+You can specify options via command-line parameters, environment variables or using config files. See the documentation below.
+
 Note that the final DB size should be ~20% of the `blk*.dat` files, but it may increase to ~35% at the end of the inital sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
 
 If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the following command:
 
 ```bash
-$ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001" [--cookie="USER:PASSWORD"]
+$ cargo run --release -- -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
 ```
 
 The index database is stored here:
@@ -70,6 +72,17 @@ The index database is stored here:
 $ du db/
 38G db/mainnet/
 ```
+
+## Configuration files and environment variables
+
+The config files must be in the Toml format. These config files are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
+
+The options in highest-priority config files override options set in lowest-priority config files. Environment variables override options in config files and finally arguments override everythig else.
+
+For each argument an environment variable of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`). Similarly, for each argument an option in config file exists with underscores instead o hypens (e.g. `electrum_rpc_addr`). In addition, config files support `cookie` option to specify cookie - this is not available using command line or environment variables for security reasonns (other applications could read it otherwise).
+
+Finally, you need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
+
 
 ## Electrum client
 ```bash
