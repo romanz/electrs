@@ -23,8 +23,17 @@ mod internal {
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
 
+pub struct InvalidUtf8(OsString);
+
+impl fmt::Display for InvalidUtf8 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?} isn't a valid UTF-8 sequence", self.0)
+    }
+}
+
+
+/// An error that might happen when attempting to convert an argument into an address
 pub enum AddressError {
-    InvalidUtf8(OsString),
     ResolvError { addr: String, err: std::io::Error },
     NoAddrError(String),
 }
@@ -32,7 +41,6 @@ pub enum AddressError {
 impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AddressError::InvalidUtf8(val) => write!(f, "{:?} isn't a valid UTF-8 sequence", val),
             AddressError::ResolvError { addr, err } => write!(f, "Failed to resolve address {}: {}", addr, err),
             AddressError::NoAddrError(addr) => write!(f, "No address found for {}", addr),
         }
@@ -41,32 +49,20 @@ impl fmt::Display for AddressError {
 
 
 #[derive(Deserialize)]
-pub struct ResolvAddr(SocketAddr);
+pub struct ResolvAddr(String);
 
 impl ::configure_me::parse_arg::ParseArg for ResolvAddr {
-    type Error = AddressError;
+    type Error = InvalidUtf8;
 
     fn parse_arg(arg: &OsStr) -> std::result::Result<Self, Self::Error> {
-        let arg = arg
-            .to_str()
-            .ok_or_else(|| AddressError::InvalidUtf8(arg.to_owned()))?;
-
-        arg
-            .to_socket_addrs().map_err(|err| AddressError::ResolvError { addr: arg.to_owned(), err })?
-            .next()
-            .ok_or_else(|| AddressError::NoAddrError(arg.to_owned()))
-            .map(ResolvAddr)
+        Self::parse_owned_arg(arg.to_owned())
     }
 
     fn parse_owned_arg(arg: OsString) -> std::result::Result<Self, Self::Error> {
-        let arg = arg
+        arg
             .into_string()
-            .map_err(|orig| AddressError::InvalidUtf8(orig))?;
-
-        match arg.to_socket_addrs() {
-            Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(arg)).map(ResolvAddr),
-            Err(err) => Err(AddressError::ResolvError { addr: arg, err }),
-        }
+            .map_err(InvalidUtf8)
+            .map(ResolvAddr)
     }
 
     fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
@@ -74,9 +70,19 @@ impl ::configure_me::parse_arg::ParseArg for ResolvAddr {
     }
 }
 
-impl Into<SocketAddr> for ResolvAddr {
-    fn into(self) -> SocketAddr {
-        self.0
+impl ResolvAddr {
+    fn resolve(self) -> std::result::Result<SocketAddr, AddressError> {
+        match self.0.to_socket_addrs() {
+            Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(self.0)),
+            Err(err) => Err(AddressError::ResolvError { addr: self.0, err }),
+        }
+    }
+
+    fn resolve_or_exit(self) -> SocketAddr {
+        self.resolve().unwrap_or_else(|err| {
+            eprintln!("Error: {}", err);
+            std::process::exit(1)
+        })
     }
 }
 
@@ -174,9 +180,9 @@ impl Config {
             Network::Regtest => 24224,
         };
 
-        let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_daemon_port).into());
-        let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_electrum_port).into());
-        let monitoring_addr: SocketAddr = config.monitoring_addr.unwrap_or((DEFAULT_SERVER_ADDRESS, default_monitoring_port).into());
+        let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or((DEFAULT_SERVER_ADDRESS, default_daemon_port).into(), ResolvAddr::resolve_or_exit);
+        let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.map_or((DEFAULT_SERVER_ADDRESS, default_electrum_port).into(), ResolvAddr::resolve_or_exit);
+        let monitoring_addr: SocketAddr = config.monitoring_addr.map_or((DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(), ResolvAddr::resolve_or_exit);
 
         match config.network {
             Network::Bitcoin => (),
