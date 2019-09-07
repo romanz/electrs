@@ -1,15 +1,15 @@
 use bitcoin::network::constants::Network;
 use dirs::home_dir;
 use num_cpus;
-use std::fs;
+use std::convert::TryInto;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::str::FromStr;
-use std::ffi::{OsStr, OsString};
-use std::convert::TryInto;
+use std::sync::Arc;
 use stderrlog;
 
 use crate::daemon::CookieGetter;
@@ -32,7 +32,6 @@ impl fmt::Display for InvalidUtf8 {
     }
 }
 
-
 /// An error that might happen when resolving an address
 pub enum AddressError {
     ResolvError { addr: String, err: std::io::Error },
@@ -42,7 +41,9 @@ pub enum AddressError {
 impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AddressError::ResolvError { addr, err } => write!(f, "Failed to resolve address {}: {}", addr, err),
+            AddressError::ResolvError { addr, err } => {
+                write!(f, "Failed to resolve address {}: {}", addr, err)
+            }
             AddressError::NoAddrError(addr) => write!(f, "No address found for {}", addr),
         }
     }
@@ -63,10 +64,7 @@ impl ::configure_me::parse_arg::ParseArg for ResolvAddr {
     }
 
     fn parse_owned_arg(arg: OsString) -> std::result::Result<Self, Self::Error> {
-        arg
-            .into_string()
-            .map_err(InvalidUtf8)
-            .map(ResolvAddr)
+        arg.into_string().map_err(InvalidUtf8).map(ResolvAddr)
     }
 
     fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
@@ -159,13 +157,17 @@ impl Config {
         use internal::ResultExt;
 
         let system_config: &OsStr = "/etc/electrs/config.toml".as_ref();
-        let home_config = home_dir().map(|mut dir| { dir.extend(&[".electrs", "config.toml"]); dir });
+        let home_config = home_dir().map(|mut dir| {
+            dir.extend(&[".electrs", "config.toml"]);
+            dir
+        });
         let cwd_config: &OsStr = "electrs.toml".as_ref();
         let configs = std::iter::once(cwd_config)
             .chain(home_config.as_ref().map(AsRef::as_ref))
             .chain(std::iter::once(system_config));
 
-        let (mut config, _) = internal::Config::including_optional_config_files(configs).unwrap_or_exit();
+        let (mut config, _) =
+            internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
         let db_subdir = match config.network {
             // We must keep the name "mainnet" due to backwards compatibility
@@ -192,9 +194,18 @@ impl Config {
             Network::Regtest => 24224,
         };
 
-        let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or((DEFAULT_SERVER_ADDRESS, default_daemon_port).into(), ResolvAddr::resolve_or_exit);
-        let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.map_or((DEFAULT_SERVER_ADDRESS, default_electrum_port).into(), ResolvAddr::resolve_or_exit);
-        let monitoring_addr: SocketAddr = config.monitoring_addr.map_or((DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(), ResolvAddr::resolve_or_exit);
+        let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
+            (DEFAULT_SERVER_ADDRESS, default_daemon_port).into(),
+            ResolvAddr::resolve_or_exit,
+        );
+        let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.map_or(
+            (DEFAULT_SERVER_ADDRESS, default_electrum_port).into(),
+            ResolvAddr::resolve_or_exit,
+        );
+        let monitoring_addr: SocketAddr = config.monitoring_addr.map_or(
+            (DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(),
+            ResolvAddr::resolve_or_exit,
+        );
 
         match config.network {
             Network::Bitcoin => (),
@@ -203,7 +214,12 @@ impl Config {
         }
 
         let mut log = stderrlog::new();
-        log.verbosity(config.verbose.try_into().expect("Overflow: Running electrs on less than 32 bit devices is unsupported"));
+        log.verbosity(
+            config
+                .verbose
+                .try_into()
+                .expect("Overflow: Running electrs on less than 32 bit devices is unsupported"),
+        );
         log.timestamp(if config.timestamp {
             stderrlog::Timestamp::Millisecond
         } else {
