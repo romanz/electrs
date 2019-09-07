@@ -1,3 +1,8 @@
+# 0.8.0 (TBD)
+
+* Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)
+* Don't accept `--cookie` via CLI arguments (@Kixunil)
+
 # 0.7.1 (27 July 2019)
 
 * Allow stopping bulk indexing via SIGINT/SIGTERM
