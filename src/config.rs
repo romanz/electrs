@@ -241,7 +241,7 @@ impl Config {
         config
     }
 
-    pub fn cookie_getter(&self) -> Arc<CookieGetter> {
+    pub fn cookie_getter(&self) -> Arc<dyn CookieGetter> {
         if let Some(ref value) = self.cookie {
             Arc::new(StaticCookie {
                 value: value.as_bytes().to_vec(),

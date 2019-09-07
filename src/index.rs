@@ -221,7 +221,7 @@ pub fn last_indexed_block(blockhash: &Sha256dHash) -> Row {
     }
 }
 
-pub fn read_indexed_blockhashes(store: &ReadStore) -> HashSet<Sha256dHash> {
+pub fn read_indexed_blockhashes(store: &dyn ReadStore) -> HashSet<Sha256dHash> {
     let mut result = HashSet::new();
     for row in store.scan(b"B") {
         let key: BlockKey = bincode::deserialize(&row.key).unwrap();
@@ -230,7 +230,7 @@ pub fn read_indexed_blockhashes(store: &ReadStore) -> HashSet<Sha256dHash> {
     result
 }
 
-fn read_indexed_headers(store: &ReadStore) -> HeaderList {
+fn read_indexed_headers(store: &dyn ReadStore) -> HeaderList {
     let latest_blockhash: Sha256dHash = match store.get(b"L") {
         // latest blockheader persisted in the DB.
         Some(row) => deserialize(&row).unwrap(),
@@ -336,7 +336,7 @@ pub struct Index {
 
 impl Index {
     pub fn load(
-        store: &ReadStore,
+        store: &dyn ReadStore,
         daemon: &Daemon,
         metrics: &Metrics,
         batch_size: usize,
@@ -352,7 +352,7 @@ impl Index {
         })
     }
 
-    pub fn reload(&self, store: &ReadStore) {
+    pub fn reload(&self, store: &dyn ReadStore) {
         let mut headers = self.headers.write().unwrap();
         *headers = read_indexed_headers(store);
     }

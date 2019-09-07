@@ -150,7 +150,7 @@ pub trait CookieGetter: Send + Sync {
 struct Connection {
     tx: TcpStream,
     rx: Lines<BufReader<TcpStream>>,
-    cookie_getter: Arc<CookieGetter>,
+    cookie_getter: Arc<dyn CookieGetter>,
     addr: SocketAddr,
     signal: Waiter,
 }
@@ -171,7 +171,7 @@ fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
 impl Connection {
     fn new(
         addr: SocketAddr,
-        cookie_getter: Arc<CookieGetter>,
+        cookie_getter: Arc<dyn CookieGetter>,
         signal: Waiter,
     ) -> Result<Connection> {
         let conn = tcp_connect(addr, &signal)?;
@@ -300,7 +300,7 @@ impl Daemon {
     pub fn new(
         daemon_dir: &PathBuf,
         daemon_rpc_addr: SocketAddr,
-        cookie_getter: Arc<CookieGetter>,
+        cookie_getter: Arc<dyn CookieGetter>,
         network: Network,
         signal: Waiter,
         blocktxids_cache: Arc<BlockTxIDsCache>,

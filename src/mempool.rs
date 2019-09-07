@@ -186,7 +186,7 @@ impl Tracker {
         &self.histogram
     }
 
-    pub fn index(&self) -> &ReadStore {
+    pub fn index(&self) -> &dyn ReadStore {
         &self.index
     }
 
