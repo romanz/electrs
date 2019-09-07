@@ -1,6 +1,6 @@
 ## Installation
 
-Install [latest Rust](https://rustup.rs/) (1.32+),
+Install [latest Rust](https://rustup.rs/) (1.34+),
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+)
 and [latest Electrum wallet](https://electrum.org/#download) (3.3+).
 

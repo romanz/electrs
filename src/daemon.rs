@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-#[cfg(feature = "latest_rust")]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -151,7 +150,7 @@ pub trait CookieGetter: Send + Sync {
 struct Connection {
     tx: TcpStream,
     rx: Lines<BufReader<TcpStream>>,
-    cookie_getter: Arc<CookieGetter>,
+    cookie_getter: Arc<dyn CookieGetter>,
     addr: SocketAddr,
     signal: Waiter,
 }
@@ -172,7 +171,7 @@ fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
 impl Connection {
     fn new(
         addr: SocketAddr,
-        cookie_getter: Arc<CookieGetter>,
+        cookie_getter: Arc<dyn CookieGetter>,
         signal: Waiter,
     ) -> Result<Connection> {
         let conn = tcp_connect(addr, &signal)?;
@@ -269,12 +268,10 @@ impl Connection {
     }
 }
 
-#[cfg(feature = "latest_rust")]
 struct Counter {
     value: AtomicU64,
 }
 
-#[cfg(feature = "latest_rust")]
 impl Counter {
     fn new() -> Self {
         Counter { value: 0.into() }
@@ -283,26 +280,6 @@ impl Counter {
     fn next(&self) -> u64 {
         // fetch_add() returns previous value, we want current one
         self.value.fetch_add(1, Ordering::Relaxed) + 1
-    }
-}
-
-#[cfg(not(feature = "latest_rust"))]
-struct Counter {
-    value: Mutex<u64>,
-}
-
-#[cfg(not(feature = "latest_rust"))]
-impl Counter {
-    fn new() -> Self {
-        Counter {
-            value: Mutex::new(0),
-        }
-    }
-
-    fn next(&self) -> u64 {
-        let mut value = self.value.lock().unwrap();
-        *value += 1;
-        *value
     }
 }
 
@@ -323,7 +300,7 @@ impl Daemon {
     pub fn new(
         daemon_dir: &PathBuf,
         daemon_rpc_addr: SocketAddr,
-        cookie_getter: Arc<CookieGetter>,
+        cookie_getter: Arc<dyn CookieGetter>,
         network: Network,
         signal: Waiter,
         blocktxids_cache: Arc<BlockTxIDsCache>,

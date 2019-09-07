@@ -2,6 +2,7 @@
 
 * Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)
 * Don't accept `--cookie` via CLI arguments (@Kixunil)
+* Support Rust >=1.34 (for Debian)
 
 # 0.7.1 (27 July 2019)
 

@@ -31,7 +31,7 @@ impl App {
         &self.store
     }
     // TODO: use index for queries.
-    pub fn read_store(&self) -> &store::ReadStore {
+    pub fn read_store(&self) -> &dyn store::ReadStore {
         &self.store
     }
     pub fn index(&self) -> &index::Index {

@@ -188,7 +188,7 @@ pub fn full_compaction(store: DBStore) -> DBStore {
     store
 }
 
-pub fn is_fully_compacted(store: &ReadStore) -> bool {
+pub fn is_fully_compacted(store: &dyn ReadStore) -> bool {
     let marker = store.get(&full_compaction_marker().key);
     marker.is_some()
 }
