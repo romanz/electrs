@@ -1,3 +1,7 @@
+# 0.8.0 (TBD)
+
+* Support Rust >=1.34 (for Debian)
+
 # 0.7.1 (27 July 2019)
 
 * Allow stopping bulk indexing via SIGINT/SIGTERM
