@@ -47,4 +47,4 @@ time = "0.1"
 tiny_http = "0.6"
 
 [build-dependencies]
-configure_me_codegen = "0.3.4"
+configure_me_codegen = "0.3.5"
