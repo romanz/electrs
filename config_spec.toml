@@ -74,16 +74,16 @@ doc = "Number of threads used for bulk indexing (default: use the # of CPUs)"
 default = "0"
 
 [[param]]
-name = "tx_cache_size"
-type = "usize"
-doc = "Number of transactions to keep in for query LRU cache"
-default = "10000"
+name = "tx_cache_size_mb"
+type = "f32"
+doc = "Total size of transactions to cache (MB)"
+default = "10.0"
 
 [[param]]
-name = "blocktxids_cache_size"
-type = "usize"
-doc = "Number of blocks to cache transactions IDs in LRU cache"
-default = "100"
+name = "blocktxids_cache_size_mb"
+type = "f32"
+doc = "Total size of block transactions IDs to cache (in MB)"
+default = "10.0"
 
 [[param]]
 name = "txid_limit"

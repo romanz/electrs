@@ -5,12 +5,12 @@ use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use bitcoin_hashes::Hash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use lru::LruCache;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crate::app::App;
+use crate::cache::TransactionCache;
 use crate::errors::*;
 use crate::index::{compute_script_hash, TxInRow, TxOutRow, TxRow};
 use crate::mempool::Tracker;
@@ -175,30 +175,6 @@ fn txids_by_funding_output(
         .iter()
         .map(|row| TxInRow::from_row(row).txid_prefix)
         .collect()
-}
-
-pub struct TransactionCache {
-    map: Mutex<LruCache<Sha256dHash, Transaction>>,
-}
-
-impl TransactionCache {
-    pub fn new(capacity: usize) -> TransactionCache {
-        TransactionCache {
-            map: Mutex::new(LruCache::new(capacity)),
-        }
-    }
-
-    fn get_or_else<F>(&self, txid: &Sha256dHash, load_txn_func: F) -> Result<Transaction>
-    where
-        F: FnOnce() -> Result<Transaction>,
-    {
-        if let Some(txn) = self.map.lock().unwrap().get(txid) {
-            return Ok(txn.clone());
-        }
-        let txn = load_txn_func()?;
-        self.map.lock().unwrap().put(*txid, txn.clone());
-        Ok(txn)
-    }
 }
 
 pub struct Query {
@@ -378,7 +354,12 @@ impl Query {
     fn load_txn(&self, txid: &Sha256dHash, block_height: Option<u32>) -> Result<Transaction> {
         self.tx_cache.get_or_else(&txid, || {
             let blockhash = self.lookup_confirmed_blockhash(txid, block_height)?;
-            self.app.daemon().gettransaction(txid, blockhash)
+            let value: Value = self
+                .app
+                .daemon()
+                .gettransaction_raw(txid, blockhash, /*verbose*/ false)?;
+            let value_hex: &str = value.as_str().chain_err(|| "non-string tx")?;
+            hex::decode(&value_hex).chain_err(|| "non-hex tx")
         })
     }
 
