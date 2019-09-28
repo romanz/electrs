@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "configure_me"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "parse_arg 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "configure_me_codegen"
-version = "0.3.5"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "build-helper 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -347,8 +347,8 @@ dependencies = [
  "bincode 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin 0.18.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin_hashes 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "configure_me 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "configure_me_codegen 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "configure_me 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "configure_me_codegen 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1236,8 +1236,8 @@ dependencies = [
 "checksum clang-sys 0.28.1 (registry+https://github.com/rust-lang/crates.io-index)" = "81de550971c976f176130da4b2978d3b524eaa0fd9ac31f3ceb5ae1231fb4853"
 "checksum clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5067f5bb2d80ef5d68b4c87db81601f0b75bca627bc2ef76b141d7b846a3c6d9"
 "checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
-"checksum configure_me 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "09bcca54d6219791a348ed074cb1599e47a29fbd33a23b2ba1dffc18231da6b1"
-"checksum configure_me_codegen 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "f9d597ad7a9c18bb354d15704acef7716819a5f5ab389a720fdef0e7e309f15c"
+"checksum configure_me 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "478e5d56a6bff5d410d9d5871cf6e43546a3b14447ffc64286bc97892d5d3b84"
+"checksum configure_me_codegen 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "0c5484bb0a4c80e60de0ff7cf989b8f36e3281f28c06e50da070402b6154f17f"
 "checksum constant_time_eq 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "995a44c877f9212528ccc74b21a232f66ad69001e40ede5bcee2ac9ef2657120"
 "checksum crossbeam-channel 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "c8ec7fcd21571dc78f96cc96243cab8d8f035247c3efd16c687be154c3fa9efa"
 "checksum crossbeam-deque 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "b18cd2e169ad86297e6bc0ad9aa679aee9daa4f19e8163860faf7c164e4f5a71"

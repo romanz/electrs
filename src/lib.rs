@@ -8,6 +8,8 @@ extern crate log;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
+// I really don't know why it fails without this line
+extern crate configure_me;
 
 pub mod app;
 pub mod bulk;

@@ -1,5 +1,7 @@
 [general]
 env_prefix = "ELECTRS"
+conf_file_param = "conf"
+conf_dir_param = "conf_dir"
 doc = """
 An efficient re-implementation of Electrum Server, inspired by ElectrumX, Electrum Personal Server and bitcoincore-indexd.
 

@@ -23,7 +23,7 @@ base64 = "0.10"
 bincode = "1.0"
 bitcoin = { version = "0.18", features = ["use-serde"] }
 bitcoin_hashes = "0.3"
-configure_me = "0.3.2"
+configure_me = "0.3.3"
 crossbeam-channel = "0.3"
 dirs = "1.0"
 error-chain = "0.12"
@@ -47,4 +47,4 @@ time = "0.1"
 tiny_http = "0.6"
 
 [build-dependencies]
-configure_me_codegen = "0.3.5"
+configure_me_codegen = "0.3.8"
