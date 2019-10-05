@@ -1,9 +1,10 @@
-# 0.8.0 (TBD)
+# 0.8.0 (5 Oct 2019)
 
 * Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)
 * Don't accept `--cookie` via CLI arguments (@Kixunil)
 * Define cache size in MB instead of number of elements (@dagurval)
 * Support Rust >=1.34 (for Debian)
+* Bump rust-rocksdb to 0.12.3, using RockDB 6.1.2
 
 # 0.7.1 (27 July 2019)
 
