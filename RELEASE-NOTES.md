@@ -2,12 +2,13 @@
 
 * Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)
 * Don't accept `--cookie` via CLI arguments (@Kixunil)
+* Define cache size in MB instead of number of elements (@dagurval)
 * Support Rust >=1.34 (for Debian)
 
 # 0.7.1 (27 July 2019)
 
 * Allow stopping bulk indexing via SIGINT/SIGTERM
-* Cache list of transaction IDs for blocks
+* Cache list of transaction IDs for blocks (@dagurval)
 
 # 0.7.0 (13 June 2019)
 
