@@ -220,6 +220,7 @@ fn index_tx_assets(
 
             let issued_amount = match txi.asset_issuance.amount {
                 Value::Explicit(amount) => Some(amount),
+                Value::Null => Some(0),
                 _ => None,
             };
             let token_amount = match txi.asset_issuance.inflation_keys {
