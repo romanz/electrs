@@ -1,5 +1,9 @@
 language: rust
 
+arch:
+  - amd64
+  - arm64
+
 rust:
   - stable
 
