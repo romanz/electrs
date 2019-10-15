@@ -372,10 +372,7 @@ impl Query {
 
     // Internal API for transaction retrieval
     fn load_txn(&self, txid: &Sha256dHash, block_height: Option<u32>) -> Result<Transaction> {
-        let _timer = self
-            .duration
-            .with_label_values(&["load_txn"])
-            .start_timer();
+        let _timer = self.duration.with_label_values(&["load_txn"]).start_timer();
         self.tx_cache.get_or_else(&txid, || {
             let blockhash = self.lookup_confirmed_blockhash(txid, block_height)?;
             let value: Value = self
