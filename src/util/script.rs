@@ -12,18 +12,14 @@ pub struct InnerScripts {
 }
 
 pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
-    // rust-elements provides an Address::from_script() utility that's not yet
-    // available in rust-bitcoin, but should be soon
-    #[cfg(feature = "liquid")]
     match network {
+        #[cfg(feature = "liquid")]
         Network::Liquid | Network::LiquidRegtest => {
-            return elements_address::Address::from_script(script, None, network.address_params())
+            elements_address::Address::from_script(script, None, network.address_params())
                 .map(|a| a.to_string())
         }
-        _ => (),
-    };
-
-    bitcoin::Address::from_script(script, network.into()).map(|s| s.to_string())
+        _ => bitcoin::Address::from_script(script, network.into()).map(|s| s.to_string()),
+    }
 }
 
 pub fn get_script_asm(script: &Script) -> String {
