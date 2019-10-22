@@ -72,6 +72,7 @@ fn unspent_from_status(status: &Status) -> Value {
 struct Connection {
     query: Arc<Query>,
     last_header_entry: Option<HeaderEntry>,
+    last_update_status_hashes_time: Option<Instant>,
     status_hashes: HashMap<Sha256dHash, Value>, // ScriptHash -> StatusHash
     stream: TcpStream,
     addr: SocketAddr,
@@ -89,6 +90,7 @@ impl Connection {
         Connection {
             query,
             last_header_entry: None, // disable header subscription for now
+            last_update_status_hashes_time: None,
             status_hashes: HashMap::new(),
             stream,
             addr,
@@ -333,12 +335,14 @@ impl Connection {
     }
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
+        debug!("----------------- update_subscriptions -----------------");
         let timer = self
             .stats
             .latency
             .with_label_values(&["periodic_update"])
             .start_timer();
         let mut result = vec![];
+        let mut update_status_hashes = false;
         if let Some(ref mut last_entry) = self.last_header_entry {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
@@ -349,20 +353,43 @@ impl Connection {
                     "jsonrpc": "2.0",
                     "method": "blockchain.headers.subscribe",
                     "params": [header]}));
+
+                debug!("discovered new block hash = {}", hex_header);
+                update_status_hashes = true;
             }
         }
-        for (script_hash, status_hash) in self.status_hashes.iter_mut() {
-            let status = self.query.status(&script_hash[..])?;
-            let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
-            if new_status_hash == *status_hash {
-                continue;
+
+        match self.last_update_status_hashes_time {
+            None => {
+                println!("first update");
+                update_status_hashes = true;
+            },
+            Some(last_update_status_hashes_time) => {
+                if last_update_status_hashes_time.elapsed().as_secs() >= 60 {
+                    println!(">= 60 seconds passed since last update");
+                    update_status_hashes = true;
+                }
             }
-            result.push(json!({
+        }
+
+        if update_status_hashes {
+            debug!("updating...");
+            for (script_hash, status_hash) in self.status_hashes.iter_mut() {
+                let status = self.query.status(&script_hash[..])?;
+                let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+                if new_status_hash == *status_hash {
+                    continue;
+                }
+                result.push(json!({
                 "jsonrpc": "2.0",
                 "method": "blockchain.scripthash.subscribe",
                 "params": [script_hash.to_hex(), new_status_hash]}));
-            *status_hash = new_status_hash;
+                *status_hash = new_status_hash;
+            }
+
+            self.last_update_status_hashes_time = Some(Instant::now());
         }
+
         timer.observe_duration();
         self.stats
             .subscriptions
