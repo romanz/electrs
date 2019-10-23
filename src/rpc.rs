@@ -382,9 +382,9 @@ impl Connection {
                     continue;
                 }
                 result.push(json!({
-                "jsonrpc": "2.0",
-                "method": "blockchain.scripthash.subscribe",
-                "params": [script_hash.to_hex(), new_status_hash]}));
+                    "jsonrpc": "2.0",
+                    "method": "blockchain.scripthash.subscribe",
+                    "params": [script_hash.to_hex(), new_status_hash]}));
                 *status_hash = new_status_hash;
             }
 
