@@ -11,6 +11,7 @@ use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
@@ -361,12 +362,12 @@ impl Connection {
 
         match self.last_update_status_hashes_time {
             None => {
-                println!("first update");
+                debug!("first update");
                 update_status_hashes = true;
             },
             Some(last_update_status_hashes_time) => {
                 if last_update_status_hashes_time.elapsed().as_secs() >= 60 {
-                    println!(">= 60 seconds passed since last update");
+                    debug!(">= 60 seconds passed since last update");
                     update_status_hashes = true;
                 }
             }
