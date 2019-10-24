@@ -12,6 +12,9 @@ readme = "README.md"
 edition = "2018"
 build = "build.rs"
 
+[package.metadata.configure_me]
+spec = "config_spec.toml"
+
 [profile.release]
 lto = true
 
@@ -47,4 +50,4 @@ time = "0.1"
 tiny_http = "0.6"
 
 [build-dependencies]
-configure_me_codegen = "0.3.8"
+configure_me_codegen = "0.3.12"
