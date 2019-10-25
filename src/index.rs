@@ -270,7 +270,7 @@ fn read_indexed_headers(store: &dyn ReadStore) -> HeaderList {
     );
     let mut result = HeaderList::empty();
     let entries = result.order(headers);
-    result.apply(entries, latest_blockhash);
+    result.apply(&entries, latest_blockhash);
     result
 }
 
@@ -359,7 +359,7 @@ impl Index {
 
     pub fn best_header(&self) -> Option<HeaderEntry> {
         let headers = self.headers.read().unwrap();
-        headers.header_by_blockhash(&headers.tip()).cloned()
+        headers.header_by_blockhash(&headers.tiphash()).cloned()
     }
 
     pub fn get_header(&self, height: usize) -> Option<HeaderEntry> {
@@ -370,7 +370,11 @@ impl Index {
             .cloned()
     }
 
-    pub fn update(&self, store: &impl WriteStore, waiter: &Waiter) -> Result<Sha256dHash> {
+    pub fn update(
+        &self,
+        store: &impl WriteStore,
+        waiter: &Waiter,
+    ) -> Result<(Vec<HeaderEntry>, HeaderEntry)> {
         let daemon = self.daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers: Vec<HeaderEntry> = {
@@ -429,10 +433,16 @@ impl Index {
         timer.observe_duration();
 
         fetcher.join().expect("block fetcher failed");
-        self.headers.write().unwrap().apply(new_headers, tip);
-        assert_eq!(tip, self.headers.read().unwrap().tip());
+        self.headers.write().unwrap().apply(&new_headers, tip);
+        let tip_header = self
+            .headers
+            .read()
+            .unwrap()
+            .tip()
+            .expect("failed to get tip header");
+        assert_eq!(&tip, tip_header.hash());
         self.stats
             .update_height(self.headers.read().unwrap().len() - 1);
-        Ok(tip)
+        Ok((new_headers, tip_header))
     }
 }

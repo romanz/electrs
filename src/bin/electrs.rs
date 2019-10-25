@@ -62,12 +62,28 @@ fn run_server(config: &Config) -> Result<()> {
     let query = Query::new(app.clone(), &metrics, tx_cache, config.txid_limit);
 
     let mut server = None; // Electrum RPC server
+
+    // If we see this more new blocks than this, don't look for scripthash
+    // changes. Just have clients reconnect.
+    //
+    // This many header changes means we're either not fully synced, or there
+    // has been abnormally large reorg of the blockchain.
+    let MAX_SCRIPTHASH_BLOCKS = 10;
+
     loop {
-        app.update(&signal)?;
-        query.update_mempool()?;
-        server
-            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics))
-            .notify(); // update subscribed clients
+        let (headers_changed, new_tip) = app.update(&signal)?;
+        let txs_changed = query.update_mempool()?;
+        let rpc = server
+            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics));
+        if headers_changed.len() > MAX_SCRIPTHASH_BLOCKS {
+            rpc.disconnect_clients();
+        }
+        else {
+            rpc.notify_scripthash_subscriptions(&headers_changed, txs_changed);
+        }
+        if let Some(header) = new_tip {
+            rpc.notify_subscriptions_chaintip(header);
+        }
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
             info!("stopping server: {}", err);
             break;
