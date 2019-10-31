@@ -190,7 +190,7 @@ impl Tracker {
         &self.index
     }
 
-    pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
+    pub fn update(&mut self, daemon: &Daemon) -> Result<Vec<Transaction>> {
         let timer = self.stats.start_timer("fetch");
         let new_txids = daemon
             .getmempooltxids()
@@ -211,16 +211,17 @@ impl Tracker {
                 }
             })
             .collect();
+        let mut txs = Vec::<Transaction>::new();
         if !entries.is_empty() {
             let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
-            let txs = match daemon.gettransactions(&txids) {
+            txs = match daemon.gettransactions(&txids) {
                 Ok(txs) => txs,
                 Err(err) => {
                     warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
-                    return Ok(()); // keep the mempool until next update()
+                    return Ok(Vec::<Transaction>::new()); // keep the mempool until next update()
                 }
             };
-            for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
+            for ((txid, entry), tx) in entries.into_iter().zip(txs.clone().into_iter()) {
                 assert_eq!(tx.txid(), *txid);
                 self.add(txid, tx, entry);
             }
@@ -238,7 +239,7 @@ impl Tracker {
         timer.observe_duration();
 
         self.stats.count.set(self.items.len() as i64);
-        Ok(())
+        Ok(txs)
     }
 
     fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {

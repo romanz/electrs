@@ -496,7 +496,7 @@ pub enum Message {
 }
 
 pub enum Notification {
-    Periodic,
+    NewTransactions,
     Exit,
 }
 

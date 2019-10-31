@@ -370,7 +370,7 @@ impl Index {
             .cloned()
     }
 
-    pub fn update(&self, store: &impl WriteStore, waiter: &Waiter) -> Result<Sha256dHash> {
+    pub fn update(&self, store: &impl WriteStore, waiter: &Waiter) -> Result<Vec<Sha256dHash>> {
         let daemon = self.daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers: Vec<HeaderEntry> = {
@@ -387,6 +387,7 @@ impl Index {
         let chan = SyncChannel::new(1);
         let sender = chan.sender();
         let blockhashes: Vec<Sha256dHash> = new_headers.iter().map(|h| *h.hash()).collect();
+        let res = blockhashes.clone();
         let batch_size = self.batch_size;
         let fetcher = spawn_thread("fetcher", move || {
             for chunk in blockhashes.chunks(batch_size) {
@@ -433,6 +434,7 @@ impl Index {
         assert_eq!(tip, self.headers.read().unwrap().tip());
         self.stats
             .update_height(self.headers.read().unwrap().len() - 1);
-        Ok(tip)
+
+        Ok(res)
     }
 }

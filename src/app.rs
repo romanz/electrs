@@ -41,13 +41,17 @@ impl App {
         &self.daemon
     }
 
-    pub fn update(&self, signal: &Waiter) -> Result<bool> {
+    pub fn update(&self, signal: &Waiter) -> Result<Vec<Sha256dHash>> {
         let mut tip = self.tip.lock().expect("failed to lock tip");
-        let new_block = *tip != self.daemon().getbestblockhash()?;
-        if new_block {
-            *tip = self.index().update(self.write_store(), &signal)?;
+        if *tip == self.daemon().getbestblockhash()? {
+            Ok(vec![])
+        } else {
+            let blockhashes = self.index().update(self.write_store(), &signal)?;
+            if let Some(last) = blockhashes.last() {
+                *tip = last.clone();
+            }
+            Ok(blockhashes)
         }
-        Ok(new_block)
     }
 
     pub fn get_banner(&self) -> Result<String> {

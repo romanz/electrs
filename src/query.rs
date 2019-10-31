@@ -489,7 +489,7 @@ impl Query {
         self.app.daemon().broadcast(txn)
     }
 
-    pub fn update_mempool(&self) -> Result<()> {
+    pub fn update_mempool(&self) -> Result<Vec<Transaction>> {
         let _timer = self
             .duration
             .with_label_values(&["update_mempool"])
@@ -519,5 +519,9 @@ impl Query {
 
     pub fn get_banner(&self) -> Result<String> {
         self.app.get_banner()
+    }
+
+    pub fn tracker(&self) -> &RwLock<Tracker> {
+        &self.tracker
     }
 }
