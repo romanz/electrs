@@ -531,17 +531,17 @@ impl Query {
                     continue;
                 }
 
-                // for each script_hash in tx.inputs
                 for input in tx.input.iter() {
-                    // find output, get the relevant script hash in it
                     let previous_output_tx = tx_from_value(
                         self.get_transaction(&input.previous_output.txid, false)?)?;
+
                     let previous_output = previous_output_tx.output.get(input.previous_output.vout as usize)
                         .chain_err(|| format!("failed finding previous output {}:{}", input.previous_output.txid, input.previous_output.vout))?;
+
                     let script_hash =
                         Sha256dHash::from_slice(&compute_script_hash(&previous_output.script_pubkey[..]))
                             .expect("failed computing script hash for output.script_pubkey");
-                    // if script_hash in self.script_hashes, add to the relevant script hashes list
+
                     script_hashes.insert(script_hash);
                 }
 
@@ -549,7 +549,7 @@ impl Query {
                     let script_hash =
                         Sha256dHash::from_slice(&compute_script_hash(&output.script_pubkey[..]))
                             .expect(&format!("failed computing script hash for output {}:{}", tx.txid(), i));
-                    // if script_hash in self.script_hashes:
+
                     script_hashes.insert(script_hash);
                 }
             }
@@ -562,7 +562,6 @@ impl Query {
         let mut script_hashes = HashSet::<Sha256dHash>::new();
         for tx in txs {
             for input in tx.input.iter() {
-                // find output, get the relevant script hash in it
                 let previous_output = self.app.daemon().get_confirmed_utxo(&input.previous_output.txid, input.previous_output.vout)
                     .or_else(|_e| {
                         // possibly failed because previous output's transaction itself is unconfirmed, so search in mempool.
@@ -570,19 +569,19 @@ impl Query {
                         let previous_output_tx = self.tracker.read().unwrap()
                             .get_txn(&input.previous_output.txid)
                             .chain_err(|| format!("failed to find unconfirmed previous output tx {}:{}",
-                                                  &input.previous_output.txid, &input.previous_output.vout))?;
+                                &input.previous_output.txid, &input.previous_output.vout))?;
 
                         previous_output_tx.output.get(input.previous_output.vout as usize)
                             .map(|output| output.clone())
                             .chain_err(|| format!("failed to find previous output index in tx {}:{}",
-                                                  &input.previous_output.txid, &input.previous_output.vout))
+                                &input.previous_output.txid, &input.previous_output.vout))
                     })
                     .expect(&format!("failed to get previous output {}:{}", &input.previous_output.txid, &input.previous_output.vout));
 
                 let script_hash =
                     Sha256dHash::from_slice(&compute_script_hash(&previous_output.script_pubkey[..]))
                         .expect(&format!("failed computing script hash of previous output {}:{}",
-                                         &input.previous_output.txid, &input.previous_output.vout));
+                            &input.previous_output.txid, &input.previous_output.vout));
 
                 script_hashes.insert(script_hash);
             }
