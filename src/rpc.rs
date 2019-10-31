@@ -5,13 +5,12 @@ use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Instant;
 
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
@@ -73,7 +72,6 @@ fn unspent_from_status(status: &Status) -> Value {
 struct Connection {
     query: Arc<Query>,
     last_header_entry: Option<HeaderEntry>,
-    last_update_status_hashes_time: Option<Instant>,
     status_hashes: HashMap<Sha256dHash, Value>, // ScriptHash -> StatusHash
     stream: TcpStream,
     addr: SocketAddr,
@@ -91,7 +89,6 @@ impl Connection {
         Connection {
             query,
             last_header_entry: None, // disable header subscription for now
-            last_update_status_hashes_time: None,
             status_hashes: HashMap::new(),
             stream,
             addr,
@@ -240,8 +237,9 @@ impl Connection {
         let tx = hex::decode(&tx).chain_err(|| "non-hex tx")?;
         let tx: Transaction = deserialize(&tx).chain_err(|| "failed to parse tx")?;
         let txid = self.query.broadcast(&tx)?;
-        self.query.update_mempool()?;
-        if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate) {
+        let mempool_txs = self.query.update_mempool()?;
+        let script_hashes = self.query.get_script_hashes_in_mempool_txs(mempool_txs)?;
+        if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate(script_hashes)) {
             warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
         }
         Ok(json!(txid.to_hex()))
@@ -335,15 +333,13 @@ impl Connection {
         })
     }
 
-    fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
-        debug!("----------------- update_subscriptions -----------------");
+    fn update_subscriptions(&mut self, new_txs_script_hashes: HashSet<Sha256dHash>) -> Result<Vec<Value>> {
         let timer = self
             .stats
             .latency
             .with_label_values(&["periodic_update"])
             .start_timer();
         let mut result = vec![];
-        let mut update_status_hashes = false;
         if let Some(ref mut last_entry) = self.last_header_entry {
             let entry = self.query.get_best_header()?;
             if *last_entry != entry {
@@ -354,43 +350,24 @@ impl Connection {
                     "jsonrpc": "2.0",
                     "method": "blockchain.headers.subscribe",
                     "params": [header]}));
-
-                debug!("discovered new block hash = {}", hex_header);
-                update_status_hashes = true;
             }
         }
 
-        match self.last_update_status_hashes_time {
-            None => {
-                debug!("first update");
-                update_status_hashes = true;
-            },
-            Some(last_update_status_hashes_time) => {
-                if last_update_status_hashes_time.elapsed().as_secs() >= 60 {
-                    debug!(">= 60 seconds passed since last update");
-                    update_status_hashes = true;
-                }
+        let subscribed_script_hashes: HashSet<Sha256dHash> = self.status_hashes.keys().map(|k| *k).collect();
+        let subscribed_script_hashes_in_new_txs: Vec<Sha256dHash> = new_txs_script_hashes.intersection(&subscribed_script_hashes).map(|s| *s).collect();
+        for script_hash in subscribed_script_hashes_in_new_txs.iter() {
+            let status_hash = self.status_hashes.get_mut(script_hash).unwrap();
+            let status = self.query.status(&script_hash[..])?;
+            let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+            if new_status_hash == *status_hash {
+                continue;
             }
+            result.push(json!({
+                "jsonrpc": "2.0",
+                "method": "blockchain.scripthash.subscribe",
+                "params": [script_hash.to_hex(), new_status_hash]}));
+            *status_hash = new_status_hash;
         }
-
-        if update_status_hashes {
-            debug!("updating...");
-            for (script_hash, status_hash) in self.status_hashes.iter_mut() {
-                let status = self.query.status(&script_hash[..])?;
-                let new_status_hash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
-                if new_status_hash == *status_hash {
-                    continue;
-                }
-                result.push(json!({
-                    "jsonrpc": "2.0",
-                    "method": "blockchain.scripthash.subscribe",
-                    "params": [script_hash.to_hex(), new_status_hash]}));
-                *status_hash = new_status_hash;
-            }
-
-            self.last_update_status_hashes_time = Some(Instant::now());
-        }
-
         timer.observe_duration();
         self.stats
             .subscriptions
@@ -430,9 +407,9 @@ impl Connection {
                     };
                     self.send_values(&[reply])?
                 }
-                Message::PeriodicUpdate => {
+                Message::PeriodicUpdate(script_hashes) => {
                     let values = self
-                        .update_subscriptions()
+                        .update_subscriptions(script_hashes)
                         .chain_err(|| "failed to update subscriptions")?;
                     self.send_values(&values)?
                 }
@@ -491,12 +468,12 @@ impl Connection {
 #[derive(Debug)]
 pub enum Message {
     Request(String),
-    PeriodicUpdate,
+    PeriodicUpdate(HashSet<Sha256dHash>),
     Done,
 }
 
 pub enum Notification {
-    NewTransactions,
+    Periodic(HashSet<Sha256dHash>),
     Exit,
 }
 
@@ -520,10 +497,10 @@ impl RPC {
             for msg in notification.receiver().iter() {
                 let mut senders = senders.lock().unwrap();
                 match msg {
-                    Notification::Periodic => {
+                    Notification::Periodic(script_hashes) => {
                         for sender in senders.split_off(0) {
                             if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::PeriodicUpdate)
+                                sender.try_send(Message::PeriodicUpdate(script_hashes.clone()))
                             {
                                 continue;
                             }
@@ -601,8 +578,8 @@ impl RPC {
         }
     }
 
-    pub fn notify(&self) {
-        self.notification.send(Notification::Periodic).unwrap();
+    pub fn notify(&self, script_hashes: HashSet<Sha256dHash>) {
+        self.notification.send(Notification::Periodic(script_hashes)).unwrap();
     }
 }
 
