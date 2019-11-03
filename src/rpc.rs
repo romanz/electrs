@@ -239,7 +239,11 @@ impl Connection {
         let txid = self.query.broadcast(&tx)?;
         let mempool_txs = self.query.update_mempool()?;
         let script_hashes = self.query.get_script_hashes_in_mempool_txs(mempool_txs)?;
-        if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate(script_hashes)) {
+        if let Err(e) = self
+            .chan
+            .sender()
+            .try_send(Message::PeriodicUpdate(script_hashes))
+        {
             warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
         }
         Ok(json!(txid.to_hex()))
@@ -333,7 +337,10 @@ impl Connection {
         })
     }
 
-    fn update_subscriptions(&mut self, new_txs_script_hashes: HashSet<Sha256dHash>) -> Result<Vec<Value>> {
+    fn update_subscriptions(
+        &mut self,
+        new_txs_script_hashes: HashSet<Sha256dHash>,
+    ) -> Result<Vec<Value>> {
         let timer = self
             .stats
             .latency
@@ -353,8 +360,12 @@ impl Connection {
             }
         }
 
-        let subscribed_script_hashes: HashSet<Sha256dHash> = self.status_hashes.keys().map(|k| *k).collect();
-        let subscribed_script_hashes_in_new_txs: Vec<Sha256dHash> = new_txs_script_hashes.intersection(&subscribed_script_hashes).map(|s| *s).collect();
+        let subscribed_script_hashes: HashSet<Sha256dHash> =
+            self.status_hashes.keys().map(|k| *k).collect();
+        let subscribed_script_hashes_in_new_txs: Vec<Sha256dHash> = new_txs_script_hashes
+            .intersection(&subscribed_script_hashes)
+            .map(|s| *s)
+            .collect();
         for script_hash in subscribed_script_hashes_in_new_txs.iter() {
             let status_hash = self.status_hashes.get_mut(script_hash).unwrap();
             let status = self.query.status(&script_hash[..])?;
@@ -579,7 +590,9 @@ impl RPC {
     }
 
     pub fn notify(&self, script_hashes: HashSet<Sha256dHash>) {
-        self.notification.send(Notification::Periodic(script_hashes)).unwrap();
+        self.notification
+            .send(Notification::Periodic(script_hashes))
+            .unwrap();
     }
 }
 

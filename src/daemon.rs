@@ -1,7 +1,7 @@
 use base64;
 use bitcoin::blockdata::block::{Block, BlockHeader};
-use bitcoin::blockdata::transaction::{Transaction, TxOut};
 use bitcoin::blockdata::script::Script;
+use bitcoin::blockdata::transaction::{Transaction, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::network::constants::Network;
 use bitcoin::util::hash::BitcoinHash;
@@ -59,26 +59,29 @@ pub fn tx_from_value(value: Value) -> Result<Transaction> {
 fn txout_from_value(value: Value) -> Result<TxOut> {
     let txout_obj: &Map<String, Value> = value.as_object().chain_err(|| "non-object txout")?;
 
-    let script_pubkey_obj = txout_obj.get("scriptPubKey")
-        .chain_err(||"no 'scriptPubKey' key in txout")?
+    let script_pubkey_obj = txout_obj
+        .get("scriptPubKey")
+        .chain_err(|| "no 'scriptPubKey' key in txout")?
         .as_object()
-        .chain_err(||"non-object 'scriptPubKey' value in txout")?;
-    let txout_hex = script_pubkey_obj.get("hex")
-        .chain_err(||"no 'hex' key in txout")?
+        .chain_err(|| "non-object 'scriptPubKey' value in txout")?;
+    let txout_hex = script_pubkey_obj
+        .get("hex")
+        .chain_err(|| "no 'hex' key in txout")?
         .as_str()
-        .chain_err(||"non-string 'hex' value in script_pubkey_obj")?;
+        .chain_err(|| "non-string 'hex' value in script_pubkey_obj")?;
     let txout_bytes = hex::decode(txout_hex).chain_err(|| "non-hex txout")?;
     let script_pubkey = Script::from(txout_bytes);
 
-    let value = (txout_obj.get("value")
-        .chain_err(||"no 'value' key in txout")?
+    let value = (txout_obj
+        .get("value")
+        .chain_err(|| "no 'value' key in txout")?
         .as_f64()
-        .chain_err(||"non-u64 'value' value in txout")?
+        .chain_err(|| "non-u64 'value' value in txout")?
         * 100_000_000f64) as u64;
 
     Ok(TxOut {
         value,
-        script_pubkey
+        script_pubkey,
     })
 }
 
@@ -545,12 +548,8 @@ impl Daemon {
     }
 
     // get a confirmed output which is either unspent or spent by a mempool transaction
-    pub fn get_confirmed_utxo(
-        &self,
-        txhash: &Sha256dHash,
-        n: u32,
-    ) -> Result<TxOut> {
-        let include_mempool = false;  // allow finding outputs which are spent by a mempool transaction
+    pub fn get_confirmed_utxo(&self, txhash: &Sha256dHash, n: u32) -> Result<TxOut> {
+        let include_mempool = false; // allow finding outputs which are spent by a mempool transaction
         let args = json!([txhash.to_hex(), n, include_mempool]);
         txout_from_value(self.request("gettxout", args)?)
     }
