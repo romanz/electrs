@@ -43,6 +43,6 @@ fn main() {
     }
 
     if total_entries > 100 {
-        println!("{} {}", hex::encode(&curr_scripthash), total_entries);
+        println!("scripthash,{},{}", hex::encode(&curr_scripthash), total_entries);
     }
 }
