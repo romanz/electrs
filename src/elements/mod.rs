@@ -139,7 +139,8 @@ impl From<&TxIn> for IssuanceValue {
             },
             assetamount: match issuance.amount {
                 Value::Explicit(value) => Some(value),
-                _ => None,
+                Value::Null => Some(0),
+                Value::Confidential(..) => None,
             },
             assetamountcommitment: match issuance.amount {
                 Value::Confidential(..) => Some(hex::encode(serialize(&issuance.amount))),
@@ -147,7 +148,8 @@ impl From<&TxIn> for IssuanceValue {
             },
             tokenamount: match issuance.inflation_keys {
                 Value::Explicit(value) => Some(value),
-                _ => None,
+                Value::Null => Some(0),
+                Value::Confidential(..) => None,
             },
             tokenamountcommitment: match issuance.inflation_keys {
                 Value::Confidential(..) => Some(hex::encode(serialize(&issuance.inflation_keys))),
