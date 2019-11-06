@@ -6,7 +6,7 @@ use bitcoin_hashes::Hash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use crate::app::App;
@@ -216,7 +216,8 @@ impl Query {
         for txid_prefix in prefixes {
             for tx_row in txrows_by_prefix(store, txid_prefix) {
                 let txid: Sha256dHash = deserialize(&tx_row.key.txid).unwrap();
-                let txn = self.load_txn(&txid, Some(tx_row.height))?;
+                let blockhash = self.lookup_confirmed_blockhash(&txid, Some(tx_row.height))?;
+                let txn = self.load_txn(&txid, blockhash)?;
                 txns.push(TxnHeight {
                     txn,
                     height: tx_row.height,
@@ -343,7 +344,7 @@ impl Query {
         Ok(Status { confirmed, mempool })
     }
 
-    fn lookup_confirmed_blockhash(
+    pub fn lookup_confirmed_blockhash(
         &self,
         tx_hash: &Sha256dHash,
         block_height: Option<u32>,
@@ -370,11 +371,13 @@ impl Query {
         Ok(blockhash)
     }
 
-    // Internal API for transaction retrieval
-    fn load_txn(&self, txid: &Sha256dHash, block_height: Option<u32>) -> Result<Transaction> {
+    pub fn load_txn(
+        &self,
+        txid: &Sha256dHash,
+        blockhash: Option<Sha256dHash>,
+    ) -> Result<Transaction> {
         let _timer = self.duration.with_label_values(&["load_txn"]).start_timer();
         self.tx_cache.get_or_else(&txid, || {
-            let blockhash = self.lookup_confirmed_blockhash(txid, block_height)?;
             let value: Value = self
                 .app
                 .daemon()
@@ -411,6 +414,17 @@ impl Query {
     pub fn get_best_header(&self) -> Result<HeaderEntry> {
         let last_header = self.app.index().best_header();
         Ok(last_header.chain_err(|| "no headers indexed")?.clone())
+    }
+
+    pub fn with_blocktxids<F>(&self, blockhash: &Sha256dHash, mut callb: F) -> Result<()>
+    where
+        F: FnMut(&Sha256dHash),
+    {
+        let txid = self.app.daemon().getblocktxids(blockhash)?;
+        for t in txid {
+            callb(&t)
+        }
+        Ok(())
     }
 
     pub fn get_merkle_proof(
@@ -489,7 +503,7 @@ impl Query {
         self.app.daemon().broadcast(txn)
     }
 
-    pub fn update_mempool(&self) -> Result<()> {
+    pub fn update_mempool(&self) -> Result<HashSet<Sha256dHash>> {
         let _timer = self
             .duration
             .with_label_values(&["update_mempool"])

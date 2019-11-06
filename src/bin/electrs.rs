@@ -24,6 +24,13 @@ use electrs::{
     store::{full_compaction, is_fully_compacted, DBStore},
 };
 
+// If we see this more new blocks than this, don't look for scripthash
+// changes. Just have clients reconnect.
+//
+// This many header changes means we're either not fully synced, or there
+// has been abnormally large reorg of the blockchain.
+const MAX_SCRIPTHASH_BLOCKS: usize = 10;
+
 fn run_server(config: &Config) -> Result<()> {
     let signal = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
@@ -63,11 +70,26 @@ fn run_server(config: &Config) -> Result<()> {
 
     let mut server = None; // Electrum RPC server
     loop {
-        app.update(&signal)?;
-        query.update_mempool()?;
-        server
-            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics))
-            .notify(); // update subscribed clients
+        debug!("------ update ------");
+        let (changed_headers, new_tip) = app.update(&signal)?;
+        if new_tip.is_some() {
+            debug!("new_tip.len() = {}", changed_headers.len());
+            debug!("changed_headers.len() = {}", changed_headers.len());
+        }
+        let changed_mempool_txs = query.update_mempool()?;
+        debug!("changed_mempool_txs.len() = {}", changed_mempool_txs.len());
+        let rpc = server
+            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics));
+        if changed_headers.len() > MAX_SCRIPTHASH_BLOCKS {
+            rpc.disconnect_clients();
+        } else {
+            rpc.notify_scripthash_subscriptions(&changed_headers, changed_mempool_txs);
+        }
+
+        if let Some(header) = new_tip {
+            rpc.notify_subscriptions_chaintip(header);
+        }
+
         if let Err(err) = signal.wait(Duration::from_secs(5)) {
             info!("stopping server: {}", err);
             break;

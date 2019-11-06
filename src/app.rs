@@ -1,6 +1,7 @@
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use std::sync::{Arc, Mutex};
 
+use crate::util::HeaderEntry;
 use crate::{config::Config, daemon, errors::*, index, signal::Waiter, store};
 
 pub struct App {
@@ -41,13 +42,16 @@ impl App {
         &self.daemon
     }
 
-    pub fn update(&self, signal: &Waiter) -> Result<bool> {
+    pub fn update(&self, signal: &Waiter) -> Result<(Vec<HeaderEntry>, Option<HeaderEntry>)> {
         let mut tip = self.tip.lock().expect("failed to lock tip");
         let new_block = *tip != self.daemon().getbestblockhash()?;
         if new_block {
-            *tip = self.index().update(self.write_store(), &signal)?;
+            let (new_headers, new_tip) = self.index().update(self.write_store(), &signal)?;
+            *tip = new_tip.hash().clone();
+            Ok((new_headers, Some(new_tip)))
+        } else {
+            Ok((vec![], None))
         }
-        Ok(new_block)
     }
 
     pub fn get_banner(&self) -> Result<String> {
