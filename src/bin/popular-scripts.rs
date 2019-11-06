@@ -42,7 +42,7 @@ fn main() {
         iter.next();
     }
 
-    if total_entries >= 5000 {
+    if total_entries >= 4000 {
         println!("scripthash,{},{}", hex::encode(&curr_scripthash), total_entries);
     }
 }
