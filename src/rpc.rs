@@ -203,7 +203,7 @@ impl Connection {
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        debug!("** blockchain_scripthash_subscribe, script_hash = {}", script_hash);
+        debug!("blockchain_scripthash_subscribe: script_hash = {}", script_hash);
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
@@ -395,14 +395,12 @@ impl Connection {
     }
 
     fn send_values(&mut self, values: &[Value]) -> Result<()> {
-        debug!("pre send_values");
         for value in values {
             let line = value.to_string() + "\n";
             self.stream
                 .write_all(line.as_bytes())
                 .chain_err(|| format!("failed to send {}", value))?;
         }
-        debug!("post send_values");
         Ok(())
     }
 
@@ -426,7 +424,6 @@ impl Connection {
                         ) => self.handle_command(method, params, id)?,
                         _ => bail!("invalid command: {}", cmd),
                     };
-                    debug!("before send_values, reply = {}", reply);
                     self.send_values(&[reply])?
                 }
                 Message::ScriptHashChange(hash) => self.on_scripthash_change(hash)?,
