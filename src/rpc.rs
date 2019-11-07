@@ -395,12 +395,14 @@ impl Connection {
     }
 
     fn send_values(&mut self, values: &[Value]) -> Result<()> {
+        debug!("pre send_values");
         for value in values {
             let line = value.to_string() + "\n";
             self.stream
                 .write_all(line.as_bytes())
                 .chain_err(|| format!("failed to send {}", value))?;
         }
+        debug!("post send_values");
         Ok(())
     }
 
@@ -426,7 +428,6 @@ impl Connection {
                     };
                     debug!("before send_values, reply = {}", reply);
                     self.send_values(&[reply])?
-                    debug!("after send_values");
                 }
                 Message::ScriptHashChange(hash) => self.on_scripthash_change(hash)?,
                 Message::ChainTipChange(tip) => self.on_chaintip_change(tip)?,
