@@ -7,7 +7,7 @@ use std::fmt;
 use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use stderrlog;
@@ -121,7 +121,6 @@ impl Into<Network> for BitcoinNetwork {
 }
 
 /// Parsed and post-processed configuration
-#[derive(Debug)]
 pub struct Config {
     // See below for the documentation of each field:
     pub log: stderrlog::StdErrLog,
@@ -129,7 +128,6 @@ pub struct Config {
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub daemon_rpc_addr: SocketAddr,
-    pub cookie: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
@@ -139,6 +137,7 @@ pub struct Config {
     pub txid_limit: usize,
     pub server_banner: String,
     pub blocktxids_cache_size: usize,
+    pub cookie_getter: Arc<dyn CookieGetter>,
 }
 
 /// Returns default daemon directory
@@ -149,6 +148,22 @@ fn default_daemon_dir() -> PathBuf {
     });
     home.push(".bitcoin");
     home
+}
+
+fn create_cookie_getter(
+    cookie: Option<String>,
+    cookie_file: Option<PathBuf>,
+    daemon_dir: &Path,
+) -> Arc<dyn CookieGetter> {
+    match (cookie, cookie_file) {
+        (None, None) => Arc::new(CookieFile::from_daemon_dir(daemon_dir)),
+        (None, Some(file)) => Arc::new(CookieFile::from_file(file)),
+        (Some(cookie), None) => Arc::new(StaticCookie::from_string(cookie)),
+        (Some(_), Some(_)) => {
+            eprintln!("Error: ambigous configuration - cookie and cookie_file can't be specified at the same time");
+            std::process::exit(1);
+        }
+    }
 }
 
 impl Config {
@@ -168,6 +183,9 @@ impl Config {
 
         let (mut config, _) =
             internal::Config::including_optional_config_files(configs).unwrap_or_exit();
+
+        let cookie_getter =
+            create_cookie_getter(config.cookie, config.cookie_file, &config.daemon_dir);
 
         let db_subdir = match config.network {
             // We must keep the name "mainnet" due to backwards compatibility
@@ -241,7 +259,6 @@ impl Config {
             db_path: config.db_dir,
             daemon_dir: config.daemon_dir,
             daemon_rpc_addr,
-            cookie: config.cookie,
             electrum_rpc_addr,
             monitoring_addr,
             jsonrpc_import: config.jsonrpc_import,
@@ -251,26 +268,59 @@ impl Config {
             blocktxids_cache_size: (config.blocktxids_cache_size_mb * MB) as usize,
             txid_limit: config.txid_limit,
             server_banner: config.server_banner,
+            cookie_getter,
         };
         eprintln!("{:?}", config);
         config
     }
 
     pub fn cookie_getter(&self) -> Arc<dyn CookieGetter> {
-        if let Some(ref value) = self.cookie {
-            Arc::new(StaticCookie {
-                value: value.as_bytes().to_vec(),
-            })
-        } else {
-            Arc::new(CookieFile {
-                daemon_dir: self.daemon_dir.clone(),
-            })
+        Arc::clone(&self.cookie_getter)
+    }
+}
+
+// CookieGetter + Debug isn't implemented in Rust, so we have to skip cookie_getter
+macro_rules! debug_struct {
+    ($name:ty, $($field:ident,)*) => {
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.debug_struct(stringify!($name))
+                    $(
+                        .field(stringify!($field), &self.$field)
+                    )*
+                    .finish()
+            }
         }
     }
 }
 
+debug_struct! { Config,
+    log,
+    network_type,
+    db_path,
+    daemon_dir,
+    daemon_rpc_addr,
+    electrum_rpc_addr,
+    monitoring_addr,
+    jsonrpc_import,
+    index_batch_size,
+    bulk_index_threads,
+    tx_cache_size,
+    txid_limit,
+    server_banner,
+    blocktxids_cache_size,
+}
+
 struct StaticCookie {
     value: Vec<u8>,
+}
+
+impl StaticCookie {
+    fn from_string(value: String) -> Self {
+        StaticCookie {
+            value: value.into(),
+        }
+    }
 }
 
 impl CookieGetter for StaticCookie {
@@ -280,14 +330,28 @@ impl CookieGetter for StaticCookie {
 }
 
 struct CookieFile {
-    daemon_dir: PathBuf,
+    cookie_file: PathBuf,
+}
+
+impl CookieFile {
+    fn from_daemon_dir(daemon_dir: &Path) -> Self {
+        CookieFile {
+            cookie_file: daemon_dir.join(".cookie"),
+        }
+    }
+
+    fn from_file(cookie_file: PathBuf) -> Self {
+        CookieFile { cookie_file }
+    }
 }
 
 impl CookieGetter for CookieFile {
     fn get(&self) -> Result<Vec<u8>> {
-        let path = self.daemon_dir.join(".cookie");
-        let contents = fs::read(&path).chain_err(|| {
-            ErrorKind::Connection(format!("failed to read cookie from {:?}", path))
+        let contents = fs::read(&self.cookie_file).chain_err(|| {
+            ErrorKind::Connection(format!(
+                "failed to read cookie from {}",
+                self.cookie_file.display()
+            ))
         })?;
         Ok(contents)
     }

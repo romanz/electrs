@@ -1,3 +1,7 @@
+# 0.8.1 (TBD)
+
+* Allow setting `--cookie-file` path via configuration (@Kixunil)
+
 # 0.8.0 (28 Oct 2019)
 
 * Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)
