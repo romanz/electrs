@@ -32,10 +32,16 @@ default = "crate::config::default_daemon_dir()"
 [[param]]
 name = "cookie"
 type = "String"
-doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from ~/.bitcoin/.cookie)"
+doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from cookie file)"
 # Force the user to use config file in order to avoid password leaks
 argument = false
 env_var = false
+
+[[param]]
+name = "cookie_file"
+type = "std::path::PathBuf"
+doc = "JSONRPC authentication cookie file (default: ~/.bitcoin/.cookie)"
+# This is safe to configure on command line.
 
 [[param]]
 name = "network"
