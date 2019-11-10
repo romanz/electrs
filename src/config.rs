@@ -150,7 +150,11 @@ fn default_daemon_dir() -> PathBuf {
     home
 }
 
-fn create_cookie_getter(cookie: Option<String>, cookie_file: Option<PathBuf>, daemon_dir: &Path) -> Arc<CookieGetter> {
+fn create_cookie_getter(
+    cookie: Option<String>,
+    cookie_file: Option<PathBuf>,
+    daemon_dir: &Path,
+) -> Arc<CookieGetter> {
     match (cookie, cookie_file) {
         (None, None) => Arc::new(CookieFile::from_daemon_dir(daemon_dir)),
         (None, Some(file)) => Arc::new(CookieFile::from_file(file)),
@@ -158,7 +162,7 @@ fn create_cookie_getter(cookie: Option<String>, cookie_file: Option<PathBuf>, da
         (Some(_), Some(_)) => {
             eprintln!("Error: ambigous configuration - cookie and cookie_file can't be specified at the same time");
             std::process::exit(1);
-        },
+        }
     }
 }
 
@@ -180,7 +184,8 @@ impl Config {
         let (mut config, _) =
             internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
-        let cookie_getter = create_cookie_getter(config.cookie, config.cookie_file, &config.daemon_dir);
+        let cookie_getter =
+            create_cookie_getter(config.cookie, config.cookie_file, &config.daemon_dir);
 
         let db_subdir = match config.network {
             // We must keep the name "mainnet" due to backwards compatibility
@@ -336,16 +341,17 @@ impl CookieFile {
     }
 
     fn from_file(cookie_file: PathBuf) -> Self {
-        CookieFile {
-            cookie_file,
-        }
+        CookieFile { cookie_file }
     }
 }
 
 impl CookieGetter for CookieFile {
     fn get(&self) -> Result<Vec<u8>> {
         let contents = fs::read(&self.cookie_file).chain_err(|| {
-            ErrorKind::Connection(format!("failed to read cookie from {}", self.cookie_file.display()))
+            ErrorKind::Connection(format!(
+                "failed to read cookie from {}",
+                self.cookie_file.display()
+            ))
         })?;
         Ok(contents)
     }
