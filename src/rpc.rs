@@ -16,6 +16,7 @@ use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::query::{Query, Status};
 use crate::util::{spawn_thread, Channel, HeaderEntry, SyncChannel};
+use std::ops::Deref;
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
@@ -493,13 +494,8 @@ impl RPC {
                 let mut senders = senders.lock().unwrap();
                 match msg {
                     Notification::Periodic => {
-                        for sender in senders.split_off(0) {
-                            if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::PeriodicUpdate)
-                            {
-                                continue;
-                            }
-                            senders.push(sender);
+                        for sender in senders.deref() {
+                            let _ = sender.try_send(Message::PeriodicUpdate);
                         }
                     }
                     Notification::Exit => acceptor.send(None).unwrap(),
