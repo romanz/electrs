@@ -1,5 +1,5 @@
 use page_size;
-use prometheus::{self, Encoder};
+use prometheus::{self, Encoder, IntGauge};
 use std::fs;
 use std::io;
 use std::net::SocketAddr;
@@ -49,6 +49,12 @@ impl Metrics {
 
     pub fn gauge_vec(&self, opts: prometheus::Opts, labels: &[&str]) -> GaugeVec {
         let g = GaugeVec::new(opts, labels).unwrap();
+        self.reg.register(Box::new(g.clone())).unwrap();
+        g
+    }
+
+    pub fn gauge_int(&self, opts: prometheus::Opts) -> IntGauge {
+        let g = Gauge::with_opts(opts).unwrap();
         self.reg.register(Box::new(g.clone())).unwrap();
         g
     }

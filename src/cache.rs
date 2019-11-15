@@ -7,21 +7,24 @@ use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use lru::LruCache;
 use std::hash::Hash;
 use std::sync::Mutex;
+use prometheus::IntGauge;
 
 struct SizedLruCache<K, V> {
     map: LruCache<K, (V, usize)>,
     bytes_usage: usize,
     bytes_capacity: usize,
     lookups: CounterVec,
+    usage: IntGauge,
 }
 
 impl<K: Hash + Eq, V> SizedLruCache<K, V> {
-    fn new(bytes_capacity: usize, lookups: CounterVec) -> SizedLruCache<K, V> {
+    fn new(bytes_capacity: usize, lookups: CounterVec, usage: IntGauge) -> SizedLruCache<K, V> {
         SizedLruCache {
             map: LruCache::unbounded(),
             bytes_usage: 0,
             bytes_capacity,
             lookups,
+            usage,
         }
     }
 
@@ -39,6 +42,7 @@ impl<K: Hash + Eq, V> SizedLruCache<K, V> {
     }
 
     fn put(&mut self, key: K, value: V, byte_size: usize) {
+
         if byte_size > self.bytes_capacity {
             return;
         }
@@ -50,10 +54,16 @@ impl<K: Hash + Eq, V> SizedLruCache<K, V> {
         while self.bytes_usage > self.bytes_capacity {
             match self.map.pop_lru() {
                 Some((_, (_, popped_size))) => self.bytes_usage -= popped_size,
-                None => return,
+                None => {
+                    self.usage.set(self.bytes_usage as i64);
+                    return
+                },
             }
         }
+
+        self.usage.set(self.bytes_usage as i64);
     }
+
 }
 
 pub struct BlockTxIDsCache {
@@ -69,8 +79,14 @@ impl BlockTxIDsCache {
             ),
             &["type"],
         );
+        let usage = metrics.gauge_int(
+            MetricOpts::new(
+                "electrs_blocktxids_cache_size",
+                "Cache usage for list of transactions in a block (bytes)",
+            ),
+        );
         BlockTxIDsCache {
-            map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups)),
+            map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups, usage)),
         }
     }
 
@@ -110,8 +126,14 @@ impl TransactionCache {
             ),
             &["type"],
         );
+        let usage = metrics.gauge_int(
+            MetricOpts::new(
+                "electrs_transactions_cache_size",
+                "Cache usage for list of transactions (bytes)",
+            ),
+        );
         TransactionCache {
-            map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups)),
+            map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups, usage)),
         }
     }
 
@@ -144,18 +166,24 @@ mod tests {
     #[test]
     fn test_sized_lru_cache_hit_and_miss() {
         let counter = CounterVec::new(prometheus::Opts::new("name", "help"), &["type"]).unwrap();
-        let mut cache = SizedLruCache::<i8, i32>::new(100, counter.clone());
+        let usage = IntGauge::new("usage", "help").unwrap();
+        let mut cache = SizedLruCache::<i8, i32>::new(100, counter.clone(), usage.clone());
         assert_eq!(counter.with_label_values(&["miss"]).get(), 0);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 0);
+        assert_eq!(usage.get(), 0);
 
         assert_eq!(cache.get(&1), None); // no such key
         assert_eq!(counter.with_label_values(&["miss"]).get(), 1);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 0);
+        assert_eq!(usage.get(), 0);
+
 
         cache.put(1, 10, 50); // add new key-value
         assert_eq!(cache.get(&1), Some(&10));
         assert_eq!(counter.with_label_values(&["miss"]).get(), 1);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 1);
+        assert_eq!(usage.get(), 50);
+
 
         cache.put(3, 30, 50); // drop oldest key (1)
         cache.put(2, 20, 50);
@@ -164,6 +192,7 @@ mod tests {
         assert_eq!(cache.get(&3), Some(&30));
         assert_eq!(counter.with_label_values(&["miss"]).get(), 2);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 3);
+        assert_eq!(usage.get(), 100);
 
         cache.put(3, 33, 50); // replace existing value
         assert_eq!(cache.get(&1), None);
@@ -171,6 +200,7 @@ mod tests {
         assert_eq!(cache.get(&3), Some(&33));
         assert_eq!(counter.with_label_values(&["miss"]).get(), 3);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 5);
+        assert_eq!(usage.get(), 100);
 
         cache.put(9, 90, 9999); // larger than cache capacity, don't drop the cache
         assert_eq!(cache.get(&1), None);
@@ -179,6 +209,7 @@ mod tests {
         assert_eq!(cache.get(&9), None);
         assert_eq!(counter.with_label_values(&["miss"]).get(), 5);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 7);
+        assert_eq!(usage.get(), 100);
     }
 
     fn gen_hash(seed: u8) -> Sha256dHash {
