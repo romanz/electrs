@@ -54,10 +54,7 @@ impl<K: Hash + Eq, V> SizedLruCache<K, V> {
         while self.bytes_usage > self.bytes_capacity {
             match self.map.pop_lru() {
                 Some((_, (_, popped_size))) => self.bytes_usage -= popped_size,
-                None => {
-                    self.usage.set(self.bytes_usage as i64);
-                    return
-                },
+                None => break,
             }
         }
 
