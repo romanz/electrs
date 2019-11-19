@@ -190,7 +190,10 @@ impl Tracker {
         &self.index
     }
 
-    pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
+    pub fn update(&mut self, daemon: &Daemon) -> Result<HashSet<Sha256dHash>> {
+        // set of transactions where a change has occurred (either new or removed)
+        let mut changed_txs: HashSet<Sha256dHash> = HashSet::new();
+
         let timer = self.stats.start_timer("fetch");
         let new_txids = daemon
             .getmempooltxids()
@@ -217,19 +220,23 @@ impl Tracker {
                 Ok(txs) => txs,
                 Err(err) => {
                     warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
-                    return Ok(()); // keep the mempool until next update()
+                                                                              // keep the mempool until next update()
+                    let empty: HashSet<Sha256dHash> = HashSet::new();
+                    return Ok(empty);
                 }
             };
             for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
                 assert_eq!(tx.txid(), *txid);
                 self.add(txid, tx, entry);
             }
+            changed_txs = txids.iter().map(|txid| *txid.clone()).collect();
         }
         timer.observe_duration();
 
         let timer = self.stats.start_timer("remove");
         for txid in old_txids.difference(&new_txids) {
             self.remove(txid);
+            changed_txs.insert(txid.clone());
         }
         timer.observe_duration();
 
@@ -238,7 +245,7 @@ impl Tracker {
         timer.observe_duration();
 
         self.stats.count.set(self.items.len() as i64);
-        Ok(())
+        Ok(changed_txs)
     }
 
     fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {

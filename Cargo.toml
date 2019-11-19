@@ -1,6 +1,6 @@
 [package]
 name = "electrs"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 description = "An efficient re-implementation of Electrum Server in Rust"
 license = "MIT"
@@ -11,6 +11,9 @@ documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
 build = "build.rs"
+
+[package.metadata.configure_me]
+spec = "config_spec.toml"
 
 [profile.release]
 lto = true
@@ -47,4 +50,4 @@ time = "0.1"
 tiny_http = "0.6"
 
 [build-dependencies]
-configure_me_codegen = "0.3.8"
+configure_me_codegen = "0.3.12"
