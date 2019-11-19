@@ -5,9 +5,9 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use lru::LruCache;
+use prometheus::IntGauge;
 use std::hash::Hash;
 use std::sync::Mutex;
-use prometheus::IntGauge;
 
 struct SizedLruCache<K, V> {
     map: LruCache<K, (V, usize)>,
@@ -42,7 +42,6 @@ impl<K: Hash + Eq, V> SizedLruCache<K, V> {
     }
 
     fn put(&mut self, key: K, value: V, byte_size: usize) {
-
         if byte_size > self.bytes_capacity {
             return;
         }
@@ -60,7 +59,6 @@ impl<K: Hash + Eq, V> SizedLruCache<K, V> {
 
         self.usage.set(self.bytes_usage as i64);
     }
-
 }
 
 pub struct BlockTxIDsCache {
@@ -76,12 +74,10 @@ impl BlockTxIDsCache {
             ),
             &["type"],
         );
-        let usage = metrics.gauge_int(
-            MetricOpts::new(
-                "electrs_blocktxids_cache_size",
-                "Cache usage for list of transactions in a block (bytes)",
-            ),
-        );
+        let usage = metrics.gauge_int(MetricOpts::new(
+            "electrs_blocktxids_cache_size",
+            "Cache usage for list of transactions in a block (bytes)",
+        ));
         BlockTxIDsCache {
             map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups, usage)),
         }
@@ -123,12 +119,10 @@ impl TransactionCache {
             ),
             &["type"],
         );
-        let usage = metrics.gauge_int(
-            MetricOpts::new(
-                "electrs_transactions_cache_size",
-                "Cache usage for list of transactions (bytes)",
-            ),
-        );
+        let usage = metrics.gauge_int(MetricOpts::new(
+            "electrs_transactions_cache_size",
+            "Cache usage for list of transactions (bytes)",
+        ));
         TransactionCache {
             map: Mutex::new(SizedLruCache::new(bytes_capacity, lookups, usage)),
         }
@@ -174,13 +168,11 @@ mod tests {
         assert_eq!(counter.with_label_values(&["hit"]).get(), 0);
         assert_eq!(usage.get(), 0);
 
-
         cache.put(1, 10, 50); // add new key-value
         assert_eq!(cache.get(&1), Some(&10));
         assert_eq!(counter.with_label_values(&["miss"]).get(), 1);
         assert_eq!(counter.with_label_values(&["hit"]).get(), 1);
         assert_eq!(usage.get(), 50);
-
 
         cache.put(3, 30, 50); // drop oldest key (1)
         cache.put(2, 20, 50);
