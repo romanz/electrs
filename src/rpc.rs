@@ -335,8 +335,9 @@ impl Connection {
         })
     }
 
-    fn on_scripthash_change(&mut self, scripthash: FullHash) -> Result<()> {
+    fn on_scripthash_change(&mut self, scripthash: FullHash, txid: FullHash) -> Result<()> {
         let scripthash = Sha256dHash::from_slice(&scripthash[..]).expect("invalid scripthash");
+        let txid = Sha256dHash::from_slice(&txid[..]).expect("invalid txid");
 
         let old_statushash;
         match self.status_hashes.get(&scripthash) {
@@ -360,7 +361,7 @@ impl Connection {
             return Ok(());
         }
         timer.observe_duration();
-        debug!("ScriptHash change: scripthash = {}, statushash = {}", scripthash, new_statushash);
+        debug!("ScriptHash change: scripthash = {}, tx_hash = {}, statushash = {}", scripthash, txid, new_statushash);
         self.send_values(&vec![json!({
             "jsonrpc": "2.0",
             "method": "blockchain.scripthash.subscribe",
@@ -427,7 +428,7 @@ impl Connection {
                     };
                     self.send_values(&[reply])?
                 }
-                Message::ScriptHashChange(hash) => self.on_scripthash_change(hash)?,
+                Message::ScriptHashChange(hash, txid) => self.on_scripthash_change(hash, txid)?,
                 Message::ChainTipChange(tip) => self.on_chaintip_change(tip)?,
                 Message::Done => return Ok(()),
             }
@@ -484,13 +485,13 @@ impl Connection {
 #[derive(Debug)]
 pub enum Message {
     Request(String),
-    ScriptHashChange(FullHash),
+    ScriptHashChange(FullHash, FullHash),
     ChainTipChange(HeaderEntry),
     Done,
 }
 
 pub enum Notification {
-    ScriptHashChange(FullHash),
+    ScriptHashChange(FullHash, FullHash),
     ChainTipChange(HeaderEntry),
     Exit,
 }
@@ -516,10 +517,10 @@ impl RPC {
             for msg in notification.receiver().iter() {
                 let mut senders = senders.lock().unwrap();
                 match msg {
-                    Notification::ScriptHashChange(hash) => {
+                    Notification::ScriptHashChange(hash, txid) => {
                         for sender in senders.split_off(0) {
                             if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::ScriptHashChange(hash))
+                                sender.try_send(Message::ScriptHashChange(hash, txid))
                             {
                                 continue;
                             }
@@ -639,7 +640,7 @@ impl RPC {
             .collect();
 
         for s in scripthashes {
-            if let Err(e) = self.notification.send(Notification::ScriptHashChange(s)) {
+            if let Err(e) = self.notification.send(Notification::ScriptHashChange(s, txid.into_inner())) {
                 trace!("ScriptHash change notification failed {}", e);
             }
         }
