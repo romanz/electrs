@@ -360,6 +360,7 @@ impl Connection {
             return Ok(());
         }
         timer.observe_duration();
+        debug!("ScriptHash change: scripthash = {}, statushash = {}", scripthash, new_statushash);
         self.send_values(&vec![json!({
             "jsonrpc": "2.0",
             "method": "blockchain.scripthash.subscribe",
