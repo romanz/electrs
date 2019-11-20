@@ -1,4 +1,4 @@
-# 0.8.1 (TBD)
+# 0.8.1 (20 Nov 2019)
 
 * Allow setting `--cookie-file` path via configuration (@Kixunil)
 * Bump rust-rocksdb to 0.13.0, using RockDB 6.2.4
