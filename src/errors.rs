@@ -15,5 +15,10 @@ error_chain! {
             description("Interruption by external signal")
             display("Iterrupted by SIG{:?}", signal)
         }
+
+        TooPopular {
+            description("Too many history entries")
+            display("Too many history entries")
+        }
     }
 }

@@ -18,6 +18,7 @@ use bitcoin::consensus::encode::serialize;
 #[cfg(feature = "liquid")]
 use elements::encode::serialize;
 
+use crate::config::Config;
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
@@ -86,6 +87,7 @@ struct Connection {
     addr: SocketAddr,
     chan: SyncChannel<Message>,
     stats: Arc<Stats>,
+    txs_limit: usize,
 }
 
 impl Connection {
@@ -94,6 +96,7 @@ impl Connection {
         stream: TcpStream,
         addr: SocketAddr,
         stats: Arc<Stats>,
+        txs_limit: usize,
     ) -> Connection {
         Connection {
             query,
@@ -103,6 +106,7 @@ impl Connection {
             addr,
             chan: SyncChannel::new(10),
             stats,
+            txs_limit,
         }
     }
 
@@ -217,7 +221,7 @@ impl Connection {
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
 
-        let history_txids = self.query.history_txids(&script_hash[..]);
+        let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
         let status_hash = get_status_hash(history_txids)
             .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
 
@@ -237,7 +241,7 @@ impl Connection {
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let history_txids = self.query.history_txids(&script_hash[..]);
+        let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
         Ok(json!(Value::Array(
             history_txids
                 .into_iter()
@@ -397,7 +401,7 @@ impl Connection {
             }
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
-            let history_txids = self.query.history_txids(&script_hash[..]);
+            let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
             let new_status_hash = get_status_hash(history_txids)
                 .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
             if new_status_hash == *status_hash {
@@ -506,6 +510,17 @@ impl Connection {
     }
 }
 
+fn get_history(
+    query: &Query,
+    scripthash: &[u8],
+    txs_limit: usize,
+) -> Result<Vec<(Sha256dHash, Option<BlockId>)>> {
+    // to avoid silently trunacting history entries, ask for one extra more than the limit and fail if it exists
+    let history_txids = query.history_txids(scripthash, txs_limit + 1);
+    ensure!(history_txids.len() <= txs_limit, ErrorKind::TooPopular);
+    Ok(history_txids)
+}
+
 #[derive(Debug)]
 pub enum Message {
     Request(String),
@@ -571,7 +586,7 @@ impl RPC {
         chan
     }
 
-    pub fn start(addr: SocketAddr, query: Arc<Query>, metrics: &Metrics) -> RPC {
+    pub fn start(config: Arc<Config>, query: Arc<Query>, metrics: &Metrics) -> RPC {
         let stats = Arc::new(Stats {
             latency: metrics.histogram_vec(
                 HistogramOpts::new("electrum_rpc", "Electrum RPC latency (seconds)"),
@@ -583,11 +598,15 @@ impl RPC {
             )),
         });
         let notification = Channel::new();
+
+        let rpc_addr = config.electrum_rpc_addr;
+        let txs_limit = config.electrum_txs_limit;
+
         let handle = RPC {
             notification: notification.sender(),
             server: Some(spawn_thread("rpc", move || {
                 let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
-                let acceptor = RPC::start_acceptor(addr);
+                let acceptor = RPC::start_acceptor(rpc_addr);
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
                 let mut children = vec![];
                 while let Some((stream, addr)) = acceptor.receiver().recv().unwrap() {
@@ -596,7 +615,7 @@ impl RPC {
                     let stats = stats.clone();
                     children.push(spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
-                        let conn = Connection::new(query, stream, addr, stats);
+                        let conn = Connection::new(query, stream, addr, stats, txs_limit);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);

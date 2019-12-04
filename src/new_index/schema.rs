@@ -384,17 +384,18 @@ impl ChainQuery {
             .collect()
     }
 
-    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
+    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Sha256dHash, BlockId)> {
         // scripthash lookup
-        self._history_txids(b'H', scripthash)
+        self._history_txids(b'H', scripthash, limit)
     }
 
-    fn _history_txids(&self, code: u8, hash: &[u8]) -> Vec<(Sha256dHash, BlockId)> {
+    fn _history_txids(&self, code: u8, hash: &[u8], limit: usize) -> Vec<(Sha256dHash, BlockId)> {
         let _timer = self.start_timer("history_txids");
         self.history_iter_scan(code, hash, 0)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
             .unique()
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
+            .take(limit)
             .collect()
     }
 
@@ -759,8 +760,12 @@ impl ChainQuery {
     }
 
     #[cfg(feature = "liquid")]
-    pub fn asset_history_txids(&self, asset_id: &Sha256dHash) -> Vec<(Sha256dHash, BlockId)> {
-        self._history_txids(b'I', &asset_id[..])
+    pub fn asset_history_txids(
+        &self,
+        asset_id: &Sha256dHash,
+        limit: usize,
+    ) -> Vec<(Sha256dHash, BlockId)> {
+        self._history_txids(b'I', &asset_id[..], limit)
     }
 }
 

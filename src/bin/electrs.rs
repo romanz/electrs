@@ -80,8 +80,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
 
     // TODO: configuration for which servers to start
     let rest_server = rest::run_server(Arc::clone(&config), Arc::clone(&query));
-    let electrum_server =
-        ElectrumRPC::start(config.electrum_rpc_addr, Arc::clone(&query), &metrics);
+    let electrum_server = ElectrumRPC::start(Arc::clone(&config), Arc::clone(&query), &metrics);
 
     loop {
         if let Err(err) = signal.wait(Duration::from_secs(5)) {

@@ -66,16 +66,18 @@ impl Query {
         utxos
     }
 
-    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<(Sha256dHash, Option<BlockId>)> {
-        let confirmed_txids = self
-            .chain
-            .history_txids(scripthash)
-            .into_iter()
-            .map(|(tx, b)| (tx, Some(b)));
+    pub fn history_txids(
+        &self,
+        scripthash: &[u8],
+        limit: usize,
+    ) -> Vec<(Sha256dHash, Option<BlockId>)> {
+        let confirmed_txids = self.chain.history_txids(scripthash, limit);
+        let confirmed_len = confirmed_txids.len();
+        let confirmed_txids = confirmed_txids.into_iter().map(|(tx, b)| (tx, Some(b)));
 
         let mempool_txids = self
             .mempool()
-            .history_txids(scripthash)
+            .history_txids(scripthash, limit - confirmed_len)
             .into_iter()
             .map(|tx| (tx, None));
 

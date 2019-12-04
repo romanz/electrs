@@ -132,14 +132,19 @@ impl Mempool {
             .collect()
     }
 
-    pub fn history_txids(&self, scripthash: &[u8]) -> Vec<Sha256dHash> {
+    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<Sha256dHash> {
         let _timer = self
             .latency
             .with_label_values(&["history_txids"])
             .start_timer();
         match self.history.get(scripthash) {
-            None => return vec![],
-            Some(entries) => entries.iter().map(|e| e.get_txid()).unique().collect(),
+            None => vec![],
+            Some(entries) => entries
+                .iter()
+                .map(|e| e.get_txid())
+                .unique()
+                .take(limit)
+                .collect(),
         }
     }
 

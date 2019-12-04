@@ -34,6 +34,7 @@ pub struct Config {
     pub prevout_enabled: bool,
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
+    pub electrum_txs_limit: usize,
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
@@ -150,6 +151,12 @@ impl Config {
                     .long("precache-scripts")
                     .help("Path to file with list of scripts to pre-cache")
                     .takes_value(true)
+            )
+            .arg(
+                Arg::with_name("electrum_txs_limit")
+                    .long("electrum-txs-limit")
+                    .help("Maximum number of transactions returned by Electrum history queries. Lookups with more results will fail.")
+                    .default_value("100")
             );
 
         #[cfg(feature = "liquid")]
@@ -292,6 +299,8 @@ impl Config {
             prevout_enabled: !m.is_present("disable_prevout"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
+            electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
+
             #[cfg(feature = "liquid")]
             parent_network,
             #[cfg(feature = "liquid")]
