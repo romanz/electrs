@@ -472,7 +472,7 @@ fn prepare_txs(
         .collect()
 }
 
-type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
     let addr = &config.http_addr;
