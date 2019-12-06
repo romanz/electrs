@@ -1,3 +1,7 @@
+# 0.8.2 (6 Dec 2019)
+
+* Downgrade rust-rocksdb to 0.12.2 (https://github.com/romanz/electrs/issues/193)
+
 # 0.8.1 (20 Nov 2019)
 
 * Allow setting `--cookie-file` path via configuration (@Kixunil)
