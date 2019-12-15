@@ -47,7 +47,7 @@ doc = "JSONRPC authentication cookie file (default: ~/.bitcoin/.cookie)"
 name = "network"
 type = "crate::config::BitcoinNetwork"
 convert_into = "::bitcoin::network::constants::Network"
-doc = "Select Bitcoin network type ('mainnet', 'testnet' or 'regtest')"
+doc = "Select Bitcoin network type ('bitcoin', 'testnet' or 'regtest')"
 default = "Default::default()"
 
 [[param]]
