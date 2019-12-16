@@ -16,8 +16,8 @@ use crate::elements::{lookup_asset, AssetRegistry, LiquidAsset};
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
-const CONF_TARGETS: [u16; 9] = [
-    2u16, 3u16, 4u16, 6u16, 10u16, 20u16, 144u16, 504u16, 1008u16,
+const CONF_TARGETS: [u16; 11] = [
+    2u16, 3u16, 4u16, 5u16, 6u16, 10u16, 20u16, 25u16, 144u16, 504u16, 1008u16,
 ];
 
 pub struct Query {
