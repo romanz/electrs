@@ -495,7 +495,7 @@ impl RPC {
                     Notification::Periodic => {
                         for (i, sender) in senders.iter() {
                             if let Err(e) = sender.try_send(Message::PeriodicUpdate) {
-                                warn!("failed to send PeriodicUpdate to peer {}: {}", i, e);
+                                debug!("failed to send PeriodicUpdate to peer {}: {}", i, e);
                             }
                         }
                     }
