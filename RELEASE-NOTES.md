@@ -1,3 +1,7 @@
+# 0.8.3 (30 Jan 2020)
+
+* Fix memory leak (@champo)
+
 # 0.8.2 (6 Dec 2019)
 
 * Downgrade rust-rocksdb to 0.12.2 (https://github.com/romanz/electrs/issues/193)
