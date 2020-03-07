@@ -520,4 +520,8 @@ impl Query {
     pub fn get_banner(&self) -> Result<String> {
         self.app.get_banner()
     }
+
+    pub fn get_relayfee(&self) -> Result<f64> {
+        self.app.daemon().get_relayfee()
+    }
 }

@@ -113,6 +113,7 @@ struct BlockchainInfo {
 struct NetworkInfo {
     version: u64,
     subversion: String,
+    relayfee: f64, // in BTC
 }
 
 pub struct MempoolEntry {
@@ -453,6 +454,10 @@ impl Daemon {
 
     pub fn get_subversion(&self) -> Result<String> {
         Ok(self.getnetworkinfo()?.subversion)
+    }
+
+    pub fn get_relayfee(&self) -> Result<f64> {
+        Ok(self.getnetworkinfo()?.relayfee)
     }
 
     pub fn getbestblockhash(&self) -> Result<Sha256dHash> {
