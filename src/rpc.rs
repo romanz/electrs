@@ -194,11 +194,11 @@ impl Connection {
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
         let fee_rate = self.query.estimate_fee(blocks_count); // in BTC/kB
-        Ok(json!(fee_rate))
+        Ok(json!(fee_rate.max(self.relayfee)))
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
-        Ok(json!(self.relayfee))
+        Ok(json!(self.relayfee)) // in BTC/kB
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
