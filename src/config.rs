@@ -3,6 +3,7 @@ use dirs::home_dir;
 use num_cpus;
 use std::fs;
 use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
@@ -42,6 +43,15 @@ pub struct Config {
     pub parent_genesis_hash: String,
     #[cfg(feature = "liquid")]
     pub asset_db_path: Option<PathBuf>,
+}
+
+fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
+    address
+        .to_socket_addrs()
+        .expect(&format!("unable to resolve {} address", what))
+        .collect::<Vec<_>>()
+        .pop()
+        .unwrap()
 }
 
 impl Config {
@@ -229,26 +239,22 @@ impl Config {
             Network::LiquidRegtest => 44224,
         };
 
-        let daemon_rpc_addr: SocketAddr = m
-            .value_of("daemon_rpc_addr")
-            .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port))
-            .parse()
-            .expect("invalid Bitcoind RPC address");
-        let electrum_rpc_addr: SocketAddr = m
-            .value_of("electrum_rpc_addr")
-            .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port))
-            .parse()
-            .expect("invalid Electrum RPC address");
-        let http_addr: SocketAddr = m
-            .value_of("http_addr")
-            .unwrap_or(&format!("127.0.0.1:{}", default_http_port))
-            .parse()
-            .expect("invalid HTTP server address");
-        let monitoring_addr: SocketAddr = m
-            .value_of("monitoring_addr")
-            .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port))
-            .parse()
-            .expect("invalid Prometheus monitoring address");
+        let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
+            m.value_of("daemon_rpc_addr")
+                .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port)), "Bitcoin RPC"
+        );
+        let electrum_rpc_addr: SocketAddr = str_to_socketaddr(
+            m.value_of("electrum_rpc_addr")
+                .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port)), "Electrum RPC"
+        );
+        let http_addr: SocketAddr = str_to_socketaddr(
+            m.value_of("http_addr")
+                .unwrap_or(&format!("127.0.0.1:{}", default_http_port)), "HTTP Server"
+        );
+        let monitoring_addr: SocketAddr = str_to_socketaddr(
+            m.value_of("monitoring_addr")
+                .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port)), "Prometheus monitoring"
+        );
 
         let mut daemon_dir = m
             .value_of("daemon_dir")
