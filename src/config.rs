@@ -241,19 +241,23 @@ impl Config {
 
         let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("daemon_rpc_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port)), "Bitcoin RPC"
+                .unwrap_or(&format!("127.0.0.1:{}", default_daemon_port)),
+            "Bitcoin RPC",
         );
         let electrum_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("electrum_rpc_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port)), "Electrum RPC"
+                .unwrap_or(&format!("127.0.0.1:{}", default_electrum_port)),
+            "Electrum RPC",
         );
         let http_addr: SocketAddr = str_to_socketaddr(
             m.value_of("http_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_http_port)), "HTTP Server"
+                .unwrap_or(&format!("127.0.0.1:{}", default_http_port)),
+            "HTTP Server",
         );
         let monitoring_addr: SocketAddr = str_to_socketaddr(
             m.value_of("monitoring_addr")
-                .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port)), "Prometheus monitoring"
+                .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port)),
+            "Prometheus monitoring",
         );
 
         let mut daemon_dir = m
