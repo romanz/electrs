@@ -20,7 +20,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
+    crate::elements::{IssuanceValue, PegOutRequest},
     bitcoin::hashes::sha256d::Hash as Sha256dHash,
     elements::confidential::{Asset, Value},
     elements::encode,
@@ -60,7 +60,7 @@ struct BlockValue {
     bits: u32,
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    proof: Option<BlockProofValue>,
+    ext: Option<serde_json::Value>,
 }
 
 impl From<BlockHeaderMeta> for BlockValue {
@@ -87,7 +87,7 @@ impl From<BlockHeaderMeta> for BlockValue {
             nonce: header.nonce,
 
             #[cfg(feature = "liquid")]
-            proof: Some(BlockProofValue::from(&header.proof)),
+            ext: Some(json!(header.ext)),
         }
     }
 }
@@ -1032,8 +1032,8 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
 
         #[cfg(feature = "liquid")]
         {
-            // exclude proof in block list view
-            value.proof = None;
+            // exclude ExtData in block list view
+            value.ext = None;
         }
         values.push(value);
 

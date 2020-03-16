@@ -2,7 +2,11 @@ use crate::chain::{Block, BlockHeader};
 use crate::errors::*;
 use crate::new_index::BlockEntry;
 
+#[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize;
+#[cfg(feature = "liquid")]
+use elements::encode::serialize;
+
 use bitcoin::{BitcoinHash, BlockHash};
 
 use std::collections::HashMap;

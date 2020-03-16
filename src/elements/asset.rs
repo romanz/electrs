@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use bitcoin::hashes::{hex::FromHex, sha256, sha256d, Hash};
+use bitcoin::{BlockHash, Txid};
 use elements::confidential::{Asset, Value};
 use elements::encode::{deserialize, serialize};
 use elements::{AssetIssuance, OutPoint, Transaction, TxIn};
@@ -103,11 +104,11 @@ impl IssuedAsset {
         Self {
             asset_id: parse_hash(&full_hash(&asset_id[..])),
             issuance_txin: TxInput {
-                txid: parse_hash(&asset.issuance_txid),
+                txid: deserialize(&asset.issuance_txid).unwrap(),
                 vin: asset.issuance_vin,
             },
             issuance_prevout: OutPoint {
-                txid: parse_hash(&asset.prev_txid),
+                txid: deserialize(&asset.prev_txid).unwrap(),
                 vout: asset.prev_vout as u32,
             },
             contract_hash,
@@ -169,7 +170,7 @@ pub fn index_mempool_tx_assets(
 
 // Remove mempool transaction issuances from in-memory store
 pub fn remove_mempool_tx_assets(
-    to_remove: &HashSet<&sha256d::Hash>,
+    to_remove: &HashSet<&Txid>,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
     asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
 ) {
@@ -179,8 +180,10 @@ pub fn remove_mempool_tx_assets(
         !entries.is_empty()
     });
 
-    asset_issuance
-        .retain(|_assethash, issuance| !to_remove.contains(&parse_hash(&issuance.issuance_txid)));
+    asset_issuance.retain(|_assethash, issuance| {
+        let txid: Txid = deserialize(&issuance.issuance_txid).unwrap();
+        !to_remove.contains(&txid)
+    });
 }
 
 // Internal utility function, index a transaction and return its history entries and issuances
@@ -319,7 +322,7 @@ pub fn lookup_asset(
 
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
         let stats = asset_stats(query, asset_id, &reissuance_token);
-        let status = query.get_tx_status(&parse_hash(&row.issuance_txid));
+        let status = query.get_tx_status(&deserialize(&row.issuance_txid).unwrap());
 
         let asset = IssuedAsset::new(asset_id, row, stats, meta, status);
 
@@ -376,11 +379,7 @@ impl AssetStats {
 fn asset_cache_key(asset_id: &sha256d::Hash) -> Bytes {
     [b"z", &asset_id[..]].concat()
 }
-fn asset_cache_row(
-    asset_id: &sha256d::Hash,
-    stats: &AssetStats,
-    blockhash: &sha256d::Hash,
-) -> DBRow {
+fn asset_cache_row(asset_id: &sha256d::Hash, stats: &AssetStats, blockhash: &BlockHash) -> DBRow {
     DBRow {
         key: asset_cache_key(asset_id),
         value: bincode::serialize(&(stats, blockhash)).unwrap(),
@@ -440,7 +439,7 @@ fn asset_stats_delta(
     asset_id: &sha256d::Hash,
     init_stats: AssetStats,
     start_height: usize,
-) -> (AssetStats, Option<sha256d::Hash>) {
+) -> (AssetStats, Option<BlockHash>) {
     let history_iter = chain
         .history_iter_scan(b'I', &asset_id[..], start_height)
         .map(TxHistoryRow::from_row)
@@ -478,11 +477,7 @@ pub fn mempool_asset_stats(mempool: &Mempool, asset_id: &sha256d::Hash) -> Asset
     stats
 }
 
-fn apply_asset_stats(
-    info: &TxHistoryInfo,
-    stats: &mut AssetStats,
-    seen_txids: &mut HashSet<sha256d::Hash>,
-) {
+fn apply_asset_stats(info: &TxHistoryInfo, stats: &mut AssetStats, seen_txids: &mut HashSet<Txid>) {
     if seen_txids.insert(info.get_txid()) {
         stats.tx_count += 1;
     }

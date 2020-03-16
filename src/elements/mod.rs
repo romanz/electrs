@@ -3,7 +3,7 @@ use bitcoin::hashes::hex::ToHex;
 use bitcoin::Script;
 use elements::confidential::Value;
 use elements::encode::serialize;
-use elements::{Proof, TxIn};
+use elements::TxIn;
 use hex;
 
 use crate::chain::Network;
@@ -17,25 +17,6 @@ use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, LiquidAsset};
 pub use assetid::AssetId;
 pub use registry::AssetRegistry;
-
-#[derive(Serialize, Deserialize)]
-pub struct BlockProofValue {
-    challenge: Script,
-    challenge_asm: String,
-    solution: Script,
-    solution_asm: String,
-}
-
-impl From<&Proof> for BlockProofValue {
-    fn from(proof: &Proof) -> Self {
-        BlockProofValue {
-            challenge_asm: get_script_asm(&proof.challenge),
-            challenge: proof.challenge.clone(),
-            solution_asm: get_script_asm(&proof.solution),
-            solution: proof.solution.clone(),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PegOutRequest {

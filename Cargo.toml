@@ -56,13 +56,8 @@ features = ["use-serde"]
 
 [dependencies.elements]
 optional = true
-git = "https://github.com/elementsproject/rust-elements"
-rev = "ae548a4748508775653a65daa828bb5a0207a325"
+version = "0.12.1"
 features = ["serde-feature"]
-
-[patch."https://github.com/elementsproject/rust-elements".elements]
-git = "https://github.com/stevenroose/rust-elements"
-rev = "bitcoin-0.19"
 
 [dev-dependencies]
 tempfile = "3.0"

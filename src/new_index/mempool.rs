@@ -1,4 +1,5 @@
 use arraydeque::{ArrayDeque, Wrapping};
+use bitcoin::consensus::encode::deserialize;
 use bitcoin::Txid;
 use itertools::Itertools;
 
@@ -19,8 +20,8 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
-    compute_script_hash, parse_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats,
-    SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
+    compute_script_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats, SpendingInfo,
+    SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
@@ -161,7 +162,7 @@ impl Mempool {
             .into_iter()
             .filter_map(|entry| match entry {
                 TxHistoryInfo::Funding(info) => Some(Utxo {
-                    txid: Txid::from(parse_hash(&info.txid)),
+                    txid: deserialize(&info.txid).expect("invalid txid"),
                     vout: info.vout as u32,
                     value: info.value,
                     confirmed: None,
