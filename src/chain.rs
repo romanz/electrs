@@ -9,7 +9,6 @@ pub use elements::address;
 pub use elements::{confidential, Address, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 
 use bitcoin::blockdata::constants::genesis_block;
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin::network::constants::Network as BNetwork;
 use bitcoin::util::hash::BitcoinHash;
 
@@ -31,7 +30,7 @@ pub enum Network {
 }
 
 impl Network {
-    pub fn genesis_hash(&self) -> Sha256dHash {
+    pub fn genesis_hash(&self) -> bitcoin::BlockHash {
         let block = genesis_block(BNetwork::from(self));
         block.bitcoin_hash()
     }

@@ -1,4 +1,3 @@
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use rayon::prelude::*;
 
 use std::collections::{BTreeSet, HashMap};
@@ -11,8 +10,12 @@ use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
+use bitcoin::Txid;
+
 #[cfg(feature = "liquid")]
 use crate::elements::{lookup_asset, AssetRegistry, LiquidAsset};
+#[cfg(feature = "liquid")]
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
@@ -49,7 +52,7 @@ impl Query {
         self.mempool.read().unwrap()
     }
 
-    pub fn broadcast_raw(&self, txhex: &String) -> Result<Sha256dHash> {
+    pub fn broadcast_raw(&self, txhex: &String) -> Result<Txid> {
         let txid = self.daemon.broadcast_raw(&txhex)?;
         self.mempool
             .write()
@@ -66,11 +69,7 @@ impl Query {
         utxos
     }
 
-    pub fn history_txids(
-        &self,
-        scripthash: &[u8],
-        limit: usize,
-    ) -> Vec<(Sha256dHash, Option<BlockId>)> {
+    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Txid, Option<BlockId>)> {
         let confirmed_txids = self.chain.history_txids(scripthash, limit);
         let confirmed_len = confirmed_txids.len();
         let confirmed_txids = confirmed_txids.into_iter().map(|(tx, b)| (tx, Some(b)));
@@ -91,12 +90,12 @@ impl Query {
         )
     }
 
-    pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+    pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
         self.chain
             .lookup_txn(txid)
             .or_else(|| self.mempool().lookup_txn(txid))
     }
-    pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+    pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
         self.chain
             .lookup_raw_txn(txid)
             .or_else(|| self.mempool().lookup_raw_txn(txid))
@@ -134,7 +133,7 @@ impl Query {
             .collect()
     }
 
-    pub fn get_tx_status(&self, txid: &Sha256dHash) -> TransactionStatus {
+    pub fn get_tx_status(&self, txid: &Txid) -> TransactionStatus {
         TransactionStatus::from(self.chain.tx_confirming_block(txid))
     }
 

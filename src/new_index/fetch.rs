@@ -1,7 +1,6 @@
 use crate::chain::Block;
 
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
-use bitcoin::util::hash::BitcoinHash;
+use bitcoin::{BitcoinHash, BlockHash};
 use rayon::prelude::*;
 
 #[cfg(not(feature = "liquid"))]
@@ -81,7 +80,7 @@ fn bitcoind_fetcher(
         chan.into_receiver(),
         spawn_thread("bitcoind_fetcher", move || -> () {
             for entries in new_headers.chunks(100) {
-                let blockhashes: Vec<Sha256dHash> = entries.iter().map(|e| *e.hash()).collect();
+                let blockhashes: Vec<BlockHash> = entries.iter().map(|e| *e.hash()).collect();
                 let blocks = daemon
                     .getblocks(&blockhashes)
                     .expect("failed to get blocks from bitcoind");
@@ -114,7 +113,7 @@ fn blkfiles_fetcher(
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
 
-    let mut entry_map: HashMap<Sha256dHash, HeaderEntry> =
+    let mut entry_map: HashMap<BlockHash, HeaderEntry> =
         new_headers.into_iter().map(|h| (*h.hash(), h)).collect();
 
     let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);

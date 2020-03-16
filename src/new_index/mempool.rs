@@ -1,9 +1,11 @@
 use arraydeque::{ArrayDeque, Wrapping};
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::Txid;
 use itertools::Itertools;
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize;
+#[cfg(feature = "liquid")]
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 #[cfg(feature = "liquid")]
 use elements::encode::serialize;
 
@@ -31,10 +33,10 @@ const BACKLOG_STATS_TTL: u64 = 10;
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
-    txstore: HashMap<Sha256dHash, Transaction>,
-    feeinfo: HashMap<Sha256dHash, TxFeeInfo>,
+    txstore: HashMap<Txid, Transaction>,
+    feeinfo: HashMap<Txid, TxFeeInfo>,
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
-    edges: HashMap<OutPoint, (Sha256dHash, u32)>,   // OutPoint -> (spending_txid, spending_vin)
+    edges: HashMap<OutPoint, (Txid, u32)>,          // OutPoint -> (spending_txid, spending_vin)
     recent: ArrayDeque<[TxOverview; RECENT_TXS_SIZE], Wrapping>, // The N most recent txs to enter the mempool
     backlog_stats: (BacklogStats, Instant),
 
@@ -53,7 +55,7 @@ pub struct Mempool {
 // A simplified transaction view used for the list of most recent transactions
 #[derive(Serialize)]
 pub struct TxOverview {
-    txid: Sha256dHash,
+    txid: Txid,
     fee: u64,
     vsize: u32,
     #[cfg(not(feature = "liquid"))]
@@ -93,11 +95,11 @@ impl Mempool {
         }
     }
 
-    pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+    pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
         self.txstore.get(txid).map(|item| item.clone())
     }
 
-    pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+    pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
         self.txstore.get(txid).map(serialize)
     }
 
@@ -132,7 +134,7 @@ impl Mempool {
             .collect()
     }
 
-    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<Sha256dHash> {
+    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<Txid> {
         let _timer = self
             .latency
             .with_label_values(&["history_txids"])
@@ -159,7 +161,7 @@ impl Mempool {
             .into_iter()
             .filter_map(|entry| match entry {
                 TxHistoryInfo::Funding(info) => Some(Utxo {
-                    txid: parse_hash(&info.txid),
+                    txid: Txid::from(parse_hash(&info.txid)),
                     vout: info.vout as u32,
                     value: info.value,
                     confirmed: None,
@@ -225,7 +227,7 @@ impl Mempool {
     }
 
     // Get all txids in the mempool
-    pub fn txids(&self) -> Vec<&Sha256dHash> {
+    pub fn txids(&self) -> Vec<&Txid> {
         let _timer = self.latency.with_label_values(&["txids"]).start_timer();
         self.txstore.keys().collect()
     }
@@ -248,10 +250,10 @@ impl Mempool {
             .getmempooltxids()
             .chain_err(|| "failed to update mempool from daemon")?;
         let old_txids = HashSet::from_iter(self.txstore.keys().cloned());
-        let to_remove: HashSet<&Sha256dHash> = old_txids.difference(&new_txids).collect();
+        let to_remove: HashSet<&Txid> = old_txids.difference(&new_txids).collect();
 
         // Download and add new transactions from bitcoind's mempool
-        let txids: Vec<&Sha256dHash> = new_txids.difference(&old_txids).collect();
+        let txids: Vec<&Txid> = new_txids.difference(&old_txids).collect();
         let to_add = match daemon.gettransactions(&txids) {
             Ok(txs) => txs,
             Err(err) => {
@@ -280,7 +282,7 @@ impl Mempool {
         Ok(())
     }
 
-    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Sha256dHash) {
+    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) {
         if let Ok(tx) = daemon.getmempooltx(&txid) {
             self.add(vec![tx])
         }
@@ -420,7 +422,7 @@ impl Mempool {
         Ok(txos)
     }
 
-    fn get_prevouts(&self, txids: &[Sha256dHash]) -> BTreeSet<OutPoint> {
+    fn get_prevouts(&self, txids: &[Txid]) -> BTreeSet<OutPoint> {
         txids
             .iter()
             .map(|txid| self.txstore.get(txid).expect("missing mempool tx"))
@@ -433,7 +435,7 @@ impl Mempool {
             .collect()
     }
 
-    fn remove(&mut self, to_remove: HashSet<&Sha256dHash>) {
+    fn remove(&mut self, to_remove: HashSet<&Txid>) {
         self.delta
             .with_label_values(&["remove"])
             .observe(to_remove.len() as f64);
@@ -493,7 +495,7 @@ impl BacklogStats {
         }
     }
 
-    fn new(feeinfo: &HashMap<Sha256dHash, TxFeeInfo>) -> Self {
+    fn new(feeinfo: &HashMap<Txid, TxFeeInfo>) -> Self {
         let (count, vsize, total_fee) = feeinfo
             .values()
             .fold((0, 0, 0), |(count, vsize, fee), feeinfo| {

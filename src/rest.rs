@@ -10,8 +10,8 @@ use crate::util::{
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::{FromHex, ToHex};
-use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Error as HashError};
-use bitcoin::{BitcoinHash, Script};
+use bitcoin::hashes::Error as HashError;
+use bitcoin::{BitcoinHash, BlockHash, Script, Txid};
 use futures::sync::oneshot;
 use hex::{self, FromHexError};
 use hyper::rt::{self, Future, Stream};
@@ -21,6 +21,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{BlockProofValue, IssuanceValue, PegOutRequest},
+    bitcoin::hashes::sha256d::Hash as Sha256dHash,
     elements::confidential::{Asset, Value},
     elements::encode,
 };
@@ -74,7 +75,7 @@ impl From<BlockHeaderMeta> for BlockValue {
             size: blockhm.meta.size,
             weight: blockhm.meta.weight,
             merkle_root: header.merkle_root.to_hex(),
-            previousblockhash: if &header.prev_blockhash != &Sha256dHash::default() {
+            previousblockhash: if &header.prev_blockhash != &BlockHash::default() {
                 Some(header.prev_blockhash.to_hex())
             } else {
                 None
@@ -93,7 +94,7 @@ impl From<BlockHeaderMeta> for BlockValue {
 
 #[derive(Serialize, Deserialize)]
 struct TransactionValue {
-    txid: Sha256dHash,
+    txid: Txid,
     version: u32,
     locktime: u32,
     vin: Vec<TxInValue>,
@@ -163,7 +164,7 @@ impl TransactionValue {
 
 #[derive(Serialize, Deserialize, Clone)]
 struct TxInValue {
-    txid: Sha256dHash,
+    txid: Txid,
     vout: u32,
     prevout: Option<TxOutValue>,
     scriptsig: Script,
@@ -348,7 +349,7 @@ impl TxOutValue {
 
 #[derive(Serialize)]
 struct UtxoValue {
-    txid: Sha256dHash,
+    txid: Txid,
     vout: u32,
     status: TransactionStatus,
 
@@ -409,7 +410,7 @@ impl From<Utxo> for UtxoValue {
 struct SpendingValue {
     spent: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    txid: Option<Sha256dHash>,
+    txid: Option<Txid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     vin: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -586,7 +587,7 @@ fn handle_request(
             http_message(StatusCode::OK, header.hash().to_hex(), ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), None, None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = BlockHash::from_hex(hash)?;
             let blockhm = query
                 .chain()
                 .get_block_with_meta(&hash)
@@ -595,13 +596,13 @@ fn handle_request(
             json_response(block_value, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = BlockHash::from_hex(hash)?;
             let status = query.chain().get_block_status(&hash);
             let ttl = ttl_by_depth(status.height, query);
             json_response(status, ttl)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txids"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = BlockHash::from_hex(hash)?;
             let txids = query
                 .chain()
                 .get_block_txids(&hash)
@@ -609,7 +610,7 @@ fn handle_request(
             json_response(txids, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txid"), Some(index), None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = BlockHash::from_hex(hash)?;
             let index: usize = index.parse()?;
             let txids = query
                 .chain()
@@ -621,7 +622,7 @@ fn handle_request(
             http_message(StatusCode::OK, txids[index].to_hex(), TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txs"), start_index, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = BlockHash::from_hex(hash)?;
             let txids = query
                 .chain()
                 .get_block_txids(&hash)
@@ -729,7 +730,7 @@ fn handle_request(
             last_seen_txid,
         ) => {
             let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
-            let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
+            let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_hex(txid).ok());
 
             let txs = query
                 .chain()
@@ -798,7 +799,7 @@ fn handle_request(
             json_response(utxos, TTL_SHORT)
         }
         (&Method::GET, Some(&"tx"), Some(hash), None, None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let tx = query
                 .lookup_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
@@ -810,7 +811,7 @@ fn handle_request(
             json_response(tx, ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let rawtx = query
                 .lookup_raw_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
@@ -818,14 +819,14 @@ fn handle_request(
             http_message(StatusCode::OK, hex::encode(rawtx), ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let status = query.get_tx_status(&hash);
             let ttl = ttl_by_depth(status.block_height, query);
             json_response(status, ttl)
         }
 
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkle-proof"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let blockid = query.chain().tx_confirming_block(&hash).ok_or_else(|| {
                 HttpError::not_found("Transaction not found or is unconfirmed".to_string())
             })?;
@@ -838,7 +839,7 @@ fn handle_request(
             )
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index), None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let outpoint = OutPoint {
                 txid: hash,
                 vout: index.parse::<u32>()?,
@@ -856,7 +857,7 @@ fn handle_request(
             json_response(spend, ttl)
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspends"), None, None) => {
-            let hash = Sha256dHash::from_hex(hash)?;
+            let hash = Txid::from_hex(hash)?;
             let tx = query
                 .lookup_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
@@ -951,7 +952,7 @@ fn handle_request(
             last_seen_txid,
         ) => {
             let asset_id = Sha256dHash::from_hex(asset_str)?;
-            let last_seen_txid = last_seen_txid.and_then(|txid| Sha256dHash::from_hex(txid).ok());
+            let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_hex(txid).ok());
 
             let txs = query
                 .chain()

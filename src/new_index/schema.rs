@@ -1,6 +1,7 @@
 use bincode;
 use bitcoin::blockdata::script::Script;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::{BlockHash, Txid};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
@@ -37,8 +38,8 @@ pub struct Store {
     txstore_db: DB,
     history_db: DB,
     cache_db: DB,
-    added_blockhashes: RwLock<HashSet<Sha256dHash>>,
-    indexed_blockhashes: RwLock<HashSet<Sha256dHash>>,
+    added_blockhashes: RwLock<HashSet<BlockHash>>,
+    indexed_blockhashes: RwLock<HashSet<BlockHash>>,
     indexed_headers: RwLock<HeaderList>,
 }
 
@@ -85,7 +86,7 @@ type UtxoMap = HashMap<OutPoint, (BlockId, Value)>;
 
 #[derive(Debug)]
 pub struct Utxo {
-    pub txid: Sha256dHash,
+    pub txid: Txid,
     pub vout: u32,
     pub confirmed: Option<BlockId>,
     pub value: Value,
@@ -105,7 +106,7 @@ impl From<&Utxo> for OutPoint {
 
 #[derive(Debug)]
 pub struct SpendingInput {
-    pub txid: Sha256dHash,
+    pub txid: Txid,
     pub vin: u32,
     pub confirmed: Option<BlockId>,
 }
@@ -193,7 +194,7 @@ impl Indexer {
         db.enable_auto_compaction();
     }
 
-    fn get_new_headers(&self, daemon: &Daemon, tip: &Sha256dHash) -> Result<Vec<HeaderEntry>> {
+    fn get_new_headers(&self, daemon: &Daemon, tip: &BlockHash) -> Result<Vec<HeaderEntry>> {
         let headers = self.store.indexed_headers.read().unwrap();
         let new_headers = daemon.get_new_headers(&headers, &tip)?;
         let result = headers.order(new_headers);
@@ -203,7 +204,7 @@ impl Indexer {
         Ok(result)
     }
 
-    pub fn update(&mut self, daemon: &Daemon) -> Result<Sha256dHash> {
+    pub fn update(&mut self, daemon: &Daemon) -> Result<BlockHash> {
         let daemon = daemon.reconnect()?;
         let tip = daemon.getbestblockhash()?;
         let new_headers = self.get_new_headers(&daemon, &tip)?;
@@ -302,7 +303,7 @@ impl ChainQuery {
         self.duration.with_label_values(&[name]).start_timer()
     }
 
-    pub fn get_block_txids(&self, hash: &Sha256dHash) -> Option<Vec<Sha256dHash>> {
+    pub fn get_block_txids(&self, hash: &BlockHash) -> Option<Vec<Txid>> {
         let _timer = self.start_timer("get_block_txids");
         self.store
             .txstore_db
@@ -310,7 +311,7 @@ impl ChainQuery {
             .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
     }
 
-    pub fn get_block_meta(&self, hash: &Sha256dHash) -> Option<BlockMeta> {
+    pub fn get_block_meta(&self, hash: &BlockHash) -> Option<BlockMeta> {
         let _timer = self.start_timer("get_block_meta");
         self.store
             .txstore_db
@@ -318,7 +319,7 @@ impl ChainQuery {
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
     }
 
-    pub fn get_block_with_meta(&self, hash: &Sha256dHash) -> Option<BlockHeaderMeta> {
+    pub fn get_block_with_meta(&self, hash: &BlockHash) -> Option<BlockHeaderMeta> {
         let _timer = self.start_timer("get_block_with_meta");
         Some(BlockHeaderMeta {
             header_entry: self.header_by_hash(hash)?,
@@ -342,7 +343,7 @@ impl ChainQuery {
     pub fn history(
         &self,
         scripthash: &[u8],
-        last_seen_txid: Option<&Sha256dHash>,
+        last_seen_txid: Option<&Txid>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
         // scripthash lookup
@@ -353,7 +354,7 @@ impl ChainQuery {
         &self,
         code: u8,
         hash: &[u8],
-        last_seen_txid: Option<&Sha256dHash>,
+        last_seen_txid: Option<&Txid>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
         let _timer_scan = self.start_timer("history");
@@ -373,7 +374,7 @@ impl ChainQuery {
             })
             .filter_map(|txid| self.tx_confirming_block(&txid).map(|b| (txid, b)))
             .take(limit)
-            .collect::<Vec<(Sha256dHash, BlockId)>>();
+            .collect::<Vec<(Txid, BlockId)>>();
 
         let txids = txs_conf.iter().map(|t| t.0.clone()).collect();
         self.lookup_txns(&txids)
@@ -384,12 +385,12 @@ impl ChainQuery {
             .collect()
     }
 
-    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Sha256dHash, BlockId)> {
+    pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Txid, BlockId)> {
         // scripthash lookup
         self._history_txids(b'H', scripthash, limit)
     }
 
-    fn _history_txids(&self, code: u8, hash: &[u8], limit: usize) -> Vec<(Sha256dHash, BlockId)> {
+    fn _history_txids(&self, code: u8, hash: &[u8], limit: usize) -> Vec<(Txid, BlockId)> {
         let _timer = self.start_timer("history_txids");
         self.history_iter_scan(code, hash, 0)
             .map(|row| TxHistoryRow::from_row(row).get_txid())
@@ -461,7 +462,7 @@ impl ChainQuery {
         scripthash: &[u8],
         init_utxos: UtxoMap,
         start_height: usize,
-    ) -> (UtxoMap, Option<Sha256dHash>, usize) {
+    ) -> (UtxoMap, Option<BlockHash>, usize) {
         let _timer = self.start_timer("utxo_delta");
         let history_iter = self
             .history_iter_scan(b'H', scripthash, start_height)
@@ -532,7 +533,7 @@ impl ChainQuery {
         scripthash: &[u8],
         init_stats: ScriptStats,
         start_height: usize,
-    ) -> (ScriptStats, Option<Sha256dHash>) {
+    ) -> (ScriptStats, Option<BlockHash>) {
         let _timer = self.start_timer("stats_delta"); // TODO: measure also the number of txns processed.
         let history_iter = self
             .history_iter_scan(b'H', scripthash, start_height)
@@ -588,7 +589,7 @@ impl ChainQuery {
         (stats, lastblock)
     }
 
-    fn header_by_hash(&self, hash: &Sha256dHash) -> Option<HeaderEntry> {
+    fn header_by_hash(&self, hash: &BlockHash) -> Option<HeaderEntry> {
         self.store
             .indexed_headers
             .read()
@@ -598,7 +599,7 @@ impl ChainQuery {
     }
 
     // Get the height of a blockhash, only if its part of the best chain
-    pub fn height_by_hash(&self, hash: &Sha256dHash) -> Option<usize> {
+    pub fn height_by_hash(&self, hash: &BlockHash) -> Option<usize> {
         self.store
             .indexed_headers
             .read()
@@ -616,7 +617,7 @@ impl ChainQuery {
             .cloned()
     }
 
-    pub fn hash_by_height(&self, height: usize) -> Option<Sha256dHash> {
+    pub fn hash_by_height(&self, height: usize) -> Option<BlockHash> {
         self.store
             .indexed_headers
             .read()
@@ -635,7 +636,7 @@ impl ChainQuery {
     }
 
     // returns None for orphaned blocks
-    pub fn blockid_by_hash(&self, hash: &Sha256dHash) -> Option<BlockId> {
+    pub fn blockid_by_hash(&self, hash: &BlockHash) -> Option<BlockId> {
         self.store
             .indexed_headers
             .read()
@@ -648,7 +649,7 @@ impl ChainQuery {
         self.store.indexed_headers.read().unwrap().len() - 1
     }
 
-    pub fn best_hash(&self) -> Sha256dHash {
+    pub fn best_hash(&self) -> BlockHash {
         self.store.indexed_headers.read().unwrap().tip().clone()
     }
 
@@ -662,7 +663,7 @@ impl ChainQuery {
 
     // TODO: can we pass txids as a "generic iterable"?
     // TODO: should also use a custom ThreadPoolBuilder?
-    pub fn lookup_txns(&self, txids: &Vec<Sha256dHash>) -> Result<Vec<Transaction>> {
+    pub fn lookup_txns(&self, txids: &Vec<Txid>) -> Result<Vec<Transaction>> {
         let _timer = self.start_timer("lookup_txns");
         txids
             .par_iter()
@@ -670,7 +671,7 @@ impl ChainQuery {
             .collect::<Result<Vec<Transaction>>>()
     }
 
-    pub fn lookup_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+    pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
         let _timer = self.start_timer("lookup_txn");
         self.lookup_raw_txn(txid).map(|rawtx| {
             let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
@@ -679,7 +680,7 @@ impl ChainQuery {
         })
     }
 
-    pub fn lookup_raw_txn(&self, txid: &Sha256dHash) -> Option<Bytes> {
+    pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
         let _timer = self.start_timer("lookup_raw_txn");
         self.store.txstore_db.get(&TxRow::key(&txid[..]))
     }
@@ -706,7 +707,7 @@ impl ChainQuery {
             .iter_scan(&TxEdgeRow::filter(&outpoint))
             .map(TxEdgeRow::from_row)
             .find_map(|edge| {
-                let txid = parse_hash(&edge.key.spending_txid);
+                let txid: Txid = deserialize(&edge.key.spending_txid).unwrap();
                 self.tx_confirming_block(&txid).map(|b| SpendingInput {
                     txid,
                     vin: edge.key.spending_vin as u32,
@@ -714,7 +715,7 @@ impl ChainQuery {
                 })
             })
     }
-    pub fn tx_confirming_block(&self, txid: &Sha256dHash) -> Option<BlockId> {
+    pub fn tx_confirming_block(&self, txid: &Txid) -> Option<BlockId> {
         let _timer = self.start_timer("tx_confirming_block");
         let headers = self.store.indexed_headers.read().unwrap();
         self.store
@@ -723,12 +724,14 @@ impl ChainQuery {
             .map(TxConfRow::from_row)
             // header_by_blockhash only returns blocks that are part of the best chain,
             // or None for orphaned blocks.
-            .filter_map(|conf| headers.header_by_blockhash(&parse_hash(&conf.key.blockhash)))
+            .filter_map(|conf| {
+                headers.header_by_blockhash(&deserialize(&conf.key.blockhash).unwrap())
+            })
             .nth(0)
             .map(BlockId::from)
     }
 
-    pub fn get_block_status(&self, hash: &Sha256dHash) -> BlockStatus {
+    pub fn get_block_status(&self, hash: &BlockHash) -> BlockStatus {
         // TODO differentiate orphaned and non-existing blocks? telling them apart requires
         // an additional db read.
 
@@ -753,7 +756,7 @@ impl ChainQuery {
     pub fn asset_history(
         &self,
         asset_id: &Sha256dHash,
-        last_seen_txid: Option<&Sha256dHash>,
+        last_seen_txid: Option<&Txid>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
         self._history(b'I', &asset_id[..], last_seen_txid, limit)
@@ -764,23 +767,23 @@ impl ChainQuery {
         &self,
         asset_id: &Sha256dHash,
         limit: usize,
-    ) -> Vec<(Sha256dHash, BlockId)> {
+    ) -> Vec<(Txid, BlockId)> {
         self._history_txids(b'I', &asset_id[..], limit)
     }
 }
 
-fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<Sha256dHash> {
+fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<BlockHash> {
     db.iter_scan(prefix)
         .map(BlockRow::from_row)
-        .map(|r| deserialize(&r.key.hash).expect("failed to parse Sha256dHash"))
+        .map(|r| deserialize(&r.key.hash).expect("failed to parse BlockHash"))
         .collect()
 }
 
-fn load_blockheaders(db: &DB) -> HashMap<Sha256dHash, BlockHeader> {
+fn load_blockheaders(db: &DB) -> HashMap<BlockHash, BlockHeader> {
     db.iter_scan(&BlockRow::header_filter())
         .map(BlockRow::from_row)
         .map(|r| {
-            let key: Sha256dHash = deserialize(&r.key.hash).expect("failed to parse Sha256dHash");
+            let key: BlockHash = deserialize(&r.key.hash).expect("failed to parse BlockHash");
             let value: BlockHeader = deserialize(&r.value).expect("failed to parse BlockHeader");
             (key, value)
         })
@@ -801,7 +804,7 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
         .map(|b| {
             let mut rows = vec![];
             let blockhash = full_hash(&b.entry.hash()[..]);
-            let txids: Vec<Sha256dHash> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
+            let txids: Vec<Txid> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
             for tx in &b.block.txdata {
                 add_transaction(tx, blockhash, &mut rows);
             }
@@ -1104,7 +1107,7 @@ impl BlockRow {
         }
     }
 
-    fn new_txids(hash: FullHash, txids: &[Sha256dHash]) -> BlockRow {
+    fn new_txids(hash: FullHash, txids: &[Txid]) -> BlockRow {
         BlockRow {
             key: BlockKey { code: b'X', hash },
             value: bincode::serialize(txids).unwrap(),
@@ -1184,15 +1187,16 @@ pub enum TxHistoryInfo {
 }
 
 impl TxHistoryInfo {
-    pub fn get_txid(&self) -> Sha256dHash {
+    pub fn get_txid(&self) -> Txid {
         match self {
             TxHistoryInfo::Funding(FundingInfo { txid, .. })
-            | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => parse_hash(&txid),
+            | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => deserialize(txid),
 
             #[cfg(feature = "liquid")]
             TxHistoryInfo::Issuing(IssuingInfo { txid, .. })
-            | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => parse_hash(&txid),
+            | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => deserialize(txid),
         }
+        .expect("cannot parse Txid")
     }
 }
 
@@ -1249,7 +1253,7 @@ impl TxHistoryRow {
         TxHistoryRow { key }
     }
 
-    pub fn get_txid(&self) -> Sha256dHash {
+    pub fn get_txid(&self) -> Txid {
         self.key.txinfo.get_txid()
     }
     fn get_outpoint(&self) -> OutPoint {
@@ -1263,11 +1267,11 @@ impl TxHistoryInfo {
     pub fn get_outpoint(&self) -> OutPoint {
         match self {
             TxHistoryInfo::Funding(ref info) => OutPoint {
-                txid: parse_hash(&info.txid),
+                txid: deserialize(&info.txid).unwrap(),
                 vout: info.vout as u32,
             },
             TxHistoryInfo::Spending(ref info) => OutPoint {
-                txid: parse_hash(&info.prev_txid),
+                txid: deserialize(&info.prev_txid).unwrap(),
                 vout: info.prev_vout as u32,
             },
             #[cfg(feature = "liquid")]
@@ -1337,7 +1341,7 @@ struct StatsCacheRow {
 }
 
 impl StatsCacheRow {
-    fn new(scripthash: &[u8], stats: &ScriptStats, blockhash: &Sha256dHash) -> Self {
+    fn new(scripthash: &[u8], stats: &ScriptStats, blockhash: &BlockHash) -> Self {
         StatsCacheRow {
             key: ScriptCacheKey {
                 code: b'A',
@@ -1359,7 +1363,7 @@ impl StatsCacheRow {
     }
 }
 
-type CachedUtxoMap = HashMap<(Sha256dHash, u32), (u32, Value)>; // (txid,vout) => (block_height,output_value)
+type CachedUtxoMap = HashMap<(Txid, u32), (u32, Value)>; // (txid,vout) => (block_height,output_value)
 
 struct UtxoCacheRow {
     key: ScriptCacheKey,
@@ -1367,7 +1371,7 @@ struct UtxoCacheRow {
 }
 
 impl UtxoCacheRow {
-    fn new(scripthash: &[u8], utxos: &UtxoMap, blockhash: &Sha256dHash) -> Self {
+    fn new(scripthash: &[u8], utxos: &UtxoMap, blockhash: &BlockHash) -> Self {
         let utxos_cache = UtxoCacheRow::to_utxo_cache(utxos);
 
         UtxoCacheRow {

@@ -7,6 +7,7 @@ use std::thread;
 
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::Txid;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use error_chain::ChainedError;
@@ -63,7 +64,7 @@ fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<
 
 // FIXME: implement caching and delta updates
 // FIXME: ensure stable ordering
-fn get_status_hash(txs: Vec<(Sha256dHash, Option<BlockId>)>) -> Option<FullHash> {
+fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>) -> Option<FullHash> {
     if txs.is_empty() {
         None
     } else {
@@ -277,7 +278,7 @@ impl Connection {
     }
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
-        let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
+        let tx_hash = Txid::from(hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?);
         let verbose = match params.get(1) {
             Some(value) => value.as_bool().chain_err(|| "non-bool verbose value")?,
             None => false,
@@ -296,7 +297,7 @@ impl Connection {
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
-        let txid = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
+        let txid = Txid::from(hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?);
         let height = usize_from_value(params.get(1), "height")?;
         let blockid = self
             .query
@@ -514,7 +515,7 @@ fn get_history(
     query: &Query,
     scripthash: &[u8],
     txs_limit: usize,
-) -> Result<Vec<(Sha256dHash, Option<BlockId>)>> {
+) -> Result<Vec<(Txid, Option<BlockId>)>> {
     // to avoid silently trunacting history entries, ask for one extra more than the limit and fail if it exists
     let history_txids = query.history_txids(scripthash, txs_limit + 1);
     ensure!(history_txids.len() <= txs_limit, ErrorKind::TooPopular);

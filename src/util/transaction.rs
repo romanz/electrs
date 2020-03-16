@@ -1,6 +1,7 @@
+use bitcoin::{BlockHash, Txid};
+
 #[cfg(feature = "liquid")]
-use bitcoin::hashes::hex::FromHex;
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hashes::{hex::FromHex, sha256d::Hash as Sha256dHash};
 
 use crate::chain::{TxIn, TxOut};
 use crate::util::BlockId;
@@ -18,7 +19,7 @@ pub struct TransactionStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block_height: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_hash: Option<Sha256dHash>,
+    pub block_hash: Option<BlockHash>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block_time: Option<u32>,
 }
@@ -44,7 +45,7 @@ impl From<Option<BlockId>> for TransactionStatus {
 
 #[derive(Serialize, Deserialize)]
 pub struct TxInput {
-    pub txid: Sha256dHash,
+    pub txid: Txid,
     pub vin: u16,
 }
 

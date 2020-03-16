@@ -1,25 +1,20 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::iter::FromIterator;
-use std::slice;
-
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
-use bitcoin::util::hash::BitcoinHash;
-use time;
-
-#[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::serialize;
-#[cfg(feature = "liquid")]
-use elements::encode::serialize;
-
 use crate::chain::{Block, BlockHeader};
 use crate::errors::*;
 use crate::new_index::BlockEntry;
 
+use bitcoin::consensus::encode::serialize;
+use bitcoin::{BitcoinHash, BlockHash};
+
+use std::collections::HashMap;
+use std::fmt;
+use std::iter::FromIterator;
+use std::slice;
+use time;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockId {
     pub height: usize,
-    pub hash: Sha256dHash,
+    pub hash: BlockHash,
     pub time: u32,
 }
 
@@ -36,12 +31,12 @@ impl From<&HeaderEntry> for BlockId {
 #[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
     height: usize,
-    hash: Sha256dHash,
+    hash: BlockHash,
     header: BlockHeader,
 }
 
 impl HeaderEntry {
-    pub fn hash(&self) -> &Sha256dHash {
+    pub fn hash(&self) -> &BlockHash {
         &self.hash
     }
 
@@ -71,8 +66,8 @@ impl fmt::Debug for HeaderEntry {
 
 pub struct HeaderList {
     headers: Vec<HeaderEntry>,
-    heights: HashMap<Sha256dHash, usize>,
-    tip: Sha256dHash,
+    heights: HashMap<BlockHash, usize>,
+    tip: BlockHash,
 }
 
 impl HeaderList {
@@ -80,13 +75,13 @@ impl HeaderList {
         HeaderList {
             headers: vec![],
             heights: HashMap::new(),
-            tip: Sha256dHash::default(),
+            tip: BlockHash::default(),
         }
     }
 
     pub fn new(
-        mut headers_map: HashMap<Sha256dHash, BlockHeader>,
-        tip_hash: Sha256dHash,
+        mut headers_map: HashMap<BlockHash, BlockHeader>,
+        tip_hash: BlockHash,
     ) -> HeaderList {
         trace!(
             "processing {} headers, tip at {:?}",
@@ -96,7 +91,7 @@ impl HeaderList {
 
         let mut blockhash = tip_hash;
         let mut headers_chain = vec![];
-        let null_hash = Sha256dHash::default();
+        let null_hash = BlockHash::default();
 
         while blockhash != null_hash {
             let header = headers_map.remove(&blockhash).expect(&format!(
@@ -122,7 +117,7 @@ impl HeaderList {
     pub fn order(&self, new_headers: Vec<BlockHeader>) -> Vec<HeaderEntry> {
         // header[i] -> header[i-1] (i.e. header.last() is the tip)
         struct HashedHeader {
-            blockhash: Sha256dHash,
+            blockhash: BlockHash,
             header: BlockHeader,
         }
         let hashed_headers =
@@ -140,7 +135,7 @@ impl HeaderList {
             Some(h) => h.header.prev_blockhash,
             None => return vec![], // hashed_headers is empty
         };
-        let null_hash = Sha256dHash::default();
+        let null_hash = BlockHash::default();
         let new_height: usize = if prev_blockhash == null_hash {
             0
         } else {
@@ -174,7 +169,7 @@ impl HeaderList {
                 let expected_prev_blockhash = if height > 0 {
                     *self.headers[height - 1].hash()
                 } else {
-                    Sha256dHash::default()
+                    BlockHash::default()
                 };
                 assert_eq!(entry.header().prev_blockhash, expected_prev_blockhash);
                 height
@@ -196,7 +191,7 @@ impl HeaderList {
         }
     }
 
-    pub fn header_by_blockhash(&self, blockhash: &Sha256dHash) -> Option<&HeaderEntry> {
+    pub fn header_by_blockhash(&self, blockhash: &BlockHash) -> Option<&HeaderEntry> {
         let height = self.heights.get(blockhash)?;
         let header = self.headers.get(*height)?;
         if *blockhash == *header.hash() {
@@ -217,13 +212,13 @@ impl HeaderList {
         self.headers.last() == other.headers.last()
     }
 
-    pub fn tip(&self) -> &Sha256dHash {
+    pub fn tip(&self) -> &BlockHash {
         assert_eq!(
             self.tip,
             self.headers
                 .last()
                 .map(|h| *h.hash())
-                .unwrap_or(Sha256dHash::default())
+                .unwrap_or(BlockHash::default())
         );
         &self.tip
     }
@@ -241,11 +236,11 @@ impl HeaderList {
 pub struct BlockStatus {
     pub in_best_chain: bool,
     pub height: Option<usize>,
-    pub next_best: Option<Sha256dHash>,
+    pub next_best: Option<BlockHash>,
 }
 
 impl BlockStatus {
-    pub fn confirmed(height: usize, next_best: Option<Sha256dHash>) -> BlockStatus {
+    pub fn confirmed(height: usize, next_best: Option<BlockHash>) -> BlockStatus {
         BlockStatus {
             in_best_chain: true,
             height: Some(height),
