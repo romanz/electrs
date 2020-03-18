@@ -57,10 +57,10 @@ fn main() {
             break;
         }
 
-        iter.next();
-
         let tx: Transaction = deserialize(&value).expect("failed to parse Transaction");
         let txid = tx.txid();
+
+        iter.next();
 
         // only consider transactions of exactly two outputs
         if tx.output.len() != 2 {

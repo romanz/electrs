@@ -56,11 +56,15 @@ impl<'a> Iterator for ReverseScanIterator<'a> {
             self.done = true;
             return None;
         }
-        let value = self.iter.value().unwrap();
+
+        let row = DBRow {
+            key: key.into(),
+            value: self.iter.value().unwrap().into(),
+        };
 
         self.iter.prev();
 
-        Some(DBRow { key, value })
+        Some(row)
     }
 }
 
