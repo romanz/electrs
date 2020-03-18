@@ -17,13 +17,18 @@ extern crate num_cpus;
 extern crate page_size;
 extern crate prometheus;
 extern crate rayon;
-extern crate rocksdb;
 extern crate serde;
 extern crate stderrlog;
 extern crate sysconf;
 extern crate time;
 extern crate tiny_http;
 extern crate url;
+
+// See https://github.com/romanz/electrs/issues/193 & https://github.com/rust-rocksdb/rust-rocksdb/issues/327
+#[cfg(not(feature = "oldcpu"))]
+extern crate rocksdb;
+#[cfg(feature = "oldcpu")]
+extern crate rocksdb_oldcpu as rocksdb;
 
 #[macro_use]
 extern crate chan;
