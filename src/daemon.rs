@@ -646,7 +646,7 @@ impl Daemon {
         Ok(new_headers)
     }
 
-     pub fn get_relayfee(&self) -> Result<f64> {
+    pub fn get_relayfee(&self) -> Result<f64> {
         let relayfee = self.getnetworkinfo()?.relayfee;
 
         // from BTC/kB to sat/b
