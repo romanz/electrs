@@ -114,6 +114,7 @@ pub struct BlockchainInfo {
 struct NetworkInfo {
     version: u64,
     subversion: String,
+    relayfee: f64, // in BTC/kB
 }
 
 pub struct MempoolEntry {
@@ -643,5 +644,12 @@ impl Daemon {
         trace!("downloaded {} block headers", new_headers.len());
         new_headers.reverse(); // so the tip is the last vector entry
         Ok(new_headers)
+    }
+
+     pub fn get_relayfee(&self) -> Result<f64> {
+        let relayfee = self.getnetworkinfo()?.relayfee;
+
+        // from BTC/kB to sat/b
+        Ok(relayfee * 100_000f64)
     }
 }

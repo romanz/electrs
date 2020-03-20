@@ -215,8 +215,9 @@ impl Connection {
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
-        // TODO
-        Ok(json!(0.0)) // allow sending transactions with any fee.
+        let relayfee = self.query.get_relayfee()?;
+        // convert from sat/b to BTC/kB, as expected by Electrum clients
+        Ok(json!(relayfee / 100_000f64))
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {

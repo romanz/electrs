@@ -28,6 +28,7 @@ pub struct Query {
     mempool: Arc<RwLock<Mempool>>,
     daemon: Arc<Daemon>,
     cached_estimates: RwLock<Option<(HashMap<u16, f32>, Instant)>>,
+    cached_relayfee: RwLock<Option<f64>>,
 
     #[cfg(feature = "liquid")]
     asset_db: Option<AssetRegistry>,
@@ -41,6 +42,7 @@ impl Query {
             mempool,
             daemon,
             cached_estimates: RwLock::new(None),
+            cached_relayfee: RwLock::new(None),
         }
     }
 
@@ -163,6 +165,16 @@ impl Query {
         fresh
     }
 
+    pub fn get_relayfee(&self) -> Result<f64> {
+        if let Some(cached) = *self.cached_relayfee.read().unwrap() {
+            return Ok(cached);
+        }
+
+        let relayfee = self.daemon.get_relayfee()?;
+        self.cached_relayfee.write().unwrap().replace(relayfee);
+        Ok(relayfee)
+    }
+
     #[cfg(feature = "liquid")]
     pub fn new(
         chain: Arc<ChainQuery>,
@@ -176,6 +188,7 @@ impl Query {
             daemon,
             asset_db,
             cached_estimates: RwLock::new(None),
+            cached_relayfee: RwLock::new(None),
         }
     }
 
