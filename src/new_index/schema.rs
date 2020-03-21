@@ -323,10 +323,12 @@ impl ChainQuery {
 
     pub fn get_block_raw(&self, hash: &BlockHash) -> Option<Vec<u8>> {
         let entry = self.header_by_hash(hash)?;
+        let meta = self.get_block_meta(hash)?;
         let txids = self.get_block_txids(hash)?;
 
-        let mut raw = serialize(entry.header());
+        let mut raw = Vec::with_capacity(meta.size as usize);
 
+        raw.append(&mut serialize(entry.header()));
         raw.append(&mut serialize(&VarInt(txids.len() as u64)));
 
         for txid in txids {
