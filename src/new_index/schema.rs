@@ -1,6 +1,8 @@
 use bincode;
 use bitcoin::blockdata::script::Script;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+#[cfg(not(feature = "liquid"))]
+use bitcoin::util::merkleblock::MerkleBlock;
 use bitcoin::{BlockHash, Txid};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -750,6 +752,20 @@ impl ChainQuery {
                 )
             },
         )
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    pub fn get_merkleblock_proof(&self, txid: &Txid) -> Option<MerkleBlock> {
+        let blockid = self.tx_confirming_block(txid)?;
+        let headerentry = self.header_by_hash(&blockid.hash)?;
+        let block_txids = self.get_block_txids(&blockid.hash)?;
+        let match_txids = vec![*txid].into_iter().collect();
+
+        Some(MerkleBlock::from_header_txids(
+            headerentry.header(),
+            &block_txids,
+            &match_txids,
+        ))
     }
 
     #[cfg(feature = "liquid")]

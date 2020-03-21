@@ -839,6 +839,24 @@ fn handle_request(
                 ttl,
             )
         }
+        #[cfg(not(feature = "liquid"))]
+        (&Method::GET, Some(&"tx"), Some(hash), Some(&"merkleblock-proof"), None, None) => {
+            let hash = Txid::from_hex(hash)?;
+
+            let merkleblock = query.chain().get_merkleblock_proof(&hash).ok_or_else(|| {
+                HttpError::not_found("Transaction not found or is unconfirmed".to_string())
+            })?;
+
+            let height = query
+                .chain()
+                .height_by_hash(&merkleblock.header.bitcoin_hash());
+
+            http_message(
+                StatusCode::OK,
+                hex::encode(encode::serialize(&merkleblock)),
+                ttl_by_depth(height, query),
+            )
+        }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"outspend"), Some(index), None) => {
             let hash = Txid::from_hex(hash)?;
             let outpoint = OutPoint {

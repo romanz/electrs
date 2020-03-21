@@ -153,7 +153,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "bitcoin"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/shesek/rust-bitcoin?rev=0.23-merkleblock-txids#4dd6614ce73febd1d537ac5a16dcd18eaad8f332"
 dependencies = [
  "bech32 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin_hashes 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -413,7 +413,7 @@ dependencies = [
  "arrayref 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bincode 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "bitcoin 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bitcoin 0.23.0 (git+https://github.com/shesek/rust-bitcoin?rev=0.23-merkleblock-txids)",
  "chan 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)",
  "chan-signal 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -453,7 +453,7 @@ name = "elements"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "bitcoin 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bitcoin 0.23.0 (git+https://github.com/shesek/rust-bitcoin?rev=0.23-merkleblock-txids)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1762,7 +1762,7 @@ dependencies = [
 "checksum bindgen 0.53.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6bb26d6a69a335b8cb0e7c7e9775cd5666611dc50a37177c3f2cedcfc040e8c8"
 "checksum bit-set 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d9bf6104718e80d7b26a68fdbacff3481cfc05df670821affc7e9cbc1884400c"
 "checksum bit-vec 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "02b4ff8b16e6076c3e14220b39fbc1fabb6737522281a388998046859400895f"
-"checksum bitcoin 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6a32c9d2fa897cfbb0db45d71e3d2838666194abc4828c0f994e4b5c3bf85ba4"
+"checksum bitcoin 0.23.0 (git+https://github.com/shesek/rust-bitcoin?rev=0.23-merkleblock-txids)" = "<none>"
 "checksum bitcoin_hashes 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)" = "aff017f894e94c11c7fab19c14d4cc5653b107ef9220fed69a7a84afc037342b"
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 "checksum blake2b_simd 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)" = "5850aeee1552f495dd0250014cf64b82b7c8879a89d83b33bbdace2cc4f63182"
