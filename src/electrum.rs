@@ -23,10 +23,8 @@ use crate::config::Config;
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
-use crate::util::{
-    full_hash, get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof, spawn_thread,
-    BlockId, Channel, FullHash, HeaderEntry, SyncChannel,
-};
+use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
+use crate::util::{full_hash, spawn_thread, BlockId, Channel, FullHash, HeaderEntry, SyncChannel};
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {

@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    full_hash, get_innerscripts, get_script_asm, get_tx_merkle_proof, has_prevout, is_coinbase,
+    electrum_merkle, full_hash, get_innerscripts, get_script_asm, has_prevout, is_coinbase,
     script_to_address, BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
 };
 
@@ -830,7 +830,8 @@ fn handle_request(
             let blockid = query.chain().tx_confirming_block(&hash).ok_or_else(|| {
                 HttpError::not_found("Transaction not found or is unconfirmed".to_string())
             })?;
-            let (merkle, pos) = get_tx_merkle_proof(query.chain(), &hash, &blockid.hash)?;
+            let (merkle, pos) =
+                electrum_merkle::get_tx_merkle_proof(query.chain(), &hash, &blockid.hash)?;
             let merkle: Vec<String> = merkle.into_iter().map(|txid| txid.to_hex()).collect();
             let ttl = ttl_by_depth(Some(blockid.height), query);
             json_response(
