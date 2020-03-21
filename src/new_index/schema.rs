@@ -3,7 +3,7 @@ use bitcoin::blockdata::script::Script;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::util::merkleblock::MerkleBlock;
-use bitcoin::{BlockHash, Txid};
+use bitcoin::{BlockHash, Txid, VarInt};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
@@ -319,6 +319,21 @@ impl ChainQuery {
             .txstore_db
             .get(&BlockRow::meta_key(full_hash(&hash[..])))
             .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
+    }
+
+    pub fn get_block_raw(&self, hash: &BlockHash) -> Option<Vec<u8>> {
+        let entry = self.header_by_hash(hash)?;
+        let txids = self.get_block_txids(hash)?;
+
+        let mut raw = serialize(entry.header());
+
+        raw.append(&mut serialize(&VarInt(txids.len() as u64)));
+
+        for txid in txids {
+            raw.append(&mut self.lookup_raw_txn(&txid)?);
+        }
+
+        Some(raw)
     }
 
     pub fn get_block_with_meta(&self, hash: &BlockHash) -> Option<BlockHeaderMeta> {

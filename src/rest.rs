@@ -609,6 +609,20 @@ fn handle_request(
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
         }
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"raw"), None, None) => {
+            let hash = BlockHash::from_hex(hash)?;
+            let raw = query
+                .chain()
+                .get_block_raw(&hash)
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
+
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/octet-stream")
+                .header("Cache-Control", format!("public, max-age={:}", TTL_LONG))
+                .body(Body::from(raw))
+                .unwrap())
+        }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"txid"), Some(index), None) => {
             let hash = BlockHash::from_hex(hash)?;
             let index: usize = index.parse()?;
