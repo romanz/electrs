@@ -28,7 +28,7 @@ pub fn precache(chain: &ChainQuery, scripthashes: Vec<FullHash>) {
             .enumerate()
             .for_each(|(i, scripthash)| {
                 if i % 5 == 0 {
-                    debug!("Starting pre-cache for scripthash {}/{}", i + 1, total);
+                    info!("running pre-cache for scripthash {}/{}", i + 1, total);
                 }
                 chain.stats(&scripthash[..]);
                 //chain.utxo(&scripthash[..]);
