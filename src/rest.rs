@@ -54,17 +54,21 @@ struct BlockValue {
     weight: u32,
     merkle_root: String,
     previousblockhash: Option<String>,
+
     #[cfg(not(feature = "liquid"))]
     nonce: u32,
     #[cfg(not(feature = "liquid"))]
     bits: u32,
+    #[cfg(not(feature = "liquid"))]
+    difficulty: u64,
+
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
     ext: Option<serde_json::Value>,
 }
 
-impl From<BlockHeaderMeta> for BlockValue {
-    fn from(blockhm: BlockHeaderMeta) -> Self {
+impl BlockValue {
+    fn new(blockhm: BlockHeaderMeta, network: &Network) -> Self {
         let header = blockhm.header_entry.header();
         BlockValue {
             id: header.bitcoin_hash().to_hex(),
@@ -85,6 +89,8 @@ impl From<BlockHeaderMeta> for BlockValue {
             bits: header.bits,
             #[cfg(not(feature = "liquid"))]
             nonce: header.nonce,
+            #[cfg(not(feature = "liquid"))]
+            difficulty: header.difficulty(bitcoin::Network::from(network)),
 
             #[cfg(feature = "liquid")]
             ext: Some(json!(header.ext)),
@@ -575,7 +581,7 @@ fn handle_request(
 
         (&Method::GET, Some(&"blocks"), start_height, None, None, None) => {
             let start_height = start_height.and_then(|height| height.parse::<usize>().ok());
-            blocks(&query, start_height)
+            blocks(&query, &config, start_height)
         }
         (&Method::GET, Some(&"block-height"), Some(height), None, None, None) => {
             let height = height.parse::<usize>()?;
@@ -592,7 +598,7 @@ fn handle_request(
                 .chain()
                 .get_block_with_meta(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
-            let block_value = BlockValue::from(blockhm);
+            let block_value = BlockValue::new(blockhm, &config.network_type);
             json_response(block_value, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None, None) => {
@@ -1018,16 +1024,15 @@ fn handle_request(
     }
 }
 
-fn http_message(
-    status: StatusCode,
-    message: String,
-    ttl: u32,
-) -> Result<Response<Body>, HttpError> {
+fn http_message<T>(status: StatusCode, message: T, ttl: u32) -> Result<Response<Body>, HttpError>
+where
+    T: Into<Body>,
+{
     Ok(Response::builder()
         .status(status)
         .header("Content-Type", "text/plain")
         .header("Cache-Control", format!("public, max-age={:}", ttl))
-        .body(Body::from(message))
+        .body(message.into())
         .unwrap())
 }
 
@@ -1040,7 +1045,7 @@ fn json_response<T: Serialize>(value: T, ttl: u32) -> Result<Response<Body>, Htt
         .unwrap())
 }
 
-fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
+fn blocks(query: &Query, config: &Config, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query
@@ -1061,7 +1066,7 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
         current_hash = blockhm.header_entry.header().prev_blockhash.clone();
 
         #[allow(unused_mut)]
-        let mut value = BlockValue::from(blockhm);
+        let mut value = BlockValue::new(blockhm, &config.network_type);
 
         #[cfg(feature = "liquid")]
         {
