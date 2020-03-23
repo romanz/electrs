@@ -322,6 +322,8 @@ impl ChainQuery {
     }
 
     pub fn get_block_raw(&self, hash: &BlockHash) -> Option<Vec<u8>> {
+        let _timer = self.start_timer("get_block_raw");
+
         let entry = self.header_by_hash(hash)?;
         let meta = self.get_block_meta(hash)?;
         let txids = self.get_block_txids(hash)?;
