@@ -19,6 +19,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut, Value};
+use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
@@ -46,14 +47,14 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn open(path: &Path) -> Self {
-        let txstore_db = DB::open(&path.join("txstore"));
+    pub fn open(path: &Path, config: &Config) -> Self {
+        let txstore_db = DB::open(&path.join("txstore"), config);
         let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::done_filter());
         debug!("{} blocks were added", added_blockhashes.len());
-        let history_db = DB::open(&path.join("history"));
+        let history_db = DB::open(&path.join("history"), config);
         let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
         debug!("{} blocks were indexed", indexed_blockhashes.len());
-        let cache_db = DB::open(&path.join("cache"));
+        let cache_db = DB::open(&path.join("cache"), config);
 
         let headers = HeaderList::empty();
 

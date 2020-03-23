@@ -49,7 +49,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         signal.clone(),
         &metrics,
     )?);
-    let store = Arc::new(Store::open(&config.db_path.join("newindex")));
+    let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
     let mut indexer = Indexer::open(
         Arc::clone(&store),
         fetch_from(&config, &store),

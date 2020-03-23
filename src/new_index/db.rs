@@ -2,6 +2,7 @@ use rocksdb;
 
 use std::path::Path;
 
+use crate::config::Config;
 use crate::util::Bytes;
 
 static DB_VERSION: u32 = 1;
@@ -80,7 +81,7 @@ pub enum DBFlush {
 }
 
 impl DB {
-    pub fn open(path: &Path) -> DB {
+    pub fn open(path: &Path, config: &Config) -> DB {
         debug!("opening DB at {:?}", path);
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);
@@ -101,7 +102,7 @@ impl DB {
         let db = DB {
             db: rocksdb::DB::open(&db_opts, path).expect("failed to open RocksDB"),
         };
-        db.verify_compatibility();
+        db.verify_compatibility(config);
         db
     }
 
@@ -182,8 +183,16 @@ impl DB {
         self.db.get(key).unwrap().map(|v| v.to_vec())
     }
 
-    fn verify_compatibility(&self) {
-        let compatibility_bytes = bincode::serialize(&DB_VERSION).unwrap();
+    fn verify_compatibility(&self, config: &Config) {
+        let mut compatibility_bytes = bincode::serialize(&DB_VERSION).unwrap();
+
+        if config.light_mode {
+            // append a byte to indicate light_mode is enabled.
+            // we're not letting bincode serialize this so that the compatiblity bytes won't change
+            // (and require a reindex) when light_mode is disabled. this should be chagned the next
+            // time we bump DB_VERSION and require a re-index anyway.
+            compatibility_bytes.push(1);
+        }
 
         match self.get(b"V") {
             None => self.put(b"V", &compatibility_bytes),
