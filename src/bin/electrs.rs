@@ -50,7 +50,12 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         &metrics,
     )?);
     let store = Arc::new(Store::open(&config.db_path.join("newindex")));
-    let mut indexer = Indexer::open(Arc::clone(&store), fetch_from(&config, &store), &metrics);
+    let mut indexer = Indexer::open(
+        Arc::clone(&store),
+        fetch_from(&config, &store),
+        config.light_mode,
+        &metrics,
+    );
     let mut tip = indexer.update(&daemon)?;
 
     let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));

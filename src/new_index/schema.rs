@@ -142,6 +142,7 @@ pub struct Indexer {
     store: Arc<Store>,
     flush: DBFlush,
     from: FetchFrom,
+    light_mode: bool,
     duration: HistogramVec,
 }
 
@@ -152,11 +153,12 @@ pub struct ChainQuery {
 
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
-    pub fn open(store: Arc<Store>, from: FetchFrom, metrics: &Metrics) -> Self {
+    pub fn open(store: Arc<Store>, from: FetchFrom, light_mode: bool, metrics: &Metrics) -> Self {
         Indexer {
             store,
             flush: DBFlush::Disable,
             from,
+            light_mode,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("index_duration", "Index update duration (in seconds)"),
                 &["step"],
@@ -251,7 +253,7 @@ impl Indexer {
         // TODO: skip orphaned blocks?
         let rows = {
             let _timer = self.start_timer("add_process");
-            add_blocks(blocks)
+            add_blocks(blocks, self.light_mode)
         };
         {
             let _timer = self.start_timer("add_write");
@@ -825,7 +827,7 @@ fn load_blockheaders(db: &DB) -> HashMap<BlockHash, BlockHeader> {
         .collect()
 }
 
-fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
+fn add_blocks(block_entries: &[BlockEntry], light_mode: bool) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
@@ -841,11 +843,15 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
             let blockhash = full_hash(&b.entry.hash()[..]);
             let txids: Vec<Txid> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
             for tx in &b.block.txdata {
-                add_transaction(tx, blockhash, &mut rows);
+                add_transaction(tx, blockhash, &mut rows, light_mode);
             }
+
+            if !light_mode {
+                rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
+                rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
+            }
+
             rows.push(BlockRow::new_header(&b).to_row());
-            rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
-            rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
             rows.push(BlockRow::new_done(blockhash).to_row()); // mark block as "added"
             rows
         })
@@ -853,9 +859,12 @@ fn add_blocks(block_entries: &[BlockEntry]) -> Vec<DBRow> {
         .collect()
 }
 
-fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>) {
-    rows.push(TxRow::new(tx).to_row());
+fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>, light_mode: bool) {
     rows.push(TxConfRow::new(tx, blockhash).to_row());
+
+    if !light_mode {
+        rows.push(TxRow::new(tx).to_row());
+    }
 
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
