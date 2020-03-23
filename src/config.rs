@@ -32,6 +32,7 @@ pub struct Config {
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
+    pub light_mode: bool,
     pub prevout_enabled: bool,
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
@@ -144,6 +145,11 @@ impl Config {
                     .long("tx-cache-size")
                     .help("Number of transactions to keep in for query LRU cache")
                     .default_value("10000")  // should be enough for a small wallet.
+            )
+            .arg(
+                Arg::with_name("lightmode")
+                    .long("lightmode")
+                    .help("Enable light indexing mode")
             )
             .arg(
                 Arg::with_name("disable_prevout")
@@ -306,6 +312,7 @@ impl Config {
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
+            light_mode: m.is_present("lightmode"),
             prevout_enabled: !m.is_present("disable_prevout"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
