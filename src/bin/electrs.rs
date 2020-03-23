@@ -58,7 +58,12 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     );
     let mut tip = indexer.update(&daemon)?;
 
-    let chain = Arc::new(ChainQuery::new(Arc::clone(&store), &metrics));
+    let chain = Arc::new(ChainQuery::new(
+        Arc::clone(&store),
+        Arc::clone(&daemon),
+        config.light_mode,
+        &metrics,
+    ));
 
     if let Some(ref precache_file) = config.precache_scripts {
         let precache_scripthashes = precache::scripthashes_from_file(precache_file.to_string())

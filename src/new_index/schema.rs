@@ -148,6 +148,8 @@ pub struct Indexer {
 
 pub struct ChainQuery {
     store: Arc<Store>, // TODO: should be used as read-only
+    daemon: Arc<Daemon>,
+    light_mode: bool,
     duration: HistogramVec,
 }
 
@@ -289,9 +291,16 @@ impl Indexer {
 }
 
 impl ChainQuery {
-    pub fn new(store: Arc<Store>, metrics: &Metrics) -> Self {
+    pub fn new(
+        store: Arc<Store>,
+        daemon: Arc<Daemon>,
+        light_mode: bool,
+        metrics: &Metrics,
+    ) -> Self {
         ChainQuery {
             store,
+            daemon,
+            light_mode,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
                 &["name"],
@@ -309,37 +318,57 @@ impl ChainQuery {
 
     pub fn get_block_txids(&self, hash: &BlockHash) -> Option<Vec<Txid>> {
         let _timer = self.start_timer("get_block_txids");
-        self.store
-            .txstore_db
-            .get(&BlockRow::txids_key(full_hash(&hash[..])))
-            .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
+
+        if self.light_mode {
+            // TODO fetch block as binary from REST API instead of as hex
+            let mut blockinfo = self.daemon.getblock_raw(hash, 1).ok()?;
+            Some(serde_json::from_value(blockinfo["tx"].take()).unwrap())
+        } else {
+            self.store
+                .txstore_db
+                .get(&BlockRow::txids_key(full_hash(&hash[..])))
+                .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
+        }
     }
 
     pub fn get_block_meta(&self, hash: &BlockHash) -> Option<BlockMeta> {
         let _timer = self.start_timer("get_block_meta");
-        self.store
-            .txstore_db
-            .get(&BlockRow::meta_key(full_hash(&hash[..])))
-            .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
+
+        if self.light_mode {
+            let blockinfo = self.daemon.getblock_raw(hash, 1).ok()?;
+            Some(serde_json::from_value(blockinfo).unwrap())
+        } else {
+            self.store
+                .txstore_db
+                .get(&BlockRow::meta_key(full_hash(&hash[..])))
+                .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
+        }
     }
 
     pub fn get_block_raw(&self, hash: &BlockHash) -> Option<Vec<u8>> {
         let _timer = self.start_timer("get_block_raw");
 
-        let entry = self.header_by_hash(hash)?;
-        let meta = self.get_block_meta(hash)?;
-        let txids = self.get_block_txids(hash)?;
+        if self.light_mode {
+            let blockhex = self.daemon.getblock_raw(hash, 0).ok()?;
+            Some(hex::decode(blockhex.as_str().unwrap()).unwrap())
+        } else {
+            let entry = self.header_by_hash(hash)?;
+            let meta = self.get_block_meta(hash)?;
+            let txids = self.get_block_txids(hash)?;
 
-        let mut raw = Vec::with_capacity(meta.size as usize);
+            // Reconstruct the raw block using the header and txids,
+            // as <raw header><tx count varint><raw txs>
+            let mut raw = Vec::with_capacity(meta.size as usize);
 
-        raw.append(&mut serialize(entry.header()));
-        raw.append(&mut serialize(&VarInt(txids.len() as u64)));
+            raw.append(&mut serialize(entry.header()));
+            raw.append(&mut serialize(&VarInt(txids.len() as u64)));
 
-        for txid in txids {
-            raw.append(&mut self.lookup_raw_txn(&txid)?);
+            for txid in txids {
+                raw.append(&mut self.lookup_raw_txn(&txid)?);
+            }
+
+            Some(raw)
         }
-
-        Some(raw)
     }
 
     pub fn get_block_with_meta(&self, hash: &BlockHash) -> Option<BlockHeaderMeta> {
@@ -705,7 +734,15 @@ impl ChainQuery {
 
     pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
         let _timer = self.start_timer("lookup_raw_txn");
-        self.store.txstore_db.get(&TxRow::key(&txid[..]))
+
+        if self.light_mode {
+            // TODO specify the blockhash so that we don't require txindex
+            // TODO fetch transaction as binary from REST API instead of as hex
+            let txhex = self.daemon.gettransaction_raw(txid, false).ok()?;
+            Some(hex::decode(txhex.as_str().unwrap()).unwrap())
+        } else {
+            self.store.txstore_db.get(&TxRow::key(&txid[..]))
+        }
     }
 
     pub fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {

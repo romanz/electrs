@@ -263,6 +263,7 @@ impl BlockStatus {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlockMeta {
+    #[serde(alias = "nTx")]
     pub tx_count: u32,
     pub size: u32,
     pub weight: u32,

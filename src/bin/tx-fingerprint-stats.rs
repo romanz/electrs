@@ -26,8 +26,6 @@ fn main() {
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
-    let chain = ChainQuery::new(Arc::clone(&store), &metrics);
-
     let daemon = Arc::new(
         Daemon::new(
             &config.daemon_dir,
@@ -38,6 +36,13 @@ fn main() {
             &metrics,
         )
         .unwrap(),
+    );
+
+    let chain = ChainQuery::new(
+        Arc::clone(&store),
+        Arc::clone(&daemon),
+        config.light_mode,
+        &metrics,
     );
 
     let mut indexer = Indexer::open(
