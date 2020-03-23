@@ -1045,7 +1045,11 @@ fn json_response<T: Serialize>(value: T, ttl: u32) -> Result<Response<Body>, Htt
         .unwrap())
 }
 
-fn blocks(query: &Query, config: &Config, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
+fn blocks(
+    query: &Query,
+    config: &Config,
+    start_height: Option<usize>,
+) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
         Some(height) => query
