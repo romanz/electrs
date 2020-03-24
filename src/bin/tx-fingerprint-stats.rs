@@ -21,7 +21,7 @@ fn main() {
 
     let signal = Waiter::new();
     let config = Config::from_args();
-    let store = Arc::new(Store::open(&config.db_path.join("newindex")));
+    let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
 
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
