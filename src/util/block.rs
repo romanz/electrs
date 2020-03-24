@@ -2,11 +2,6 @@ use crate::chain::{Block, BlockHeader};
 use crate::errors::*;
 use crate::new_index::BlockEntry;
 
-#[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::serialize;
-#[cfg(feature = "liquid")]
-use elements::encode::serialize;
-
 use bitcoin::{BitcoinHash, BlockHash};
 
 use std::collections::HashMap;
@@ -278,19 +273,15 @@ impl From<&Block> for BlockMeta {
     fn from(block: &Block) -> BlockMeta {
         BlockMeta {
             tx_count: block.txdata.len() as u32,
-            weight: block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
-            size: serialize(block).len() as u32,
+            weight: block.get_weight() as u32,
+            size: block.get_size() as u32,
         }
     }
 }
 
 impl From<&BlockEntry> for BlockMeta {
     fn from(b: &BlockEntry) -> BlockMeta {
-        BlockMeta {
-            tx_count: b.block.txdata.len() as u32,
-            weight: b.block.txdata.iter().map(|tx| tx.get_weight() as u32).sum(),
-            size: b.size,
-        }
+        BlockMeta::from(&b.block)
     }
 }
 

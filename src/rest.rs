@@ -133,7 +133,6 @@ impl TransactionValue {
             .iter()
             .map(|txout| TxOutValue::new(txout, config))
             .collect();
-        let bytes = encode::serialize(&tx);
 
         #[cfg(not(feature = "liquid"))]
         let fee = if config.prevout_enabled && !vins.iter().any(|vin| vin.prevout.is_none()) {
@@ -160,7 +159,7 @@ impl TransactionValue {
             locktime: tx.lock_time,
             vin: vins,
             vout: vouts,
-            size: bytes.len() as u32,
+            size: tx.get_size() as u32,
             weight: tx.get_weight() as u32,
             fee,
             status: Some(TransactionStatus::from(blockid)),

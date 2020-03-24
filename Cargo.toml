@@ -70,5 +70,5 @@ panic = 'abort'
 codegen-units = 1
 
 [patch.crates-io.bitcoin]
-git = "https://github.com/shesek/rust-bitcoin"
-rev = "0.23-merkleblock-txids"
+git = "https://github.com/blockstream/rust-bitcoin"
+rev = "0.23-electrs"
