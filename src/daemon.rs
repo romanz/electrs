@@ -524,8 +524,16 @@ impl Daemon {
         Ok(txs)
     }
 
-    pub fn gettransaction_raw(&self, txid: &Txid, verbose: bool) -> Result<Value> {
-        self.request("getrawtransaction", json!([txid.to_hex(), verbose]))
+    pub fn gettransaction_raw(
+        &self,
+        txid: &Txid,
+        blockhash: &BlockHash,
+        verbose: bool,
+    ) -> Result<Value> {
+        self.request(
+            "getrawtransaction",
+            json!([txid.to_hex(), verbose, blockhash]),
+        )
     }
 
     pub fn getmempooltx(&self, txhash: &Txid) -> Result<Transaction> {

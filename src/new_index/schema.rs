@@ -365,7 +365,8 @@ impl ChainQuery {
             raw.append(&mut serialize(&VarInt(txids.len() as u64)));
 
             for txid in txids {
-                raw.append(&mut self.lookup_raw_txn(&txid)?);
+                // we don't need to provide the blockhash because we know we're not in light mode
+                raw.append(&mut self.lookup_raw_txn(&txid, None)?);
             }
 
             Some(raw)
@@ -429,8 +430,7 @@ impl ChainQuery {
             .take(limit)
             .collect::<Vec<(Txid, BlockId)>>();
 
-        let txids = txs_conf.iter().map(|t| t.0.clone()).collect();
-        self.lookup_txns(&txids)
+        self.lookup_txns(&txs_conf)
             .expect("failed looking up txs in history index")
             .into_iter()
             .zip(txs_conf)
@@ -716,30 +716,38 @@ impl ChainQuery {
 
     // TODO: can we pass txids as a "generic iterable"?
     // TODO: should also use a custom ThreadPoolBuilder?
-    pub fn lookup_txns(&self, txids: &Vec<Txid>) -> Result<Vec<Transaction>> {
+    fn lookup_txns(&self, txids: &[(Txid, BlockId)]) -> Result<Vec<Transaction>> {
         let _timer = self.start_timer("lookup_txns");
         txids
             .par_iter()
-            .map(|txid| self.lookup_txn(txid).chain_err(|| "missing tx"))
+            .map(|(txid, blockid)| {
+                self.lookup_txn(txid, Some(&blockid.hash))
+                    .chain_err(|| "missing tx")
+            })
             .collect::<Result<Vec<Transaction>>>()
     }
 
-    pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
+    pub fn lookup_txn(&self, txid: &Txid, blockhash: Option<&BlockHash>) -> Option<Transaction> {
         let _timer = self.start_timer("lookup_txn");
-        self.lookup_raw_txn(txid).map(|rawtx| {
+        self.lookup_raw_txn(txid, blockhash).map(|rawtx| {
             let txn: Transaction = deserialize(&rawtx).expect("failed to parse Transaction");
             assert_eq!(*txid, txn.txid());
             txn
         })
     }
 
-    pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
+    pub fn lookup_raw_txn(&self, txid: &Txid, blockhash: Option<&BlockHash>) -> Option<Bytes> {
         let _timer = self.start_timer("lookup_raw_txn");
 
         if self.light_mode {
-            // TODO specify the blockhash so that we don't require txindex
+            let queried_blockhash =
+                blockhash.map_or_else(|| self.tx_confirming_block(txid).map(|b| b.hash), |_| None);
+            let blockhash = blockhash.or(queried_blockhash.as_ref())?;
             // TODO fetch transaction as binary from REST API instead of as hex
-            let txhex = self.daemon.gettransaction_raw(txid, false).ok()?;
+            let txhex = self
+                .daemon
+                .gettransaction_raw(txid, blockhash, false)
+                .ok()?;
             Some(hex::decode(txhex.as_str().unwrap()).unwrap())
         } else {
             self.store.txstore_db.get(&TxRow::key(&txid[..]))
