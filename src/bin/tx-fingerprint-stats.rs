@@ -45,12 +45,7 @@ fn main() {
         &metrics,
     );
 
-    let mut indexer = Indexer::open(
-        Arc::clone(&store),
-        FetchFrom::Bitcoind,
-        config.light_mode,
-        &metrics,
-    );
+    let mut indexer = Indexer::open(Arc::clone(&store), FetchFrom::Bitcoind, &config, &metrics);
     indexer.update(&daemon).unwrap();
 
     let mut iter = store.txstore_db().raw_iterator();

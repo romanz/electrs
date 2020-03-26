@@ -33,6 +33,7 @@ pub struct Config {
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
     pub light_mode: bool,
+    pub address_search: bool,
     pub prevout_enabled: bool,
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
@@ -150,6 +151,11 @@ impl Config {
                 Arg::with_name("lightmode")
                     .long("lightmode")
                     .help("Enable light indexing mode")
+            )
+            .arg(
+                Arg::with_name("address_search")
+                    .long("address-search")
+                    .help("Enable prefix address search")
             )
             .arg(
                 Arg::with_name("disable_prevout")
@@ -313,6 +319,7 @@ impl Config {
             bulk_index_threads,
             tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
             light_mode: m.is_present("lightmode"),
+            address_search: m.is_present("address_search"),
             prevout_enabled: !m.is_present("disable_prevout"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),

@@ -18,14 +18,14 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{BlockHeader, OutPoint, Transaction, TxOut, Value};
+use crate::chain::{BlockHeader, Network as CNetwork, OutPoint, Transaction, TxOut, Value};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
-    full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, Bytes,
-    HeaderEntry, HeaderList,
+    full_hash, has_prevout, is_spendable, script_to_address, BlockHeaderMeta, BlockId, BlockMeta,
+    BlockStatus, Bytes, HeaderEntry, HeaderList,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -143,8 +143,24 @@ pub struct Indexer {
     store: Arc<Store>,
     flush: DBFlush,
     from: FetchFrom,
-    light_mode: bool,
+    iconfig: IndexerConfig,
     duration: HistogramVec,
+}
+
+struct IndexerConfig {
+    light_mode: bool,
+    address_search: bool,
+    cnetwork: CNetwork,
+}
+
+impl From<&Config> for IndexerConfig {
+    fn from(config: &Config) -> Self {
+        IndexerConfig {
+            light_mode: config.light_mode,
+            address_search: config.address_search,
+            cnetwork: CNetwork::from(config.network_type),
+        }
+    }
 }
 
 pub struct ChainQuery {
@@ -156,12 +172,12 @@ pub struct ChainQuery {
 
 // TODO: &[Block] should be an iterator / a queue.
 impl Indexer {
-    pub fn open(store: Arc<Store>, from: FetchFrom, light_mode: bool, metrics: &Metrics) -> Self {
+    pub fn open(store: Arc<Store>, from: FetchFrom, config: &Config, metrics: &Metrics) -> Self {
         Indexer {
             store,
             flush: DBFlush::Disable,
             from,
-            light_mode,
+            iconfig: IndexerConfig::from(config),
             duration: metrics.histogram_vec(
                 HistogramOpts::new("index_duration", "Index update duration (in seconds)"),
                 &["step"],
@@ -256,7 +272,7 @@ impl Indexer {
         // TODO: skip orphaned blocks?
         let rows = {
             let _timer = self.start_timer("add_process");
-            add_blocks(blocks, self.light_mode)
+            add_blocks(blocks, &self.iconfig)
         };
         {
             let _timer = self.start_timer("add_write");
@@ -285,7 +301,7 @@ impl Indexer {
                     panic!("cannot index block {} (missing from store)", blockhash);
                 }
             }
-            index_blocks(blocks, &previous_txos_map)
+            index_blocks(blocks, &previous_txos_map, &self.iconfig)
         };
         self.store.history_db.write(rows, self.flush);
     }
@@ -642,6 +658,15 @@ impl ChainQuery {
         (stats, lastblock)
     }
 
+    pub fn address_search(&self, prefix: &str, limit: usize) -> Vec<String> {
+        self.store
+            .history_db
+            .iter_scan(&addr_search_filter(prefix))
+            .take(limit)
+            .map(|row| std::str::from_utf8(&row.key[1..]).unwrap().to_string())
+            .collect()
+    }
+
     fn header_by_hash(&self, hash: &BlockHash) -> Option<HeaderEntry> {
         self.store
             .indexed_headers
@@ -873,7 +898,7 @@ fn load_blockheaders(db: &DB) -> HashMap<BlockHash, BlockHeader> {
         .collect()
 }
 
-fn add_blocks(block_entries: &[BlockEntry], light_mode: bool) -> Vec<DBRow> {
+fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
     //      C{txid}{blockhash}{height} →
@@ -889,10 +914,10 @@ fn add_blocks(block_entries: &[BlockEntry], light_mode: bool) -> Vec<DBRow> {
             let blockhash = full_hash(&b.entry.hash()[..]);
             let txids: Vec<Txid> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
             for tx in &b.block.txdata {
-                add_transaction(tx, blockhash, &mut rows, light_mode);
+                add_transaction(tx, blockhash, &mut rows, iconfig);
             }
 
-            if !light_mode {
+            if !iconfig.light_mode {
                 rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
                 rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
             }
@@ -905,10 +930,15 @@ fn add_blocks(block_entries: &[BlockEntry], light_mode: bool) -> Vec<DBRow> {
         .collect()
 }
 
-fn add_transaction(tx: &Transaction, blockhash: FullHash, rows: &mut Vec<DBRow>, light_mode: bool) {
+fn add_transaction(
+    tx: &Transaction,
+    blockhash: FullHash,
+    rows: &mut Vec<DBRow>,
+    iconfig: &IndexerConfig,
+) {
     rows.push(TxConfRow::new(tx, blockhash).to_row());
 
-    if !light_mode {
+    if !iconfig.light_mode {
         rows.push(TxRow::new(tx).to_row());
     }
 
@@ -969,6 +999,7 @@ fn lookup_txo(txstore_db: &DB, outpoint: &OutPoint) -> Option<TxOut> {
 fn index_blocks(
     block_entries: &[BlockEntry],
     previous_txos_map: &HashMap<OutPoint, TxOut>,
+    iconfig: &IndexerConfig,
 ) -> Vec<DBRow> {
     block_entries
         .par_iter() // serialization is CPU-intensive
@@ -976,7 +1007,7 @@ fn index_blocks(
             let mut rows = vec![];
             for tx in &b.block.txdata {
                 let height = b.entry.height() as u32;
-                index_transaction(tx, height, previous_txos_map, &mut rows);
+                index_transaction(tx, height, previous_txos_map, &mut rows, iconfig);
             }
             rows.push(BlockRow::new_done(full_hash(&b.entry.hash()[..])).to_row()); // mark block as "indexed"
             rows
@@ -991,6 +1022,7 @@ fn index_transaction(
     confirmed_height: u32,
     previous_txos_map: &HashMap<OutPoint, TxOut>,
     rows: &mut Vec<DBRow>,
+    iconfig: &IndexerConfig,
 ) {
     // persist history index:
     //      H{funding-scripthash}{funding-height}F{funding-txid:vout} → ""
@@ -1009,7 +1041,13 @@ fn index_transaction(
                     value: txo.value,
                 }),
             );
-            rows.push(history.to_row())
+            rows.push(history.to_row());
+
+            if iconfig.address_search {
+                if let Some(row) = addr_search_row(&txo.script_pubkey, &iconfig.cnetwork) {
+                    rows.push(row);
+                }
+            }
         }
     }
     for (txi_index, txi) in tx.input.iter().enumerate() {
@@ -1044,6 +1082,17 @@ fn index_transaction(
 
     #[cfg(feature = "liquid")]
     index_confirmed_tx_assets(tx, confirmed_height, rows);
+}
+
+fn addr_search_row(spk: &Script, network: &CNetwork) -> Option<DBRow> {
+    script_to_address(spk, network).map(|address| DBRow {
+        key: [b"a", address.as_bytes()].concat(),
+        value: vec![],
+    })
+}
+
+fn addr_search_filter(prefix: &str) -> Bytes {
+    [b"a", prefix.as_bytes()].concat()
 }
 
 // TODO: replace by a separate opaque type (similar to Sha256dHash, but without the "double")

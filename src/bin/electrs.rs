@@ -53,7 +53,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let mut indexer = Indexer::open(
         Arc::clone(&store),
         fetch_from(&config, &store),
-        config.light_mode,
+        &config,
         &metrics,
     );
     let mut tip = indexer.update(&daemon)?;

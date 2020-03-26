@@ -38,6 +38,7 @@ use url::form_urlencoded;
 const CHAIN_TXS_PER_PAGE: usize = 25;
 const MAX_MEMPOOL_TXS: usize = 50;
 const BLOCK_LIMIT: usize = 10;
+const ADDRESS_SEARCH_LIMIT: usize = 10;
 
 const TTL_LONG: u32 = 157784630; // ttl for static resources (5 years)
 const TTL_SHORT: u32 = 10; // ttl for volatie resources
@@ -816,6 +817,13 @@ fn handle_request(
                 .collect();
             // XXX paging?
             json_response(utxos, TTL_SHORT)
+        }
+        (&Method::GET, Some(&"address-prefix"), Some(prefix), None, None, None) => {
+            if !config.address_search {
+                return Err(HttpError::from("address search disabled".to_string()));
+            }
+            let results = query.chain().address_search(prefix, ADDRESS_SEARCH_LIMIT);
+            json_response(results, TTL_SHORT)
         }
         (&Method::GET, Some(&"tx"), Some(hash), None, None, None) => {
             let hash = Txid::from_hex(hash)?;
