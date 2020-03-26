@@ -837,13 +837,26 @@ fn handle_request(
 
             json_response(tx, ttl)
         }
-        (&Method::GET, Some(&"tx"), Some(hash), Some(&"hex"), None, None) => {
+        (&Method::GET, Some(&"tx"), Some(hash), Some(out_type @ &"hex"), None, None)
+        | (&Method::GET, Some(&"tx"), Some(hash), Some(out_type @ &"raw"), None, None) => {
             let hash = Txid::from_hex(hash)?;
             let rawtx = query
                 .lookup_raw_txn(&hash)
                 .ok_or_else(|| HttpError::not_found("Transaction not found".to_string()))?;
+
+            let (content_type, body) = match *out_type {
+                "raw" => ("application/octet-stream", Body::from(rawtx)),
+                "hex" => ("text/plain", Body::from(hex::encode(rawtx))),
+                _ => unreachable!(),
+            };
             let ttl = ttl_by_depth(query.get_tx_status(&hash).block_height, query);
-            http_message(StatusCode::OK, hex::encode(rawtx), ttl)
+
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", content_type)
+                .header("Cache-Control", format!("public, max-age={:}", ttl))
+                .body(body)
+                .unwrap())
         }
         (&Method::GET, Some(&"tx"), Some(hash), Some(&"status"), None, None) => {
             let hash = Txid::from_hex(hash)?;
