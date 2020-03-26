@@ -75,4 +75,4 @@ rev = "0.23-electrs"
 
 [patch.crates-io.elements]
 git = "https://github.com/shesek/rust-elements"
-rev = "202003-block-size-weight"
+rev = "341b91c839f659fed3b2510b2ec9b544f96817ca"
