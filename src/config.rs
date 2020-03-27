@@ -31,7 +31,6 @@ pub struct Config {
     pub jsonrpc_import: bool,
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
-    pub tx_cache_size: usize,
     pub light_mode: bool,
     pub address_search: bool,
     pub prevout_enabled: bool,
@@ -140,12 +139,6 @@ impl Config {
                     .long("bulk-index-threads")
                     .help("Number of threads used for bulk indexing (default: use the # of CPUs)")
                     .default_value("0")
-            )
-            .arg(
-                Arg::with_name("tx_cache_size")
-                    .long("tx-cache-size")
-                    .help("Number of transactions to keep in for query LRU cache")
-                    .default_value("10000")  // should be enough for a small wallet.
             )
             .arg(
                 Arg::with_name("lightmode")
@@ -317,7 +310,6 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
-            tx_cache_size: value_t_or_exit!(m, "tx_cache_size", usize),
             light_mode: m.is_present("lightmode"),
             address_search: m.is_present("address_search"),
             prevout_enabled: !m.is_present("disable_prevout"),
