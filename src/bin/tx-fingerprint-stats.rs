@@ -41,7 +41,7 @@ fn main() {
     let chain = ChainQuery::new(
         Arc::clone(&store),
         Arc::clone(&daemon),
-        config.light_mode,
+        config.reduced_storage,
         &metrics,
     );
 

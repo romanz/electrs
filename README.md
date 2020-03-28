@@ -30,9 +30,9 @@ Creating the indexes should take a few hours on a beefy machine with SSD.
 
 To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
 
-### Light mode
+### Reduced storage mode
 
-For personal or low-volume use, you may use `--lightmode` to reduce disk storage requirements
+For personal or low-volume use, you may use `--reduced-storage` to reduce disk storage requirements
 (at the time of writing, around block height 620k, by about 270GB)
 at the cost of slower and more expensive lookups.
 
