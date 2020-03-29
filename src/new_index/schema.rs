@@ -18,7 +18,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{Network as CNetwork, OutPoint, Transaction, TxOut, Value};
+use crate::chain::{BlockHeader, Network as CNetwork, OutPoint, Transaction, TxOut, Value};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
@@ -51,12 +51,25 @@ impl Store {
         let txstore_db = DB::open(&path.join("txstore"), config);
         let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::done_filter());
         debug!("{} blocks were added", added_blockhashes.len());
+
         let history_db = DB::open(&path.join("history"), config);
         let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
         debug!("{} blocks were indexed", indexed_blockhashes.len());
+
         let cache_db = DB::open(&path.join("cache"), config);
 
-        let headers = HeaderList::empty();
+        let headers = if let Some(tip_hash) = txstore_db.get(b"t") {
+            let tip_hash = deserialize(&tip_hash).expect("invalid chain tip in `t`");
+            let headers_map = load_blockheaders(&txstore_db);
+            debug!(
+                "{} headers were loaded, tip at {:?}",
+                headers_map.len(),
+                tip_hash
+            );
+            HeaderList::new(headers_map, tip_hash)
+        } else {
+            HeaderList::empty()
+        };
 
         Store {
             txstore_db,
