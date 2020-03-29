@@ -4,9 +4,9 @@ use bitcoin::{BitcoinHash, BlockHash};
 use rayon::prelude::*;
 
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::{deserialize, serialize, Decodable};
+use bitcoin::consensus::encode::{deserialize, Decodable};
 #[cfg(feature = "liquid")]
-use elements::encode::{deserialize, serialize, Decodable};
+use elements::encode::{deserialize, Decodable};
 
 use std::collections::HashMap;
 use std::fs;
@@ -89,8 +89,8 @@ fn bitcoind_fetcher(
                     .into_iter()
                     .zip(entries)
                     .map(|(block, entry)| BlockEntry {
-                        entry: entry.clone(),                 // TODO: remove this clone()
-                        size: serialize(&block).len() as u32, // TODO: avoid re-serializing
+                        entry: entry.clone(), // TODO: remove this clone()
+                        size: block.get_size() as u32,
                         block,
                     })
                     .collect();
