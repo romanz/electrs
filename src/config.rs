@@ -8,9 +8,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use stderrlog;
 
-#[cfg(feature = "liquid")]
-use bitcoin::hashes::hex::ToHex;
-
 use crate::chain::Network;
 use crate::daemon::CookieGetter;
 
@@ -40,8 +37,6 @@ pub struct Config {
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
-    #[cfg(feature = "liquid")]
-    pub parent_genesis_hash: String,
     #[cfg(feature = "liquid")]
     pub asset_db_path: Option<PathBuf>,
 }
@@ -199,8 +194,6 @@ impl Config {
         #[cfg(feature = "liquid")]
         let parent_network = Network::from(m.value_of("parent_network").unwrap_or("mainnet"));
         #[cfg(feature = "liquid")]
-        let parent_genesis_hash = parent_network.genesis_hash().to_hex();
-        #[cfg(feature = "liquid")]
         let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
 
         let default_daemon_port = match network_type {
@@ -319,8 +312,6 @@ impl Config {
 
             #[cfg(feature = "liquid")]
             parent_network,
-            #[cfg(feature = "liquid")]
-            parent_genesis_hash,
             #[cfg(feature = "liquid")]
             asset_db_path,
         };

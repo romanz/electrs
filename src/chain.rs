@@ -11,11 +11,20 @@ pub use elements::{confidential, Address, Block, BlockHeader, OutPoint, Transact
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
 use bitcoin::util::hash::BitcoinHash;
+use bitcoin::BlockHash;
+
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 #[cfg(not(feature = "liquid"))]
 pub type Value = u64;
 #[cfg(feature = "liquid")]
 pub use confidential::Value;
+
+lazy_static! {
+    static ref CACHED_GENESIS: Arc<RwLock<HashMap<Network, BlockHash>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
@@ -30,9 +39,14 @@ pub enum Network {
 }
 
 impl Network {
-    pub fn genesis_hash(self) -> bitcoin::BlockHash {
-        let block = genesis_block(BNetwork::from(self));
-        block.bitcoin_hash()
+    pub fn genesis_hash(self) -> BlockHash {
+        if let Some(block_hash) = CACHED_GENESIS.read().unwrap().get(&self) {
+            return *block_hash;
+        }
+
+        let block_hash = genesis_block(BNetwork::from(self)).bitcoin_hash();
+        CACHED_GENESIS.write().unwrap().insert(self, block_hash);
+        block_hash
     }
 
     pub fn magic(self) -> u32 {

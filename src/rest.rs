@@ -332,8 +332,7 @@ impl TxOutValue {
         };
 
         #[cfg(feature = "liquid")]
-        let pegout =
-            PegOutRequest::parse(&script, &config.parent_network, &config.parent_genesis_hash);
+        let pegout = PegOutRequest::parse(&script, config.parent_network);
 
         TxOutValue {
             scriptpubkey: script.clone(),

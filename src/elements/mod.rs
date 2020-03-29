@@ -1,6 +1,6 @@
 use bitcoin::blockdata::script::Instruction::PushBytes;
-use bitcoin::hashes::hex::ToHex;
-use bitcoin::Script;
+use bitcoin::hashes::{hex::ToHex, Hash};
+use bitcoin::{BlockHash, Script};
 use elements::confidential::Value;
 use elements::encode::serialize;
 use elements::TxIn;
@@ -28,11 +28,7 @@ pub struct PegOutRequest {
 }
 
 impl PegOutRequest {
-    pub fn parse(
-        script: &Script,
-        parent_network: &Network,
-        parent_genesis_hash: &str,
-    ) -> Option<PegOutRequest> {
+    pub fn parse(script: &Script, parent_network: Network) -> Option<PegOutRequest> {
         if !script.is_op_return() {
             return None;
         }
@@ -43,9 +39,7 @@ impl PegOutRequest {
         }
 
         let genesis_hash = if let PushBytes(data) = nulldata[0] {
-            let mut data = data.to_vec();
-            data.reverse();
-            hex::encode(data)
+            BlockHash::from_slice(data).ok()?
         } else {
             return None;
         };
@@ -56,7 +50,7 @@ impl PegOutRequest {
             return None;
         };
 
-        if genesis_hash != parent_genesis_hash {
+        if genesis_hash != parent_network.genesis_hash() {
             return None;
         }
 
@@ -64,7 +58,7 @@ impl PegOutRequest {
         let scriptpubkey_address = script_to_address(&scriptpubkey, parent_network);
 
         Some(PegOutRequest {
-            genesis_hash,
+            genesis_hash: genesis_hash.to_hex(),
             scriptpubkey,
             scriptpubkey_asm,
             scriptpubkey_address,

@@ -13,7 +13,7 @@ edition = "2018"
 
 [features]
 default = [ "rocksdb" ]
-liquid = ["elements", "lazy_static"]
+liquid = [ "elements" ]
 oldcpu = [ "rocksdb-oldcpu" ]
 
 [dependencies]
@@ -31,7 +31,7 @@ glob = "0.3"
 hex = "0.4.2"
 hyper = "0.12.33"
 itertools = "0.9.0"
-lazy_static = { version = "1.3.0", optional = true }
+lazy_static = "1.3.0"
 libc = "0.2.68"
 log = "0.4"
 lru = "0.3"
