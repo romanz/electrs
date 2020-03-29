@@ -936,13 +936,14 @@ fn handle_request(
         (&Method::GET, Some(&"broadcast"), None, None, None, None)
         | (&Method::POST, Some(&"tx"), None, None, None, None) => {
             // accept both POST and GET for backward compatibility.
-            // GET will eventually be removed in favor for POST.
+            // GET will eventually be removed in favor of POST.
             let txhex = match &method {
                 &Method::POST => String::from_utf8(body.to_vec())?,
-                &Method::GET | _ => query_params
+                &Method::GET => query_params
                     .get("tx")
                     .cloned()
                     .ok_or_else(|| HttpError::from("Missing tx".to_string()))?,
+                _ => return http_message(StatusCode::METHOD_NOT_ALLOWED, "Invalid method", 0),
             };
             let txid = query
                 .broadcast_raw(&txhex)
