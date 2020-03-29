@@ -1,9 +1,8 @@
-use bitcoin::blockdata::script::Instruction::PushBytes;
-use bitcoin::hashes::{hex::ToHex, Hash};
-use bitcoin::{BlockHash, Script};
+use bitcoin::hashes::hex::ToHex;
+use bitcoin::Script;
 use elements::confidential::Value;
 use elements::encode::serialize;
-use elements::TxIn;
+use elements::{TxIn, TxOut};
 use hex;
 
 use crate::chain::Network;
@@ -19,7 +18,7 @@ pub use assetid::AssetId;
 pub use registry::AssetRegistry;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct PegOutRequest {
+pub struct PegoutValue {
     pub genesis_hash: String,
     pub scriptpubkey: Script,
     pub scriptpubkey_asm: String,
@@ -27,41 +26,19 @@ pub struct PegOutRequest {
     pub scriptpubkey_address: Option<String>,
 }
 
-impl PegOutRequest {
-    pub fn parse(script: &Script, parent_network: Network) -> Option<PegOutRequest> {
-        if !script.is_op_return() {
+impl PegoutValue {
+    pub fn parse(txout: &TxOut, parent_network: Network) -> Option<Self> {
+        let pegoutdata = txout.pegout_data()?;
+
+        if pegoutdata.genesis_hash != parent_network.genesis_hash() {
             return None;
         }
 
-        let nulldata: Vec<_> = script.iter(true).skip(1).collect();
-        if nulldata.len() < 2 {
-            return None;
-        }
-
-        let genesis_hash = if let PushBytes(data) = nulldata[0] {
-            BlockHash::from_slice(data).ok()?
-        } else {
-            return None;
-        };
-
-        let scriptpubkey = if let PushBytes(data) = nulldata[1] {
-            Script::from(data.to_vec())
-        } else {
-            return None;
-        };
-
-        if genesis_hash != parent_network.genesis_hash() {
-            return None;
-        }
-
-        let scriptpubkey_asm = get_script_asm(&scriptpubkey);
-        let scriptpubkey_address = script_to_address(&scriptpubkey, parent_network);
-
-        Some(PegOutRequest {
-            genesis_hash: genesis_hash.to_hex(),
-            scriptpubkey,
-            scriptpubkey_asm,
-            scriptpubkey_address,
+        Some(PegoutValue {
+            genesis_hash: pegoutdata.genesis_hash.to_hex(),
+            scriptpubkey_asm: get_script_asm(&pegoutdata.script_pubkey),
+            scriptpubkey_address: script_to_address(&pegoutdata.script_pubkey, parent_network),
+            scriptpubkey: pegoutdata.script_pubkey,
         })
     }
 }

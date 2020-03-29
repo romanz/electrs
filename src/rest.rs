@@ -20,7 +20,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{IssuanceValue, PegOutRequest},
+    crate::elements::{IssuanceValue, PegoutValue},
     bitcoin::hashes::sha256d::Hash as Sha256dHash,
     elements::confidential::{Asset, Value},
     elements::encode,
@@ -270,7 +270,7 @@ struct TxOutValue {
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pegout: Option<PegOutRequest>,
+    pegout: Option<PegoutValue>,
 }
 
 impl TxOutValue {
@@ -332,7 +332,7 @@ impl TxOutValue {
         };
 
         #[cfg(feature = "liquid")]
-        let pegout = PegOutRequest::parse(&script, config.parent_network);
+        let pegout = PegoutValue::parse(txout, config.parent_network);
 
         TxOutValue {
             scriptpubkey: script.clone(),
