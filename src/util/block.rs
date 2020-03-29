@@ -1,4 +1,4 @@
-use crate::chain::{Block, BlockHeader};
+use crate::chain::BlockHeader;
 use crate::errors::*;
 use crate::new_index::BlockEntry;
 
@@ -269,19 +269,13 @@ pub struct BlockHeaderMeta {
     pub meta: BlockMeta,
 }
 
-impl From<&Block> for BlockMeta {
-    fn from(block: &Block) -> BlockMeta {
-        BlockMeta {
-            tx_count: block.txdata.len() as u32,
-            weight: block.get_weight() as u32,
-            size: block.get_size() as u32,
-        }
-    }
-}
-
 impl From<&BlockEntry> for BlockMeta {
     fn from(b: &BlockEntry) -> BlockMeta {
-        BlockMeta::from(&b.block)
+        BlockMeta {
+            tx_count: b.block.txdata.len() as u32,
+            weight: b.block.get_weight() as u32,
+            size: b.size,
+        }
     }
 }
 
