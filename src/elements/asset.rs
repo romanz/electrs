@@ -136,9 +136,9 @@ pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: 
     let (history, issuances) = index_tx_assets(tx);
 
     rows.extend(
-        history
-            .into_iter()
-            .map(|(asset_id, info)| asset_history_row(&asset_id, confirmed_height, info).to_row()),
+        history.into_iter().map(|(asset_id, info)| {
+            asset_history_row(&asset_id, confirmed_height, info).into_row()
+        }),
     );
 
     // the initial issuance is kept twice: once in the history index under I<asset><height><txid:vin>,
