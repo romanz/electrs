@@ -26,6 +26,9 @@ use crate::new_index::Query;
 use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
 use crate::util::{full_hash, spawn_thread, BlockId, Channel, FullHash, HeaderEntry, SyncChannel};
 
+const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PROTOCOL_VERSION: &str = "1.4";
+
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     let script_hash = val.chain_err(|| "missing hash")?;
@@ -118,8 +121,10 @@ impl Connection {
     }
 
     fn server_version(&self) -> Result<Value> {
-        // TODO dynamic version
-        Ok(json!(["electrs-esplora", "1.4"]))
+        Ok(json!([
+            format!("electrs-esplora {}", ELECTRS_VERSION),
+            PROTOCOL_VERSION
+        ]))
     }
 
     fn server_banner(&self) -> Result<Value> {
