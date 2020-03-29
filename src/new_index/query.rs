@@ -54,8 +54,8 @@ impl Query {
         self.mempool.read().unwrap()
     }
 
-    pub fn broadcast_raw(&self, txhex: &String) -> Result<Txid> {
-        let txid = self.daemon.broadcast_raw(&txhex)?;
+    pub fn broadcast_raw(&self, txhex: &str) -> Result<Txid> {
+        let txid = self.daemon.broadcast_raw(txhex)?;
         self.mempool
             .write()
             .unwrap()

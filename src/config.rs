@@ -267,7 +267,7 @@ impl Config {
 
         let mut daemon_dir = m
             .value_of("daemon_dir")
-            .map(|p| PathBuf::from(p))
+            .map(PathBuf::from)
             .unwrap_or_else(|| {
                 let mut default_dir = home_dir().expect("no homedir");
                 default_dir.push(".bitcoin");

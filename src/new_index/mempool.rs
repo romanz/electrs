@@ -97,7 +97,7 @@ impl Mempool {
     }
 
     pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
-        self.txstore.get(txid).map(|item| item.clone())
+        self.txstore.get(txid).cloned()
     }
 
     pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
@@ -123,7 +123,7 @@ impl Mempool {
             .map_or_else(|| vec![], |entries| self._history(entries, limit))
     }
 
-    fn _history(&self, entries: &Vec<TxHistoryInfo>, limit: usize) -> Vec<Transaction> {
+    fn _history(&self, entries: &[TxHistoryInfo], limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         entries
             .iter()
@@ -159,7 +159,7 @@ impl Mempool {
         };
 
         entries
-            .into_iter()
+            .iter()
             .filter_map(|entry| match entry {
                 TxHistoryInfo::Funding(info) => Some(Utxo {
                     txid: deserialize(&info.txid).expect("invalid txid"),
@@ -334,7 +334,7 @@ impl Mempool {
 
             // recent is an ArrayDeque that automatically evicts the oldest elements
             self.recent.push_front(TxOverview {
-                txid: txid,
+                txid,
                 fee: feeinfo.fee,
                 vsize: feeinfo.vsize,
                 #[cfg(not(feature = "liquid"))]
@@ -379,7 +379,7 @@ impl Mempool {
             for (scripthash, entry) in funding.chain(spending) {
                 self.history
                     .entry(scripthash)
-                    .or_insert_with(|| Vec::new())
+                    .or_insert_with(Vec::new)
                     .push(entry);
             }
             for (i, txi) in tx.input.iter().enumerate() {

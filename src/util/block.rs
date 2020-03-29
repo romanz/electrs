@@ -96,7 +96,7 @@ impl HeaderList {
                 "missing expected blockhash in headers map: {:?}",
                 blockhash
             ));
-            blockhash = header.prev_blockhash.clone();
+            blockhash = header.prev_blockhash;
             headers_chain.push(header);
         }
         headers_chain.reverse();
@@ -179,7 +179,7 @@ impl HeaderList {
             new_headers.len(),
             new_height
         );
-        self.headers.split_off(new_height); // keep [0..new_height) entries
+        let _removed = self.headers.split_off(new_height); // keep [0..new_height) entries
         for new_header in new_headers {
             let height = new_header.height();
             assert_eq!(height, self.headers.len());

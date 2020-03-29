@@ -32,7 +32,7 @@ fn main() {
             config.daemon_rpc_addr,
             config.cookie_getter(),
             config.network_type,
-            signal.clone(),
+            signal,
             &metrics,
         )
         .unwrap(),
@@ -134,8 +134,8 @@ fn main() {
             txid, blockid.height, tx.lock_time, uih, is_multi_spend as u8, has_reuse as u8
         );
 
-        total = total + 1;
-        uih_totals[uih] = uih_totals[uih] + 1;
+        total += 1;
+        uih_totals[uih] += 1;
     }
     info!(
         "processed {} total txs, UIH counts: {:?}",

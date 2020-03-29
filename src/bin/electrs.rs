@@ -30,9 +30,13 @@ fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
         // switch over to jsonrpc after the initial sync is done
         jsonrpc_import = store.done_initial_sync();
     }
-    match jsonrpc_import {
-        true => FetchFrom::Bitcoind, // slower, uses JSONRPC (good for incremental updates)
-        false => FetchFrom::BlkFiles, // faster, uses blk*.dat files (good for initial indexing)
+
+    if jsonrpc_import {
+        // slower, uses JSONRPC (good for incremental updates)
+        FetchFrom::Bitcoind
+    } else {
+        // faster, uses blk*.dat files (good for initial indexing)
+        FetchFrom::BlkFiles
     }
 }
 

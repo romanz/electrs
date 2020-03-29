@@ -25,7 +25,7 @@ const HASH_LEN: usize = 32;
 pub type FullHash = [u8; HASH_LEN];
 
 pub fn full_hash(hash: &[u8]) -> FullHash {
-    array_ref![hash, 0, HASH_LEN].clone()
+    *array_ref![hash, 0, HASH_LEN]
 }
 
 pub struct SyncChannel<T> {

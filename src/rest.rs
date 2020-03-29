@@ -40,7 +40,7 @@ const MAX_MEMPOOL_TXS: usize = 50;
 const BLOCK_LIMIT: usize = 10;
 const ADDRESS_SEARCH_LIMIT: usize = 10;
 
-const TTL_LONG: u32 = 157784630; // ttl for static resources (5 years)
+const TTL_LONG: u32 = 157_784_630; // ttl for static resources (5 years)
 const TTL_SHORT: u32 = 10; // ttl for volatie resources
 const CONF_FINAL: usize = 10; // reorgs deeper than this are considered unlikely
 
@@ -69,7 +69,7 @@ struct BlockValue {
 }
 
 impl BlockValue {
-    fn new(blockhm: BlockHeaderMeta, network: &Network) -> Self {
+    fn new(blockhm: BlockHeaderMeta, network: Network) -> Self {
         let header = blockhm.header_entry.header();
         BlockValue {
             id: header.bitcoin_hash().to_hex(),
@@ -80,7 +80,7 @@ impl BlockValue {
             size: blockhm.meta.size,
             weight: blockhm.meta.weight,
             merkle_root: header.merkle_root.to_hex(),
-            previousblockhash: if &header.prev_blockhash != &BlockHash::default() {
+            previousblockhash: if header.prev_blockhash != BlockHash::default() {
                 Some(header.prev_blockhash.to_hex())
             } else {
                 None
@@ -306,7 +306,7 @@ impl TxOutValue {
 
         let script = &txout.script_pubkey;
         let script_asm = get_script_asm(&script);
-        let script_addr = script_to_address(&script, &config.network_type);
+        let script_addr = script_to_address(&script, config.network_type);
 
         // TODO should the following something to put inside rust-elements lib?
         let script_type = if is_fee {
@@ -598,7 +598,7 @@ fn handle_request(
                 .chain()
                 .get_block_with_meta(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
-            let block_value = BlockValue::new(blockhm, &config.network_type);
+            let block_value = BlockValue::new(blockhm, config.network_type);
             json_response(block_value, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"status"), None, None) => {
@@ -683,7 +683,7 @@ fn handle_request(
         }
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None, None)
         | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None, None) => {
-            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
             let stats = query.stats(&script_hash[..]);
             json_response(
                 json!({
@@ -710,7 +710,7 @@ fn handle_request(
             None,
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
 
             let mut txs = vec![];
 
@@ -749,7 +749,7 @@ fn handle_request(
             Some(&"chain"),
             last_seen_txid,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_hex(txid).ok());
 
             let txs = query
@@ -781,7 +781,7 @@ fn handle_request(
             Some(&"mempool"),
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
 
             let txs = query
                 .mempool()
@@ -809,7 +809,7 @@ fn handle_request(
             None,
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, &config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
             let utxos: Vec<UtxoValue> = query
                 .utxo(&script_hash[..])
                 .into_iter()
@@ -925,8 +925,8 @@ fn handle_request(
                 .into_iter()
                 .map(|spend| {
                     spend.map_or_else(
-                        || SpendingValue::default(),
-                        |spend| SpendingValue::from(spend),
+                        SpendingValue::default,
+                        SpendingValue::from,
                     )
                 })
                 .collect();
@@ -937,9 +937,9 @@ fn handle_request(
         | (&Method::POST, Some(&"tx"), None, None, None, None) => {
             // accept both POST and GET for backward compatibility.
             // GET will eventually be removed in favor of POST.
-            let txhex = match &method {
-                &Method::POST => String::from_utf8(body.to_vec())?,
-                &Method::GET => query_params
+            let txhex = match method {
+                Method::POST => String::from_utf8(body.to_vec())?,
+                Method::GET => query_params
                     .get("tx")
                     .cloned()
                     .ok_or_else(|| HttpError::from("Missing tx".to_string()))?,
@@ -1073,12 +1073,11 @@ fn blocks(
 ) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
-        Some(height) => query
+        Some(height) => *query
             .chain()
             .header_by_height(height)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?
-            .hash()
-            .clone(),
+            .hash(),
         None => query.chain().best_hash(),
     };
 
@@ -1088,10 +1087,10 @@ fn blocks(
             .chain()
             .get_block_with_meta(&current_hash)
             .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
-        current_hash = blockhm.header_entry.header().prev_blockhash.clone();
+        current_hash = blockhm.header_entry.header().prev_blockhash;
 
         #[allow(unused_mut)]
-        let mut value = BlockValue::new(blockhm, &config.network_type);
+        let mut value = BlockValue::new(blockhm, config.network_type);
 
         #[cfg(feature = "liquid")]
         {
@@ -1100,7 +1099,7 @@ fn blocks(
         }
         values.push(value);
 
-        if &current_hash[..] == &zero[..] {
+        if current_hash[..] == zero[..] {
             break;
         }
     }
@@ -1110,7 +1109,7 @@ fn blocks(
 fn to_scripthash(
     script_type: &str,
     script_str: &str,
-    network: &Network,
+    network: Network,
 ) -> Result<FullHash, HttpError> {
     match script_type {
         "address" => address_to_scripthash(script_str, network),
@@ -1120,14 +1119,14 @@ fn to_scripthash(
 }
 
 #[allow(unused_variables)] // `network` is unused in liquid mode
-fn address_to_scripthash(addr: &str, network: &Network) -> Result<FullHash, HttpError> {
+fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpError> {
     let addr = address::Address::from_str(addr)?;
 
     #[cfg(not(feature = "liquid"))]
     let is_expected_net = {
-        let addr_network = Network::from(&addr.network);
-        (addr_network == *network
-            || (addr_network == Network::Testnet && *network == Network::Regtest))
+        let addr_network = Network::from(addr.network);
+        addr_network == network
+            || (addr_network == Network::Testnet && network == Network::Regtest)
     };
 
     #[cfg(feature = "liquid")]

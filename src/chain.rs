@@ -30,16 +30,16 @@ pub enum Network {
 }
 
 impl Network {
-    pub fn genesis_hash(&self) -> bitcoin::BlockHash {
+    pub fn genesis_hash(self) -> bitcoin::BlockHash {
         let block = genesis_block(BNetwork::from(self));
         block.bitcoin_hash()
     }
 
-    pub fn magic(&self) -> u32 {
+    pub fn magic(self) -> u32 {
         match self {
-            Network::Bitcoin => 0xD9B4BEF9,
-            Network::Testnet => 0x0709110B,
-            Network::Regtest => 0xDAB5BFFA,
+            Network::Bitcoin => 0xD9B4_BEF9,
+            Network::Testnet => 0x0709_110B,
+            Network::Regtest => 0xDAB5_BFFA,
 
             #[cfg(feature = "liquid")]
             Network::Liquid => 0xDAB5BFFA,
@@ -94,8 +94,8 @@ impl From<&str> for Network {
     }
 }
 
-impl From<&Network> for BNetwork {
-    fn from(network: &Network) -> Self {
+impl From<Network> for BNetwork {
+    fn from(network: Network) -> Self {
         match network {
             Network::Bitcoin => BNetwork::Bitcoin,
             Network::Testnet => BNetwork::Testnet,
@@ -109,8 +109,8 @@ impl From<&Network> for BNetwork {
     }
 }
 
-impl From<&BNetwork> for Network {
-    fn from(network: &BNetwork) -> Self {
+impl From<BNetwork> for Network {
+    fn from(network: BNetwork) -> Self {
         match network {
             #[cfg(not(feature = "liquid"))]
             BNetwork::Bitcoin => Network::Bitcoin,

@@ -91,12 +91,12 @@ fn create_merkle_branch_and_root(
     let mut merkle = vec![];
     while hashes.len() > 1 {
         if hashes.len() % 2 != 0 {
-            let last = hashes.last().unwrap().clone();
+            let last = *hashes.last().unwrap();
             hashes.push(last);
         }
         index = if index % 2 == 0 { index + 1 } else { index - 1 };
         merkle.push(hashes[index]);
-        index = index / 2;
+        index /= 2;
         hashes = hashes
             .chunks(2)
             .map(|pair| merklize(pair[0], pair[1]))

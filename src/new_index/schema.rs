@@ -18,7 +18,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{BlockHeader, Network as CNetwork, OutPoint, Transaction, TxOut, Value};
+use crate::chain::{Network as CNetwork, OutPoint, Transaction, TxOut, Value};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
@@ -158,7 +158,7 @@ impl From<&Config> for IndexerConfig {
         IndexerConfig {
             reduced_storage: config.reduced_storage,
             address_search: config.address_search,
-            cnetwork: CNetwork::from(config.network_type),
+            cnetwork: config.network_type,
         }
     }
 }
@@ -221,9 +221,10 @@ impl Indexer {
         let headers = self.store.indexed_headers.read().unwrap();
         let new_headers = daemon.get_new_headers(&headers, &tip)?;
         let result = headers.order(new_headers);
-        result.last().map(|tip| {
-            info!("{:?} ({} left to process)", tip, result.len());
-        });
+
+        if let Some(tip) = result.last() {
+            info!("{:?} ({} left to index)", tip, result.len());
+        };
         Ok(result)
     }
 
@@ -283,7 +284,7 @@ impl Indexer {
             .added_blockhashes
             .write()
             .unwrap()
-            .extend(blocks.into_iter().map(|b| b.entry.hash()));
+            .extend(blocks.iter().map(|b| b.entry.hash()));
     }
 
     fn index(&self, blocks: &[BlockEntry]) {
@@ -484,7 +485,7 @@ impl ChainQuery {
                 self.height_by_hash(&blockhash)
                     .map(|height| (utxos_cache, height))
             })
-            .map(|(utxos_cache, height)| (UtxoCacheRow::to_utxo_map(utxos_cache, self), height));
+            .map(|(utxos_cache, height)| (from_utxo_cache(utxos_cache, self), height));
         let had_cache = cache.is_some();
 
         // update utxo set with new transactions since
@@ -497,7 +498,7 @@ impl ChainQuery {
         if let Some(lastblock) = lastblock {
             if had_cache || processed_items > MIN_HISTORY_ITEMS_TO_CACHE {
                 self.store.cache_db.write(
-                    vec![UtxoCacheRow::new(scripthash, &newutxos, &lastblock).to_row()],
+                    vec![UtxoCacheRow::new(scripthash, &newutxos, &lastblock).into_row()],
                     DBFlush::Enable,
                 );
             }
@@ -546,7 +547,7 @@ impl ChainQuery {
         let mut lastblock = None;
 
         for (history, blockid) in history_iter {
-            processed_items = processed_items + 1;
+            processed_items += 1;
             lastblock = Some(blockid.hash);
 
             // TODO: make sure funding rows are processed before spending rows on the same height
@@ -588,7 +589,7 @@ impl ChainQuery {
         if let Some(lastblock) = lastblock {
             if newstats.funded_txo_count + newstats.spent_txo_count > MIN_HISTORY_ITEMS_TO_CACHE {
                 self.store.cache_db.write(
-                    vec![StatsCacheRow::new(scripthash, &newstats, &lastblock).to_row()],
+                    vec![StatsCacheRow::new(scripthash, &newstats, &lastblock).into_row()],
                     DBFlush::Enable,
                 );
             }
@@ -701,7 +702,7 @@ impl ChainQuery {
             .read()
             .unwrap()
             .header_by_height(height)
-            .map(|entry| entry.hash().clone())
+            .map(|entry| *entry.hash())
     }
 
     pub fn blockid_by_height(&self, height: usize) -> Option<BlockId> {
@@ -728,7 +729,7 @@ impl ChainQuery {
     }
 
     pub fn best_hash(&self) -> BlockHash {
-        self.store.indexed_headers.read().unwrap().tip().clone()
+        *self.store.indexed_headers.read().unwrap().tip()
     }
 
     pub fn best_header(&self) -> HeaderEntry {
@@ -767,7 +768,7 @@ impl ChainQuery {
         if self.reduced_storage {
             let queried_blockhash =
                 blockhash.map_or_else(|| self.tx_confirming_block(txid).map(|b| b.hash), |_| None);
-            let blockhash = blockhash.or(queried_blockhash.as_ref())?;
+            let blockhash = blockhash.or_else(|| queried_blockhash.as_ref())?;
             // TODO fetch transaction as binary from REST API instead of as hex
             let txhex = self
                 .daemon
@@ -821,7 +822,7 @@ impl ChainQuery {
             .filter_map(|conf| {
                 headers.header_by_blockhash(&deserialize(&conf.key.blockhash).unwrap())
             })
-            .nth(0)
+            .next()
             .map(BlockId::from)
     }
 
@@ -834,13 +835,13 @@ impl ChainQuery {
         // header_by_blockhash only returns blocks that are part of the best chain,
         // or None for orphaned blocks.
         headers.header_by_blockhash(hash).map_or_else(
-            || BlockStatus::orphaned(),
+            BlockStatus::orphaned,
             |header| {
                 BlockStatus::confirmed(
                     header.height(),
                     headers
                         .header_by_height(header.height() + 1)
-                        .map(|h| h.hash().clone()),
+                        .map(|h| *h.hash()),
                 )
             },
         )
@@ -918,12 +919,12 @@ fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRo
             }
 
             if !iconfig.reduced_storage {
-                rows.push(BlockRow::new_txids(blockhash, &txids).to_row());
-                rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).to_row());
+                rows.push(BlockRow::new_txids(blockhash, &txids).into_row());
+                rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).into_row());
             }
 
-            rows.push(BlockRow::new_header(&b).to_row());
-            rows.push(BlockRow::new_done(blockhash).to_row()); // mark block as "added"
+            rows.push(BlockRow::new_header(&b).into_row());
+            rows.push(BlockRow::new_done(blockhash).into_row()); // mark block as "added"
             rows
         })
         .flatten()
@@ -936,16 +937,16 @@ fn add_transaction(
     rows: &mut Vec<DBRow>,
     iconfig: &IndexerConfig,
 ) {
-    rows.push(TxConfRow::new(tx, blockhash).to_row());
+    rows.push(TxConfRow::new(tx, blockhash).into_row());
 
     if !iconfig.reduced_storage {
-        rows.push(TxRow::new(tx).to_row());
+        rows.push(TxRow::new(tx).into_row());
     }
 
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if !txo.script_pubkey.is_provably_unspendable() {
-            rows.push(TxOutRow::new(&txid, txo_index, txo).to_row());
+            rows.push(TxOutRow::new(&txid, txo_index, txo).into_row());
         }
     }
 }
@@ -1009,7 +1010,7 @@ fn index_blocks(
                 let height = b.entry.height() as u32;
                 index_transaction(tx, height, previous_txos_map, &mut rows, iconfig);
             }
-            rows.push(BlockRow::new_done(full_hash(&b.entry.hash()[..])).to_row()); // mark block as "indexed"
+            rows.push(BlockRow::new_done(full_hash(&b.entry.hash()[..])).into_row()); // mark block as "indexed"
             rows
         })
         .flatten()
@@ -1041,10 +1042,10 @@ fn index_transaction(
                     value: txo.value,
                 }),
             );
-            rows.push(history.to_row());
+            rows.push(history.into_row());
 
             if iconfig.address_search {
-                if let Some(row) = addr_search_row(&txo.script_pubkey, &iconfig.cnetwork) {
+                if let Some(row) = addr_search_row(&txo.script_pubkey, iconfig.cnetwork) {
                     rows.push(row);
                 }
             }
@@ -1069,7 +1070,7 @@ fn index_transaction(
                 value: prev_txo.value,
             }),
         );
-        rows.push(history.to_row());
+        rows.push(history.into_row());
 
         let edge = TxEdgeRow::new(
             full_hash(&txi.previous_output.txid[..]),
@@ -1077,14 +1078,14 @@ fn index_transaction(
             txid,
             txi_index as u16,
         );
-        rows.push(edge.to_row());
+        rows.push(edge.into_row());
     }
 
     #[cfg(feature = "liquid")]
     index_confirmed_tx_assets(tx, confirmed_height, rows);
 }
 
-fn addr_search_row(spk: &Script, network: &CNetwork) -> Option<DBRow> {
+fn addr_search_row(spk: &Script, network: CNetwork) -> Option<DBRow> {
     script_to_address(spk, network).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
@@ -1134,7 +1135,7 @@ impl TxRow {
         [b"T", prefix].concat()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         let TxRow { key, value } = self;
         DBRow {
             key: bincode::serialize(&key).unwrap(),
@@ -1170,7 +1171,7 @@ impl TxConfRow {
         [b"C", prefix].concat()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: vec![],
@@ -1216,7 +1217,7 @@ impl TxOutRow {
         .unwrap()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: self.value,
@@ -1283,7 +1284,7 @@ impl BlockRow {
         b"D".to_vec()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: self.value,
@@ -1377,7 +1378,7 @@ impl TxHistoryRow {
             .unwrap()
     }
 
-    pub fn to_row(self) -> DBRow {
+    pub fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::config().big_endian().serialize(&self.key).unwrap(),
             value: vec![],
@@ -1454,7 +1455,7 @@ impl TxEdgeRow {
         bincode::serialize(&(b'S', full_hash(&outpoint.txid[..]), outpoint.vout as u16)).unwrap()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: vec![],
@@ -1494,7 +1495,7 @@ impl StatsCacheRow {
         [b"A", scripthash].concat()
     }
 
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: self.value,
@@ -1511,7 +1512,7 @@ struct UtxoCacheRow {
 
 impl UtxoCacheRow {
     fn new(scripthash: &[u8], utxos: &UtxoMap, blockhash: &BlockHash) -> Self {
-        let utxos_cache = UtxoCacheRow::to_utxo_cache(utxos);
+        let utxos_cache = make_utxo_cache(utxos);
 
         UtxoCacheRow {
             key: ScriptCacheKey {
@@ -1526,37 +1527,37 @@ impl UtxoCacheRow {
         [b"U", scripthash].concat()
     }
 
-    // keep utxo cache with just the block height (the hash/timestamp are read later from the headers to reconstruct BlockId)
-    // and use a (txid,vout) tuple instead of OutPoints (they don't play nicely with bincode serialization)
-    pub fn to_utxo_cache(utxos: &UtxoMap) -> CachedUtxoMap {
-        utxos
-            .iter()
-            .map(|(outpoint, (blockid, value))| {
-                (
-                    (outpoint.txid, outpoint.vout),
-                    (blockid.height as u32, *value),
-                )
-            })
-            .collect()
-    }
-
-    pub fn to_utxo_map(utxos_cache: CachedUtxoMap, chain: &ChainQuery) -> UtxoMap {
-        utxos_cache
-            .into_iter()
-            .map(|((txid, vout), (height, value))| {
-                let outpoint = OutPoint { txid, vout };
-                let blockid = chain
-                    .blockid_by_height(height as usize)
-                    .expect("missing blockheader for valid utxo cache entry");
-                (outpoint, (blockid, value))
-            })
-            .collect()
-    }
-
-    fn to_row(self) -> DBRow {
+    fn into_row(self) -> DBRow {
         DBRow {
             key: bincode::serialize(&self.key).unwrap(),
             value: self.value,
         }
     }
+}
+
+// keep utxo cache with just the block height (the hash/timestamp are read later from the headers to reconstruct BlockId)
+// and use a (txid,vout) tuple instead of OutPoints (they don't play nicely with bincode serialization)
+fn make_utxo_cache(utxos: &UtxoMap) -> CachedUtxoMap {
+    utxos
+        .iter()
+        .map(|(outpoint, (blockid, value))| {
+            (
+                (outpoint.txid, outpoint.vout),
+                (blockid.height as u32, *value),
+            )
+        })
+        .collect()
+}
+
+fn from_utxo_cache(utxos_cache: CachedUtxoMap, chain: &ChainQuery) -> UtxoMap {
+    utxos_cache
+        .into_iter()
+        .map(|((txid, vout), (height, value))| {
+            let outpoint = OutPoint { txid, vout };
+            let blockid = chain
+                .blockid_by_height(height as usize)
+                .expect("missing blockheader for valid utxo cache entry");
+            (outpoint, (blockid, value))
+        })
+        .collect()
 }

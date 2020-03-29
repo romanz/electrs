@@ -11,7 +11,8 @@ pub struct InnerScripts {
     pub witness_script: Option<Script>,
 }
 
-pub fn script_to_address(script: &Script, network: &Network) -> Option<String> {
+#[allow(clippy::match_single_binding)]
+pub fn script_to_address(script: &Script, network: Network) -> Option<String> {
     match network {
         #[cfg(feature = "liquid")]
         Network::Liquid | Network::LiquidRegtest => {

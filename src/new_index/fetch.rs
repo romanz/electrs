@@ -70,15 +70,15 @@ fn bitcoind_fetcher(
     daemon: &Daemon,
     new_headers: Vec<HeaderEntry>,
 ) -> Result<Fetcher<Vec<BlockEntry>>> {
-    new_headers.last().map(|tip| {
-        debug!("{:?} ({} new blocks to fetch)", tip, new_headers.len());
-    });
+    if let Some(tip) = new_headers.last() {
+        debug!("{:?} ({} left to index)", tip, new_headers.len());
+    };
     let daemon = daemon.reconnect()?;
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
     Ok(Fetcher::from(
         chan.into_receiver(),
-        spawn_thread("bitcoind_fetcher", move || -> () {
+        spawn_thread("bitcoind_fetcher", move || {
             for entries in new_headers.chunks(100) {
                 let blockhashes: Vec<BlockHash> = entries.iter().map(|e| *e.hash()).collect();
                 let blocks = daemon
@@ -119,7 +119,7 @@ fn blkfiles_fetcher(
     let parser = blkfiles_parser(blkfiles_reader(blk_files), magic);
     Ok(Fetcher::from(
         chan.into_receiver(),
-        spawn_thread("blkfiles_fetcher", move || -> () {
+        spawn_thread("blkfiles_fetcher", move || {
             parser.map(|sizedblocks| {
                 let block_entries: Vec<BlockEntry> = sizedblocks
                     .into_iter()
@@ -155,7 +155,7 @@ fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Fetcher<Vec<u8>> {
 
     Fetcher::from(
         chan.into_receiver(),
-        spawn_thread("blkfiles_reader", move || -> () {
+        spawn_thread("blkfiles_reader", move || {
             for path in blk_files {
                 trace!("reading {:?}", path);
                 let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
@@ -173,7 +173,7 @@ fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<SizedBloc
 
     Fetcher::from(
         chan.into_receiver(),
-        spawn_thread("blkfiles_parser", move || -> () {
+        spawn_thread("blkfiles_parser", move || {
             blobs.map(|blob| {
                 trace!("parsing {} bytes", blob.len());
                 let blocks = parse_blocks(blob, magic).expect("failed to parse blk*.dat file");

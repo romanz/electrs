@@ -73,10 +73,9 @@ fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Resu
                     match code {
                         // RPC_IN_WARMUP -> retry by later reconnection
                         -28 => bail!(ErrorKind::Connection(err.to_string())),
-                        _ => (),
+                        _ => bail!("{} RPC error: {}", method, err),
                     }
                 }
-                bail!("{} RPC error: {}", method, err);
             }
         }
         let id = reply_obj
@@ -330,7 +329,7 @@ impl Daemon {
         };
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
-        if network_info.version < 00_16_00_00 {
+        if network_info.version < 16_00_00 {
             bail!(
                 "{} is not supported - please use bitcoind 0.16+",
                 network_info.subversion,
@@ -574,7 +573,7 @@ impl Daemon {
         self.broadcast_raw(&hex::encode(serialize(tx)))
     }
 
-    pub fn broadcast_raw(&self, txhex: &String) -> Result<Txid> {
+    pub fn broadcast_raw(&self, txhex: &str) -> Result<Txid> {
         let txid = self.request("sendrawtransaction", json!([txhex]))?;
         Ok(
             Txid::from_hex(txid.as_str().chain_err(|| "non-string txid")?)
@@ -582,6 +581,7 @@ impl Daemon {
         )
     }
 
+    #[allow(clippy::float_cmp)]
     pub fn estimatesmartfee(&self, conf_target: u16) -> Result<f32> {
         let feerate = self
             .request("estimatesmartfee", json!([conf_target]))?

@@ -43,7 +43,7 @@ pub fn scripthashes_from_file(path: String) -> Result<Vec<FullHash>> {
         .lines()
         .map(|line| {
             let line = line.chain_err(|| "cannot read scripthash line")?;
-            let cols: Vec<&str> = line.split(",").collect();
+            let cols: Vec<&str> = line.split(',').collect();
             to_scripthash(cols[0], cols[1])
         })
         .collect()

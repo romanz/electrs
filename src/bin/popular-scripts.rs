@@ -37,7 +37,7 @@ fn main() {
             total_entries = 0;
         }
 
-        total_entries = total_entries + 1;
+        total_entries += 1;
 
         iter.next();
     }
