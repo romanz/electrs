@@ -141,7 +141,7 @@ impl Config {
                     .default_value("0")
             )
             .arg(
-                Arg::with_name("reduced_stroage")
+                Arg::with_name("reduced_storage")
                     .long("reduced-storage")
                     .help("Enable reduced storage mode")
             )
