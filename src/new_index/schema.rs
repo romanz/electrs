@@ -834,17 +834,16 @@ impl ChainQuery {
 
         // header_by_blockhash only returns blocks that are part of the best chain,
         // or None for orphaned blocks.
-        headers.header_by_blockhash(hash).map_or_else(
-            BlockStatus::orphaned,
-            |header| {
+        headers
+            .header_by_blockhash(hash)
+            .map_or_else(BlockStatus::orphaned, |header| {
                 BlockStatus::confirmed(
                     header.height(),
                     headers
                         .header_by_height(header.height() + 1)
                         .map(|h| *h.hash()),
                 )
-            },
-        )
+            })
     }
 
     #[cfg(not(feature = "liquid"))]

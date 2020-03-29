@@ -923,12 +923,7 @@ fn handle_request(
             let spends: Vec<SpendingValue> = query
                 .lookup_tx_spends(tx)
                 .into_iter()
-                .map(|spend| {
-                    spend.map_or_else(
-                        SpendingValue::default,
-                        SpendingValue::from,
-                    )
-                })
+                .map(|spend| spend.map_or_else(SpendingValue::default, SpendingValue::from))
                 .collect();
             // @TODO long ttl if all outputs are either spent long ago or unspendable
             json_response(spends, TTL_SHORT)
@@ -1125,8 +1120,7 @@ fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpE
     #[cfg(not(feature = "liquid"))]
     let is_expected_net = {
         let addr_network = Network::from(addr.network);
-        addr_network == network
-            || (addr_network == Network::Testnet && network == Network::Regtest)
+        addr_network == network || (addr_network == Network::Testnet && network == Network::Regtest)
     };
 
     #[cfg(feature = "liquid")]
