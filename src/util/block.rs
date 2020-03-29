@@ -50,9 +50,8 @@ impl HeaderEntry {
 
 impl fmt::Debug for HeaderEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_block_time = time::at_utc(time::Timespec::new(self.header().time as i64, 0))
-            .rfc3339()
-            .to_string();
+        let spec = time::Timespec::new(i64::from(self.header().time), 0);
+        let last_block_time = time::at_utc(spec).rfc3339().to_string();
         write!(
             f,
             "best={} height={} @ {}",
@@ -146,7 +145,7 @@ impl HeaderList {
         (new_height..)
             .zip(hashed_headers.into_iter())
             .map(|(height, hashed_header)| HeaderEntry {
-                height: height,
+                height,
                 hash: hashed_header.blockhash,
                 header: hashed_header.header,
             })
@@ -214,16 +213,17 @@ impl HeaderList {
     pub fn tip(&self) -> &BlockHash {
         assert_eq!(
             self.tip,
-            self.headers
-                .last()
-                .map(|h| *h.hash())
-                .unwrap_or(BlockHash::default())
+            self.headers.last().map(|h| *h.hash()).unwrap_or_default()
         );
         &self.tip
     }
 
     pub fn len(&self) -> usize {
         self.headers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.headers.is_empty()
     }
 
     pub fn iter(&self) -> slice::Iter<HeaderEntry> {

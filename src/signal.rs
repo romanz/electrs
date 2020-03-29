@@ -10,7 +10,7 @@ pub struct Waiter {
 }
 
 impl Waiter {
-    pub fn new() -> Waiter {
+    pub fn start() -> Waiter {
         Waiter {
             signal: chan_signal::notify(&[chan_signal::Signal::INT, chan_signal::Signal::TERM]),
         }

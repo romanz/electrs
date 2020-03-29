@@ -338,7 +338,7 @@ impl Daemon {
         }
         let blockchain_info = daemon.getblockchaininfo()?;
         info!("{:?}", blockchain_info);
-        if blockchain_info.pruned == true {
+        if blockchain_info.pruned {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
         }
         loop {
@@ -605,7 +605,7 @@ impl Daemon {
             .expect("missing height")
             .as_u64()
             .expect("non-numeric height") as usize;
-        let all_heights: Vec<usize> = (0..tip_height + 1).collect();
+        let all_heights: Vec<usize> = (0..=tip_height).collect();
         let chunk_size = 100_000;
         let mut result = vec![];
         for heights in all_heights.chunks(chunk_size) {
@@ -631,7 +631,7 @@ impl Daemon {
         bestblockhash: &BlockHash,
     ) -> Result<Vec<BlockHeader>> {
         // Iterate back over headers until known blockash is found:
-        if indexed_headers.len() == 0 {
+        if indexed_headers.is_empty() {
             debug!("downloading all block headers up to {}", bestblockhash);
             return self.get_all_headers(bestblockhash);
         }

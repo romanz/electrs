@@ -162,11 +162,11 @@ impl Connection {
 
         let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
 
-        return Ok(json!({
+        Ok(json!({
             "header": raw_header_hex,
             "root": root.to_hex(),
             "branch": branch_vec
-        }));
+        }))
     }
 
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
@@ -239,9 +239,10 @@ impl Connection {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let (chain_stats, mempool_stats) = self.query.stats(&script_hash[..]);
 
-        Ok(
-            json!({ "confirmed": chain_stats.funded_txo_sum - chain_stats.spent_txo_sum, "unconfirmed": mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum}),
-        )
+        Ok(json!({
+            "confirmed": chain_stats.funded_txo_sum - chain_stats.spent_txo_sum,
+            "unconfirmed": mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum,
+        }))
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
@@ -572,7 +573,7 @@ impl RPC {
     }
 
     fn start_acceptor(addr: SocketAddr) -> Channel<Option<(TcpStream, SocketAddr)>> {
-        let chan = Channel::new();
+        let chan = Channel::unbounded();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
             let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
@@ -599,7 +600,7 @@ impl RPC {
                 "# of Electrum subscriptions",
             )),
         });
-        let notification = Channel::new();
+        let notification = Channel::unbounded();
 
         let rpc_addr = config.electrum_rpc_addr;
         let txs_limit = config.electrum_txs_limit;
@@ -672,7 +673,9 @@ impl Drop for RPC {
     fn drop(&mut self) {
         trace!("stop accepting new RPCs");
         self.notification.send(Notification::Exit).unwrap();
-        self.server.take().map(|t| t.join().unwrap());
+        if let Some(handle) = self.server.take() {
+            handle.join().unwrap();
+        }
         trace!("RPC server is stopped");
     }
 }

@@ -58,7 +58,7 @@ pub struct Channel<T> {
 }
 
 impl<T> Channel<T> {
-    pub fn new() -> Channel<T> {
+    pub fn unbounded() -> Self {
         let (tx, rx) = channel();
         Channel { tx, rx }
     }

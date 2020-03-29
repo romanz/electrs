@@ -40,7 +40,7 @@ pub fn get_header_merkle_proof(
         );
     }
 
-    let heights: Vec<usize> = (0..cp_height + 1).collect();
+    let heights: Vec<usize> = (0..=cp_height).collect();
     let header_hashes: Vec<BlockHash> = heights
         .into_iter()
         .map(|height| chain.hash_by_height(height))
