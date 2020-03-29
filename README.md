@@ -32,11 +32,12 @@ To deploy with Docker, follow the [instructions here](https://github.com/Blockst
 
 ### Reduced storage mode
 
-For personal or low-volume use, you may use `--reduced-storage` to reduce disk storage requirements
+For personal or low-volume use, you may set `--reduced-storage` to reduce disk storage requirements
 (at the time of writing, around block height 620k, by about 270GB)
 at the cost of slower and more expensive lookups.
 
-With this option set, raw transactions and metadata associated with blocks will not be kept in rocksdb,
+With this option set, raw transactions and metadata associated with blocks will not be kept in rocksdb
+(the `T`, `X` and `M` indexes),
 but instead queried from bitcoind on demand.
 
 ### Notable changes from Electrs:
