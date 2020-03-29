@@ -1056,7 +1056,7 @@ fn index_transaction(
         }
         let prev_txo = previous_txos_map
             .get(&txi.previous_output)
-            .expect(&format!("missing previous txo {}", txi.previous_output));
+            .unwrap_or_else(|| panic!("missing previous txo {}", txi.previous_output));
 
         let history = TxHistoryRow::new(
             &prev_txo.script_pubkey,

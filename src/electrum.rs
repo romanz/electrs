@@ -576,7 +576,8 @@ impl RPC {
         let chan = Channel::unbounded();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
-            let listener = TcpListener::bind(addr).expect(&format!("bind({}) failed", addr));
+            let listener =
+                TcpListener::bind(addr).unwrap_or_else(|_| panic!("bind({}) failed", addr));
             info!("Electrum RPC server running on {}", addr);
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");

@@ -158,10 +158,10 @@ fn blkfiles_reader(blk_files: Vec<PathBuf>) -> Fetcher<Vec<u8>> {
         spawn_thread("blkfiles_reader", move || {
             for path in blk_files {
                 trace!("reading {:?}", path);
-                let blob = fs::read(&path).expect(&format!("failed to read {:?}", path));
+                let blob = fs::read(&path).unwrap_or_else(|_| panic!("failed to read {:?}", path));
                 sender
                     .send(blob)
-                    .expect(&format!("failed to send {:?} contents", path));
+                    .unwrap_or_else(|_| panic!("failed to send {:?} contents", path));
             }
         }),
     )

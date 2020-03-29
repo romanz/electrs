@@ -323,8 +323,9 @@ impl Mempool {
                 .map(|(index, txi)| {
                     (
                         index as u32,
-                        txos.get(&txi.previous_output)
-                            .expect(&format!("missing outpoint {:?}", txi.previous_output)),
+                        txos.get(&txi.previous_output).unwrap_or_else(|| {
+                            panic!("missing outpoint {:?}", txi.previous_output)
+                        }),
                     )
                 })
                 .collect();
@@ -445,7 +446,7 @@ impl Mempool {
         for txid in &to_remove {
             self.txstore
                 .remove(*txid)
-                .expect(&format!("missing mempool tx {}", txid));
+                .unwrap_or_else(|| panic!("missing mempool tx {}", txid));
 
             self.feeinfo.remove(*txid).or_else(|| {
                 warn!("missing mempool tx feeinfo {}", txid);

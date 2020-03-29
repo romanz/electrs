@@ -92,10 +92,9 @@ impl HeaderList {
         let null_hash = BlockHash::default();
 
         while blockhash != null_hash {
-            let header = headers_map.remove(&blockhash).expect(&format!(
-                "missing expected blockhash in headers map: {:?}",
-                blockhash
-            ));
+            let header = headers_map.remove(&blockhash).unwrap_or_else(|| {
+                panic!("missing expected blockhash in headers map: {:?}", blockhash)
+            });
             blockhash = header.prev_blockhash;
             headers_chain.push(header);
         }
@@ -138,7 +137,7 @@ impl HeaderList {
             0
         } else {
             self.header_by_blockhash(&prev_blockhash)
-                .expect(&format!("{} is not part of the blockchain", prev_blockhash))
+                .unwrap_or_else(|| panic!("{} is not part of the blockchain", prev_blockhash))
                 .height()
                 + 1
         };

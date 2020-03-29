@@ -49,7 +49,7 @@ pub struct Config {
 fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
     address
         .to_socket_addrs()
-        .expect(&format!("unable to resolve {} address", what))
+        .unwrap_or_else(|_| panic!("unable to resolve {} address", what))
         .collect::<Vec<_>>()
         .pop()
         .unwrap()
