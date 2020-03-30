@@ -1,4 +1,6 @@
 extern crate electrs;
+
+#[cfg(not(feature = "liquid"))]
 #[macro_use]
 extern crate log;
 
