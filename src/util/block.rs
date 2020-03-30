@@ -54,7 +54,7 @@ impl fmt::Debug for HeaderEntry {
         let last_block_time = time::at_utc(spec).rfc3339().to_string();
         write!(
             f,
-            "best={} height={} @ {}",
+            "hash={} height={} @ {}",
             self.hash(),
             self.height(),
             last_block_time,
