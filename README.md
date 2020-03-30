@@ -42,7 +42,7 @@ but instead queried from bitcoind on demand.
 
 ### Notable changes from Electrs:
 
-- HTTP REST API instead of the Electrum JSON-RPC protocol, with extended transaction information
+- HTTP REST API in addition to the Electrum JSON-RPC protocol, with extended transaction information
   (previous outputs, spending transactions, script asm and more).
 
 - Extended indexes and database storage for improved performance under high load:
@@ -66,6 +66,7 @@ but instead queried from bitcoind on demand.
 In addition to electrs's original configuration options, a few new options are also available:
 
 - `--http-addr <addr:port>` - HTTP server address/port to listen on (default: `127.0.0.1:3000`).
+- `--lightmode` - enable light mode (see above)
 - `--disable-prevout` - disable attaching previous output information to inputs.
   This significantly reduces the amount of transaction lookups (and IO/CPU/memory usage),
   at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
