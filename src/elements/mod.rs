@@ -68,7 +68,7 @@ impl From<&TxIn> for IssuanceValue {
         let is_reissuance = issuance.asset_blinding_nonce != [0u8; 32];
 
         let asset_entropy = get_issuance_entropy(txin).expect("invalid issuance");
-        let asset_id = AssetId::from_entropy(asset_entropy.clone());
+        let asset_id = AssetId::from_entropy(asset_entropy);
 
         let contract_hash = if !is_reissuance {
             // reverse to match the format used by elements-cpp

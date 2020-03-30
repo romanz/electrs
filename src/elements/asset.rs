@@ -160,7 +160,7 @@ pub fn index_mempool_tx_assets(
     for (asset_id, info) in history {
         asset_history
             .entry(asset_id)
-            .or_insert_with(|| Vec::new())
+            .or_insert_with(Vec::new)
             .push(info);
     }
     for (asset_id, issuance) in issuances {
@@ -217,7 +217,7 @@ fn index_tx_assets(
             let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
             let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
-            let asset_id = AssetId::from_entropy(asset_entropy.clone());
+            let asset_id = AssetId::from_entropy(asset_entropy);
             // ugh, should eventually switch to using AssetIds everywhere
             let asset_id = sha256d::Hash::from_inner(asset_id.into_inner().into_inner());
 
@@ -342,7 +342,7 @@ pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
     Ok(if !is_reissuance {
         let contract_hash = sha256::Hash::from_slice(&txin.asset_issuance.asset_entropy)
             .chain_err(|| "invalid entropy (contract hash)")?;
-        AssetId::generate_asset_entropy(txin.previous_output.clone(), contract_hash)
+        AssetId::generate_asset_entropy(txin.previous_output, contract_hash)
     } else {
         sha256::Midstate::from_slice(&txin.asset_issuance.asset_entropy)
             .chain_err(|| "invalid entropy (reissuance)")?

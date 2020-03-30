@@ -56,14 +56,14 @@ impl Network {
             Network::Regtest => 0xDAB5_BFFA,
 
             #[cfg(feature = "liquid")]
-            Network::Liquid => 0xDAB5BFFA,
+            Network::Liquid => 0xDAB5_BFFA,
             #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => 0xDAB5BFFA,
+            Network::LiquidRegtest => 0xDAB5_BFFA,
         }
     }
 
     #[cfg(feature = "liquid")]
-    pub fn address_params(&self) -> &'static address::AddressParams {
+    pub fn address_params(self) -> &'static address::AddressParams {
         // Liquid regtest uses elements's address params
         match self {
             Network::Liquid => &address::AddressParams::LIQUID,
