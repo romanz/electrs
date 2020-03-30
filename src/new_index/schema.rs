@@ -224,7 +224,7 @@ impl Indexer {
         let key = b"F".to_vec();
         if db.get(&key).is_none() {
             db.full_compaction();
-            db.put(&key, b"");
+            db.put_sync(&key, b"");
             assert!(db.get(&key).is_some());
         }
         db.enable_auto_compaction();
