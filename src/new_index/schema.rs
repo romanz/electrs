@@ -264,20 +264,24 @@ impl Indexer {
         start_fetcher(self.from, &daemon, to_index)?.map(|blocks| self.index(&blocks));
         self.start_auto_compactions(&self.store.history_db);
 
+        if let DBFlush::Disable = self.flush {
+            debug!("flushing to disk");
+            self.store.txstore_db.flush();
+            self.store.history_db.flush();
+            self.flush = DBFlush::Enable;
+        }
+
+        // update the synced tip *after* the new data is flushed to disk
+        debug!("updating synced tip to {:?}", tip);
+        self.store.txstore_db.put_sync(b"t", &serialize(&tip));
+
         let mut headers = self.store.indexed_headers.write().unwrap();
         headers.apply(new_headers);
         assert_eq!(tip, *headers.tip());
 
-        // update the most recently indexed block
-        self.store.txstore_db.put(b"t", &serialize(&tip));
-
         if let FetchFrom::BlkFiles = self.from {
             self.from = FetchFrom::Bitcoind;
         }
-
-        self.flush = DBFlush::Enable;
-        self.store.txstore_db.write(vec![], self.flush);
-        self.store.history_db.write(vec![], self.flush);
 
         Ok(tip)
     }

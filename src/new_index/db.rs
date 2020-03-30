@@ -175,8 +175,18 @@ impl DB {
         self.db.write_opt(batch, &opts).unwrap();
     }
 
+    pub fn flush(&self) {
+        self.db.flush().unwrap();
+    }
+
     pub fn put(&self, key: &[u8], value: &[u8]) {
         self.db.put(key, value).unwrap();
+    }
+
+    pub fn put_sync(&self, key: &[u8], value: &[u8]) {
+        let mut opts = rocksdb::WriteOptions::new();
+        opts.set_sync(true);
+        self.db.put_opt(key, value, &opts).unwrap();
     }
 
     pub fn get(&self, key: &[u8]) -> Option<Bytes> {
