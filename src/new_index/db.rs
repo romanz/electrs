@@ -196,10 +196,10 @@ impl DB {
     fn verify_compatibility(&self, config: &Config) {
         let mut compatibility_bytes = bincode::serialize(&DB_VERSION).unwrap();
 
-        if config.reduced_storage {
-            // append a byte to indicate reduced_storage is enabled.
+        if config.light_mode {
+            // append a byte to indicate light_mode is enabled.
             // we're not letting bincode serialize this so that the compatiblity bytes won't change
-            // (and require a reindex) when reduced_storage is disabled. this should be chagned the next
+            // (and require a reindex) when light_mode is disabled. this should be chagned the next
             // time we bump DB_VERSION and require a re-index anyway.
             compatibility_bytes.push(1);
         }

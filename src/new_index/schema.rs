@@ -161,7 +161,7 @@ pub struct Indexer {
 }
 
 struct IndexerConfig {
-    reduced_storage: bool,
+    light_mode: bool,
     address_search: bool,
     cnetwork: CNetwork,
 }
@@ -169,7 +169,7 @@ struct IndexerConfig {
 impl From<&Config> for IndexerConfig {
     fn from(config: &Config) -> Self {
         IndexerConfig {
-            reduced_storage: config.reduced_storage,
+            light_mode: config.light_mode,
             address_search: config.address_search,
             cnetwork: config.network_type,
         }
@@ -179,7 +179,7 @@ impl From<&Config> for IndexerConfig {
 pub struct ChainQuery {
     store: Arc<Store>, // TODO: should be used as read-only
     daemon: Arc<Daemon>,
-    reduced_storage: bool,
+    light_mode: bool,
     duration: HistogramVec,
 }
 
@@ -329,13 +329,13 @@ impl ChainQuery {
     pub fn new(
         store: Arc<Store>,
         daemon: Arc<Daemon>,
-        reduced_storage: bool,
+        light_mode: bool,
         metrics: &Metrics,
     ) -> Self {
         ChainQuery {
             store,
             daemon,
-            reduced_storage,
+            light_mode,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
                 &["name"],
@@ -354,7 +354,7 @@ impl ChainQuery {
     pub fn get_block_txids(&self, hash: &BlockHash) -> Option<Vec<Txid>> {
         let _timer = self.start_timer("get_block_txids");
 
-        if self.reduced_storage {
+        if self.light_mode {
             // TODO fetch block as binary from REST API instead of as hex
             let mut blockinfo = self.daemon.getblock_raw(hash, 1).ok()?;
             Some(serde_json::from_value(blockinfo["tx"].take()).unwrap())
@@ -369,7 +369,7 @@ impl ChainQuery {
     pub fn get_block_meta(&self, hash: &BlockHash) -> Option<BlockMeta> {
         let _timer = self.start_timer("get_block_meta");
 
-        if self.reduced_storage {
+        if self.light_mode {
             let blockinfo = self.daemon.getblock_raw(hash, 1).ok()?;
             Some(serde_json::from_value(blockinfo).unwrap())
         } else {
@@ -383,7 +383,7 @@ impl ChainQuery {
     pub fn get_block_raw(&self, hash: &BlockHash) -> Option<Vec<u8>> {
         let _timer = self.start_timer("get_block_raw");
 
-        if self.reduced_storage {
+        if self.light_mode {
             let blockhex = self.daemon.getblock_raw(hash, 0).ok()?;
             Some(hex::decode(blockhex.as_str().unwrap()).unwrap())
         } else {
@@ -399,7 +399,7 @@ impl ChainQuery {
             raw.append(&mut serialize(&VarInt(txids.len() as u64)));
 
             for txid in txids {
-                // we don't need to provide the blockhash because we know we're not in reduced storage mode
+                // we don't need to provide the blockhash because we know we're not in light mode
                 raw.append(&mut self.lookup_raw_txn(&txid, None)?);
             }
 
@@ -782,7 +782,7 @@ impl ChainQuery {
     pub fn lookup_raw_txn(&self, txid: &Txid, blockhash: Option<&BlockHash>) -> Option<Bytes> {
         let _timer = self.start_timer("lookup_raw_txn");
 
-        if self.reduced_storage {
+        if self.light_mode {
             let queried_blockhash =
                 blockhash.map_or_else(|| self.tx_confirming_block(txid).map(|b| b.hash), |_| None);
             let blockhash = blockhash.or_else(|| queried_blockhash.as_ref())?;
@@ -934,7 +934,7 @@ fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRo
                 add_transaction(tx, blockhash, &mut rows, iconfig);
             }
 
-            if !iconfig.reduced_storage {
+            if !iconfig.light_mode {
                 rows.push(BlockRow::new_txids(blockhash, &txids).into_row());
                 rows.push(BlockRow::new_meta(blockhash, &BlockMeta::from(b)).into_row());
             }
@@ -955,7 +955,7 @@ fn add_transaction(
 ) {
     rows.push(TxConfRow::new(tx, blockhash).into_row());
 
-    if !iconfig.reduced_storage {
+    if !iconfig.light_mode {
         rows.push(TxRow::new(tx).into_row());
     }
 

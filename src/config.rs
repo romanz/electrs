@@ -28,7 +28,7 @@ pub struct Config {
     pub jsonrpc_import: bool,
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
-    pub reduced_storage: bool,
+    pub light_mode: bool,
     pub address_search: bool,
     pub prevout_enabled: bool,
     pub cors: Option<String>,
@@ -136,9 +136,9 @@ impl Config {
                     .default_value("0")
             )
             .arg(
-                Arg::with_name("reduced_storage")
-                    .long("reduced-storage")
-                    .help("Enable reduced storage mode")
+                Arg::with_name("light_mode")
+                    .long("lightmode")
+                    .help("Enable light mode for reduced storage")
             )
             .arg(
                 Arg::with_name("address_search")
@@ -303,7 +303,7 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
             bulk_index_threads,
-            reduced_storage: m.is_present("reduced_storage"),
+            light_mode: m.is_present("light_mode"),
             address_search: m.is_present("address_search"),
             prevout_enabled: !m.is_present("disable_prevout"),
             cors: m.value_of("cors").map(|s| s.to_string()),
