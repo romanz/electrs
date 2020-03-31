@@ -35,9 +35,9 @@ pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
 pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> u64 {
     tx.output
         .iter()
-        .filter(TxOut::is_fee)
+        .filter(|o| o.is_fee())
         .filter_map(|vout| match vout.value {
-            Value::Explicit(value) => value,
+            Value::Explicit(value) => Some(value),
             _ => None,
         })
         .sum()

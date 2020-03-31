@@ -593,7 +593,10 @@ impl Daemon {
             .zip(conf_targets)
             .filter_map(|(reply, target)| {
                 if !reply["errors"].is_null() {
-                    warn!("failed estimating fee for target {}: {:?}", target, reply["errors"]);
+                    warn!(
+                        "failed estimating fee for target {}: {:?}",
+                        target, reply["errors"]
+                    );
                     return None;
                 }
 

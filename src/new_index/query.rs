@@ -200,7 +200,7 @@ impl Query {
             mempool,
             daemon,
             asset_db,
-            cached_estimates: RwLock::new(None),
+            cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
         }
     }
