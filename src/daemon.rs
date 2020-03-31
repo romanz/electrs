@@ -581,21 +581,35 @@ impl Daemon {
         )
     }
 
+    // Get estimated feerates for the provided confirmation targets using a batch RPC request
+    // Missing estimates are logged but do not cause a failure, whatever is available is returned
     #[allow(clippy::float_cmp)]
-    pub fn estimatesmartfee(&self, conf_target: u16) -> Result<f32> {
-        let feerate = self
-            .request("estimatesmartfee", json!([conf_target]))?
-            .get("feerate")
-            .chain_err(|| "missing feerate")?
-            .as_f64()
-            .chain_err(|| "invalid feerate")?;
+    pub fn estimatesmartfee_batch(&self, conf_targets: &[u16]) -> Result<HashMap<u16, f32>> {
+        let params_list: Vec<Value> = conf_targets.iter().map(|t| json!([t])).collect();
 
-        if feerate == -1f64 {
-            bail!("not enough data to estimate");
-        }
+        Ok(self
+            .requests("estimatesmartfee", &params_list)?
+            .iter()
+            .zip(conf_targets)
+            .filter_map(|(reply, target)| {
+                if !reply["errors"].is_null() {
+                    warn!("failed estimating fee for target {}: {:?}", target, reply["errors"]);
+                    return None;
+                }
 
-        // from BTC/kB to sat/b
-        Ok((feerate * 100_000f64) as f32)
+                let feerate = reply["feerate"]
+                    .as_f64()
+                    .unwrap_or_else(|| panic!("invalid estimatesmartfee response: {:?}", reply));
+
+                if feerate == -1f64 {
+                    warn!("not enough data to estimate fee for target {}", target);
+                    return None;
+                }
+
+                // from BTC/kB to sat/b
+                Some((*target, (feerate * 100_000f64) as f32))
+            })
+            .collect())
     }
 
     fn get_all_headers(&self, tip: &BlockHash) -> Result<Vec<BlockHeader>> {

@@ -948,7 +948,7 @@ fn handle_request(
         }
 
         (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {
-            json_response(query.estimate_fee_targets(), TTL_SHORT)
+            json_response(query.estimate_fee_map(), TTL_SHORT)
         }
 
         #[cfg(feature = "liquid")]

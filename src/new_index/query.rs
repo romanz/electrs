@@ -19,15 +19,16 @@ use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
 
-const CONF_TARGETS: [u16; 11] = [
-    2u16, 3u16, 4u16, 5u16, 6u16, 10u16, 20u16, 25u16, 144u16, 504u16, 1008u16,
+const CONF_TARGETS: [u16; 28] = [
+    1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16,
+    16u16, 17u16, 18u16, 19u16, 20u16, 21u16, 22u16, 23u16, 24u16, 25u16, 144u16, 504u16, 1008u16,
 ];
 
 pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
     mempool: Arc<RwLock<Mempool>>,
     daemon: Arc<Daemon>,
-    cached_estimates: RwLock<Option<(HashMap<u16, f32>, Instant)>>,
+    cached_estimates: RwLock<(HashMap<u16, f32>, Option<Instant>)>,
     cached_relayfee: RwLock<Option<f64>>,
 
     #[cfg(feature = "liquid")]
@@ -41,7 +42,7 @@ impl Query {
             chain,
             mempool,
             daemon,
-            cached_estimates: RwLock::new(None),
+            cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
         }
     }
@@ -140,29 +141,41 @@ impl Query {
     }
 
     pub fn estimate_fee(&self, conf_target: u16) -> Option<f32> {
-        self.estimate_fee_targets().remove(&conf_target)
-    }
-
-    pub fn estimate_fee_targets(&self) -> HashMap<u16, f32> {
-        if let Some(ref cached) = *self.cached_estimates.read().unwrap() {
-            if cached.1.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
-                return cached.0.clone();
+        if let (ref cache, Some(cache_time)) = *self.cached_estimates.read().unwrap() {
+            if cache_time.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
+                return cache.get(&conf_target).copied();
             }
         }
 
-        let fresh = CONF_TARGETS
-            .iter()
-            .filter_map(|conf_target| {
-                self.daemon
-                    .estimatesmartfee(*conf_target)
-                    .ok()
-                    .map(|feerate| (*conf_target, feerate))
-            })
-            .collect::<HashMap<u16, f32>>();
+        self.update_fee_estimates();
+        self.cached_estimates
+            .read()
+            .unwrap()
+            .0
+            .get(&conf_target)
+            .copied()
+    }
 
-        *self.cached_estimates.write().unwrap() = Some((fresh.clone(), Instant::now()));
+    pub fn estimate_fee_map(&self) -> HashMap<u16, f32> {
+        if let (ref cache, Some(cache_time)) = *self.cached_estimates.read().unwrap() {
+            if cache_time.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
+                return cache.clone();
+            }
+        }
 
-        fresh
+        self.update_fee_estimates();
+        self.cached_estimates.read().unwrap().0.clone()
+    }
+
+    fn update_fee_estimates(&self) {
+        match self.daemon.estimatesmartfee_batch(&CONF_TARGETS) {
+            Ok(estimates) => {
+                *self.cached_estimates.write().unwrap() = (estimates, Some(Instant::now()));
+            }
+            Err(err) => {
+                warn!("failed estimating feerates: {:?}", err);
+            }
+        }
     }
 
     pub fn get_relayfee(&self) -> Result<f64> {
