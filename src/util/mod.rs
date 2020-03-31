@@ -6,8 +6,11 @@ pub mod electrum_merkle;
 pub mod fees;
 
 pub use self::block::{BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, HeaderEntry, HeaderList};
+pub use self::fees::get_tx_fee;
 pub use self::script::{get_innerscripts, get_script_asm, script_to_address};
-pub use self::transaction::{has_prevout, is_coinbase, is_spendable, TransactionStatus, TxInput};
+pub use self::transaction::{
+    extract_tx_prevouts, has_prevout, is_coinbase, is_spendable, TransactionStatus, TxInput,
+};
 
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};

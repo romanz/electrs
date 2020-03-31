@@ -24,7 +24,7 @@ use crate::new_index::{
     SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
-use crate::util::{full_hash, has_prevout, is_spendable, Bytes};
+use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
 use crate::elements::asset;
@@ -314,21 +314,7 @@ impl Mempool {
         for txid in txids {
             let tx = self.txstore.get(&txid).expect("missing mempool tx");
             let txid_bytes = full_hash(&txid[..]);
-
-            let prevouts: HashMap<u32, &TxOut> = tx
-                .input
-                .iter()
-                .enumerate()
-                .filter(|(_, txi)| has_prevout(txi))
-                .map(|(index, txi)| {
-                    (
-                        index as u32,
-                        txos.get(&txi.previous_output).unwrap_or_else(|| {
-                            panic!("missing outpoint {:?}", txi.previous_output)
-                        }),
-                    )
-                })
-                .collect();
+            let prevouts = extract_tx_prevouts(&tx, &txos, false);
 
             // Get feeinfo for caching and recent tx overview
             let feeinfo = TxFeeInfo::new(&tx, &prevouts);

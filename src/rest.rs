@@ -3,8 +3,9 @@ use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    electrum_merkle, full_hash, get_innerscripts, get_script_asm, has_prevout, is_coinbase,
-    script_to_address, BlockHeaderMeta, BlockId, FullHash, TransactionStatus,
+    electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts, get_script_asm, get_tx_fee,
+    has_prevout, is_coinbase, script_to_address, BlockHeaderMeta, BlockId, FullHash,
+    TransactionStatus,
 };
 
 #[cfg(not(feature = "liquid"))]
@@ -119,15 +120,16 @@ impl TransactionValue {
     fn new(
         tx: Transaction,
         blockid: Option<BlockId>,
-        prevouts: &HashMap<OutPoint, TxOut>,
+        txos: &HashMap<OutPoint, TxOut>,
         config: &Config,
     ) -> Self {
+        let prevouts = extract_tx_prevouts(&tx, &txos, true);
         let vins: Vec<TxInValue> = tx
             .input
             .iter()
-            .map(|txin| {
-                let prevout = prevouts.get(&txin.previous_output);
-                TxInValue::new(txin, prevout, config)
+            .enumerate()
+            .map(|(index, txin)| {
+                TxInValue::new(txin, prevouts.get(&(index as u32)).cloned(), config)
             })
             .collect();
         let vouts: Vec<TxOutValue> = tx
@@ -136,24 +138,11 @@ impl TransactionValue {
             .map(|txout| TxOutValue::new(txout, config))
             .collect();
 
-        #[cfg(not(feature = "liquid"))]
-        let fee = if config.prevout_enabled && !vins.iter().any(|vin| vin.prevout.is_none()) {
-            let total_in: u64 = vins
-                .iter()
-                .map(|vin| vin.prevout.as_ref().unwrap().value)
-                .sum();
-            let total_out: u64 = vouts.iter().map(|vout| vout.value).sum();
-            Some(total_in - total_out)
+        let fee = if config.prevout_enabled || cfg!(feature = "liquid") {
+            Some(get_tx_fee(&tx, &prevouts))
         } else {
             None
         };
-
-        #[cfg(feature = "liquid")]
-        let fee = vouts
-            .iter()
-            .find(|vout| vout.scriptpubkey_type == "fee")
-            .map(|vout| vout.value.unwrap())
-            .or_else(|| Some(0));
 
         TransactionValue {
             txid: tx.txid(),

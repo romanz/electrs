@@ -12,11 +12,8 @@ pub struct TxFeeInfo {
 }
 
 impl TxFeeInfo {
-    #[cfg(not(feature = "liquid"))]
     pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> Self {
-        let total_in: u64 = prevouts.values().map(|prevout| prevout.value).sum();
-        let total_out: u64 = tx.output.iter().map(|vout| vout.value).sum();
-        let fee = total_in - total_out;
+        let fee = get_tx_fee(tx, prevouts);
         let vsize = tx.get_weight() / 4;
 
         TxFeeInfo {
@@ -25,26 +22,25 @@ impl TxFeeInfo {
             fee_per_vbyte: fee as f32 / vsize as f32,
         }
     }
+}
 
-    #[cfg(feature = "liquid")]
-    pub fn new(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> Self {
-        let fee = tx
-            .output
-            .iter()
-            .find(|vout| vout.is_fee())
-            .map_or(0, |vout| match vout.value {
-                Value::Explicit(value) => value,
-                _ => 0u64,
-            });
+#[cfg(not(feature = "liquid"))]
+pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
+    let total_in: u64 = prevouts.values().map(|prevout| prevout.value).sum();
+    let total_out: u64 = tx.output.iter().map(|vout| vout.value).sum();
+    total_in - total_out
+}
 
-        let vsize = tx.get_weight() / 4;
-
-        TxFeeInfo {
-            fee,
-            vsize: vsize as u32,
-            fee_per_vbyte: fee as f32 / vsize as f32,
-        }
-    }
+#[cfg(feature = "liquid")]
+pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> u64 {
+    tx.output
+        .iter()
+        .filter(TxOut::is_fee)
+        .filter_map(|vout| match vout.value {
+            Value::Explicit(value) => value,
+            _ => None,
+        })
+        .sum()
 }
 
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {

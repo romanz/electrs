@@ -3,8 +3,10 @@ use bitcoin::{BlockHash, Txid};
 #[cfg(feature = "liquid")]
 use bitcoin::hashes::hex::FromHex;
 
-use crate::chain::{TxIn, TxOut};
+use crate::chain::{OutPoint, Transaction, TxIn, TxOut};
 use crate::util::BlockId;
+
+use std::collections::HashMap;
 
 #[cfg(feature = "liquid")]
 lazy_static! {
@@ -69,4 +71,25 @@ pub fn is_spendable(txout: &TxOut) -> bool {
     return !txout.script_pubkey.is_provably_unspendable();
     #[cfg(feature = "liquid")]
     return !txout.is_fee() && !txout.script_pubkey.is_provably_unspendable();
+}
+
+pub fn extract_tx_prevouts<'a>(
+    tx: &Transaction,
+    txos: &'a HashMap<OutPoint, TxOut>,
+    allow_missing: bool,
+) -> HashMap<u32, &'a TxOut> {
+    tx.input
+        .iter()
+        .enumerate()
+        .filter(|(_, txi)| has_prevout(txi))
+        .filter_map(|(index, txi)| {
+            Some((
+                index as u32,
+                txos.get(&txi.previous_output).or_else(|| {
+                    assert!(allow_missing, "missing outpoint {:?}", txi.previous_output);
+                    None
+                })?,
+            ))
+        })
+        .collect()
 }
