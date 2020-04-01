@@ -48,12 +48,10 @@ but instead queried from bitcoind on demand.
 - Extended indexes and database storage for improved performance under high load:
 
   - A full transaction store mapping txids to raw transactions is kept in the database under the prefix `t`.
-    This takes up ~200GB of extra storage.
+  - An index of all spendable transaction outputs is kept under the prefix `O`.
+  - An index of all addresses (encoded as string) is kept under the prefix `a` to enable by-prefix address search.
   - A map of blockhash to txids is kept in the database under the prefix `X`.
   - Block stats metadata (number of transactions, size and weight) is kept in the database under the prefix `M`.
-  - The index with `T` prefix mapping txids to block heights now also includes the block hash.
-    This allows for quick reorg-aware transaction confirmation status lookups, by verifying the
-    current block at the recorded height still matches the recorded block hash.
 
   With these new indexes, bitcoind is no longer queried to serve user requests and is only polled
   periodically for new blocks and for syncing the mempool.
@@ -72,6 +70,7 @@ In addition to electrs's original configuration options, a few new options are a
   at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
 - `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
+- `--address-search` - enables the by-prefix address search index.
 
 See `$ cargo run --release --bin electrs -- --help` for the full list of options.
 
