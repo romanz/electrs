@@ -116,34 +116,6 @@ struct NetworkInfo {
     relayfee: f64, // in BTC/kB
 }
 
-pub struct MempoolEntry {
-    fee: u64,   // in satoshis
-    vsize: u32, // in virtual bytes (= weight/4)
-    fee_per_vbyte: f32,
-}
-
-impl MempoolEntry {
-    fn new(fee: u64, vsize: u32) -> MempoolEntry {
-        MempoolEntry {
-            fee,
-            vsize,
-            fee_per_vbyte: fee as f32 / vsize as f32,
-        }
-    }
-
-    pub fn fee_per_vbyte(&self) -> f32 {
-        self.fee_per_vbyte
-    }
-
-    pub fn fee(&self) -> u64 {
-        self.fee
-    }
-
-    pub fn vsize(&self) -> u32 {
-        self.vsize
-    }
-}
-
 pub trait CookieGetter: Send + Sync {
     fn get(&self) -> Result<Vec<u8>>;
 }
@@ -544,29 +516,8 @@ impl Daemon {
     }
 
     pub fn getmempooltxids(&self) -> Result<HashSet<Txid>> {
-        let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
-        let mut result = HashSet::new();
-        for value in txids.as_array().chain_err(|| "non-array result")? {
-            let txid: Txid = parse_hash(&value).chain_err(|| "invalid txid")?;
-            result.insert(txid);
-        }
-        Ok(result)
-    }
-
-    pub fn getmempoolentry(&self, txid: &Txid) -> Result<MempoolEntry> {
-        let entry = self.request("getmempoolentry", json!([txid.to_hex()]))?;
-        let fee = (entry
-            .get("fee")
-            .chain_err(|| "missing fee")?
-            .as_f64()
-            .chain_err(|| "non-float fee")?
-            * 100_000_000f64) as u64;
-        let vsize = entry
-            .get("size")
-            .chain_err(|| "missing size")?
-            .as_u64()
-            .chain_err(|| "non-integer size")? as u32;
-        Ok(MempoolEntry::new(fee, vsize))
+        let res = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
+        Ok(serde_json::from_value(res).chain_err(|| "invalid getrawmempool reply")?)
     }
 
     pub fn broadcast(&self, tx: &Transaction) -> Result<Txid> {
