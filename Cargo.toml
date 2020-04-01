@@ -74,5 +74,5 @@ git = "https://github.com/blockstream/rust-bitcoin"
 rev = "0.23-electrs"
 
 [patch.crates-io.elements]
-git = "https://github.com/shesek/rust-elements"
-rev = "bab177bb9a1d7293a71eb5ed78755811995b5688"
+git = "https://github.com/elementsproject/rust-elements"
+rev = "9b7e4315fdda699a9679547f45411ae6f657b4c8"
