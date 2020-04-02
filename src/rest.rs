@@ -269,15 +269,13 @@ impl TxOutValue {
         let value = txout.value;
 
         #[cfg(feature = "liquid")]
-        let value = match txout.value {
-            Value::Explicit(value) => Some(value),
-            _ => None,
-        };
+        let value = txout.value.explicit();
         #[cfg(feature = "liquid")]
         let valuecommitment = match txout.value {
             Value::Confidential(..) => Some(hex::encode(encode::serialize(&txout.value))),
             _ => None,
         };
+
         #[cfg(feature = "liquid")]
         let asset = match txout.asset {
             Asset::Explicit(value) => Some(value.to_hex()),

@@ -1,5 +1,3 @@
-#[cfg(feature = "liquid")]
-use crate::chain::Value;
 use crate::chain::{Transaction, TxOut};
 use std::collections::HashMap;
 
@@ -33,14 +31,7 @@ pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
 
 #[cfg(feature = "liquid")]
 pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> u64 {
-    tx.output
-        .iter()
-        .filter(|o| o.is_fee())
-        .filter_map(|vout| match vout.value {
-            Value::Explicit(value) => Some(value),
-            _ => None,
-        })
-        .sum()
+    tx.fee()
 }
 
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {
