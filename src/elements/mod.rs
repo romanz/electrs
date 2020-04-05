@@ -1,12 +1,8 @@
 use bitcoin::hashes::hex::ToHex;
-use bitcoin::Script;
 use elements::confidential::Value;
 use elements::encode::serialize;
-use elements::{TxIn, TxOut};
+use elements::TxIn;
 use hex;
-
-use crate::chain::Network;
-use crate::util::{get_script_asm, script_to_address};
 
 pub mod asset;
 mod assetid;
@@ -17,32 +13,6 @@ use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, LiquidAsset};
 pub use assetid::AssetId;
 pub use registry::AssetRegistry;
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct PegoutValue {
-    pub genesis_hash: String,
-    pub scriptpubkey: Script,
-    pub scriptpubkey_asm: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scriptpubkey_address: Option<String>,
-}
-
-impl PegoutValue {
-    pub fn parse(txout: &TxOut, parent_network: Network) -> Option<Self> {
-        let pegoutdata = txout.pegout_data()?;
-
-        if pegoutdata.genesis_hash != parent_network.genesis_hash() {
-            return None;
-        }
-
-        Some(PegoutValue {
-            genesis_hash: pegoutdata.genesis_hash.to_hex(),
-            scriptpubkey_asm: get_script_asm(&pegoutdata.script_pubkey),
-            scriptpubkey_address: script_to_address(&pegoutdata.script_pubkey, parent_network),
-            scriptpubkey: pegoutdata.script_pubkey,
-        })
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {

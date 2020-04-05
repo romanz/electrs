@@ -1,11 +1,40 @@
 use std::collections::HashSet;
 
-use bitcoin::Txid;
+use bitcoin::{hashes::hex::ToHex, Script, Txid};
+use elements::TxOut;
 
-use crate::chain::Transaction;
+use crate::chain::{Network, Transaction};
 use crate::new_index::{db::DBRow, ChainQuery};
-use crate::util::BlockId;
+use crate::util::{get_script_asm, script_to_address, BlockId};
 
+// API representation of pegout data assocaited with an output
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PegoutValue {
+    pub genesis_hash: String,
+    pub scriptpubkey: Script,
+    pub scriptpubkey_asm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scriptpubkey_address: Option<String>,
+}
+
+impl PegoutValue {
+    pub fn parse(txout: &TxOut, parent_network: Network) -> Option<Self> {
+        let pegoutdata = txout.pegout_data()?;
+
+        if pegoutdata.genesis_hash != parent_network.genesis_hash() {
+            return None;
+        }
+
+        Some(PegoutValue {
+            genesis_hash: pegoutdata.genesis_hash.to_hex(),
+            scriptpubkey_asm: get_script_asm(&pegoutdata.script_pubkey),
+            scriptpubkey_address: script_to_address(&pegoutdata.script_pubkey, parent_network),
+            scriptpubkey: pegoutdata.script_pubkey,
+        })
+    }
+}
+
+// Indexer representation of tx peg statistics
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TxPegInfo {
     pub txid: Txid,

@@ -21,7 +21,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{IssuanceValue, PegoutValue},
+    crate::elements::{peg::PegoutValue, IssuanceValue},
     bitcoin::hashes::sha256d::Hash as Sha256dHash,
     elements::confidential::{Asset, Value},
     elements::encode,
