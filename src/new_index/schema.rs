@@ -32,9 +32,7 @@ use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB
 use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset::{index_confirmed_tx_assets, IssuingInfo};
-#[cfg(feature = "liquid")]
-use crate::elements::peg::{index_confirmed_tx_pegs, lookup_confirmed_tx_pegs_history};
+use crate::elements::{asset, peg};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -415,6 +413,10 @@ impl ChainQuery {
             header_entry: self.header_by_hash(hash)?,
             meta: self.get_block_meta(hash)?,
         })
+    }
+
+    pub fn iter_scan(&self, prefix: &[u8], start_at: &[u8]) -> ScanIterator {
+        self.store.history_db.iter_scan_from(prefix, start_at)
     }
 
     pub fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
@@ -908,7 +910,7 @@ impl ChainQuery {
         last_seen_txid: Option<&Txid>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
-        lookup_confirmed_tx_pegs_history(self, last_seen_txid, limit)
+        peg::lookup_confirmed_tx_pegs_history(self, last_seen_txid, limit)
     }
 }
 
@@ -1113,10 +1115,10 @@ fn index_transaction(
     }
 
     #[cfg(feature = "liquid")]
-    index_confirmed_tx_assets(tx, confirmed_height, rows);
+    asset::index_confirmed_tx_assets(tx, confirmed_height, rows);
 
     #[cfg(feature = "liquid")]
-    index_confirmed_tx_pegs(tx, confirmed_height, rows);
+    peg::index_confirmed_tx_pegs(tx, confirmed_height, rows);
 }
 
 fn addr_search_row(spk: &Script, network: CNetwork) -> Option<DBRow> {
@@ -1355,7 +1357,7 @@ pub enum TxHistoryInfo {
     Spending(SpendingInfo),
 
     #[cfg(feature = "liquid")]
-    Issuing(IssuingInfo),
+    Issuing(asset::IssuingInfo),
     #[cfg(feature = "liquid")]
     Burning(FundingInfo),
 }
@@ -1367,7 +1369,7 @@ impl TxHistoryInfo {
             | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => deserialize(txid),
 
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuing(IssuingInfo { txid, .. })
+            TxHistoryInfo::Issuing(asset::IssuingInfo { txid, .. })
             | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => deserialize(txid),
         }
         .expect("cannot parse Txid")

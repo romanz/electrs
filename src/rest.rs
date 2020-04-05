@@ -1021,6 +1021,19 @@ fn handle_request(
         }
 
         #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"pegs"), None, None, None, None) => {
+            let (chain_stats, mempool_stats) = query.peg_stats();
+
+            json_response(
+                json!({
+                    "chain_stats": chain_stats,
+                    "mempool_stats": mempool_stats
+                }),
+                TTL_SHORT,
+            )
+        }
+
+        #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"pegs"), Some(&"txs"), None, None, None) => {
             let mut txs = vec![];
 

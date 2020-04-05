@@ -13,6 +13,8 @@ use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 use bitcoin::Txid;
 
 #[cfg(feature = "liquid")]
+use crate::elements::peg;
+#[cfg(feature = "liquid")]
 use crate::elements::{lookup_asset, AssetRegistry, LiquidAsset};
 #[cfg(feature = "liquid")]
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
@@ -208,5 +210,10 @@ impl Query {
     #[cfg(feature = "liquid")]
     pub fn lookup_asset(&self, asset_id: &Sha256dHash) -> Result<Option<LiquidAsset>> {
         lookup_asset(&self, self.asset_db.as_ref(), asset_id)
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn peg_stats(&self) -> (peg::PegStats, peg::PegStats) {
+        peg::peg_stats(self)
     }
 }
