@@ -1020,6 +1020,55 @@ fn handle_request(
             json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"pegs"), Some(&"txs"), None, None, None) => {
+            let mut txs = vec![];
+
+            txs.extend(
+                query
+                    .mempool()
+                    .pegs_history(MAX_MEMPOOL_TXS)
+                    .into_iter()
+                    .map(|tx| (tx, None)),
+            );
+
+            txs.extend(
+                query
+                    .chain()
+                    .pegs_history(None, CHAIN_TXS_PER_PAGE)
+                    .into_iter()
+                    .map(|(tx, blockid)| (tx, Some(blockid))),
+            );
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"pegs"), Some(&"txs"), Some(&"chain"), last_seen_txid, None) => {
+            let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_hex(txid).ok());
+
+            let txs = query
+                .chain()
+                .pegs_history(last_seen_txid.as_ref(), CHAIN_TXS_PER_PAGE)
+                .into_iter()
+                .map(|(tx, blockid)| (tx, Some(blockid)))
+                .collect();
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"pegs"), Some(&"txs"), Some(&"mempool"), None, None) => {
+            let txs = query
+                .mempool()
+                .pegs_history(CHAIN_TXS_PER_PAGE)
+                .into_iter()
+                .map(|tx| (tx, None))
+                .collect();
+
+            json_response(prepare_txs(txs, query, config), TTL_SHORT)
+        }
+
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",
             uri.path()

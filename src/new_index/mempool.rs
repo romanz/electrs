@@ -27,7 +27,7 @@ use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
-use crate::elements::asset;
+use crate::elements::{asset, peg};
 
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
@@ -51,6 +51,8 @@ pub struct Mempool {
     pub asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // asset_id -> {history_entries}
     #[cfg(feature = "liquid")]
     pub asset_issuance: HashMap<Sha256dHash, asset::AssetRow>, // asset_id -> {history_entries}
+    #[cfg(feature = "liquid")]
+    pub pegs_history: Vec<peg::TxPegInfo>,
 }
 
 // A simplified transaction view used for the list of most recent transactions
@@ -93,6 +95,8 @@ impl Mempool {
             asset_history: HashMap::new(),
             #[cfg(feature = "liquid")]
             asset_issuance: HashMap::new(),
+            #[cfg(feature = "liquid")]
+            pegs_history: Vec::new(),
         }
     }
 
@@ -376,6 +380,10 @@ impl Mempool {
             // Index issued assets
             #[cfg(feature = "liquid")]
             asset::index_mempool_tx_assets(&tx, &mut self.asset_history, &mut self.asset_issuance);
+
+            // Index peg ins/outs
+            #[cfg(feature = "liquid")]
+            peg::index_mempool_tx_pegs(&tx, &mut self.pegs_history);
         }
     }
 
@@ -453,6 +461,9 @@ impl Mempool {
             &mut self.asset_issuance,
         );
 
+        #[cfg(feature = "liquid")]
+        peg::remove_mempool_tx_pegs(&to_remove, &mut self.pegs_history);
+
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
     }
@@ -462,6 +473,21 @@ impl Mempool {
         self.asset_history
             .get(asset_id)
             .map_or_else(|| vec![], |entries| self._history(entries, limit))
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn pegs_history(&self, limit: usize) -> Vec<Transaction> {
+        let _timer = self
+            .latency
+            .with_label_values(&["pegs_history"])
+            .start_timer();
+
+        self.pegs_history
+            .iter()
+            .take(limit)
+            .map(|peginfo| self.txstore.get(&peginfo.txid).expect("missing mempool tx"))
+            .cloned()
+            .collect()
     }
 }
 

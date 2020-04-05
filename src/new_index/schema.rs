@@ -33,6 +33,8 @@ use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
 use crate::elements::asset::{index_confirmed_tx_assets, IssuingInfo};
+#[cfg(feature = "liquid")]
+use crate::elements::peg::{index_confirmed_tx_pegs, lookup_confirmed_tx_pegs_history};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
@@ -415,6 +417,10 @@ impl ChainQuery {
         })
     }
 
+    pub fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
+        self.store.history_db.iter_scan_reverse(prefix, prefix_max)
+    }
+
     pub fn history_iter_scan(&self, code: u8, hash: &[u8], start_height: usize) -> ScanIterator {
         self.store.history_db.iter_scan_from(
             &TxHistoryRow::filter(code, &hash[..]),
@@ -759,7 +765,7 @@ impl ChainQuery {
 
     // TODO: can we pass txids as a "generic iterable"?
     // TODO: should also use a custom ThreadPoolBuilder?
-    fn lookup_txns(&self, txids: &[(Txid, BlockId)]) -> Result<Vec<Transaction>> {
+    pub fn lookup_txns(&self, txids: &[(Txid, BlockId)]) -> Result<Vec<Transaction>> {
         let _timer = self.start_timer("lookup_txns");
         txids
             .par_iter()
@@ -894,6 +900,15 @@ impl ChainQuery {
         limit: usize,
     ) -> Vec<(Txid, BlockId)> {
         self._history_txids(b'I', &asset_id[..], limit)
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn pegs_history(
+        &self,
+        last_seen_txid: Option<&Txid>,
+        limit: usize,
+    ) -> Vec<(Transaction, BlockId)> {
+        lookup_confirmed_tx_pegs_history(self, last_seen_txid, limit)
     }
 }
 
@@ -1099,6 +1114,9 @@ fn index_transaction(
 
     #[cfg(feature = "liquid")]
     index_confirmed_tx_assets(tx, confirmed_height, rows);
+
+    #[cfg(feature = "liquid")]
+    index_confirmed_tx_pegs(tx, confirmed_height, rows);
 }
 
 fn addr_search_row(spk: &Script, network: CNetwork) -> Option<DBRow> {

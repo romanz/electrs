@@ -10,6 +10,7 @@ use crate::util::{get_script_asm, script_to_address};
 
 pub mod asset;
 mod assetid;
+pub mod peg;
 mod registry;
 
 use asset::get_issuance_entropy;
