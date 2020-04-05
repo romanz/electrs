@@ -236,7 +236,7 @@ fn read_indexed_headers(store: &dyn ReadStore) -> HeaderList {
         Some(row) => deserialize(&row).unwrap(),
         None => Sha256dHash::default(),
     };
-    trace!("lastest indexed blockhash: {}", latest_blockhash);
+    trace!("latest indexed blockhash: {}", latest_blockhash);
     let mut map = HeaderMap::new();
     for row in store.scan(b"B") {
         let key: BlockKey = bincode::deserialize(&row.key).unwrap();
