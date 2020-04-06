@@ -18,7 +18,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{BlockHeader, Network as CNetwork, OutPoint, Transaction, TxOut, Value};
+use crate::chain::{BlockHeader, Network, OutPoint, Transaction, TxOut, Value};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
@@ -163,7 +163,7 @@ pub struct Indexer {
 struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
-    cnetwork: CNetwork,
+    network: Network,
 }
 
 impl From<&Config> for IndexerConfig {
@@ -171,7 +171,7 @@ impl From<&Config> for IndexerConfig {
         IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
-            cnetwork: config.network_type,
+            network: config.network_type,
         }
     }
 }
@@ -1078,7 +1078,7 @@ fn index_transaction(
             rows.push(history.into_row());
 
             if iconfig.address_search {
-                if let Some(row) = addr_search_row(&txo.script_pubkey, iconfig.cnetwork) {
+                if let Some(row) = addr_search_row(&txo.script_pubkey, iconfig.network) {
                     rows.push(row);
                 }
             }
@@ -1121,7 +1121,7 @@ fn index_transaction(
     peg::index_confirmed_tx_pegs(tx, confirmed_height, rows);
 }
 
-fn addr_search_row(spk: &Script, network: CNetwork) -> Option<DBRow> {
+fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {
     script_to_address(spk, network).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
