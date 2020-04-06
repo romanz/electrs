@@ -5,14 +5,14 @@ use elements::TxIn;
 use hex;
 
 pub mod asset;
-mod assetid;
 pub mod peg;
 mod registry;
 
 use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, LiquidAsset};
-pub use assetid::AssetId;
 pub use registry::AssetRegistry;
+
+pub use elements::AssetId;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {
