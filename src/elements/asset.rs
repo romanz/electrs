@@ -9,22 +9,16 @@ use elements::{AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 use crate::chain::Network;
 use crate::errors::*;
 use crate::new_index::schema::{FundingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
-use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool, Query};
+use crate::new_index::{db::DBFlush, ChainQuery, DBRow, Mempool, Query};
 use crate::util::{full_hash, is_spendable, Bytes, FullHash, TransactionStatus, TxInput};
 
 use crate::elements::registry::{AssetMeta, AssetRegistry};
 
 lazy_static! {
-    pub static ref NATIVE_ASSET_ID: sha256d::Hash =
-        sha256d::Hash::from_hex("6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d")
-            .unwrap();
-    pub static ref NATIVE_ASSET_ID_TESTNET: sha256d::Hash =
-        sha256d::Hash::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
-            .unwrap();
-    pub static ref NATIVE_ASSET_ID_: AssetId =
+    pub static ref NATIVE_ASSET_ID: AssetId =
         AssetId::from_hex("6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d")
             .unwrap();
-    pub static ref NATIVE_ASSET_ID_TESTNET_: AssetId =
+    pub static ref NATIVE_ASSET_ID_TESTNET: AssetId =
         AssetId::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
             .unwrap();
     static ref NATIVE_ASSET_META: AssetMeta = AssetMeta {
@@ -36,6 +30,10 @@ lazy_static! {
     };
 }
 
+pub fn parse_asset_id(hash: &[u8]) -> AssetId {
+    deserialize(hash).expect("failed to parse AssetId")
+}
+
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum LiquidAsset {
@@ -45,17 +43,17 @@ pub enum LiquidAsset {
 
 #[derive(Serialize, Clone)]
 pub struct NativeAsset {
-    pub asset_id: sha256d::Hash, // not really a sha256d
+    pub asset_id: AssetId,
     #[serde(flatten)]
     pub meta: AssetMeta,
 }
 
 #[derive(Serialize)]
 pub struct IssuedAsset {
-    pub asset_id: sha256d::Hash, // not really a sha256d
+    pub asset_id: AssetId,
     pub issuance_txin: TxInput,
     pub issuance_prevout: OutPoint,
-    pub reissuance_token: sha256d::Hash, // not really a sha256d
+    pub reissuance_token: AssetId,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract_hash: Option<sha256d::Hash>, // not really a sha256d
@@ -84,7 +82,7 @@ pub struct AssetRow {
 
 impl IssuedAsset {
     pub fn new(
-        asset_id: &sha256d::Hash,
+        asset_id: &AssetId,
         asset: &AssetRow,
         (chain_stats, mempool_stats): (AssetStats, AssetStats),
         meta: Option<AssetMeta>,
@@ -93,9 +91,11 @@ impl IssuedAsset {
         let issuance: AssetIssuance =
             deserialize(&asset.issuance).expect("failed parsing AssetIssuance");
 
+        let reissuance_token = parse_asset_id(&asset.reissuance_token);
+
         // XXX this isn't really a double-hash, sha256d is only being used to get backward
         // serialization that matches the one used by elements-cpp
-        let reissuance_token = sha256d::Hash::from_inner(asset.reissuance_token);
+        // TODO should be fixed with the use of https://github.com/ElementsProject/rust-elements/pull/48
         let contract_hash = if issuance.asset_entropy != [0u8; 32] {
             Some(sha256d::Hash::from_inner(issuance.asset_entropy))
         } else {
@@ -103,7 +103,7 @@ impl IssuedAsset {
         };
 
         Self {
-            asset_id: parse_hash(&full_hash(&asset_id[..])),
+            asset_id: *asset_id,
             issuance_txin: TxInput {
                 txid: deserialize(&asset.issuance_txid).unwrap(),
                 vin: asset.issuance_vin,
@@ -151,7 +151,7 @@ pub fn index_confirmed_tx_assets(
     // and once separately under i<asset> for asset lookup with some more associated metadata.
     // reissuances are only kept under the history index.
     rows.extend(issuances.into_iter().map(|(asset_id, asset_row)| DBRow {
-        key: [b"i", &asset_id[..]].concat(),
+        key: [b"i", &asset_id.into_inner()[..]].concat(),
         value: bincode::serialize(&asset_row).unwrap(),
     }));
 }
@@ -160,8 +160,8 @@ pub fn index_confirmed_tx_assets(
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
     network: Network,
-    asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
-    asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
+    asset_history: &mut HashMap<AssetId, Vec<TxHistoryInfo>>,
+    asset_issuance: &mut HashMap<AssetId, AssetRow>,
 ) {
     let (history, issuances) = index_tx_assets(tx, network);
     for (asset_id, info) in history {
@@ -178,8 +178,8 @@ pub fn index_mempool_tx_assets(
 // Remove mempool transaction issuances from in-memory store
 pub fn remove_mempool_tx_assets(
     to_remove: &HashSet<&Txid>,
-    asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
-    asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
+    asset_history: &mut HashMap<AssetId, Vec<TxHistoryInfo>>,
+    asset_issuance: &mut HashMap<AssetId, AssetRow>,
 ) {
     // TODO optimize
     asset_history.retain(|_assethash, entries| {
@@ -197,10 +197,7 @@ pub fn remove_mempool_tx_assets(
 fn index_tx_assets(
     tx: &Transaction,
     network: Network,
-) -> (
-    Vec<(sha256d::Hash, TxHistoryInfo)>,
-    Vec<(sha256d::Hash, AssetRow)>,
-) {
+) -> (Vec<(AssetId, TxHistoryInfo)>, Vec<(AssetId, AssetRow)>) {
     let mut history = vec![];
     let mut issuances = vec![];
 
@@ -226,8 +223,6 @@ fn index_tx_assets(
 
             let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
             let asset_id = AssetId::from_entropy(asset_entropy);
-            // ugh, should eventually switch to using AssetIds everywhere
-            let asset_id = sha256d::Hash::from_inner(asset_id.into_inner().into_inner());
 
             let issued_amount = match txi.asset_issuance.amount {
                 Value::Explicit(amount) => Some(amount),
@@ -279,7 +274,7 @@ fn index_tx_assets(
 }
 
 // returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
-fn get_issued_asset_id(asset: &Asset, network: Network) -> Option<sha256d::Hash> {
+fn get_issued_asset_id(asset: &Asset, network: Network) -> Option<AssetId> {
     match asset {
         Asset::Explicit(asset_id) if asset_id != network.native_asset() => Some(*asset_id),
         _ => None,
@@ -287,13 +282,13 @@ fn get_issued_asset_id(asset: &Asset, network: Network) -> Option<sha256d::Hash>
 }
 
 fn asset_history_row(
-    asset_id: &sha256d::Hash,
+    asset_id: &AssetId,
     confirmed_height: u32,
     txinfo: TxHistoryInfo,
 ) -> TxHistoryRow {
     let key = TxHistoryKey {
         code: b'I',
-        hash: full_hash(&asset_id[..]),
+        hash: full_hash(&asset_id.into_inner()[..]),
         confirmed_height,
         txinfo,
     };
@@ -303,7 +298,7 @@ fn asset_history_row(
 pub fn lookup_asset(
     query: &Query,
     registry: Option<&AssetRegistry>,
-    asset_id: &sha256d::Hash,
+    asset_id: &AssetId,
 ) -> Result<Option<LiquidAsset>> {
     if asset_id == query.network.native_asset() {
         return Ok(Some(LiquidAsset::Native(NativeAsset {
@@ -316,7 +311,7 @@ pub fn lookup_asset(
     let mempool_issuances = &query.mempool().asset_issuance;
 
     let chain_row = history_db
-        .get(&[b"i", &asset_id[..]].concat())
+        .get(&[b"i", &asset_id.into_inner()[..]].concat())
         .map(|row| bincode::deserialize::<AssetRow>(&row).expect("failed parsing AssetRow"));
 
     let row = chain_row
@@ -324,8 +319,7 @@ pub fn lookup_asset(
         .or_else(|| mempool_issuances.get(asset_id));
 
     Ok(if let Some(row) = row {
-        let reissuance_token = sha256d::Hash::from_slice(&row.reissuance_token)
-            .expect("failed parsing reissuance_token");
+        let reissuance_token = parse_asset_id(&row.reissuance_token);
 
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
         let stats = asset_stats(query, asset_id, &reissuance_token);
@@ -383,10 +377,10 @@ impl AssetStats {
     }
 }
 
-fn asset_cache_key(asset_id: &sha256d::Hash) -> Bytes {
-    [b"z", &asset_id[..]].concat()
+fn asset_cache_key(asset_id: &AssetId) -> Bytes {
+    [b"z", &asset_id.into_inner()[..]].concat()
 }
-fn asset_cache_row(asset_id: &sha256d::Hash, stats: &AssetStats, blockhash: &BlockHash) -> DBRow {
+fn asset_cache_row(asset_id: &AssetId, stats: &AssetStats, blockhash: &BlockHash) -> DBRow {
     DBRow {
         key: asset_cache_key(asset_id),
         value: bincode::serialize(&(stats, blockhash)).unwrap(),
@@ -395,8 +389,8 @@ fn asset_cache_row(asset_id: &sha256d::Hash, stats: &AssetStats, blockhash: &Blo
 
 fn asset_stats(
     query: &Query,
-    asset_id: &sha256d::Hash,
-    reissuance_token: &sha256d::Hash,
+    asset_id: &AssetId,
+    reissuance_token: &AssetId,
 ) -> (AssetStats, AssetStats) {
     let chain = query.chain();
     let mut chain_stats = chain_asset_stats(chain, asset_id);
@@ -410,7 +404,7 @@ fn asset_stats(
     (chain_stats, mempool_stats)
 }
 
-fn chain_asset_stats(chain: &ChainQuery, asset_id: &sha256d::Hash) -> AssetStats {
+fn chain_asset_stats(chain: &ChainQuery, asset_id: &AssetId) -> AssetStats {
     // get the last known stats and the blockhash they are updated for.
     // invalidates the cache if the block was orphaned.
     let cache: Option<(AssetStats, usize)> = chain
@@ -443,12 +437,12 @@ fn chain_asset_stats(chain: &ChainQuery, asset_id: &sha256d::Hash) -> AssetStats
 
 fn asset_stats_delta(
     chain: &ChainQuery,
-    asset_id: &sha256d::Hash,
+    asset_id: &AssetId,
     init_stats: AssetStats,
     start_height: usize,
 ) -> (AssetStats, Option<BlockHash>) {
     let history_iter = chain
-        .history_iter_scan(b'I', &asset_id[..], start_height)
+        .history_iter_scan(b'I', &asset_id.into_inner()[..], start_height)
         .map(TxHistoryRow::from_row)
         .filter_map(|history| {
             chain
@@ -471,7 +465,7 @@ fn asset_stats_delta(
     (stats, lastblock)
 }
 
-pub fn mempool_asset_stats(mempool: &Mempool, asset_id: &sha256d::Hash) -> AssetStats {
+pub fn mempool_asset_stats(mempool: &Mempool, asset_id: &AssetId) -> AssetStats {
     let mut stats = AssetStats::default();
 
     if let Some(history) = mempool.asset_history.get(asset_id) {

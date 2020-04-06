@@ -12,7 +12,10 @@ use rayon::prelude::*;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::{deserialize, serialize};
 #[cfg(feature = "liquid")]
-use elements::encode::{deserialize, serialize};
+use elements::{
+    encode::{deserialize, serialize},
+    AssetId,
+};
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
@@ -892,20 +895,16 @@ impl ChainQuery {
     #[cfg(feature = "liquid")]
     pub fn asset_history(
         &self,
-        asset_id: &Sha256dHash,
+        asset_id: &AssetId,
         last_seen_txid: Option<&Txid>,
         limit: usize,
     ) -> Vec<(Transaction, BlockId)> {
-        self._history(b'I', &asset_id[..], last_seen_txid, limit)
+        self._history(b'I', &asset_id.into_inner()[..], last_seen_txid, limit)
     }
 
     #[cfg(feature = "liquid")]
-    pub fn asset_history_txids(
-        &self,
-        asset_id: &Sha256dHash,
-        limit: usize,
-    ) -> Vec<(Txid, BlockId)> {
-        self._history_txids(b'I', &asset_id[..], limit)
+    pub fn asset_history_txids(&self, asset_id: &AssetId, limit: usize) -> Vec<(Txid, BlockId)> {
+        self._history_txids(b'I', &asset_id.into_inner()[..], limit)
     }
 
     #[cfg(feature = "liquid")]

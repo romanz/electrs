@@ -22,9 +22,10 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{peg::PegoutValue, IssuanceValue},
-    bitcoin::hashes::sha256d::Hash as Sha256dHash,
-    elements::confidential::{Asset, Value},
-    elements::encode,
+    elements::{
+        confidential::{Asset, Value},
+        encode, AssetId,
+    },
 };
 
 use serde::Serialize;
@@ -951,7 +952,7 @@ fn handle_request(
 
         #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"asset"), Some(asset_str), None, None, None) => {
-            let asset_id = Sha256dHash::from_hex(asset_str)?;
+            let asset_id = AssetId::from_hex(asset_str)?;
             let asset_entry = query
                 .lookup_asset(&asset_id)?
                 .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
@@ -961,7 +962,7 @@ fn handle_request(
 
         #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), None, None) => {
-            let asset_id = Sha256dHash::from_hex(asset_str)?;
+            let asset_id = AssetId::from_hex(asset_str)?;
 
             let mut txs = vec![];
 
@@ -993,7 +994,7 @@ fn handle_request(
             Some(&"chain"),
             last_seen_txid,
         ) => {
-            let asset_id = Sha256dHash::from_hex(asset_str)?;
+            let asset_id = AssetId::from_hex(asset_str)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_hex(txid).ok());
 
             let txs = query
@@ -1008,7 +1009,7 @@ fn handle_request(
 
         #[cfg(feature = "liquid")]
         (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"txs"), Some(&"mempool"), None) => {
-            let asset_id = Sha256dHash::from_hex(asset_str)?;
+            let asset_id = AssetId::from_hex(asset_str)?;
 
             let txs = query
                 .mempool()

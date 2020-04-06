@@ -31,7 +31,7 @@ pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, _network: N
 
 #[cfg(feature = "liquid")]
 pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>, network: Network) -> u64 {
-    tx.fee_in(*network.native_asset_as_assetid())
+    tx.fee_in(*network.native_asset())
 }
 
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {

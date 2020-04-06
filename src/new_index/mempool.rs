@@ -6,9 +6,7 @@ use itertools::Itertools;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize;
 #[cfg(feature = "liquid")]
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
-#[cfg(feature = "liquid")]
-use elements::encode::serialize;
+use elements::{encode::serialize, AssetId};
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
@@ -50,9 +48,9 @@ pub struct Mempool {
 
     // elements only
     #[cfg(feature = "liquid")]
-    pub asset_history: HashMap<Sha256dHash, Vec<TxHistoryInfo>>, // asset_id -> {history_entries}
+    pub asset_history: HashMap<AssetId, Vec<TxHistoryInfo>>,
     #[cfg(feature = "liquid")]
-    pub asset_issuance: HashMap<Sha256dHash, asset::AssetRow>, // asset_id -> {history_entries}
+    pub asset_issuance: HashMap<AssetId, asset::AssetRow>,
     #[cfg(feature = "liquid")]
     pub pegs_history: Vec<peg::TxPegInfo>,
 }
@@ -482,7 +480,7 @@ impl Mempool {
     }
 
     #[cfg(feature = "liquid")]
-    pub fn asset_history(&self, asset_id: &Sha256dHash, limit: usize) -> Vec<Transaction> {
+    pub fn asset_history(&self, asset_id: &AssetId, limit: usize) -> Vec<Transaction> {
         self.asset_history
             .get(asset_id)
             .map_or_else(|| vec![], |entries| self._history(entries, limit))

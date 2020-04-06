@@ -4,7 +4,6 @@ pub use bitcoin::{util::address, Block, BlockHeader, OutPoint, Transaction, TxIn
 #[cfg(feature = "liquid")]
 pub use {
     crate::elements::asset,
-    bitcoin::hashes::{hex::FromHex, sha256d},
     elements::{
         address, confidential, Address, AssetId, Block, BlockHeader, OutPoint, Transaction, TxIn,
         TxOut,
@@ -76,19 +75,11 @@ impl Network {
     }
 
     #[cfg(feature = "liquid")]
-    pub fn native_asset(self) -> &'static sha256d::Hash {
+    pub fn native_asset(self) -> &'static AssetId {
         match self {
-            Network::Liquid => &asset::NATIVE_ASSET_ID,
-            Network::LiquidRegtest => &asset::NATIVE_ASSET_ID_TESTNET, // same for testnet and regtest
-            _ => panic!("the liquid-only native_asset_id() called with non-liquid network"),
-        }
-    }
-
-    #[cfg(feature = "liquid")]
-    pub fn native_asset_as_assetid(self) -> &'static AssetId {
-        match self {
-            Network::Liquid => &*asset::NATIVE_ASSET_ID_,
-            Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_TESTNET_, // same for testnet and regtest
+            Network::Liquid => &*asset::NATIVE_ASSET_ID,
+            // same for testnet and regtest
+            Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_TESTNET,
             _ => panic!("the liquid-only native_asset_id() called with non-liquid network"),
         }
     }
