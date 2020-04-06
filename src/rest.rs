@@ -139,7 +139,7 @@ impl TransactionValue {
             .collect();
 
         let fee = if config.prevout_enabled || cfg!(feature = "liquid") {
-            Some(get_tx_fee(&tx, &prevouts))
+            Some(get_tx_fee(&tx, &prevouts, config.network_type))
         } else {
             None
         };
@@ -320,7 +320,7 @@ impl TxOutValue {
         };
 
         #[cfg(feature = "liquid")]
-        let pegout = PegoutValue::parse(txout, config.parent_network);
+        let pegout = PegoutValue::parse(txout, config.network_type, config.parent_network);
 
         TxOutValue {
             scriptpubkey: script.clone(),

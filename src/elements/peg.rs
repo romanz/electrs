@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use bitcoin::{hashes::hex::ToHex, BlockHash, Script, Txid};
-use elements::TxOut;
+use elements::{confidential::Asset, TxOut};
 
 use crate::chain::{Network, Transaction};
 use crate::new_index::{db::DBRow, ChainQuery, Mempool, Query};
@@ -18,8 +18,12 @@ pub struct PegoutValue {
 }
 
 impl PegoutValue {
-    pub fn parse(txout: &TxOut, parent_network: Network) -> Option<Self> {
+    pub fn parse(txout: &TxOut, network: Network, parent_network: Network) -> Option<Self> {
         let pegoutdata = txout.pegout_data()?;
+
+        if pegoutdata.asset != Asset::Explicit(*network.native_asset()) {
+            return None;
+        }
 
         if pegoutdata.genesis_hash != parent_network.genesis_hash() {
             return None;
@@ -47,8 +51,8 @@ pub struct TxPegInfo {
 }
 
 impl TxPegInfo {
-    fn get_info(tx: &Transaction) -> Option<Self> {
-        let (peg_in_amount, peg_out_amount) = peg_amounts(tx);
+    fn get_info(tx: &Transaction, network: Network, parent_network: Network) -> Option<Self> {
+        let (peg_in_amount, peg_out_amount) = peg_amounts(tx, network, parent_network);
 
         if peg_in_amount > 0 || peg_out_amount > 0 {
             Some(TxPegInfo {
@@ -109,8 +113,14 @@ impl TxPegRow {
 }
 
 // Index confirmed pegins/pegouts to db rows
-pub fn index_confirmed_tx_pegs(tx: &Transaction, confirmed_height: u32, rows: &mut Vec<DBRow>) {
-    if let Some(peginfo) = TxPegInfo::get_info(tx) {
+pub fn index_confirmed_tx_pegs(
+    tx: &Transaction,
+    confirmed_height: u32,
+    network: Network,
+    parent_network: Network,
+    rows: &mut Vec<DBRow>,
+) {
+    if let Some(peginfo) = TxPegInfo::get_info(tx, network, parent_network) {
         debug!(
             "indexing confirmed tx peg at height {}: {:?}",
             confirmed_height, peginfo
@@ -154,8 +164,13 @@ pub fn lookup_confirmed_tx_pegs_history(
 }
 
 // Index mempool transaction pegins/pegouts to in-memory store
-pub fn index_mempool_tx_pegs(tx: &Transaction, pegs_history: &mut Vec<TxPegInfo>) {
-    if let Some(peginfo) = TxPegInfo::get_info(tx) {
+pub fn index_mempool_tx_pegs(
+    tx: &Transaction,
+    network: Network,
+    parent_network: Network,
+    pegs_history: &mut Vec<TxPegInfo>,
+) {
+    if let Some(peginfo) = TxPegInfo::get_info(tx, network, parent_network) {
         pegs_history.push(peginfo);
     }
 }
@@ -166,17 +181,24 @@ pub fn remove_mempool_tx_pegs(to_remove: &HashSet<&Txid>, pegs_history: &mut Vec
     pegs_history.retain(|peginfo| !to_remove.contains(&peginfo.txid));
 }
 
-fn peg_amounts(tx: &Transaction) -> (u64, u64) {
-    // XXX check the peg in/out asset type is explicit and matches the sidechain's native token?
+fn peg_amounts(tx: &Transaction, network: Network, parent_network: Network) -> (u64, u64) {
+    let native_asset = network.native_asset();
+    let parent_genesis_hash = parent_network.genesis_hash();
+
     (
         tx.input
             .iter()
             .filter_map(|txin| txin.pegin_data())
+            .filter(|pegin| pegin.asset == Asset::Explicit(*native_asset))
             .map(|pegin| pegin.value)
             .sum(),
         tx.output
             .iter()
             .filter_map(|txout| txout.pegout_data())
+            .filter(|pegout| {
+                pegout.asset == Asset::Explicit(*native_asset)
+                    && pegout.genesis_hash == parent_genesis_hash
+            })
             .map(|pegout| pegout.value)
             .sum(),
     )

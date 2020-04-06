@@ -75,4 +75,4 @@ rev = "0.23-electrs"
 
 [patch.crates-io.elements]
 git = "https://github.com/elementsproject/rust-elements"
-rev = "9b7e4315fdda699a9679547f45411ae6f657b4c8"
+rev = "2c50e9e15105610da77d50d7f997590133d34f9e"

@@ -1,4 +1,4 @@
-use crate::chain::{Transaction, TxOut};
+use crate::chain::{Network, Transaction, TxOut};
 use std::collections::HashMap;
 
 const VSIZE_BIN_WIDTH: u32 = 50_000; // in vbytes
@@ -10,8 +10,8 @@ pub struct TxFeeInfo {
 }
 
 impl TxFeeInfo {
-    pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> Self {
-        let fee = get_tx_fee(tx, prevouts);
+    pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, network: Network) -> Self {
+        let fee = get_tx_fee(tx, prevouts, network);
         let vsize = tx.get_weight() / 4;
 
         TxFeeInfo {
@@ -23,15 +23,15 @@ impl TxFeeInfo {
 }
 
 #[cfg(not(feature = "liquid"))]
-pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
+pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, _network: Network) -> u64 {
     let total_in: u64 = prevouts.values().map(|prevout| prevout.value).sum();
     let total_out: u64 = tx.output.iter().map(|vout| vout.value).sum();
     total_in - total_out
 }
 
 #[cfg(feature = "liquid")]
-pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>) -> u64 {
-    tx.fee()
+pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>, network: Network) -> u64 {
+    tx.fee_in(*network.native_asset_as_assetid())
 }
 
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {

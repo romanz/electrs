@@ -75,7 +75,11 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         precache::precache(&chain, precache_scripthashes);
     }
 
-    let mempool = Arc::new(RwLock::new(Mempool::new(Arc::clone(&chain), &metrics)));
+    let mempool = Arc::new(RwLock::new(Mempool::new(
+        Arc::clone(&chain),
+        &metrics,
+        Arc::clone(&config),
+    )));
     mempool.write().unwrap().update(&daemon)?;
 
     #[cfg(feature = "liquid")]
@@ -88,6 +92,8 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         Arc::clone(&chain),
         Arc::clone(&mempool),
         Arc::clone(&daemon),
+        #[cfg(feature = "liquid")]
+        config.network_type,
         #[cfg(feature = "liquid")]
         asset_db,
     ));

@@ -13,9 +13,10 @@ use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 use bitcoin::Txid;
 
 #[cfg(feature = "liquid")]
-use crate::elements::peg;
-#[cfg(feature = "liquid")]
-use crate::elements::{lookup_asset, AssetRegistry, LiquidAsset};
+use crate::{
+    chain::Network,
+    elements::{lookup_asset, peg, AssetRegistry, LiquidAsset},
+};
 #[cfg(feature = "liquid")]
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 
@@ -33,6 +34,8 @@ pub struct Query {
     cached_estimates: RwLock<(HashMap<u16, f32>, Option<Instant>)>,
     cached_relayfee: RwLock<Option<f64>>,
 
+    #[cfg(feature = "liquid")]
+    pub network: Network,
     #[cfg(feature = "liquid")]
     asset_db: Option<AssetRegistry>,
 }
@@ -195,12 +198,14 @@ impl Query {
         chain: Arc<ChainQuery>,
         mempool: Arc<RwLock<Mempool>>,
         daemon: Arc<Daemon>,
+        network: Network,
         asset_db: Option<AssetRegistry>,
     ) -> Self {
         Query {
             chain,
             mempool,
             daemon,
+            network,
             asset_db,
             cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),

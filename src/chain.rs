@@ -1,12 +1,15 @@
-#[cfg(not(feature = "liquid"))]
-pub use bitcoin::util::address;
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
-pub use bitcoin::{Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
+pub use bitcoin::{util::address, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
 
 #[cfg(feature = "liquid")]
-pub use elements::address;
-#[cfg(feature = "liquid")]
-pub use elements::{confidential, Address, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
+pub use {
+    crate::elements::asset,
+    bitcoin::hashes::{hex::FromHex, sha256d},
+    elements::{
+        address, confidential, Address, AssetId, Block, BlockHeader, OutPoint, Transaction, TxIn,
+        TxOut,
+    },
+};
 
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
@@ -69,6 +72,24 @@ impl Network {
             Network::Liquid => &address::AddressParams::LIQUID,
             Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
             _ => panic!("the liquid-only address_params() called with non-liquid network"),
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn native_asset(self) -> &'static sha256d::Hash {
+        match self {
+            Network::Liquid => &asset::NATIVE_ASSET_ID,
+            Network::LiquidRegtest => &asset::NATIVE_ASSET_ID_TESTNET, // same for testnet and regtest
+            _ => panic!("the liquid-only native_asset_id() called with non-liquid network"),
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn native_asset_as_assetid(self) -> &'static AssetId {
+        match self {
+            Network::Liquid => &*asset::NATIVE_ASSET_ID_,
+            Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_TESTNET_, // same for testnet and regtest
+            _ => panic!("the liquid-only native_asset_id() called with non-liquid network"),
         }
     }
 

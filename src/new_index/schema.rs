@@ -164,6 +164,8 @@ struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
     network: Network,
+    #[cfg(feature = "liquid")]
+    parent_network: Network,
 }
 
 impl From<&Config> for IndexerConfig {
@@ -172,6 +174,8 @@ impl From<&Config> for IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
             network: config.network_type,
+            #[cfg(feature = "liquid")]
+            parent_network: config.parent_network,
         }
     }
 }
@@ -1115,10 +1119,16 @@ fn index_transaction(
     }
 
     #[cfg(feature = "liquid")]
-    asset::index_confirmed_tx_assets(tx, confirmed_height, rows);
+    asset::index_confirmed_tx_assets(tx, confirmed_height, iconfig.network, rows);
 
     #[cfg(feature = "liquid")]
-    peg::index_confirmed_tx_pegs(tx, confirmed_height, rows);
+    peg::index_confirmed_tx_pegs(
+        tx,
+        confirmed_height,
+        iconfig.network,
+        iconfig.parent_network,
+        rows,
+    );
 }
 
 fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {

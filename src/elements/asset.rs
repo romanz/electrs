@@ -4,34 +4,35 @@ use bitcoin::hashes::{hex::FromHex, sha256, sha256d, Hash};
 use bitcoin::{BlockHash, Txid};
 use elements::confidential::{Asset, Value};
 use elements::encode::{deserialize, serialize};
-use elements::{AssetIssuance, OutPoint, Transaction, TxIn};
+use elements::{AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 
+use crate::chain::Network;
 use crate::errors::*;
 use crate::new_index::schema::{FundingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
 use crate::new_index::{db::DBFlush, parse_hash, ChainQuery, DBRow, Mempool, Query};
 use crate::util::{full_hash, is_spendable, Bytes, FullHash, TransactionStatus, TxInput};
 
-use crate::elements::{
-    registry::{AssetMeta, AssetRegistry},
-    AssetId,
-};
+use crate::elements::registry::{AssetMeta, AssetRegistry};
 
 lazy_static! {
-    static ref NATIVE_ASSET_ID: sha256d::Hash =
+    pub static ref NATIVE_ASSET_ID: sha256d::Hash =
         sha256d::Hash::from_hex("6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d")
             .unwrap();
-    static ref NATIVE_ASSET_ID_TESTNET: sha256d::Hash =
+    pub static ref NATIVE_ASSET_ID_TESTNET: sha256d::Hash =
         sha256d::Hash::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
             .unwrap();
-    static ref NATIVE_ASSET: NativeAsset = NativeAsset {
-        asset_id: *NATIVE_ASSET_ID,
-        meta: AssetMeta {
-            contract: json!(null),
-            entity: json!(null),
-            precision: 8,
-            name: "Liquid Bitcoin".into(),
-            ticker: Some("L-BTC".into()),
-        }
+    pub static ref NATIVE_ASSET_ID_: AssetId =
+        AssetId::from_hex("6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d")
+            .unwrap();
+    pub static ref NATIVE_ASSET_ID_TESTNET_: AssetId =
+        AssetId::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
+            .unwrap();
+    static ref NATIVE_ASSET_META: AssetMeta = AssetMeta {
+        contract: json!(null),
+        entity: json!(null),
+        precision: 8,
+        name: "Liquid Bitcoin".into(),
+        ticker: Some("L-BTC".into()),
     };
 }
 
@@ -132,8 +133,13 @@ pub struct IssuingInfo {
 }
 
 // Index confirmed transaction issuances and save as db rows
-pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: &mut Vec<DBRow>) {
-    let (history, issuances) = index_tx_assets(tx);
+pub fn index_confirmed_tx_assets(
+    tx: &Transaction,
+    confirmed_height: u32,
+    network: Network,
+    rows: &mut Vec<DBRow>,
+) {
+    let (history, issuances) = index_tx_assets(tx, network);
 
     rows.extend(
         history.into_iter().map(|(asset_id, info)| {
@@ -153,10 +159,11 @@ pub fn index_confirmed_tx_assets(tx: &Transaction, confirmed_height: u32, rows: 
 // Index mempool transaction issuances and save to in-memory store
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
+    network: Network,
     asset_history: &mut HashMap<sha256d::Hash, Vec<TxHistoryInfo>>,
     asset_issuance: &mut HashMap<sha256d::Hash, AssetRow>,
 ) {
-    let (history, issuances) = index_tx_assets(tx);
+    let (history, issuances) = index_tx_assets(tx, network);
     for (asset_id, info) in history {
         asset_history
             .entry(asset_id)
@@ -189,6 +196,7 @@ pub fn remove_mempool_tx_assets(
 // Internal utility function, index a transaction and return its history entries and issuances
 fn index_tx_assets(
     tx: &Transaction,
+    network: Network,
 ) -> (
     Vec<(sha256d::Hash, TxHistoryInfo)>,
     Vec<(sha256d::Hash, AssetRow)>,
@@ -199,7 +207,7 @@ fn index_tx_assets(
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if !is_spendable(txo) {
-            if let Some(asset_id) = get_issued_asset_id(&txo.asset) {
+            if let Some(asset_id) = get_issued_asset_id(&txo.asset, network) {
                 history.push((
                     asset_id,
                     TxHistoryInfo::Burning(FundingInfo {
@@ -271,13 +279,9 @@ fn index_tx_assets(
 }
 
 // returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
-fn get_issued_asset_id(asset: &Asset) -> Option<sha256d::Hash> {
+fn get_issued_asset_id(asset: &Asset, network: Network) -> Option<sha256d::Hash> {
     match asset {
-        Asset::Explicit(asset_id)
-            if asset_id != &*NATIVE_ASSET_ID && asset_id != &*NATIVE_ASSET_ID_TESTNET =>
-        {
-            Some(*asset_id)
-        }
+        Asset::Explicit(asset_id) if asset_id != network.native_asset() => Some(*asset_id),
         _ => None,
     }
 }
@@ -301,8 +305,11 @@ pub fn lookup_asset(
     registry: Option<&AssetRegistry>,
     asset_id: &sha256d::Hash,
 ) -> Result<Option<LiquidAsset>> {
-    if asset_id == &*NATIVE_ASSET_ID {
-        return Ok(Some(LiquidAsset::Native(NATIVE_ASSET.clone())));
+    if asset_id == query.network.native_asset() {
+        return Ok(Some(LiquidAsset::Native(NativeAsset {
+            asset_id: *asset_id,
+            meta: NATIVE_ASSET_META.clone(),
+        })));
     }
 
     let history_db = query.chain().store().history_db();

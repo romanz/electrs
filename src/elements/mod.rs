@@ -1,7 +1,7 @@
 use bitcoin::hashes::hex::ToHex;
 use elements::confidential::Value;
 use elements::encode::serialize;
-use elements::TxIn;
+use elements::{AssetId, TxIn};
 use hex;
 
 pub mod asset;
@@ -11,8 +11,6 @@ mod registry;
 use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, LiquidAsset};
 pub use registry::AssetRegistry;
-
-pub use elements::AssetId;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {

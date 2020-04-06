@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::chain::{OutPoint, Transaction, TxOut};
+use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
@@ -34,6 +35,7 @@ const BACKLOG_STATS_TTL: u64 = 10;
 
 pub struct Mempool {
     chain: Arc<ChainQuery>,
+    config: Arc<Config>,
     txstore: HashMap<Txid, Transaction>,
     feeinfo: HashMap<Txid, TxFeeInfo>,
     history: HashMap<FullHash, Vec<TxHistoryInfo>>, // ScriptHash -> {history_entries}
@@ -66,9 +68,10 @@ pub struct TxOverview {
 }
 
 impl Mempool {
-    pub fn new(chain: Arc<ChainQuery>, metrics: &Metrics) -> Self {
+    pub fn new(chain: Arc<ChainQuery>, metrics: &Metrics, config: Arc<Config>) -> Self {
         Mempool {
             chain,
+            config,
             txstore: HashMap::new(),
             feeinfo: HashMap::new(),
             history: HashMap::new(),
@@ -321,7 +324,7 @@ impl Mempool {
             let prevouts = extract_tx_prevouts(&tx, &txos, false);
 
             // Get feeinfo for caching and recent tx overview
-            let feeinfo = TxFeeInfo::new(&tx, &prevouts);
+            let feeinfo = TxFeeInfo::new(&tx, &prevouts, self.config.network_type);
 
             // recent is an ArrayDeque that automatically evicts the oldest elements
             self.recent.push_front(TxOverview {
@@ -379,11 +382,21 @@ impl Mempool {
 
             // Index issued assets
             #[cfg(feature = "liquid")]
-            asset::index_mempool_tx_assets(&tx, &mut self.asset_history, &mut self.asset_issuance);
+            asset::index_mempool_tx_assets(
+                &tx,
+                self.config.network_type,
+                &mut self.asset_history,
+                &mut self.asset_issuance,
+            );
 
             // Index peg ins/outs
             #[cfg(feature = "liquid")]
-            peg::index_mempool_tx_pegs(&tx, &mut self.pegs_history);
+            peg::index_mempool_tx_pegs(
+                &tx,
+                self.config.network_type,
+                self.config.parent_network,
+                &mut self.pegs_history,
+            );
         }
     }
 
