@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use bitcoin::hashes::{hex::FromHex, sha256, sha256d, Hash};
+use bitcoin::hashes::{hex::FromHex, sha256, Hash};
 use bitcoin::{BlockHash, Txid};
 use elements::confidential::{Asset, Value};
 use elements::encode::{deserialize, serialize};
-use elements::{AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
+use elements::{issuance::ContractHash, AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 
 use crate::chain::Network;
 use crate::errors::*;
@@ -56,7 +56,7 @@ pub struct IssuedAsset {
     pub reissuance_token: AssetId,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub contract_hash: Option<sha256d::Hash>, // not really a sha256d
+    pub contract_hash: Option<ContractHash>,
 
     // the confirmation status of the initial issuance transaction
     pub status: TransactionStatus,
@@ -93,11 +93,8 @@ impl IssuedAsset {
 
         let reissuance_token = parse_asset_id(&asset.reissuance_token);
 
-        // XXX this isn't really a double-hash, sha256d is only being used to get backward
-        // serialization that matches the one used by elements-cpp
-        // TODO should be fixed with the use of https://github.com/ElementsProject/rust-elements/pull/48
         let contract_hash = if issuance.asset_entropy != [0u8; 32] {
-            Some(sha256d::Hash::from_inner(issuance.asset_entropy))
+            Some(ContractHash::from_inner(issuance.asset_entropy))
         } else {
             None
         };
@@ -341,7 +338,7 @@ pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
     let is_reissuance = txin.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
     Ok(if !is_reissuance {
-        let contract_hash = sha256::Hash::from_slice(&txin.asset_issuance.asset_entropy)
+        let contract_hash = ContractHash::from_slice(&txin.asset_issuance.asset_entropy)
             .chain_err(|| "invalid entropy (contract hash)")?;
         AssetId::generate_asset_entropy(txin.previous_output, contract_hash)
     } else {

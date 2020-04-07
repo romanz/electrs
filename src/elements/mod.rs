@@ -1,8 +1,5 @@
-use bitcoin::hashes::hex::ToHex;
-use elements::confidential::Value;
-use elements::encode::serialize;
-use elements::{AssetId, TxIn};
-use hex;
+use bitcoin::hashes::{hex::ToHex, Hash};
+use elements::{confidential::Value, encode::serialize, issuance::ContractHash, AssetId, TxIn};
 
 pub mod asset;
 pub mod peg;
@@ -40,10 +37,7 @@ impl From<&TxIn> for IssuanceValue {
         let asset_id = AssetId::from_entropy(asset_entropy);
 
         let contract_hash = if !is_reissuance {
-            // reverse to match the format used by elements-cpp
-            let mut entropy = issuance.asset_entropy;
-            entropy.reverse();
-            Some(hex::encode(entropy))
+            Some(ContractHash::from_slice(&issuance.asset_entropy).expect("invalid asset entropy"))
         } else {
             None
         };
@@ -51,7 +45,7 @@ impl From<&TxIn> for IssuanceValue {
         IssuanceValue {
             asset_id: asset_id.to_hex(),
             asset_entropy: asset_entropy.to_hex(),
-            contract_hash,
+            contract_hash: contract_hash.map(|h| h.to_hex()),
             is_reissuance,
             asset_blinding_nonce: if is_reissuance {
                 Some(hex::encode(issuance.asset_blinding_nonce))
