@@ -83,4 +83,4 @@ Elements only:
 
  * `"z{asset-id}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `issuance_count`, `issued_amount`, `burned_amount`, `has_blinded_issuances`, `reissuance_tokens`, `burned_reissuance_tokens`)
 
- * `"p" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `peg_in_amount` and `peg_out_amount`)
+ * `"p" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `peg_in_count`, `peg_in_amount`, `peg_out_count` and `peg_out_amount`)
