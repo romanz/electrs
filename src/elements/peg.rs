@@ -211,7 +211,9 @@ fn peg_amounts(tx: &Transaction, network: Network, parent_network: Network) -> (
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PegStats {
     pub tx_count: usize,
+    pub peg_in_count: u64,
     pub peg_in_amount: u64,
+    pub peg_out_count: u64,
     pub peg_out_amount: u64,
 }
 
@@ -219,7 +221,9 @@ impl PegStats {
     fn default() -> Self {
         Self {
             tx_count: 0,
+            peg_in_count: 0,
             peg_in_amount: 0,
+            peg_out_count: 0,
             peg_out_amount: 0,
         }
     }
@@ -309,4 +313,12 @@ fn apply_peg_stats(info: &TxPegInfo, stats: &mut PegStats) {
     stats.tx_count += 1;
     stats.peg_in_amount += info.peg_in_amount;
     stats.peg_out_amount += info.peg_out_amount;
+
+    if info.peg_in_amount > 0 {
+        stats.peg_in_count += 1;
+    }
+
+    if info.peg_out_amount > 0 {
+        stats.peg_out_count += 1;
+    }
 }
