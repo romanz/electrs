@@ -582,7 +582,6 @@ impl ChainQuery {
             processed_items += 1;
             lastblock = Some(blockid.hash);
 
-            // TODO: make sure funding rows are processed before spending rows on the same height
             match history.key.txinfo {
                 TxHistoryInfo::Funding(ref info) => {
                     utxos.insert(history.get_outpoint(), (blockid, info.value))
