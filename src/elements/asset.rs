@@ -8,7 +8,7 @@ use elements::{issuance::ContractHash, AssetId, AssetIssuance, OutPoint, Transac
 
 use crate::chain::Network;
 use crate::errors::*;
-use crate::new_index::schema::{FundingInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
+use crate::new_index::schema::{OutputInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
 use crate::new_index::{db::DBFlush, ChainQuery, DBRow, Mempool, Query};
 use crate::util::{full_hash, is_spendable, Bytes, FullHash, TransactionStatus, TxInput};
 
@@ -204,7 +204,7 @@ fn index_tx_assets(
             if let Some(asset_id) = get_issued_asset_id(&txo.asset, network) {
                 history.push((
                     asset_id,
-                    TxHistoryInfo::Burning(FundingInfo {
+                    TxHistoryInfo::Burning(OutputInfo {
                         txid,
                         vout: txo_index as u16,
                         value: txo.value,

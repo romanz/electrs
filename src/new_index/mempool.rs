@@ -19,7 +19,7 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
-    compute_script_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats, SpendingInfo,
+    compute_script_hash, schema::FullHash, ChainQuery, OutputInfo, ScriptStats, SpendingInfo,
     SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
@@ -359,7 +359,7 @@ impl Mempool {
                 .map(|(index, txo)| {
                     (
                         compute_script_hash(&txo.script_pubkey),
-                        TxHistoryInfo::Funding(FundingInfo {
+                        TxHistoryInfo::Funding(OutputInfo {
                             txid: txid_bytes,
                             vout: index as u16,
                             value: txo.value,

@@ -1072,7 +1072,7 @@ fn index_transaction(
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,
-                TxHistoryInfo::Funding(FundingInfo {
+                TxHistoryInfo::Funding(OutputInfo {
                     txid,
                     vout: txo_index as u16,
                     value: txo.value,
@@ -1344,9 +1344,10 @@ impl BlockRow {
     }
 }
 
+// For Funding history entries. In elements, also used for Burning entries
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FundingInfo {
-    pub txid: FullHash, // funding transaction
+pub struct OutputInfo {
+    pub txid: FullHash,
     pub vout: u16,
     pub value: Value,
 }
@@ -1362,24 +1363,24 @@ pub struct SpendingInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TxHistoryInfo {
-    Funding(FundingInfo),
+    Funding(OutputInfo),
     Spending(SpendingInfo),
 
     #[cfg(feature = "liquid")]
     Issuing(asset::IssuingInfo),
     #[cfg(feature = "liquid")]
-    Burning(FundingInfo),
+    Burning(OutputInfo),
 }
 
 impl TxHistoryInfo {
     pub fn get_txid(&self) -> Txid {
         match self {
-            TxHistoryInfo::Funding(FundingInfo { txid, .. })
+            TxHistoryInfo::Funding(OutputInfo { txid, .. })
             | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => deserialize(txid),
 
             #[cfg(feature = "liquid")]
             TxHistoryInfo::Issuing(asset::IssuingInfo { txid, .. })
-            | TxHistoryInfo::Burning(FundingInfo { txid, .. }) => deserialize(txid),
+            | TxHistoryInfo::Burning(OutputInfo { txid, .. }) => deserialize(txid),
         }
         .expect("cannot parse Txid")
     }
