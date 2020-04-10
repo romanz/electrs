@@ -321,7 +321,7 @@ impl TxOutValue {
         };
 
         #[cfg(feature = "liquid")]
-        let pegout = PegoutValue::parse(txout, config.network_type, config.parent_network);
+        let pegout = PegoutValue::from_txout(txout, config.network_type, config.parent_network);
 
         TxOutValue {
             scriptpubkey: script.clone(),

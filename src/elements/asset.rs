@@ -605,7 +605,11 @@ fn apply_issued_asset_stats(
     }
 }
 
-fn apply_native_asset_stats(info: &TxHistoryInfo, stats: &mut NativeAssetStats, seen_txids: &mut HashSet<Txid>) {
+fn apply_native_asset_stats(
+    info: &TxHistoryInfo,
+    stats: &mut NativeAssetStats,
+    seen_txids: &mut HashSet<Txid>,
+) {
     if seen_txids.insert(info.get_txid()) {
         stats.tx_count += 1;
     }

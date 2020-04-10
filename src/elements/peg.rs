@@ -32,7 +32,7 @@ pub struct PegoutValue {
 }
 
 impl PegoutValue {
-    pub fn parse(txout: &TxOut, network: Network, parent_network: Network) -> Option<Self> {
+    pub fn from_txout(txout: &TxOut, network: Network, parent_network: Network) -> Option<Self> {
         let pegoutdata = get_pegout_data(txout, network, parent_network)?;
 
         Some(PegoutValue {
