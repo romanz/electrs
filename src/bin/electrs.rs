@@ -65,7 +65,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let chain = Arc::new(ChainQuery::new(
         Arc::clone(&store),
         Arc::clone(&daemon),
-        config.light_mode,
+        &config,
         &metrics,
     ));
 

@@ -188,6 +188,7 @@ pub struct ChainQuery {
     daemon: Arc<Daemon>,
     light_mode: bool,
     duration: HistogramVec,
+    network: Network,
 }
 
 // TODO: &[Block] should be an iterator / a queue.
@@ -333,21 +334,21 @@ impl Indexer {
 }
 
 impl ChainQuery {
-    pub fn new(
-        store: Arc<Store>,
-        daemon: Arc<Daemon>,
-        light_mode: bool,
-        metrics: &Metrics,
-    ) -> Self {
+    pub fn new(store: Arc<Store>, daemon: Arc<Daemon>, config: &Config, metrics: &Metrics) -> Self {
         ChainQuery {
             store,
             daemon,
-            light_mode,
+            light_mode: config.light_mode,
+            network: config.network_type,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
                 &["name"],
             ),
         }
+    }
+
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     pub fn store(&self) -> &Store {
@@ -584,11 +585,14 @@ impl ChainQuery {
 
             match history.key.txinfo {
                 TxHistoryInfo::Funding(ref info) => {
-                    utxos.insert(history.get_outpoint(), (blockid, info.value))
+                    utxos.insert(history.get_funded_outpoint(), (blockid, info.value))
                 }
-                TxHistoryInfo::Spending(_) => utxos.remove(&history.get_outpoint()),
+                TxHistoryInfo::Spending(_) => utxos.remove(&history.get_funded_outpoint()),
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_)
+                | TxHistoryInfo::Burning(_)
+                | TxHistoryInfo::Pegin(_)
+                | TxHistoryInfo::Pegout(_) => unreachable!(),
             };
         }
 
@@ -681,7 +685,10 @@ impl ChainQuery {
                 }
 
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_)
+                | TxHistoryInfo::Burning(_)
+                | TxHistoryInfo::Pegin(_)
+                | TxHistoryInfo::Pegout(_) => unreachable!(),
             }
 
             lastblock = Some(blockid.hash);
@@ -905,15 +912,6 @@ impl ChainQuery {
     pub fn asset_history_txids(&self, asset_id: &AssetId, limit: usize) -> Vec<(Txid, BlockId)> {
         self._history_txids(b'I', &asset_id.into_inner()[..], limit)
     }
-
-    #[cfg(feature = "liquid")]
-    pub fn pegs_history(
-        &self,
-        last_seen_txid: Option<&Txid>,
-        limit: usize,
-    ) -> Vec<(Transaction, BlockId)> {
-        peg::lookup_confirmed_tx_pegs_history(self, last_seen_txid, limit)
-    }
 }
 
 fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<BlockHash> {
@@ -1071,7 +1069,7 @@ fn index_transaction(
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,
-                TxHistoryInfo::Funding(OutputInfo {
+                TxHistoryInfo::Funding(FundingInfo {
                     txid,
                     vout: txo_index as u16,
                     value: txo.value,
@@ -1116,11 +1114,9 @@ fn index_transaction(
         rows.push(edge.into_row());
     }
 
+    // Index issued assets & native asset pegins/pegouts/burns
     #[cfg(feature = "liquid")]
-    asset::index_confirmed_tx_assets(tx, confirmed_height, iconfig.network, rows);
-
-    #[cfg(feature = "liquid")]
-    peg::index_confirmed_tx_pegs(
+    asset::index_confirmed_tx_assets(
         tx,
         confirmed_height,
         iconfig.network,
@@ -1343,9 +1339,8 @@ impl BlockRow {
     }
 }
 
-// For Funding history entries. In elements, also used for Burning entries
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OutputInfo {
+pub struct FundingInfo {
     pub txid: FullHash,
     pub vout: u16,
     pub value: Value,
@@ -1362,24 +1357,30 @@ pub struct SpendingInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TxHistoryInfo {
-    Funding(OutputInfo),
+    Funding(FundingInfo),
     Spending(SpendingInfo),
 
     #[cfg(feature = "liquid")]
     Issuing(asset::IssuingInfo),
     #[cfg(feature = "liquid")]
-    Burning(OutputInfo),
+    Burning(asset::BurningInfo),
+    #[cfg(feature = "liquid")]
+    Pegin(peg::PeginInfo),
+    #[cfg(feature = "liquid")]
+    Pegout(peg::PegoutInfo),
 }
 
 impl TxHistoryInfo {
     pub fn get_txid(&self) -> Txid {
         match self {
-            TxHistoryInfo::Funding(OutputInfo { txid, .. })
+            TxHistoryInfo::Funding(FundingInfo { txid, .. })
             | TxHistoryInfo::Spending(SpendingInfo { txid, .. }) => deserialize(txid),
 
             #[cfg(feature = "liquid")]
             TxHistoryInfo::Issuing(asset::IssuingInfo { txid, .. })
-            | TxHistoryInfo::Burning(OutputInfo { txid, .. }) => deserialize(txid),
+            | TxHistoryInfo::Burning(asset::BurningInfo { txid, .. })
+            | TxHistoryInfo::Pegin(peg::PeginInfo { txid, .. })
+            | TxHistoryInfo::Pegout(peg::PegoutInfo { txid, .. }) => deserialize(txid),
         }
         .expect("cannot parse Txid")
     }
@@ -1441,15 +1442,15 @@ impl TxHistoryRow {
     pub fn get_txid(&self) -> Txid {
         self.key.txinfo.get_txid()
     }
-    fn get_outpoint(&self) -> OutPoint {
-        self.key.txinfo.get_outpoint()
+    fn get_funded_outpoint(&self) -> OutPoint {
+        self.key.txinfo.get_funded_outpoint()
     }
 }
 
 impl TxHistoryInfo {
     // for funding rows, returns the funded output.
     // for spending rows, returns the spent previous output.
-    pub fn get_outpoint(&self) -> OutPoint {
+    pub fn get_funded_outpoint(&self) -> OutPoint {
         match self {
             TxHistoryInfo::Funding(ref info) => OutPoint {
                 txid: deserialize(&info.txid).unwrap(),
@@ -1460,7 +1461,10 @@ impl TxHistoryInfo {
                 vout: info.prev_vout as u32,
             },
             #[cfg(feature = "liquid")]
-            TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+            TxHistoryInfo::Issuing(_)
+            | TxHistoryInfo::Burning(_)
+            | TxHistoryInfo::Pegin(_)
+            | TxHistoryInfo::Pegout(_) => unreachable!(),
         }
     }
 }

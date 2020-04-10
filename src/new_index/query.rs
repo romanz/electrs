@@ -15,7 +15,7 @@ use bitcoin::Txid;
 #[cfg(feature = "liquid")]
 use crate::{
     chain::{AssetId, Network},
-    elements::{lookup_asset, peg, AssetRegistry, LiquidAsset},
+    elements::{lookup_asset, AssetRegistry, LiquidAsset},
 };
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
@@ -213,10 +213,5 @@ impl Query {
     #[cfg(feature = "liquid")]
     pub fn lookup_asset(&self, asset_id: &AssetId) -> Result<Option<LiquidAsset>> {
         lookup_asset(&self, self.asset_db.as_ref(), asset_id)
-    }
-
-    #[cfg(feature = "liquid")]
-    pub fn peg_stats(&self) -> (peg::PegStats, peg::PegStats) {
-        peg::peg_stats(self)
     }
 }

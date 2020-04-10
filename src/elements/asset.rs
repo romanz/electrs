@@ -7,12 +7,12 @@ use elements::encode::{deserialize, serialize};
 use elements::{issuance::ContractHash, AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 
 use crate::chain::Network;
-use crate::errors::*;
-use crate::new_index::schema::{OutputInfo, TxHistoryInfo, TxHistoryKey, TxHistoryRow};
-use crate::new_index::{db::DBFlush, ChainQuery, DBRow, Mempool, Query};
-use crate::util::{full_hash, is_spendable, Bytes, FullHash, TransactionStatus, TxInput};
-
+use crate::elements::peg::{get_pegin_data, get_pegout_data, PeginInfo, PegoutInfo};
 use crate::elements::registry::{AssetMeta, AssetRegistry};
+use crate::errors::*;
+use crate::new_index::schema::{TxHistoryInfo, TxHistoryKey, TxHistoryRow};
+use crate::new_index::{db::DBFlush, ChainQuery, DBRow, Mempool, Query};
+use crate::util::{full_hash, Bytes, FullHash, TransactionStatus, TxInput};
 
 lazy_static! {
     pub static ref NATIVE_ASSET_ID: AssetId =
@@ -41,9 +41,11 @@ pub enum LiquidAsset {
     Native(NativeAsset),
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize)]
 pub struct NativeAsset {
     pub asset_id: AssetId,
+    pub chain_stats: NativeAssetStats,
+    pub mempool_stats: NativeAssetStats,
     #[serde(flatten)]
     pub meta: AssetMeta,
 }
@@ -61,8 +63,8 @@ pub struct IssuedAsset {
     // the confirmation status of the initial issuance transaction
     pub status: TransactionStatus,
 
-    pub chain_stats: AssetStats,
-    pub mempool_stats: AssetStats,
+    pub chain_stats: IssuedAssetStats,
+    pub mempool_stats: IssuedAssetStats,
 
     // optional metadata from registry
     #[serde(flatten)]
@@ -84,7 +86,7 @@ impl IssuedAsset {
     pub fn new(
         asset_id: &AssetId,
         asset: &AssetRow,
-        (chain_stats, mempool_stats): (AssetStats, AssetStats),
+        (chain_stats, mempool_stats): (IssuedAssetStats, IssuedAssetStats),
         meta: Option<AssetMeta>,
         status: TransactionStatus,
     ) -> Self {
@@ -129,14 +131,22 @@ pub struct IssuingInfo {
     pub token_amount: Option<u64>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BurningInfo {
+    pub txid: FullHash,
+    pub vout: u16,
+    pub value: u64,
+}
+
 // Index confirmed transaction issuances and save as db rows
 pub fn index_confirmed_tx_assets(
     tx: &Transaction,
     confirmed_height: u32,
     network: Network,
+    parent_network: Network,
     rows: &mut Vec<DBRow>,
 ) {
-    let (history, issuances) = index_tx_assets(tx, network);
+    let (history, issuances) = index_tx_assets(tx, network, parent_network);
 
     rows.extend(
         history.into_iter().map(|(asset_id, info)| {
@@ -157,10 +167,11 @@ pub fn index_confirmed_tx_assets(
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
     network: Network,
+    parent_network: Network,
     asset_history: &mut HashMap<AssetId, Vec<TxHistoryInfo>>,
     asset_issuance: &mut HashMap<AssetId, AssetRow>,
 ) {
-    let (history, issuances) = index_tx_assets(tx, network);
+    let (history, issuances) = index_tx_assets(tx, network, parent_network);
     for (asset_id, info) in history {
         asset_history
             .entry(asset_id)
@@ -194,28 +205,50 @@ pub fn remove_mempool_tx_assets(
 fn index_tx_assets(
     tx: &Transaction,
     network: Network,
+    parent_network: Network,
 ) -> (Vec<(AssetId, TxHistoryInfo)>, Vec<(AssetId, AssetRow)>) {
     let mut history = vec![];
     let mut issuances = vec![];
 
     let txid = full_hash(&tx.txid()[..]);
+
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !is_spendable(txo) {
-            if let Some(asset_id) = get_issued_asset_id(&txo.asset, network) {
-                history.push((
-                    asset_id,
-                    TxHistoryInfo::Burning(OutputInfo {
-                        txid,
-                        vout: txo_index as u16,
-                        value: txo.value,
-                    }),
-                ));
+        if let Some(pegout) = get_pegout_data(txo, network, parent_network) {
+            history.push((
+                pegout.asset.explicit().unwrap(),
+                TxHistoryInfo::Pegout(PegoutInfo {
+                    txid,
+                    vout: txo_index as u16,
+                    value: pegout.value,
+                }),
+            ));
+        } else if txo.script_pubkey.is_provably_unspendable() {
+            if let (Asset::Explicit(asset_id), Value::Explicit(value)) = (txo.asset, txo.value) {
+                if value > 0 {
+                    history.push((
+                        asset_id,
+                        TxHistoryInfo::Burning(BurningInfo {
+                            txid,
+                            vout: txo_index as u16,
+                            value: value,
+                        }),
+                    ));
+                }
             }
         }
     }
 
     for (txi_index, txi) in tx.input.iter().enumerate() {
-        if txi.has_issuance() {
+        if let Some(pegin) = get_pegin_data(txi, network) {
+            history.push((
+                pegin.asset.explicit().unwrap(),
+                TxHistoryInfo::Pegin(PeginInfo {
+                    txid,
+                    vin: txi_index as u16,
+                    value: pegin.value,
+                }),
+            ));
+        } else if txi.has_issuance() {
             let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
             let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
@@ -249,8 +282,7 @@ fn index_tx_assets(
                     _ => false,
                 };
                 let reissuance_token =
-                    AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential)
-                        .into_inner();
+                    AssetId::reissuance_token_from_entropy(asset_entropy, is_confidential);
 
                 issuances.push((
                     asset_id,
@@ -260,7 +292,7 @@ fn index_tx_assets(
                         prev_txid: full_hash(&txi.previous_output.txid[..]),
                         prev_vout: txi.previous_output.vout as u16,
                         issuance: serialize(&txi.asset_issuance),
-                        reissuance_token: full_hash(&reissuance_token[..]),
+                        reissuance_token: full_hash(&reissuance_token.into_inner()[..]),
                     },
                 ));
             }
@@ -268,14 +300,6 @@ fn index_tx_assets(
     }
 
     (history, issuances)
-}
-
-// returns the asset id if its an explicit user-issued asset, or none for confidential and native assets
-fn get_issued_asset_id(asset: &Asset, network: Network) -> Option<AssetId> {
-    match asset {
-        Asset::Explicit(asset_id) if asset_id != network.native_asset() => Some(*asset_id),
-        _ => None,
-    }
 }
 
 fn asset_history_row(
@@ -298,8 +322,12 @@ pub fn lookup_asset(
     asset_id: &AssetId,
 ) -> Result<Option<LiquidAsset>> {
     if asset_id == query.network.native_asset() {
+        let (chain_stats, mempool_stats) = native_asset_stats(query);
+
         return Ok(Some(LiquidAsset::Native(NativeAsset {
             asset_id: *asset_id,
+            chain_stats: chain_stats,
+            mempool_stats: mempool_stats,
             meta: NATIVE_ASSET_META.clone(),
         })));
     }
@@ -319,7 +347,7 @@ pub fn lookup_asset(
         let reissuance_token = parse_asset_id(&row.reissuance_token);
 
         let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
-        let stats = asset_stats(query, asset_id, &reissuance_token);
+        let stats = issued_asset_stats(query, asset_id, &reissuance_token);
         let status = query.get_tx_status(&deserialize(&row.issuance_txid).unwrap());
 
         let asset = IssuedAsset::new(asset_id, row, stats, meta, status);
@@ -347,10 +375,12 @@ pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
     })
 }
 
+//
 // Asset stats
+//
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AssetStats {
+pub struct IssuedAssetStats {
     pub tx_count: usize,
     pub issuance_count: usize,
     pub issued_amount: u64,
@@ -360,7 +390,7 @@ pub struct AssetStats {
     pub burned_reissuance_tokens: u64,
 }
 
-impl AssetStats {
+impl Default for IssuedAssetStats {
     fn default() -> Self {
         Self {
             tx_count: 0,
@@ -374,37 +404,86 @@ impl AssetStats {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NativeAssetStats {
+    pub tx_count: usize,
+    pub peg_in_count: usize,
+    pub peg_in_amount: u64,
+    pub peg_out_count: usize,
+    pub peg_out_amount: u64,
+    pub burn_count: usize,
+    pub burned_amount: u64,
+}
+
+impl Default for NativeAssetStats {
+    fn default() -> Self {
+        Self {
+            tx_count: 0,
+            peg_in_count: 0,
+            peg_in_amount: 0,
+            peg_out_count: 0,
+            peg_out_amount: 0,
+            burn_count: 0,
+            burned_amount: 0,
+        }
+    }
+}
+
+type AssetStatApplyFn<T> = fn(&TxHistoryInfo, &mut T, &mut HashSet<Txid>);
+
 fn asset_cache_key(asset_id: &AssetId) -> Bytes {
     [b"z", &asset_id.into_inner()[..]].concat()
 }
-fn asset_cache_row(asset_id: &AssetId, stats: &AssetStats, blockhash: &BlockHash) -> DBRow {
+
+fn asset_cache_row<T>(asset_id: &AssetId, stats: &T, blockhash: &BlockHash) -> DBRow
+where
+    T: serde::Serialize,
+{
     DBRow {
         key: asset_cache_key(asset_id),
         value: bincode::serialize(&(stats, blockhash)).unwrap(),
     }
 }
 
-fn asset_stats(
+// Get stats for the network's native asset
+fn native_asset_stats(query: &Query) -> (NativeAssetStats, NativeAssetStats) {
+    let asset_id = query.network.native_asset();
+
+    (
+        chain_asset_stats(query.chain(), asset_id, apply_native_asset_stats),
+        mempool_asset_stats(&query.mempool(), asset_id, apply_native_asset_stats),
+    )
+}
+
+// Get stats for user-issued assets
+fn issued_asset_stats(
     query: &Query,
     asset_id: &AssetId,
     reissuance_token: &AssetId,
-) -> (AssetStats, AssetStats) {
+) -> (IssuedAssetStats, IssuedAssetStats) {
+    let afn = apply_issued_asset_stats;
+
     let chain = query.chain();
-    let mut chain_stats = chain_asset_stats(chain, asset_id);
-    chain_stats.burned_reissuance_tokens = chain_asset_stats(chain, reissuance_token).burned_amount;
+    let mut chain_stats = chain_asset_stats(chain, asset_id, afn);
+    chain_stats.burned_reissuance_tokens =
+        chain_asset_stats(chain, reissuance_token, afn).burned_amount;
 
     let mempool = query.mempool();
-    let mut mempool_stats = mempool_asset_stats(&mempool, &asset_id);
+    let mut mempool_stats = mempool_asset_stats(&mempool, &asset_id, afn);
     mempool_stats.burned_reissuance_tokens =
-        mempool_asset_stats(&mempool, &reissuance_token).burned_amount;
+        mempool_asset_stats(&mempool, &reissuance_token, afn).burned_amount;
 
     (chain_stats, mempool_stats)
 }
 
-fn chain_asset_stats(chain: &ChainQuery, asset_id: &AssetId) -> AssetStats {
+// Get on-chain confirmed asset stats (user-issued or the native asset)
+fn chain_asset_stats<T>(chain: &ChainQuery, asset_id: &AssetId, apply_fn: AssetStatApplyFn<T>) -> T
+where
+    T: Default + serde::Serialize + serde::de::DeserializeOwned,
+{
     // get the last known stats and the blockhash they are updated for.
     // invalidates the cache if the block was orphaned.
-    let cache: Option<(AssetStats, usize)> = chain
+    let cache: Option<(T, usize)> = chain
         .store()
         .cache_db()
         .get(&asset_cache_key(asset_id))
@@ -417,8 +496,10 @@ fn chain_asset_stats(chain: &ChainQuery, asset_id: &AssetId) -> AssetStats {
 
     // update stats with new transactions since
     let (newstats, lastblock) = cache.map_or_else(
-        || asset_stats_delta(chain, asset_id, AssetStats::default(), 0),
-        |(oldstats, blockheight)| asset_stats_delta(chain, asset_id, oldstats, blockheight + 1),
+        || chain_asset_stats_delta(chain, asset_id, T::default(), 0, apply_fn),
+        |(oldstats, blockheight)| {
+            chain_asset_stats_delta(chain, asset_id, oldstats, blockheight + 1, apply_fn)
+        },
     );
 
     // save updated stats to cache
@@ -432,12 +513,14 @@ fn chain_asset_stats(chain: &ChainQuery, asset_id: &AssetId) -> AssetStats {
     newstats
 }
 
-fn asset_stats_delta(
+// Update the asset stats with the delta of confirmed txs since start_height
+fn chain_asset_stats_delta<T>(
     chain: &ChainQuery,
     asset_id: &AssetId,
-    init_stats: AssetStats,
+    init_stats: T,
     start_height: usize,
-) -> (AssetStats, Option<BlockHash>) {
+    apply_fn: AssetStatApplyFn<T>,
+) -> (T, Option<BlockHash>) {
     let history_iter = chain
         .history_iter_scan(b'I', &asset_id.into_inner()[..], start_height)
         .map(TxHistoryRow::from_row)
@@ -455,27 +538,39 @@ fn asset_stats_delta(
         if lastblock != Some(blockid.hash) {
             seen_txids.clear();
         }
-        apply_asset_stats(&row.key.txinfo, &mut stats, &mut seen_txids);
+        apply_fn(&row.key.txinfo, &mut stats, &mut seen_txids);
         lastblock = Some(blockid.hash);
     }
 
     (stats, lastblock)
 }
 
-pub fn mempool_asset_stats(mempool: &Mempool, asset_id: &AssetId) -> AssetStats {
-    let mut stats = AssetStats::default();
+// Get mempool asset stats (user-issued or the native asset)
+pub fn mempool_asset_stats<T>(
+    mempool: &Mempool,
+    asset_id: &AssetId,
+    apply_fn: AssetStatApplyFn<T>,
+) -> T
+where
+    T: Default,
+{
+    let mut stats = T::default();
 
     if let Some(history) = mempool.asset_history.get(asset_id) {
         let mut seen_txids = HashSet::new();
         for info in history {
-            apply_asset_stats(info, &mut stats, &mut seen_txids)
+            apply_fn(info, &mut stats, &mut seen_txids)
         }
     }
 
     stats
 }
 
-fn apply_asset_stats(info: &TxHistoryInfo, stats: &mut AssetStats, seen_txids: &mut HashSet<Txid>) {
+fn apply_issued_asset_stats(
+    info: &TxHistoryInfo,
+    stats: &mut IssuedAssetStats,
+    seen_txids: &mut HashSet<Txid>,
+) {
     if seen_txids.insert(info.get_txid()) {
         stats.tx_count += 1;
     }
@@ -495,13 +590,44 @@ fn apply_asset_stats(info: &TxHistoryInfo, stats: &mut AssetStats, seen_txids: &
         }
 
         TxHistoryInfo::Burning(info) => {
-            if let Value::Explicit(value) = info.value {
-                stats.burned_amount += value;
-            }
+            stats.burned_amount += info.value;
         }
 
         TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
             // we don't keep funding/spending entries for assets
+            unreachable!();
+        }
+
+        TxHistoryInfo::Pegin(_) | TxHistoryInfo::Pegout(_) => {
+            // issued assets cannot have pegins/pegouts
+            unreachable!();
+        }
+    }
+}
+
+fn apply_native_asset_stats(info: &TxHistoryInfo, stats: &mut NativeAssetStats, seen_txids: &mut HashSet<Txid>) {
+    if seen_txids.insert(info.get_txid()) {
+        stats.tx_count += 1;
+    }
+
+    match info {
+        TxHistoryInfo::Pegin(info) => {
+            stats.peg_in_count += 1;
+            stats.peg_in_amount += info.value;
+        }
+        TxHistoryInfo::Pegout(info) => {
+            stats.peg_out_count += 1;
+            stats.peg_out_amount += info.value;
+        }
+        TxHistoryInfo::Burning(info) => {
+            stats.burn_count += 1;
+            stats.burned_amount += info.value;
+        }
+        TxHistoryInfo::Issuing(_) => {
+            warn!("encountered issuance of native asset, ignoring (possibly freeinitialcoins?)");
+        }
+        TxHistoryInfo::Funding(_) | TxHistoryInfo::Spending(_) => {
+            // these history entries variants are never kept for native assets
             unreachable!();
         }
     }

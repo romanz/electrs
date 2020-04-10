@@ -33,7 +33,9 @@ impl AssetRegistry {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AssetMeta {
+    #[serde(skip_serializing_if = "JsonValue::is_null")]
     pub contract: JsonValue,
+    #[serde(skip_serializing_if = "JsonValue::is_null")]
     pub entity: JsonValue,
     pub precision: u8,
     pub name: String,

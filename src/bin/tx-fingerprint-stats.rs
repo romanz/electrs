@@ -40,12 +40,7 @@ fn main() {
         .unwrap(),
     );
 
-    let chain = ChainQuery::new(
-        Arc::clone(&store),
-        Arc::clone(&daemon),
-        config.light_mode,
-        &metrics,
-    );
+    let chain = ChainQuery::new(Arc::clone(&store), Arc::clone(&daemon), &config, &metrics);
 
     let mut indexer = Indexer::open(Arc::clone(&store), FetchFrom::Bitcoind, &config, &metrics);
     indexer.update(&daemon).unwrap();

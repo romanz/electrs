@@ -13,20 +13,20 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::chain::{OutPoint, Transaction, TxOut};
+use crate::chain::{Network, OutPoint, Transaction, TxOut};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
-    compute_script_hash, schema::FullHash, ChainQuery, OutputInfo, ScriptStats, SpendingInfo,
+    compute_script_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats, SpendingInfo,
     SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
-use crate::elements::{asset, peg};
+use crate::elements::asset;
 
 const RECENT_TXS_SIZE: usize = 10;
 const BACKLOG_STATS_TTL: u64 = 10;
@@ -51,8 +51,6 @@ pub struct Mempool {
     pub asset_history: HashMap<AssetId, Vec<TxHistoryInfo>>,
     #[cfg(feature = "liquid")]
     pub asset_issuance: HashMap<AssetId, asset::AssetRow>,
-    #[cfg(feature = "liquid")]
-    pub pegs_history: Vec<peg::TxPegInfo>,
 }
 
 // A simplified transaction view used for the list of most recent transactions
@@ -96,9 +94,11 @@ impl Mempool {
             asset_history: HashMap::new(),
             #[cfg(feature = "liquid")]
             asset_issuance: HashMap::new(),
-            #[cfg(feature = "liquid")]
-            pegs_history: Vec::new(),
         }
+    }
+
+    pub fn network(&self) -> Network {
+        self.config.network_type
     }
 
     pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
@@ -174,13 +174,16 @@ impl Mempool {
 
                     #[cfg(feature = "liquid")]
                     asset: self
-                        .lookup_txo(&entry.get_outpoint())
+                        .lookup_txo(&entry.get_funded_outpoint())
                         .expect("missing txo")
                         .asset,
                 }),
                 TxHistoryInfo::Spending(_) => None,
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_)
+                | TxHistoryInfo::Burning(_)
+                | TxHistoryInfo::Pegin(_)
+                | TxHistoryInfo::Pegout(_) => unreachable!(),
             })
             .filter(|utxo| !self.has_spend(&OutPoint::from(utxo)))
             .collect()
@@ -215,7 +218,7 @@ impl Mempool {
                     stats.spent_txo_sum += info.value;
                 }
 
-                // elements
+                // Elements
                 #[cfg(feature = "liquid")]
                 TxHistoryInfo::Funding(_) => {
                     stats.funded_txo_count += 1;
@@ -225,7 +228,10 @@ impl Mempool {
                     stats.spent_txo_count += 1;
                 }
                 #[cfg(feature = "liquid")]
-                TxHistoryInfo::Issuing(_) | TxHistoryInfo::Burning(_) => unreachable!(),
+                TxHistoryInfo::Issuing(_)
+                | TxHistoryInfo::Burning(_)
+                | TxHistoryInfo::Pegin(_)
+                | TxHistoryInfo::Pegout(_) => unreachable!(),
             };
         }
 
@@ -359,7 +365,7 @@ impl Mempool {
                 .map(|(index, txo)| {
                     (
                         compute_script_hash(&txo.script_pubkey),
-                        TxHistoryInfo::Funding(OutputInfo {
+                        TxHistoryInfo::Funding(FundingInfo {
                             txid: txid_bytes,
                             vout: index as u16,
                             value: txo.value,
@@ -378,22 +384,14 @@ impl Mempool {
                 self.edges.insert(txi.previous_output, (txid, i as u32));
             }
 
-            // Index issued assets
+            // Index issued assets & native asset pegins/pegouts/burns
             #[cfg(feature = "liquid")]
             asset::index_mempool_tx_assets(
                 &tx,
                 self.config.network_type,
+                self.config.parent_network,
                 &mut self.asset_history,
                 &mut self.asset_issuance,
-            );
-
-            // Index peg ins/outs
-            #[cfg(feature = "liquid")]
-            peg::index_mempool_tx_pegs(
-                &tx,
-                self.config.network_type,
-                self.config.parent_network,
-                &mut self.pegs_history,
             );
         }
     }
@@ -472,9 +470,6 @@ impl Mempool {
             &mut self.asset_issuance,
         );
 
-        #[cfg(feature = "liquid")]
-        peg::remove_mempool_tx_pegs(&to_remove, &mut self.pegs_history);
-
         self.edges
             .retain(|_outpoint, (txid, _vin)| !to_remove.contains(txid));
     }
@@ -484,21 +479,6 @@ impl Mempool {
         self.asset_history
             .get(asset_id)
             .map_or_else(|| vec![], |entries| self._history(entries, limit))
-    }
-
-    #[cfg(feature = "liquid")]
-    pub fn pegs_history(&self, limit: usize) -> Vec<Transaction> {
-        let _timer = self
-            .latency
-            .with_label_values(&["pegs_history"])
-            .start_timer();
-
-        self.pegs_history
-            .iter()
-            .take(limit)
-            .map(|peginfo| self.txstore.get(&peginfo.txid).expect("missing mempool tx"))
-            .cloned()
-            .collect()
     }
 }
 
