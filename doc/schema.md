@@ -61,7 +61,7 @@ Assets (re)issuances results in the following new rows (only for user-issued ass
  * `"i{asset-id}" → "{issuing-txid:vin}{prev-txid:vout}{issuance}{reissuance_token}"`
  * `"I{asset-id}{issuance-height}I{issuing-txid:vin}{is_reissuance}{amount}{tokens}" → ""`
 
-Peg-ins/Peg-outs results in the following new rows (only for the native asset, typically L-BTC):
+Peg-ins/peg-outs results in the following new rows (only for the native asset, typically L-BTC):
 
  * `"I{asset-id}{pegin-height}F{pegin-txid:vin}{value}" → ""`
  * `"I{asset-id}{pegout-height}F{pegout-txid:vout}{value}" → ""`
@@ -87,7 +87,7 @@ If the `blockhash` was since orphaned, the cache is removed and re-computed.
 #### Elements only:
 
 Stats for issued assets:
- * `"z{asset-id}" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `issuance_count`, `issued_amount`, `burned_amount`, `has_blinded_issuances`, `reissuance_tokens`, `burned_reissuance_tokens`)
+ * `"z{asset-id}" → "{issued_stats}{blockhash}"` (where `issued_stats` is composed of `tx_count`, `issuance_count`, `issued_amount`, `burned_amount`, `has_blinded_issuances`, `reissuance_tokens`, `burned_reissuance_tokens`)
 
 Stats for the native asset:
- * `"p" → "{stats}{blockhash}"` (where `stats` is composed of `tx_count`, `peg_in_count`, `peg_in_amount`, `peg_out_count`, `peg_out_amount`, `burn_count` and `burn_amount`)
+ * `"z{issued-asset}" → "{native_stats}{blockhash}"` (where `native_stats` is composed of `tx_count`, `peg_in_count`, `peg_in_amount`, `peg_out_count`, `peg_out_amount`, `burn_count` and `burn_amount`)
