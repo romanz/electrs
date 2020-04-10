@@ -21,13 +21,6 @@ lazy_static! {
     pub static ref NATIVE_ASSET_ID_TESTNET: AssetId =
         AssetId::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
             .unwrap();
-    static ref NATIVE_ASSET_META: AssetMeta = AssetMeta {
-        contract: json!(null),
-        entity: json!(null),
-        precision: 8,
-        name: "Liquid Bitcoin".into(),
-        ticker: Some("L-BTC".into()),
-    };
 }
 
 pub fn parse_asset_id(hash: &[u8]) -> AssetId {
@@ -46,8 +39,6 @@ pub struct NativeAsset {
     pub asset_id: AssetId,
     pub chain_stats: NativeAssetStats,
     pub mempool_stats: NativeAssetStats,
-    #[serde(flatten)]
-    pub meta: AssetMeta,
 }
 
 #[derive(Serialize)]
@@ -328,7 +319,6 @@ pub fn lookup_asset(
             asset_id: *asset_id,
             chain_stats: chain_stats,
             mempool_stats: mempool_stats,
-            meta: NATIVE_ASSET_META.clone(),
         })));
     }
 
