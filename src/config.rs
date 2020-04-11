@@ -1,6 +1,5 @@
 use clap::{App, Arg};
 use dirs::home_dir;
-use num_cpus;
 use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -26,8 +25,6 @@ pub struct Config {
     pub http_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
-    pub index_batch_size: usize,
-    pub bulk_index_threads: usize,
     pub light_mode: bool,
     pub address_search: bool,
     pub prevout_enabled: bool,
@@ -122,18 +119,6 @@ impl Config {
                 Arg::with_name("jsonrpc_import")
                     .long("jsonrpc-import")
                     .help("Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"),
-            )
-            .arg(
-                Arg::with_name("index_batch_size")
-                    .long("index-batch-size")
-                    .help("Number of blocks to get in one JSONRPC request from bitcoind")
-                    .default_value("100"),
-            )
-            .arg(
-                Arg::with_name("bulk_index_threads")
-                    .long("bulk-index-threads")
-                    .help("Number of threads used for bulk indexing (default: use the # of CPUs)")
-                    .default_value("0")
             )
             .arg(
                 Arg::with_name("light_mode")
@@ -286,10 +271,6 @@ impl Config {
             stderrlog::Timestamp::Off
         });
         log.init().expect("logging initialization failed");
-        let mut bulk_index_threads = value_t_or_exit!(m, "bulk_index_threads", usize);
-        if bulk_index_threads == 0 {
-            bulk_index_threads = num_cpus::get();
-        }
         let config = Config {
             log,
             network_type,
@@ -301,8 +282,6 @@ impl Config {
             http_addr,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
-            index_batch_size: value_t_or_exit!(m, "index_batch_size", usize),
-            bulk_index_threads,
             light_mode: m.is_present("light_mode"),
             address_search: m.is_present("address_search"),
             prevout_enabled: !m.is_present("disable_prevout"),
