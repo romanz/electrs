@@ -177,7 +177,15 @@ impl Config {
         let db_path = db_dir.join(network_name);
 
         #[cfg(feature = "liquid")]
-        let parent_network = Network::from(m.value_of("parent_network").unwrap_or("mainnet"));
+        let parent_network = m
+            .value_of("parent_network")
+            .map(Network::from)
+            .unwrap_or_else(|| match network_type {
+                Network::Liquid => Network::Bitcoin,
+                Network::LiquidRegtest => Network::Regtest,
+                _ => panic!("unknown liquid network, --parent-network is required"),
+            });
+
         #[cfg(feature = "liquid")]
         let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
 
