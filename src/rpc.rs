@@ -497,14 +497,15 @@ impl RPC {
                 let mut senders = senders.lock().unwrap();
                 match msg {
                     Notification::Periodic => {
-                        for sender in senders.split_off(0) {
+                        senders.retain(|sender| {
                             if let Err(TrySendError::Disconnected(_)) =
                                 sender.try_send(Message::PeriodicUpdate)
                             {
-                                continue;
+                                false // drop disconnected clients
+                            } else {
+                                true
                             }
-                            senders.push(sender);
-                        }
+                        })
                     }
                     Notification::Exit => acceptor.send(None).unwrap(), // mark acceptor as done
                 }
