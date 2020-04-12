@@ -11,7 +11,6 @@ use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
@@ -554,26 +553,47 @@ impl RPC {
                 let acceptor = RPC::start_acceptor(addr);
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
 
+                let mut threads = HashMap::new();
+                let (garbage_sender, garbage_receiver) = crossbeam_channel::unbounded();
+
                 while let Some((stream, addr)) = acceptor.receiver().recv().unwrap() {
                     // explicitely scope the shadowed variables for the new thread
                     let query = Arc::clone(&query);
                     let senders = Arc::clone(&senders);
                     let stats = Arc::clone(&stats);
+                    let garbage_sender = garbage_sender.clone();
 
                     // HACK: detach peer-handling threads
-                    spawn_thread("peer", move || {
+                    let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
                         let conn = Connection::new(query, stream, addr, stats, relayfee);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
+                        let _  = garbage_sender.send(std::thread::current().id());
                     });
+
+                    threads.insert(spawned.thread().id(), spawned);
+                    while let Ok(id) = garbage_receiver.try_recv() {
+                        let result = threads
+                            .remove(&id)
+                            .map(std::thread::JoinHandle::join)
+                            .transpose();
+
+                        if let Err(error) = result {
+                            error!("Failed to join thread: {:?}", error);
+                        }
+                    }
                 }
                 trace!("closing {} RPC connections", senders.lock().unwrap().len());
                 for sender in senders.lock().unwrap().iter() {
                     let _ = sender.send(Message::Done);
                 }
-                thread::sleep(Duration::from_secs(1)); // TODO: actually wait for threads
+                for (_, thread) in threads {
+                    if let Err(error) = thread.join() {
+                        error!("Failed to join thread: {:?}", error);
+                    }
+                }
 
                 trace!("RPC connections are closed");
             })),
