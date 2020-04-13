@@ -10,6 +10,8 @@ $ sudo apt update
 $ sudo apt install clang cmake  # for building 'rust-rocksdb'
 ```
 
+Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries. Make sure to use latest OS! (see #226)
+
 ## Build
 
 First build should take ~20 minutes:
