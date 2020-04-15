@@ -563,25 +563,23 @@ impl RPC {
                     let stats = Arc::clone(&stats);
                     let garbage_sender = garbage_sender.clone();
 
-                    // HACK: detach peer-handling threads
                     let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
                         let conn = Connection::new(query, stream, addr, stats, relayfee);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
-                        let _  = garbage_sender.send(std::thread::current().id());
+                        let _ = garbage_sender.send(std::thread::current().id());
                     });
 
+                    trace!("[{}] spawned {:?}", addr, spawned.thread().id());
                     threads.insert(spawned.thread().id(), spawned);
                     while let Ok(id) = garbage_receiver.try_recv() {
-                        let result = threads
-                            .remove(&id)
-                            .map(std::thread::JoinHandle::join)
-                            .transpose();
-
-                        if let Err(error) = result {
-                            error!("Failed to join thread: {:?}", error);
+                        if let Some(thread) = threads.remove(&id) {
+                            trace!("[{}] joining {:?}", addr, id);
+                            if let Err(error) = thread.join() {
+                                error!("failed to join {:?}: {:?}", id, error);
+                            }
                         }
                     }
                 }
@@ -589,9 +587,10 @@ impl RPC {
                 for sender in senders.lock().unwrap().iter() {
                     let _ = sender.send(Message::Done);
                 }
-                for (_, thread) in threads {
+                for (id, thread) in threads {
+                    trace!("joining {:?}", id);
                     if let Err(error) = thread.join() {
-                        error!("Failed to join thread: {:?}", error);
+                        error!("failed to join {:?}: {:?}", id, error);
                     }
                 }
 
