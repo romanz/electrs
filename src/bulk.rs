@@ -1,7 +1,6 @@
+use bitcoin::hash_types::BlockHash;
 use bitcoin::blockdata::block::Block;
 use bitcoin::consensus::encode::{deserialize, Decodable};
-use bitcoin::util::hash::BitcoinHash;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use libc;
 use std::collections::HashSet;
 use std::fs;
@@ -20,11 +19,12 @@ use crate::metrics::{CounterVec, Histogram, HistogramOpts, HistogramVec, MetricO
 use crate::signal::Waiter;
 use crate::store::{DBStore, Row, WriteStore};
 use crate::util::{spawn_thread, HeaderList, SyncChannel};
+use bitcoin::BitcoinHash;
 
 struct Parser {
     magic: u32,
     current_headers: HeaderList,
-    indexed_blockhashes: Mutex<HashSet<Sha256dHash>>,
+    indexed_blockhashes: Mutex<HashSet<BlockHash>>,
     // metrics
     duration: HistogramVec,
     block_count: CounterVec,
@@ -35,7 +35,7 @@ impl Parser {
     fn new(
         daemon: &Daemon,
         metrics: &Metrics,
-        indexed_blockhashes: HashSet<Sha256dHash>,
+        indexed_blockhashes: HashSet<BlockHash>,
     ) -> Result<Arc<Parser>> {
         Ok(Arc::new(Parser {
             magic: daemon.magic(),
