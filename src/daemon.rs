@@ -3,8 +3,8 @@ use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin::network::constants::Network;
-use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::Hash;
+use bitcoin::hashes::hex::{FromHex, ToHex};
+use bitcoin::hashes::Hash;
 use serde_json::{from_str, from_value, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
@@ -19,7 +19,6 @@ use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::HeaderList;
-use bitcoin::BitcoinHash;
 
 fn parse_hash<T: Hash>(value: &Value) -> Result<T> {
     Ok(T::from_hex(
@@ -497,7 +496,7 @@ impl Daemon {
         let block = block_from_value(
             self.request("getblock", json!([blockhash.to_hex(), /*verbose=*/ false]))?,
         )?;
-        assert_eq!(block.bitcoin_hash(), *blockhash);
+        assert_eq!(block.block_hash(), *blockhash);
         Ok(block)
     }
 
@@ -626,7 +625,7 @@ impl Daemon {
         let mut blockhash = null_hash;
         for header in &result {
             assert_eq!(header.prev_blockhash, blockhash);
-            blockhash = header.bitcoin_hash();
+            blockhash = header.block_hash();
         }
         assert_eq!(blockhash, *tip);
         Ok(result)

@@ -145,7 +145,7 @@ impl TransactionCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin_hashes::Hash;
+    use bitcoin::hashes::Hash;
 
     #[test]
     fn test_sized_lru_cache_hit_and_miss() {
