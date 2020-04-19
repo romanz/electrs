@@ -52,23 +52,23 @@ doc = "JSONRPC authentication cookie file (default: ~/.bitcoin/.cookie)"
 name = "network"
 type = "crate::config::BitcoinNetwork"
 convert_into = "::bitcoin::network::constants::Network"
-doc = "Select Bitcoin network type ('bitcoin', 'testnet' or 'regtest')"
+doc = "Select Bitcoin network type ('bitcoin', 'testnet', 'regtest' or 'signet')"
 default = "Default::default()"
 
 [[param]]
 name = "electrum_rpc_addr"
 type = "crate::config::ResolvAddr"
-doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)"
+doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet, '127.0.0.1:60401' for regtest and '127.0.0.1:60601' for signet)"
 
 [[param]]
 name = "daemon_rpc_addr"
 type = "crate::config::ResolvAddr"
-doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)"
+doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet, 127.0.0.1:18443 for regtest and 127.0.0.1:18554 for signet)"
 
 [[param]]
 name = "monitoring_addr"
 type = "crate::config::ResolvAddr"
-doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet and 127.0.0.1:24224 for regtest)"
+doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet, 127.0.0.1:24224 for regtest and 127.0.0.1:34224 for regtest)"
 
 [[switch]]
 name = "jsonrpc_import"

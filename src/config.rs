@@ -109,7 +109,7 @@ impl FromStr for BitcoinNetwork {
 
 impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
     fn describe_type<W: fmt::Write>(mut writer: W) -> std::fmt::Result {
-        write!(writer, "either 'bitcoin', 'testnet' or 'regtest'")
+        write!(writer, "either 'bitcoin', 'testnet', 'regtest' or 'signet'")
     }
 }
 
@@ -194,6 +194,7 @@ impl Config {
             Network::Bitcoin => "mainnet",
             Network::Testnet => "testnet",
             Network::Regtest => "regtest",
+            Network::Signet => "signet",
         };
 
         config.db_dir.push(db_subdir);
@@ -202,16 +203,19 @@ impl Config {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
+            Network::Signet => 18554,
         };
         let default_electrum_port = match config.network {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
+            Network::Signet => 60601,
         };
         let default_monitoring_port = match config.network {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
+            Network::Signet => 34224,
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
@@ -231,6 +235,7 @@ impl Config {
             Network::Bitcoin => (),
             Network::Testnet => config.daemon_dir.push("testnet3"),
             Network::Regtest => config.daemon_dir.push("regtest"),
+            Network::Signet => config.daemon_dir.push("signet"),
         }
 
         let daemon_dir = &config.daemon_dir;
