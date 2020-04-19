@@ -1,6 +1,7 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::hash_types::{Txid, BlockHash, TxMerkleNode};
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin_hashes::hex::ToHex;
 use bitcoin_hashes::Hash;
 use crypto::digest::Digest;
@@ -116,15 +117,15 @@ struct TxnHeight {
     height: u32,
 }
 
-fn merklize(left: TxMerkleNode, right: TxMerkleNode) -> TxMerkleNode {
+fn merklize<T: Hash>(left: T, right: T) -> T {
     let data = [&left[..], &right[..]].concat();
-    TxMerkleNode::hash(&data)
+    <T as Hash>::hash(&data)
 }
 
-fn create_merkle_branch_and_root(
-    mut hashes: Vec<TxMerkleNode>,
+fn create_merkle_branch_and_root<T: Hash>(
+    mut hashes: Vec<T>,
     mut index: usize,
-) -> (Vec<TxMerkleNode>, TxMerkleNode) {
+) -> (Vec<T>, T) {
     let mut merkle = vec![];
     while hashes.len() > 1 {
         if hashes.len() % 2 != 0 {
@@ -428,7 +429,11 @@ impl Query {
             .iter()
             .position(|txid| txid == tx_hash)
             .chain_err(|| format!("missing txid {}", tx_hash))?;
-        let (branch, _root) = create_merkle_branch_and_root(txids, pos);
+        let tx_nodes: Vec<TxMerkleNode> = txids
+            .into_iter()
+            .map(|txid| TxMerkleNode::from_inner(txid.into_inner()))
+            .collect();
+        let (branch, _root) = create_merkle_branch_and_root(tx_nodes, pos);
         Ok((branch, pos))
     }
 
@@ -436,7 +441,7 @@ impl Query {
         &self,
         height: usize,
         cp_height: usize,
-    ) -> Result<(Vec<BlockHash>, TxMerkleNode)> {
+    ) -> Result<(Vec<Sha256dHash>, Sha256dHash)> {
         if cp_height < height {
             bail!("cp_height #{} < height #{}", cp_height, height);
         }
@@ -456,8 +461,12 @@ impl Query {
             .into_iter()
             .map(|h| *h.hash())
             .collect();
+        let merkle_nodes: Vec<Sha256dHash> = header_hashes
+            .iter()
+            .map(|block_hash| Sha256dHash::from_inner(block_hash.into_inner()))
+            .collect();
         assert_eq!(header_hashes.len(), heights.len());
-        Ok(create_merkle_branch_and_root(header_hashes, height))
+        Ok(create_merkle_branch_and_root(merkle_nodes, height))
     }
 
     pub fn get_id_from_pos(
@@ -477,8 +486,13 @@ impl Query {
             .get(tx_pos)
             .chain_err(|| format!("No tx in position #{} in block #{}", tx_pos, height))?;
 
+        let tx_nodes = txids
+            .into_iter()
+            .map(|txid| TxMerkleNode::from_inner(txid.into_inner()))
+            .collect();
+
         let branch = if want_merkle {
-            create_merkle_branch_and_root(txids, tx_pos).0
+            create_merkle_branch_and_root(tx_nodes, tx_pos).0
         } else {
             vec![]
         };
