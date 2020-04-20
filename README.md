@@ -65,9 +65,6 @@ In addition to electrs's original configuration options, a few new options are a
 
 - `--http-addr <addr:port>` - HTTP server address/port to listen on (default: `127.0.0.1:3000`).
 - `--lightmode` - enable light mode (see above)
-- `--disable-prevout` - disable attaching previous output information to inputs.
-  This significantly reduces the amount of transaction lookups (and IO/CPU/memory usage),
-  at the cost of not knowing inputs amounts, their previous script/address, and the transaction fee.
 - `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 - `--address-search` - enables the by-prefix address search index.

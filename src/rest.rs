@@ -111,8 +111,7 @@ struct TransactionValue {
     vout: Vec<TxOutValue>,
     size: u32,
     weight: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fee: Option<u64>,
+    fee: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<TransactionStatus>,
 }
@@ -139,11 +138,7 @@ impl TransactionValue {
             .map(|txout| TxOutValue::new(txout, config))
             .collect();
 
-        let fee = if config.prevout_enabled || cfg!(feature = "liquid") {
-            Some(get_tx_fee(&tx, &prevouts, config.network_type))
-        } else {
-            None
-        };
+        let fee = get_tx_fee(&tx, &prevouts, config.network_type);
 
         TransactionValue {
             txid: tx.txid(),
@@ -446,21 +441,17 @@ fn prepare_txs(
     query: &Query,
     config: &Config,
 ) -> Vec<TransactionValue> {
-    let prevouts = if config.prevout_enabled {
-        let outpoints = txs
-            .iter()
-            .flat_map(|(tx, _)| {
-                tx.input
-                    .iter()
-                    .filter(|txin| has_prevout(txin))
-                    .map(|txin| txin.previous_output)
-            })
-            .collect();
+    let outpoints = txs
+        .iter()
+        .flat_map(|(tx, _)| {
+            tx.input
+                .iter()
+                .filter(|txin| has_prevout(txin))
+                .map(|txin| txin.previous_output)
+        })
+        .collect();
 
-        query.lookup_txos(&outpoints)
-    } else {
-        HashMap::new()
-    };
+    let prevouts = query.lookup_txos(&outpoints);
 
     txs.into_iter()
         .map(|(tx, blockid)| TransactionValue::new(tx, blockid, &prevouts, config))
