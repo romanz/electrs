@@ -23,8 +23,8 @@ lazy_static! {
             .unwrap();
 }
 
-pub fn parse_asset_id(hash: &[u8]) -> AssetId {
-    deserialize(hash).expect("failed to parse AssetId")
+fn parse_asset_id(sl: &[u8]) -> AssetId {
+    AssetId::from_slice(sl).expect("failed to parse AssetId")
 }
 
 #[derive(Serialize)]

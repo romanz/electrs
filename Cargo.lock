@@ -418,7 +418,7 @@ dependencies = [
  "chan-signal 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "elements 0.12.1 (git+https://github.com/elementsproject/rust-elements?rev=fc27e53046d531b5ea65617fbfeea62e84ba10d4)",
+ "elements 0.12.1 (git+https://github.com/elementsproject/rust-elements?rev=98e0c4ba1b55cd876d1d8bcff64bcf01c4c370b6)",
  "error-chain 0.12.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -451,7 +451,7 @@ dependencies = [
 [[package]]
 name = "elements"
 version = "0.12.1"
-source = "git+https://github.com/elementsproject/rust-elements?rev=fc27e53046d531b5ea65617fbfeea62e84ba10d4#fc27e53046d531b5ea65617fbfeea62e84ba10d4"
+source = "git+https://github.com/elementsproject/rust-elements?rev=98e0c4ba1b55cd876d1d8bcff64bcf01c4c370b6#98e0c4ba1b55cd876d1d8bcff64bcf01c4c370b6"
 dependencies = [
  "bitcoin 0.23.0 (git+https://github.com/blockstream/rust-bitcoin?rev=0.23-electrs)",
  "bitcoin_hashes 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1792,7 +1792,7 @@ dependencies = [
 "checksum dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
 "checksum dirs-sys 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "afa0b23de8fd801745c471deffa6e12d248f962c9fd4b4c33787b055599bde7b"
 "checksum either 1.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
-"checksum elements 0.12.1 (git+https://github.com/elementsproject/rust-elements?rev=fc27e53046d531b5ea65617fbfeea62e84ba10d4)" = "<none>"
+"checksum elements 0.12.1 (git+https://github.com/elementsproject/rust-elements?rev=98e0c4ba1b55cd876d1d8bcff64bcf01c4c370b6)" = "<none>"
 "checksum env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 "checksum errno 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "c2a071601ed01b988f896ab14b95e67335d1eeb50190932a1320f7fe3cadc84e"
 "checksum errno-dragonfly 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "14ca354e36190500e1e1fb267c647932382b54053c50b14970856c0b00a35067"
