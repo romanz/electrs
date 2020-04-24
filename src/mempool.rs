@@ -1,5 +1,5 @@
+use bitcoin::hash_types::Txid;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use hex;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::FromIterator;
@@ -139,7 +139,7 @@ impl Stats {
 }
 
 pub struct Tracker {
-    items: HashMap<Sha256dHash, Item>,
+    items: HashMap<Txid, Item>,
     index: MempoolStore,
     histogram: Vec<(f32, u32)>,
     stats: Stats,
@@ -175,7 +175,7 @@ impl Tracker {
         }
     }
 
-    pub fn get_txn(&self, txid: &Sha256dHash) -> Option<Transaction> {
+    pub fn get_txn(&self, txid: &Txid) -> Option<Transaction> {
         self.items.get(txid).map(|stats| stats.tx.clone())
     }
 
@@ -200,7 +200,7 @@ impl Tracker {
 
         let timer = self.stats.start_timer("add");
         let txids_iter = new_txids.difference(&old_txids);
-        let entries: Vec<(&Sha256dHash, MempoolEntry)> = txids_iter
+        let entries: Vec<(&Txid, MempoolEntry)> = txids_iter
             .filter_map(|txid| {
                 match daemon.getmempoolentry(txid) {
                     Ok(entry) => Some((txid, entry)),
@@ -212,7 +212,7 @@ impl Tracker {
             })
             .collect();
         if !entries.is_empty() {
-            let txids: Vec<&Sha256dHash> = entries.iter().map(|(txid, _)| *txid).collect();
+            let txids: Vec<&Txid> = entries.iter().map(|(txid, _)| *txid).collect();
             let txs = match daemon.gettransactions(&txids) {
                 Ok(txs) => txs,
                 Err(err) => {
@@ -241,12 +241,12 @@ impl Tracker {
         Ok(())
     }
 
-    fn add(&mut self, txid: &Sha256dHash, tx: Transaction, entry: MempoolEntry) {
+    fn add(&mut self, txid: &Txid, tx: Transaction, entry: MempoolEntry) {
         self.index.add(&tx);
         self.items.insert(*txid, Item { tx, entry });
     }
 
-    fn remove(&mut self, txid: &Sha256dHash) {
+    fn remove(&mut self, txid: &Txid) {
         let stats = self
             .items
             .remove(txid)

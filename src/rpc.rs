@@ -1,7 +1,7 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
+use bitcoin_hashes::{Hash, sha256d::Hash as Sha256dHash};
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Value};
@@ -21,10 +21,10 @@ const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
-fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
+fn hash_from_value<T: Hash>(val: Option<&Value>) -> Result<T> {
     let script_hash = val.chain_err(|| "missing hash")?;
     let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
-    let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
+    let script_hash = T::from_hex(script_hash).chain_err(|| "non-hex hash")?;
     Ok(script_hash)
 }
 
@@ -202,7 +202,7 @@ impl Connection {
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
@@ -210,7 +210,7 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
@@ -218,7 +218,7 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
             status
@@ -230,7 +230,7 @@ impl Connection {
     }
 
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
 
