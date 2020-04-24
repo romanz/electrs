@@ -105,6 +105,7 @@ struct BlockchainInfo {
     chain: String,
     blocks: u32,
     headers: u32,
+    verificationprogress: f64,
     bestblockhash: String,
     pruned: bool,
     initialblockdownload: bool,
@@ -343,10 +344,14 @@ impl Daemon {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
         }
         loop {
-            if !daemon.getblockchaininfo()?.initialblockdownload {
+            let info = daemon.getblockchaininfo()?;
+            if !info.initialblockdownload {
                 break;
             }
-            warn!("wait until bitcoind is synced (i.e. initialblockdownload = false)");
+            warn!(
+                "wait until IBD is over: headers={} blocks={} progress={}",
+                info.headers, info.blocks, info.verificationprogress
+            );
             signal.wait(Duration::from_secs(3))?;
         }
         Ok(daemon)
