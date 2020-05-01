@@ -1,6 +1,6 @@
+use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::hash_types::BlockHash;
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin::blockdata::block::BlockHeader;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;

@@ -1,7 +1,7 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::{Hash, sha256d::Hash as Sha256dHash};
+use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Value};
@@ -202,7 +202,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         self.status_hashes.insert(script_hash, result.clone());
@@ -210,7 +211,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
@@ -218,7 +220,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
             status
@@ -230,7 +233,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
 

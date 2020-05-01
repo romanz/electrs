@@ -1,6 +1,6 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::hash_types::{Txid, BlockHash, TxMerkleNode};
+use bitcoin::hash_types::{BlockHash, TxMerkleNode, Txid};
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin_hashes::hex::ToHex;
 use bitcoin_hashes::Hash;
@@ -122,10 +122,7 @@ fn merklize<T: Hash>(left: T, right: T) -> T {
     <T as Hash>::hash(&data)
 }
 
-fn create_merkle_branch_and_root<T: Hash>(
-    mut hashes: Vec<T>,
-    mut index: usize,
-) -> (Vec<T>, T) {
+fn create_merkle_branch_and_root<T: Hash>(mut hashes: Vec<T>, mut index: usize) -> (Vec<T>, T) {
     let mut merkle = vec![];
     while hashes.len() > 1 {
         if hashes.len() % 2 != 0 {

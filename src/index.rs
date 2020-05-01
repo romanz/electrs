@@ -1,8 +1,8 @@
 use bincode;
-use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::hash_types::{BlockHash, Txid};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use std::collections::{HashMap, HashSet};

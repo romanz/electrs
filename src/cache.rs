@@ -1,9 +1,9 @@
 use crate::errors::*;
 use crate::metrics::{CounterVec, MetricOpts, Metrics};
 
-use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
+use bitcoin::hash_types::{BlockHash, Txid};
 use lru::LruCache;
 use prometheus::IntGauge;
 use std::hash::Hash;
@@ -83,11 +83,7 @@ impl BlockTxIDsCache {
         }
     }
 
-    pub fn get_or_else<F>(
-        &self,
-        blockhash: &BlockHash,
-        load_txids_func: F,
-    ) -> Result<Vec<Txid>>
+    pub fn get_or_else<F>(&self, blockhash: &BlockHash, load_txids_func: F) -> Result<Vec<Txid>>
     where
         F: FnOnce() -> Result<Vec<Txid>>,
     {
