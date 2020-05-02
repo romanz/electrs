@@ -46,7 +46,7 @@ There are currently no official/stable binary pckages.
 
 However, there's an [**experimental** repository for Debian 10](https://deb.ln-ask.me) (should work on recent Ubuntu, but not tested well-enough). The repository provides several significant advantages:
 
-* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash... It also connects to bitoind out-of-the-bof, no messing with config files or anything else. It just works.
+* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash... It also connects to bitoind out-of-the-box, no messing with config files or anything else. It just works.
 * Prebuilt binaries save you a lot of time. The binary installation of all the components is under 3 minutes on common hardware. Building from source is much longer.
 * The repository contains some seurity hardening out-of-the-box - separate users for services, use of [btc-rpc-proxy](https://github.com/Kixunil/btc-rpc-proxy), etc.
 
@@ -74,15 +74,15 @@ $ bitcoind -server=1 -txindex=0 -prune=0
 ```
 ### Electrs configuration
 
-Electrs can be configured using command line, environment variables and configuration files (or their combination). It is highly recommended to use configuration files for any non-trivial setups since it's esier to manage. If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
+Electrs can be configured using command line, environment variables and configuration files (or their combination). It is highly recommended to use configuration files for any non-trivial setups since it's easier to manage. If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
 
 ### Configuration files and priorities
 
 The config files must be in the Toml format. These config files are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
 
-The options in highest-priority config files override options set in lowest-priority config files. Environment variables override options in config files and finally arguments override everythig else. There are two special arguments `--conf` which reads the specified file and `--conf-dir`, which read all the files in the specified directory. The options in those files override **everything that was set previously, including arguments that were passed before these arguments**. In general, later arguments override preious ones. It is a good practice to use these special arguments at the beginning of the command line in order to avoid confusion.
+The options in highest-priority config files override options set in lowest-priority config files. Environment variables override options in config files and finally arguments override everythig else. There are two special arguments `--conf` which reads the specified file and `--conf-dir`, which read all the files in the specified directory. The options in those files override **everything that was set previously, including arguments that were passed before these arguments**. In general, later arguments override previous ones. It is a good practice to use these special arguments at the beginning of the command line in order to avoid confusion.
 
-For each command line argument an environment variable of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`). Similarly, for each such argument an option in config file exists with underscores instead o hypens (e.g. `electrum_rpc_addr`). In addition, config files support `cookie` option to specify cookie - this is not available using command line or environment variables for security reasons (other applications could read it otherwise). Note that this is different from using `cookie_path`, which points to a file containing the cookie instead of being the cookie itself.
+For each command line argument an environment variable of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`). Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`). In addition, config files support `cookie` option to specify cookie - this is not available using command line or environment variables for security reasons (other applications could read it otherwise). Note that this is different from using `cookie_path`, which points to a file containing the cookie instead of being the cookie itself.
 
 Finally, you need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
 
@@ -136,7 +136,7 @@ See below for [extra configuration suggestions](https://github.com/romanz/electr
 
 ## Electrum client
 
-If you happen to use the Electrum client from [the **experimental** Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), it's pre-configured out-of-the-box already. Read below otherwie.
+If you happen to use the Electrum client from [the **experimental** Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), it's pre-configured out-of-the-box already. Read below otherwise.
 
 There's a prepared script for launching `electrum` in such way to connect only to the local `electrs` instance to protect your privacy.
 
