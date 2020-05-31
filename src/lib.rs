@@ -26,3 +26,4 @@ pub mod rpc;
 pub mod signal;
 pub mod store;
 pub mod util;
+pub mod subscriptions;

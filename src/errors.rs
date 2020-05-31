@@ -13,5 +13,10 @@ error_chain! {
             description("Interruption by external signal")
             display("Interrupted by signal {}", sig)
         }
+
+        DynamoDB(msg: String) {
+            description("DynamoDB error")
+            display("DynamoDB error: {}", msg)
+        }
     }
 }

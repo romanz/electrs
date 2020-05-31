@@ -48,6 +48,8 @@ stderrlog = "0.4.1"
 sysconf = ">=0.3.4"
 time = "0.1"
 tiny_http = "0.6"
+rusoto_core = "0.36.0"
+rusoto_dynamodb = "0.36.0"
 
 [build-dependencies]
 configure_me_codegen = "0.3.12"
