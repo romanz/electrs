@@ -1,4 +1,4 @@
-FROM rust:1.34.0-slim
+FROM rust:1.42.0-slim-buster
 
 RUN apt-get update
 RUN apt-get install -y clang cmake

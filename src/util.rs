@@ -1,6 +1,6 @@
 use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::hash_types::BlockHash;
 use bitcoin::util::hash::BitcoinHash;
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
@@ -11,7 +11,7 @@ use std::thread;
 use time;
 
 pub type Bytes = Vec<u8>;
-pub type HeaderMap = HashMap<Sha256dHash, BlockHeader>;
+pub type HeaderMap = HashMap<BlockHash, BlockHeader>;
 
 // TODO: consolidate serialization/deserialize code for bincode/bitcoin.
 const HASH_LEN: usize = 32;
@@ -33,12 +33,12 @@ pub fn full_hash(hash: &[u8]) -> FullHash {
 #[derive(Eq, PartialEq, Clone)]
 pub struct HeaderEntry {
     height: usize,
-    hash: Sha256dHash,
+    hash: BlockHash,
     header: BlockHeader,
 }
 
 impl HeaderEntry {
-    pub fn hash(&self) -> &Sha256dHash {
+    pub fn hash(&self) -> &BlockHash {
         &self.hash
     }
 
@@ -66,7 +66,7 @@ impl fmt::Debug for HeaderEntry {
 }
 
 struct HashedHeader {
-    blockhash: Sha256dHash,
+    blockhash: BlockHash,
     header: BlockHeader,
 }
 
@@ -88,7 +88,7 @@ fn hash_headers(headers: Vec<BlockHeader>) -> Vec<HashedHeader> {
 
 pub struct HeaderList {
     headers: Vec<HeaderEntry>,
-    heights: HashMap<Sha256dHash, usize>,
+    heights: HashMap<BlockHash, usize>,
 }
 
 impl HeaderList {
@@ -106,7 +106,7 @@ impl HeaderList {
             Some(h) => h.header.prev_blockhash,
             None => return vec![], // hashed_headers is empty
         };
-        let null_hash = Sha256dHash::default();
+        let null_hash = BlockHash::default();
         let new_height: usize = if prev_blockhash == null_hash {
             0
         } else {
@@ -125,8 +125,8 @@ impl HeaderList {
             .collect()
     }
 
-    pub fn apply(&mut self, new_headers: &Vec<HeaderEntry>, tip: Sha256dHash) {
-        if tip == Sha256dHash::default() {
+    pub fn apply(&mut self, new_headers: Vec<HeaderEntry>, tip: BlockHash) {
+        if tip == BlockHash::default() {
             assert!(new_headers.is_empty());
             self.heights.clear();
             self.headers.clear();
@@ -150,7 +150,7 @@ impl HeaderList {
                 let expected_prev_blockhash = if height > 0 {
                     *self.headers[height - 1].hash()
                 } else {
-                    Sha256dHash::default()
+                    BlockHash::default()
                 };
                 assert_eq!(entry.header().prev_blockhash, expected_prev_blockhash);
                 // First new header's height (may override existing headers)
@@ -174,15 +174,15 @@ impl HeaderList {
         assert_eq!(new_height, self.headers.len());
         for new_header in new_headers {
             assert_eq!(new_header.height(), self.headers.len());
-            assert_eq!(new_header.header().prev_blockhash, self.tiphash());
+            assert_eq!(new_header.header().prev_blockhash, self.tip());
             self.heights.insert(*new_header.hash(), new_header.height());
             self.headers.push(new_header.clone())
         }
-        assert_eq!(tip, self.tiphash());
+        assert_eq!(tip, self.tip());
         assert!(self.heights.contains_key(&tip));
     }
 
-    pub fn header_by_blockhash(&self, blockhash: &Sha256dHash) -> Option<&HeaderEntry> {
+    pub fn header_by_blockhash(&self, blockhash: &BlockHash) -> Option<&HeaderEntry> {
         let height = self.heights.get(blockhash)?;
         let header = self.headers.get(*height)?;
         if *blockhash == *header.hash() {
@@ -203,11 +203,11 @@ impl HeaderList {
         self.headers.last() == other.headers.last()
     }
 
-    pub fn tiphash(&self) -> Sha256dHash {
+    pub fn tip(&self) -> BlockHash {
         self.headers.last().map(|h| *h.hash()).unwrap_or_default()
     }
 
-    pub fn tip(&self) -> Option<HeaderEntry> {
+    pub fn tip_header(&self) -> Option<HeaderEntry> {
         match self.headers.last() {
             Some(header) => Some(header.clone()),
             None => None,
@@ -292,24 +292,24 @@ mod tests {
     #[test]
     fn test_headers() {
         use bitcoin::blockdata::block::BlockHeader;
+        use bitcoin::hash_types::{BlockHash, TxMerkleNode};
         use bitcoin::util::hash::BitcoinHash;
-        use bitcoin_hashes::sha256d::Hash as Sha256dHash;
         use bitcoin_hashes::Hash;
 
         use super::HeaderList;
 
         // Test an empty header list
-        let null_hash = Sha256dHash::default();
+        let null_hash = BlockHash::default();
         let mut header_list = HeaderList::empty();
         assert_eq!(header_list.tiphash(), null_hash);
         let ordered = header_list.order(vec![]);
         assert_eq!(ordered.len(), 0);
-        header_list.apply(&vec![], null_hash);
+        header_list.apply(vec![], null_hash);
 
-        let merkle_root = Sha256dHash::hash(&[255]);
+        let merkle_root = TxMerkleNode::hash(&[255]);
         let mut headers = vec![BlockHeader {
             version: 1,
-            prev_blockhash: Sha256dHash::default(),
+            prev_blockhash: BlockHash::default(),
             merkle_root,
             time: 0,
             bits: 0,
@@ -331,7 +331,7 @@ mod tests {
         // Test adding some new headers
         let ordered = header_list.order(headers[..3].to_vec());
         assert_eq!(ordered.len(), 3);
-        header_list.apply(&ordered, ordered[2].hash);
+        header_list.apply(ordered.clone(), ordered[2].hash);
         assert_eq!(header_list.len(), 3);
         assert_eq!(header_list.tiphash(), ordered[2].hash);
         for h in 0..3 {
@@ -345,7 +345,7 @@ mod tests {
         // Test adding some more headers
         let ordered = header_list.order(headers[3..6].to_vec());
         assert_eq!(ordered.len(), 3);
-        header_list.apply(&ordered, ordered[2].hash);
+        header_list.apply(ordered.clone(), ordered[2].hash);
         assert_eq!(header_list.len(), 6);
         assert_eq!(header_list.tiphash(), ordered[2].hash);
         for h in 0..6 {
@@ -359,7 +359,7 @@ mod tests {
         // Test adding some more headers (with an overlap)
         let ordered = header_list.order(headers[5..].to_vec());
         assert_eq!(ordered.len(), 5);
-        header_list.apply(&ordered, ordered[4].hash);
+        header_list.apply(ordered.clone(), ordered[4].hash);
         assert_eq!(header_list.len(), 10);
         assert_eq!(header_list.tiphash(), ordered[4].hash);
         for h in 0..10 {
@@ -378,7 +378,7 @@ mod tests {
         // Test reorging the chain
         let ordered = header_list.order(headers[8..10].to_vec());
         assert_eq!(ordered.len(), 2);
-        header_list.apply(&ordered, ordered[1].hash);
+        header_list.apply(ordered.clone(), ordered[1].hash);
         assert_eq!(header_list.len(), 10);
         assert_eq!(header_list.tiphash(), ordered[1].hash);
         for h in 0..10 {
@@ -390,7 +390,7 @@ mod tests {
         }
 
         // Test "trimming" the chain
-        header_list.apply(&vec![], headers[7].bitcoin_hash());
+        header_list.apply(vec![], headers[7].bitcoin_hash());
         assert_eq!(header_list.len(), 8);
         assert_eq!(header_list.tiphash(), headers[7].bitcoin_hash());
         for h in 0..8 {
@@ -404,7 +404,7 @@ mod tests {
         // Test "un-trimming" the chain
         let ordered = header_list.order(headers[8..].to_vec());
         assert_eq!(ordered.len(), 2);
-        header_list.apply(&ordered, ordered[1].hash);
+        header_list.apply(ordered.clone(), ordered[1].hash);
         assert_eq!(header_list.len(), 10);
         assert_eq!(header_list.tiphash(), ordered[1].hash);
         for h in 0..10 {

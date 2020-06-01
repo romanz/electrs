@@ -1,3 +1,16 @@
+# 0.8.3 (30 Jan 2020)
+
+* Fix memory leak (@champo)
+
+# 0.8.2 (6 Dec 2019)
+
+* Downgrade rust-rocksdb to 0.12.2 (https://github.com/romanz/electrs/issues/193)
+
+# 0.8.1 (20 Nov 2019)
+
+* Allow setting `--cookie-file` path via configuration (@Kixunil)
+* Bump rust-rocksdb to 0.13.0, using RockDB 6.2.4
+
 # 0.8.0 (28 Oct 2019)
 
 * Use `configure_me` instead of `clap` to support config files, environment variables and man pages (@Kixunil)

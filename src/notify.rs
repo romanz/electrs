@@ -4,7 +4,7 @@ use bitcoin::network::constants::Network;
 use bitcoin::network::message::NetworkMessage;
 use bitcoin::network::message_blockdata::InvType;
 use bitcoin::network::socket::Socket;
-use bitcoin::util::hash::Sha256dHash;
+use bitcoin::hash_types::Txid;
 use bitcoin::util::Error;
 
 use std::sync::mpsc::Sender;
@@ -19,7 +19,7 @@ fn connect() -> Result<Socket, Error> {
     Ok(sock)
 }
 
-fn handle(mut sock: Socket, tx: Sender<Sha256dHash>) {
+fn handle(mut sock: Socket, tx: Sender<Txid>) {
     let mut outgoing = vec![sock.version_message(0).unwrap()];
     loop {
         for msg in outgoing.split_off(0) {
@@ -53,7 +53,7 @@ fn handle(mut sock: Socket, tx: Sender<Sha256dHash>) {
     }
 }
 
-pub fn run() -> util::Channel<Sha256dHash> {
+pub fn run() -> util::Channel<Txid> {
     let chan = util::Channel::new();
     let tx = chan.sender();
 

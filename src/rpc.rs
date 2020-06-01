@@ -1,8 +1,9 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::hash_types::Txid;
+use bitcoin::util::hash::BitcoinHash;
 use bitcoin_hashes::hex::{FromHex, ToHex};
-use bitcoin_hashes::sha256d::Hash as Sha256dHash;
-use bitcoin_hashes::Hash;
+use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
 use error_chain::ChainedError;
 use hex;
 use serde_json::{from_str, Value};
@@ -26,10 +27,10 @@ const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
-fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
+fn hash_from_value<T: Hash>(val: Option<&Value>) -> Result<T> {
     let script_hash = val.chain_err(|| "missing hash")?;
     let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
-    let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
+    let script_hash = T::from_hex(script_hash).chain_err(|| "non-hex hash")?;
     Ok(script_hash)
 }
 
@@ -82,6 +83,7 @@ struct Connection {
     addr: SocketAddr,
     chan: SyncChannel<Message>,
     stats: Arc<Stats>,
+    relayfee: f64,
 }
 
 impl Connection {
@@ -91,6 +93,7 @@ impl Connection {
         addr: SocketAddr,
         stats: Arc<Stats>,
         script_hashes: HashMap<Sha256dHash, Value>,
+        relayfee: f64,
     ) -> Connection {
         let mut conn = Connection {
             query,
@@ -100,6 +103,7 @@ impl Connection {
             addr,
             chan: SyncChannel::new(10),
             stats,
+            relayfee,
         };
 
         let now = Instant::now();
@@ -206,15 +210,16 @@ impl Connection {
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
         let fee_rate = self.query.estimate_fee(blocks_count); // in BTC/kB
-        Ok(json!(fee_rate))
+        Ok(json!(fee_rate.max(self.relayfee)))
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
-        Ok(json!(0.0)) // allow sending transactions with any fee.
+        Ok(json!(self.relayfee)) // in BTC/kB
     }
 
     fn blockchain_scripthash_subscribe(&mut self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         debug!("blockchain_scripthash_subscribe: script_hash = {}", script_hash);
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
@@ -226,7 +231,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_balance(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(
             json!({ "confirmed": status.confirmed_balance(), "unconfirmed": status.mempool_balance() }),
@@ -234,7 +240,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         Ok(json!(Value::Array(
             status
@@ -246,7 +253,8 @@ impl Connection {
     }
 
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
-        let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
+        let script_hash =
+            hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         Ok(unspent_from_status(&self.query.status(&script_hash[..])?))
     }
 
@@ -556,7 +564,7 @@ impl RPC {
                             senders.push(sender);
                         }
                     }
-                    Notification::Exit => acceptor.send(None).unwrap(),
+                    Notification::Exit => acceptor.send(None).unwrap(), // mark acceptor as done
                 }
             }
         });
@@ -583,7 +591,7 @@ impl RPC {
         chan
     }
 
-    pub fn start(addr: SocketAddr, query: Arc<Query>, metrics: &Metrics) -> RPC {
+    pub fn start(addr: SocketAddr, query: Arc<Query>, metrics: &Metrics, relayfee: f64) -> RPC {
         let stats = Arc::new(Stats {
             latency: metrics.histogram_vec(
                 HistogramOpts::new("electrs_electrum_rpc", "Electrum RPC latency (seconds)"),
@@ -595,11 +603,13 @@ impl RPC {
             )),
         });
         let notification = Channel::unbounded();
+
         RPC {
             notification: notification.sender(),
             query: query.clone(),
             server: Some(spawn_thread("rpc", move || {
                 let senders = Arc::new(Mutex::new(Vec::<SyncSender<Message>>::new()));
+
                 let acceptor = RPC::start_acceptor(addr);
 
                 let subscribed_script_hashes = SubscriptionsManager::get_script_hashes()
@@ -607,28 +617,48 @@ impl RPC {
                 debug!("subscribed_script_hashes.len() = {}", subscribed_script_hashes.len());
 
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
-                let mut children = vec![];
+
+                let mut threads = HashMap::new();
+                let (garbage_sender, garbage_receiver) = crossbeam_channel::unbounded();
+
                 while let Some((stream, addr)) = acceptor.receiver().recv().unwrap() {
-                    let query = query.clone();
-                    let senders = senders.clone();
-                    let stats = stats.clone();
+                    let query = Arc::clone(&query);
+                    let senders = Arc::clone(&senders);
+                    let stats = Arc::clone(&stats);
+                    let garbage_sender = garbage_sender.clone();
                     let script_hashes = subscribed_script_hashes.clone();
-                    children.push(spawn_thread("peer", move || {
+
+                    let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
-                        let conn = Connection::new(query, stream, addr, stats, script_hashes);
+                        let conn = Connection::new(query, stream, addr, stats, script_hashes, relayfee);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
-                    }));
+                        let _ = garbage_sender.send(std::thread::current().id());
+                    });
+
+                    trace!("[{}] spawned {:?}", addr, spawned.thread().id());
+                    threads.insert(spawned.thread().id(), spawned);
+                    while let Ok(id) = garbage_receiver.try_recv() {
+                        if let Some(thread) = threads.remove(&id) {
+                            trace!("[{}] joining {:?}", addr, id);
+                            if let Err(error) = thread.join() {
+                                error!("failed to join {:?}: {:?}", id, error);
+                            }
+                        }
+                    }
                 }
                 trace!("closing {} RPC connections", senders.lock().unwrap().len());
                 for sender in senders.lock().unwrap().iter() {
                     let _ = sender.send(Message::Done);
                 }
-                trace!("waiting for {} RPC handling threads", children.len());
-                for child in children {
-                    let _ = child.join();
+                for (id, thread) in threads {
+                    trace!("joining {:?}", id);
+                    if let Err(error) = thread.join() {
+                        error!("failed to join {:?}: {:?}", id, error);
+                    }
                 }
+
                 trace!("RPC connections are closed");
             })),
         }
@@ -639,9 +669,9 @@ impl RPC {
     /// When `notify_inputs` is set, we also notify scripthashes that are spent from.
     fn try_notify_subscriptions_for_tx(
         &self,
-        txid: &Sha256dHash,
-        mut blockhash: Option<Sha256dHash>,
-        notified: &mut HashSet<Sha256dHash>,
+        txid: &Txid,
+        block_height: Option<u32>,
+        notified: &mut HashSet<Txid>,
         notify_inputs: bool,
     ) -> Result<()> {
         if notified.contains(txid) {
@@ -649,14 +679,7 @@ impl RPC {
         }
         notified.insert(txid.clone());
 
-        if blockhash.is_none() {
-            match self.query.lookup_confirmed_blockhash(txid, None) {
-                Ok(hash) => blockhash = hash,
-                Err(err) => trace!("Failed to lookup blockhash for {}: {}", txid, err),
-            };
-        }
-
-        let txn = self.query.load_txn(txid, blockhash)?;
+        let txn = self.query.load_txn(txid, block_height)?;
 
         let scripthashes: Vec<FullHash> = txn
             .output
@@ -675,7 +698,7 @@ impl RPC {
                 if txin.previous_output.is_null() {
                     continue;
                 }
-                let id: &Sha256dHash = &txin.previous_output.txid;
+                let id: &Txid = &txin.previous_output.txid;
 
                 if let Err(e) = self.try_notify_subscriptions_for_tx(id, None, notified, false) {
                     trace!("failed to load input transaction {}: {}", id, e);
@@ -689,11 +712,11 @@ impl RPC {
     pub fn notify_scripthash_subscriptions(
         &self,
         changed_headers: &Vec<HeaderEntry>,
-        changed_mempool_txs: HashSet<Sha256dHash>,
+        changed_mempool_txs: HashSet<Txid>,
     ) {
         // Keep track of which txs have been notified, so we don't spend time
         // notifying them twice.
-        let mut notified: HashSet<Sha256dHash> = HashSet::new();
+        let mut notified: HashSet<Txid> = HashSet::new();
 
         for txid in changed_mempool_txs {
             if let Err(e) = self.try_notify_subscriptions_for_tx(&txid, None, &mut notified, true) {
@@ -702,11 +725,12 @@ impl RPC {
         }
 
         for header in changed_headers {
-            let blockhash = header.hash();
+            let blockhash = header.header().bitcoin_hash();
+            let blockheight = header.height();
             let res = self.query.with_blocktxids(&blockhash, |txid| {
                 if let Err(e) = self.try_notify_subscriptions_for_tx(
                     &txid,
-                    Some(*blockhash),
+                    Some(blockheight as u32),
                     &mut notified,
                     true,
                 ) {

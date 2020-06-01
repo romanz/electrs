@@ -1,6 +1,6 @@
 [package]
 name = "electrs"
-version = "0.8.0"
+version = "0.8.3"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 description = "An efficient re-implementation of Electrum Server in Rust"
 license = "MIT"
@@ -24,8 +24,8 @@ latest_rust = []  # use latest Rust features (otherwise, support Rust 1.34)
 [dependencies]
 base64 = "0.10"
 bincode = "1.0"
-bitcoin = { version = "0.21", features = ["use-serde"] }
-bitcoin_hashes = "0.7.1"
+bitcoin = { version = "0.23", features = ["use-serde"] }
+bitcoin_hashes = "0.7.6"
 configure_me = "0.3.3"
 crossbeam-channel = "0.3"
 dirs = "1.0"
@@ -38,7 +38,7 @@ lru = "0.1"
 num_cpus = "1.0"
 page_size = "0.4"
 prometheus = "0.5"
-rocksdb = "0.12"
+rocksdb = "= 0.12.2"	# due to https://github.com/romanz/electrs/issues/193
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"

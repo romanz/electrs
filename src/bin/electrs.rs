@@ -67,6 +67,8 @@ fn run_server(config: &Config) -> Result<()> {
     let app = App::new(store, index, daemon, &config)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size, &metrics);
     let query = Query::new(app.clone(), &metrics, tx_cache, config.txid_limit);
+    let relayfee = query.get_relayfee()?;
+    debug!("relayfee: {} BTC", relayfee);
 
     let mut server = None; // Electrum RPC server
     loop {
@@ -79,7 +81,7 @@ fn run_server(config: &Config) -> Result<()> {
         let changed_mempool_txs = query.update_mempool()?;
         debug!("changed_mempool_txs.len() = {}", changed_mempool_txs.len());
         let rpc = server
-            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics));
+            .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics, relayfee));
         if changed_headers.len() > MAX_SCRIPTHASH_BLOCKS {
             rpc.disconnect_clients();
         } else {
