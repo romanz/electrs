@@ -301,7 +301,7 @@ mod tests {
         // Test an empty header list
         let null_hash = BlockHash::default();
         let mut header_list = HeaderList::empty();
-        assert_eq!(header_list.tiphash(), null_hash);
+        assert_eq!(header_list.tip(), null_hash);
         let ordered = header_list.order(vec![]);
         assert_eq!(ordered.len(), 0);
         header_list.apply(vec![], null_hash);
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(ordered.len(), 3);
         header_list.apply(ordered.clone(), ordered[2].hash);
         assert_eq!(header_list.len(), 3);
-        assert_eq!(header_list.tiphash(), ordered[2].hash);
+        assert_eq!(header_list.tip(), ordered[2].hash);
         for h in 0..3 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(ordered.len(), 3);
         header_list.apply(ordered.clone(), ordered[2].hash);
         assert_eq!(header_list.len(), 6);
-        assert_eq!(header_list.tiphash(), ordered[2].hash);
+        assert_eq!(header_list.tip(), ordered[2].hash);
         for h in 0..6 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(ordered.len(), 5);
         header_list.apply(ordered.clone(), ordered[4].hash);
         assert_eq!(header_list.len(), 10);
-        assert_eq!(header_list.tiphash(), ordered[4].hash);
+        assert_eq!(header_list.tip(), ordered[4].hash);
         for h in 0..10 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
@@ -380,7 +380,7 @@ mod tests {
         assert_eq!(ordered.len(), 2);
         header_list.apply(ordered.clone(), ordered[1].hash);
         assert_eq!(header_list.len(), 10);
-        assert_eq!(header_list.tiphash(), ordered[1].hash);
+        assert_eq!(header_list.tip(), ordered[1].hash);
         for h in 0..10 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
@@ -392,7 +392,7 @@ mod tests {
         // Test "trimming" the chain
         header_list.apply(vec![], headers[7].bitcoin_hash());
         assert_eq!(header_list.len(), 8);
-        assert_eq!(header_list.tiphash(), headers[7].bitcoin_hash());
+        assert_eq!(header_list.tip(), headers[7].bitcoin_hash());
         for h in 0..8 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(ordered.len(), 2);
         header_list.apply(ordered.clone(), ordered[1].hash);
         assert_eq!(header_list.len(), 10);
-        assert_eq!(header_list.tiphash(), ordered[1].hash);
+        assert_eq!(header_list.tip(), ordered[1].hash);
         for h in 0..10 {
             let entry = header_list.header_by_height(h).unwrap();
             assert_eq!(entry.header, headers[h]);
