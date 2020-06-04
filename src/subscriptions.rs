@@ -48,7 +48,10 @@ impl SubscriptionsManager {
 
                                     let status_hash_attribute_value_option = item.get("status");
                                     let status_hash_str_option =
-                                        status_hash_attribute_value_option.map(|attr_value| attr_value.s.as_ref().unwrap());
+                                        match status_hash_attribute_value_option {
+                                            Some(attr_value) => &attr_value.s,
+                                            None => &None,
+                                        };
                                     let status_hash = match status_hash_str_option {
                                         Some(s) => json!(s),
                                         None => Value::Null,
