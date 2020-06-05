@@ -151,6 +151,10 @@ impl Connection {
         Ok(json!([]))
     }
 
+    fn server_add_peer(&self) -> Result<Value> {
+        Ok(json!(false))
+    }
+
     fn mempool_get_fee_histogram(&self) -> Result<Value> {
         Ok(json!(&self.query.mempool().backlog_stats().fee_histogram))
     }
@@ -377,6 +381,7 @@ impl Connection {
             "server.banner" => self.server_banner(),
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
+            "server.add_peer" => self.server_add_peer(),
             "server.ping" => Ok(Value::Null),
             "server.version" => self.server_version(),
             "server.features" => self.server_features(),
