@@ -92,8 +92,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         Arc::clone(&chain),
         Arc::clone(&mempool),
         Arc::clone(&daemon),
-        #[cfg(feature = "liquid")]
-        config.network_type,
+        Arc::clone(&config),
         #[cfg(feature = "liquid")]
         asset_db,
     ));

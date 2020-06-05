@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use dirs::home_dir;
+use serde_json::Value;
 use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -30,6 +31,7 @@ pub struct Config {
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
     pub electrum_txs_limit: usize,
+    pub electrum_public_hosts: Option<Value>,
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
@@ -146,6 +148,12 @@ impl Config {
                     .long("electrum-txs-limit")
                     .help("Maximum number of transactions returned by Electrum history queries. Lookups with more results will fail.")
                     .default_value("100")
+            )
+            .arg(
+                Arg::with_name("electrum_public_hosts")
+                    .long("electrum-public-hosts")
+                    .help("A dictionary of hosts where the Electrum server can be reached at. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
+                    .takes_value(true)
             );
 
         #[cfg(feature = "liquid")]
@@ -265,6 +273,10 @@ impl Config {
         }
         let cookie = m.value_of("cookie").map(|s| s.to_owned());
 
+        let electrum_public_hosts = m
+            .value_of("electrum_public_hosts")
+            .map(|s| serde_json::from_str(s).expect("invalid --electrum-public-hosts json"));
+
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
         log.timestamp(if m.is_present("timestamp") {
@@ -281,6 +293,8 @@ impl Config {
             daemon_rpc_addr,
             cookie,
             electrum_rpc_addr,
+            electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
+            electrum_public_hosts,
             http_addr,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
@@ -288,7 +302,6 @@ impl Config {
             address_search: m.is_present("address_search"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
-            electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
 
             #[cfg(feature = "liquid")]
             parent_network,

@@ -312,7 +312,7 @@ pub fn lookup_asset(
     registry: Option<&AssetRegistry>,
     asset_id: &AssetId,
 ) -> Result<Option<LiquidAsset>> {
-    if asset_id == query.network.native_asset() {
+    if asset_id == query.network().native_asset() {
         let (chain_stats, mempool_stats) = native_asset_stats(query);
 
         return Ok(Some(LiquidAsset::Native(NativeAsset {
@@ -437,7 +437,7 @@ where
 
 // Get stats for the network's native asset
 fn native_asset_stats(query: &Query) -> (NativeAssetStats, NativeAssetStats) {
-    let asset_id = query.network.native_asset();
+    let asset_id = query.network().native_asset();
 
     (
         chain_asset_stats(query.chain(), asset_id, apply_native_asset_stats),

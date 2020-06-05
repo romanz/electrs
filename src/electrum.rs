@@ -132,6 +132,18 @@ impl Connection {
         Ok(json!("Welcome to electrs-esplora"))
     }
 
+    fn server_features(&self) -> Result<Value> {
+        Ok(json!({
+            "hosts": self.query.config().electrum_public_hosts,
+            "server_version": format!("electrs-esplora {}", ELECTRS_VERSION),
+            "genesis_hash": self.query.network().genesis_hash(),
+            "protocol_min": PROTOCOL_VERSION,
+            "protocol_max": PROTOCOL_VERSION,
+            "hash_function": "sha256",
+            "pruning": null,
+        }))
+    }
+
     fn server_donation_address(&self) -> Result<Value> {
         Ok(Value::Null)
     }
@@ -368,6 +380,7 @@ impl Connection {
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "server.ping" => Ok(Value::Null),
             "server.version" => self.server_version(),
+            "server.features" => self.server_features(),
             &_ => bail!("unknown method {} {:?}", method, params),
         };
         timer.observe_duration();

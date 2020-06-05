@@ -4,7 +4,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::{Duration, Instant};
 
-use crate::chain::{OutPoint, Transaction, TxOut};
+use crate::chain::{Network, OutPoint, Transaction, TxOut};
+use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
@@ -14,7 +15,7 @@ use bitcoin::Txid;
 
 #[cfg(feature = "liquid")]
 use crate::{
-    chain::{AssetId, Network},
+    chain::AssetId,
     elements::{lookup_asset, AssetRegistry, LiquidAsset},
 };
 
@@ -29,22 +30,26 @@ pub struct Query {
     chain: Arc<ChainQuery>, // TODO: should be used as read-only
     mempool: Arc<RwLock<Mempool>>,
     daemon: Arc<Daemon>,
+    config: Arc<Config>,
     cached_estimates: RwLock<(HashMap<u16, f64>, Option<Instant>)>,
     cached_relayfee: RwLock<Option<f64>>,
-
-    #[cfg(feature = "liquid")]
-    pub network: Network,
     #[cfg(feature = "liquid")]
     asset_db: Option<AssetRegistry>,
 }
 
 impl Query {
     #[cfg(not(feature = "liquid"))]
-    pub fn new(chain: Arc<ChainQuery>, mempool: Arc<RwLock<Mempool>>, daemon: Arc<Daemon>) -> Self {
+    pub fn new(
+        chain: Arc<ChainQuery>,
+        mempool: Arc<RwLock<Mempool>>,
+        daemon: Arc<Daemon>,
+        config: Arc<Config>,
+    ) -> Self {
         Query {
             chain,
             mempool,
             daemon,
+            config,
             cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
         }
@@ -52,6 +57,14 @@ impl Query {
 
     pub fn chain(&self) -> &ChainQuery {
         &self.chain
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    pub fn network(&self) -> Network {
+        self.config.network_type
     }
 
     pub fn mempool(&self) -> RwLockReadGuard<Mempool> {
@@ -196,14 +209,14 @@ impl Query {
         chain: Arc<ChainQuery>,
         mempool: Arc<RwLock<Mempool>>,
         daemon: Arc<Daemon>,
-        network: Network,
+        config: Arc<Config>,
         asset_db: Option<AssetRegistry>,
     ) -> Self {
         Query {
             chain,
             mempool,
             daemon,
-            network,
+            config,
             asset_db,
             cached_estimates: RwLock::new((HashMap::new(), None)),
             cached_relayfee: RwLock::new(None),
