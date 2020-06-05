@@ -128,8 +128,7 @@ impl Connection {
     }
 
     fn server_banner(&self) -> Result<Value> {
-        // TODO dynamic banner
-        Ok(json!("Welcome to electrs-esplora"))
+        Ok(json!(self.query.config().electrum_banner.clone()))
     }
 
     fn server_features(&self) -> Result<Value> {

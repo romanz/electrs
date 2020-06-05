@@ -13,6 +13,8 @@ use crate::daemon::CookieGetter;
 
 use crate::errors::*;
 
+const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Clone)]
 pub struct Config {
     // See below for the documentation of each field:
@@ -31,6 +33,7 @@ pub struct Config {
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
     pub electrum_txs_limit: usize,
+    pub electrum_banner: String,
     pub electrum_public_hosts: Option<Value>,
 
     #[cfg(feature = "liquid")]
@@ -148,6 +151,11 @@ impl Config {
                     .long("electrum-txs-limit")
                     .help("Maximum number of transactions returned by Electrum history queries. Lookups with more results will fail.")
                     .default_value("100")
+            ).arg(
+                Arg::with_name("electrum_banner")
+                    .long("electrum-banner")
+                    .help("Welcome banner for the Electrum server, shown in the console to clients.")
+                    .takes_value(true)
             )
             .arg(
                 Arg::with_name("electrum_public_hosts")
@@ -273,6 +281,10 @@ impl Config {
         }
         let cookie = m.value_of("cookie").map(|s| s.to_owned());
 
+        let electrum_banner = m.value_of("electrum_banner").map_or_else(
+            || format!("Welcome to electrs-esplora {}", ELECTRS_VERSION),
+            |s| s.into(),
+        );
         let electrum_public_hosts = m
             .value_of("electrum_public_hosts")
             .map(|s| serde_json::from_str(s).expect("invalid --electrum-public-hosts json"));
@@ -294,6 +306,7 @@ impl Config {
             cookie,
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
+            electrum_banner,
             electrum_public_hosts,
             http_addr,
             monitoring_addr,
