@@ -753,11 +753,6 @@ impl RPC {
             trace!("Failed to notify about chaintip change {}", e);
         }
     }
-
-    pub fn disconnect_clients(&self) {
-        trace!("disconncting clients");
-        self.notification.send(Notification::Exit).unwrap();
-    }
 }
 
 impl Drop for RPC {

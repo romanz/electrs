@@ -25,7 +25,7 @@ use electrs::{
 };
 
 // If we see this more new blocks than this, don't look for scripthash
-// changes. Just have clients reconnect.
+// changes.
 //
 // This many header changes means we're either not fully synced, or there
 // has been abnormally large reorg of the blockchain.
@@ -82,9 +82,7 @@ fn run_server(config: &Config) -> Result<()> {
         debug!("changed_mempool_txs.len() = {}", changed_mempool_txs.len());
         let rpc = server
             .get_or_insert_with(|| RPC::start(config.electrum_rpc_addr, query.clone(), &metrics, relayfee));
-        if changed_headers.len() > MAX_SCRIPTHASH_BLOCKS {
-            rpc.disconnect_clients();
-        } else {
+        if changed_headers.len() <= MAX_SCRIPTHASH_BLOCKS {
             rpc.notify_scripthash_subscriptions(&changed_headers, changed_mempool_txs);
         }
 
