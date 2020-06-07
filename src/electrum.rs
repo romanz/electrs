@@ -152,7 +152,7 @@ impl Connection {
     }
 
     fn server_add_peer(&self) -> Result<Value> {
-        Ok(json!(false))
+        Ok(json!(true))
     }
 
     fn mempool_get_fee_histogram(&self) -> Result<Value> {
