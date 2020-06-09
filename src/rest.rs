@@ -1128,9 +1128,6 @@ impl HttpError {
     fn not_found(msg: String) -> Self {
         HttpError(StatusCode::NOT_FOUND, msg)
     }
-    fn generic() -> Self {
-        HttpError::from("We encountered an error. Please try again later.".to_string())
-    }
 }
 
 impl From<String> for HttpError {
@@ -1175,25 +1172,23 @@ impl From<errors::Error> for HttpError {
             "getblock RPC error: {\"code\":-5,\"message\":\"Block not found\"}" => {
                 HttpError::not_found("Block not found".to_string())
             }
-            _ => HttpError::generic(),
+            _ => HttpError::from(e.to_string()),
         }
     }
 }
 impl From<serde_json::Error> for HttpError {
-    fn from(_e: serde_json::Error) -> Self {
-        //HttpError::from(e.description().to_string())
-        HttpError::generic()
+    fn from(e: serde_json::Error) -> Self {
+        HttpError::from(e.to_string())
     }
 }
 impl From<encode::Error> for HttpError {
-    fn from(_e: encode::Error) -> Self {
-        //HttpError::from(e.description().to_string())
-        HttpError::generic()
+    fn from(e: encode::Error) -> Self {
+        HttpError::from(e.to_string())
     }
 }
 impl From<std::string::FromUtf8Error> for HttpError {
-    fn from(_e: std::string::FromUtf8Error) -> Self {
-        HttpError::generic()
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        HttpError::from(e.to_string())
     }
 }
 #[cfg(feature = "liquid")]
