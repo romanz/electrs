@@ -157,7 +157,7 @@ impl Config {
                 Arg::with_name("electrum_txs_limit")
                     .long("electrum-txs-limit")
                     .help("Maximum number of transactions returned by Electrum history queries. Lookups with more results will fail.")
-                    .default_value("100")
+                    .default_value("500")
             ).arg(
                 Arg::with_name("electrum_banner")
                     .long("electrum-banner")
