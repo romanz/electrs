@@ -80,12 +80,12 @@ impl Query {
         Ok(txid)
     }
 
-    pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
-        let mut utxos = self.chain.utxo(scripthash);
+    pub fn utxo(&self, scripthash: &[u8]) -> Result<Vec<Utxo>> {
+        let mut utxos = self.chain.utxo(scripthash, self.config.utxos_limit)?;
         let mempool = self.mempool();
         utxos.retain(|utxo| !mempool.has_spend(&OutPoint::from(utxo)));
         utxos.extend(mempool.utxo(scripthash));
-        utxos
+        Ok(utxos)
     }
 
     pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Txid, Option<BlockId>)> {

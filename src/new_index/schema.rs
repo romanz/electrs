@@ -504,7 +504,7 @@ impl ChainQuery {
     }
 
     // TODO: avoid duplication with stats/stats_delta?
-    pub fn utxo(&self, scripthash: &[u8]) -> Vec<Utxo> {
+    pub fn utxo(&self, scripthash: &[u8], limit: usize) -> Result<Vec<Utxo>> {
         let _timer = self.start_timer("utxo");
 
         // get the last known utxo set and the blockhash it was updated for.
@@ -523,9 +523,9 @@ impl ChainQuery {
 
         // update utxo set with new transactions since
         let (newutxos, lastblock, processed_items) = cache.map_or_else(
-            || self.utxo_delta(scripthash, HashMap::new(), 0),
-            |(oldutxos, blockheight)| self.utxo_delta(scripthash, oldutxos, blockheight + 1),
-        );
+            || self.utxo_delta(scripthash, HashMap::new(), 0, limit),
+            |(oldutxos, blockheight)| self.utxo_delta(scripthash, oldutxos, blockheight + 1, limit),
+        )?;
 
         // save updated utxo set to cache
         if let Some(lastblock) = lastblock {
@@ -538,7 +538,7 @@ impl ChainQuery {
         }
 
         // format as Utxo objects
-        newutxos
+        Ok(newutxos
             .into_iter()
             .map(|(outpoint, (blockid, value))| {
                 // in elements/liquid chains, we have to lookup the txo in order to get its
@@ -557,15 +557,16 @@ impl ChainQuery {
                     asset: txo.asset,
                 }
             })
-            .collect()
+            .collect())
     }
 
-    pub fn utxo_delta(
+    fn utxo_delta(
         &self,
         scripthash: &[u8],
         init_utxos: UtxoMap,
         start_height: usize,
-    ) -> (UtxoMap, Option<BlockHash>, usize) {
+        limit: usize,
+    ) -> Result<(UtxoMap, Option<BlockHash>, usize)> {
         let _timer = self.start_timer("utxo_delta");
         let history_iter = self
             .history_iter_scan(b'H', scripthash, start_height)
@@ -594,9 +595,14 @@ impl ChainQuery {
                 | TxHistoryInfo::Pegin(_)
                 | TxHistoryInfo::Pegout(_) => unreachable!(),
             };
+
+            // abort if the utxo set size excedees the limit at any point in time
+            if utxos.len() > limit {
+                bail!(ErrorKind::TooPopular)
+            }
         }
 
-        (utxos, lastblock, processed_items)
+        Ok((utxos, lastblock, processed_items))
     }
 
     pub fn stats(&self, scripthash: &[u8]) -> ScriptStats {

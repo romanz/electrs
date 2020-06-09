@@ -32,6 +32,7 @@ pub struct Config {
     pub address_search: bool,
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
+    pub utxos_limit: usize,
     pub electrum_txs_limit: usize,
     pub electrum_banner: String,
     pub electrum_public_hosts: Option<Value>,
@@ -145,6 +146,12 @@ impl Config {
                     .long("precache-scripts")
                     .help("Path to file with list of scripts to pre-cache")
                     .takes_value(true)
+            )
+            .arg(
+                Arg::with_name("utxos_limit")
+                    .long("utxos-limit")
+                    .help("Maximum number of utxos to process per address. Lookups for addresses with more utxos will fail. Applies to the Electrum and HTTP APIs.")
+                    .default_value("500")
             )
             .arg(
                 Arg::with_name("electrum_txs_limit")
@@ -304,6 +311,7 @@ impl Config {
             daemon_dir,
             daemon_rpc_addr,
             cookie,
+            utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,

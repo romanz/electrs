@@ -790,7 +790,7 @@ fn handle_request(
         ) => {
             let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
             let utxos: Vec<UtxoValue> = query
-                .utxo(&script_hash[..])
+                .utxo(&script_hash[..])?
                 .into_iter()
                 .map(UtxoValue::from)
                 .collect();

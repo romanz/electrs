@@ -273,7 +273,7 @@ impl Connection {
 
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
-        let utxos = self.query.utxo(&script_hash[..]);
+        let utxos = self.query.utxo(&script_hash[..])?;
         Ok(json!(Value::Array(
             utxos
                 .into_iter()
