@@ -1,4 +1,4 @@
-use chan::Receiver;
+use chan::{Receiver, Sender};
 use chan_signal::Signal;
 use std::time::Duration;
 
@@ -8,6 +8,7 @@ use crate::errors::*;
 pub struct Waiter {
     term_signal: Receiver<Signal>,
     sync_signal: Receiver<Signal>,
+    never_chan: (Sender<Signal>, Receiver<Signal>),
 }
 
 impl Waiter {
@@ -15,13 +16,13 @@ impl Waiter {
         Waiter {
             term_signal: chan_signal::notify(&[Signal::INT, Signal::TERM]),
             sync_signal: chan_signal::notify(&[Signal::USR1]),
+            never_chan: chan::sync(0),
         }
     }
 
     /// Wait for the timeout duration or until a termination signal comes in.
     pub fn wait(&self, duration: Duration) -> Result<()> {
-        let never_signal = chan::sync(0);
-        wait(duration, &self.term_signal, &never_signal.1)
+        wait(duration, &self.term_signal, &self.never_chan.1)
     }
 
     /// Wait for the timeout duration, until a termination signal comes in, or until a
