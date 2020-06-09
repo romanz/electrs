@@ -423,11 +423,11 @@ impl ChainQuery {
         })
     }
 
-    pub fn iter_scan(&self, prefix: &[u8], start_at: &[u8]) -> ScanIterator {
+    fn iter_scan(&self, prefix: &[u8], start_at: &[u8]) -> ScanIterator {
         self.store.history_db.iter_scan_from(prefix, start_at)
     }
 
-    pub fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
+    fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
         self.store.history_db.iter_scan_reverse(prefix, prefix_max)
     }
 
@@ -704,6 +704,7 @@ impl ChainQuery {
     }
 
     pub fn address_search(&self, prefix: &str, limit: usize) -> Vec<String> {
+        let _timer_scan = self.start_timer("address_search");
         self.store
             .history_db
             .iter_scan(&addr_search_filter(prefix))
@@ -892,6 +893,7 @@ impl ChainQuery {
 
     #[cfg(not(feature = "liquid"))]
     pub fn get_merkleblock_proof(&self, txid: &Txid) -> Option<MerkleBlock> {
+        let _timer = self.start_timer("get_merkleblock_proof");
         let blockid = self.tx_confirming_block(txid)?;
         let headerentry = self.header_by_hash(&blockid.hash)?;
         let block_txids = self.get_block_txids(&blockid.hash)?;
