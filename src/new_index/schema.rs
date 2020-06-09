@@ -423,14 +423,6 @@ impl ChainQuery {
         })
     }
 
-    fn iter_scan(&self, prefix: &[u8], start_at: &[u8]) -> ScanIterator {
-        self.store.history_db.iter_scan_from(prefix, start_at)
-    }
-
-    fn iter_scan_reverse(&self, prefix: &[u8], prefix_max: &[u8]) -> ReverseScanIterator {
-        self.store.history_db.iter_scan_reverse(prefix, prefix_max)
-    }
-
     pub fn history_iter_scan(&self, code: u8, hash: &[u8], start_height: usize) -> ScanIterator {
         self.store.history_db.iter_scan_from(
             &TxHistoryRow::filter(code, &hash[..]),

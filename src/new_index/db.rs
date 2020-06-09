@@ -213,35 +213,3 @@ impl DB {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    use crate::new_index::db::{DBRow, DB};
-    use tempfile;
-
-    #[test]
-    fn test_db_iterator() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = DB::open(dir.path());
-        let rows = vec![
-            DBRow {
-                key: b"X11".to_vec(),
-                value: b"a".to_vec(),
-            },
-            DBRow {
-                key: b"X22".to_vec(),
-                value: b"b".to_vec(),
-            },
-            DBRow {
-                key: b"X33".to_vec(),
-                value: b"c".to_vec(),
-            },
-        ];
-        for row in &rows {
-            db.put(&row.key, &row.value);
-        }
-        let actual: Vec<DBRow> = db.iter_scan(b"X").collect();
-        assert_eq!(rows, actual);
-    }
-}
