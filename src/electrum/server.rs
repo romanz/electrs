@@ -63,8 +63,7 @@ fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<
     bool_from_value(val, name)
 }
 
-// FIXME: implement caching and delta updates
-// FIXME: ensure stable ordering
+// TODO: implement caching and delta updates
 fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>) -> Option<FullHash> {
     if txs.is_empty() {
         None
