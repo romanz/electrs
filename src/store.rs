@@ -71,22 +71,20 @@ impl DBStore {
         })
     }
 
-    pub fn enable_compaction(self) -> Self {
-        let mut opts = self.opts.clone();
-        if opts.bulk_import {
-            opts.bulk_import = false;
+    pub fn enable_compaction(&mut self) {
+        if self.opts.bulk_import {
+            self.opts.bulk_import = false;
             info!("enabling auto-compactions");
-            let opts = [("disable_auto_compactions", "false")];
-            self.db.set_options(&opts).unwrap();
+            self.db
+                .set_options(&[("disable_auto_compactions", "false")])
+                .expect("failed to enable auto-compactions");
         }
-        self
     }
 
-    pub fn compact(self) -> Self {
+    pub fn compact(&self) {
         info!("starting full compaction");
         self.db.compact_range(None::<&[u8]>, None::<&[u8]>); // would take a while
         info!("finished full compaction");
-        self
     }
 
     pub fn iter_scan(&self, prefix: &[u8]) -> ScanIterator {
@@ -160,11 +158,7 @@ impl WriteStore for DBStore {
     }
 
     fn flush(&self) {
-        let mut opts = rocksdb::WriteOptions::new();
-        opts.set_sync(true);
-        opts.disable_wal(false);
-        let empty = rocksdb::WriteBatch::default();
-        self.db.write_opt(empty, &opts).unwrap();
+        self.db.flush().expect("failed to flush");
     }
 }
 
@@ -181,11 +175,11 @@ fn full_compaction_marker() -> Row {
     }
 }
 
-pub fn full_compaction(store: DBStore) -> DBStore {
+pub fn full_compaction(store: &mut DBStore) {
     store.flush();
-    let store = store.compact().enable_compaction();
+    store.compact();
+    store.enable_compaction();
     store.write(vec![full_compaction_marker()]);
-    store
 }
 
 pub fn is_fully_compacted(store: &dyn ReadStore) -> bool {

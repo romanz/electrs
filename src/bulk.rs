@@ -227,12 +227,12 @@ pub fn index_blk_files(
     index_threads: usize,
     metrics: &Metrics,
     signal: &Waiter,
-    store: DBStore,
-) -> Result<DBStore> {
+    store: &DBStore,
+) -> Result<()> {
     set_open_files_limit(2048); // twice the default `ulimit -n` value
     let blk_files = daemon.list_blk_files()?;
     info!("indexing {} blk*.dat files", blk_files.len());
-    let indexed_blockhashes = read_indexed_blockhashes(&store);
+    let indexed_blockhashes = read_indexed_blockhashes(store);
     debug!("found {} indexed blocks", indexed_blockhashes.len());
     let parser = Parser::new(daemon, metrics, indexed_blockhashes)?;
     let (blobs, reader) = start_reader(blk_files, parser.clone());
@@ -241,29 +241,26 @@ pub fn index_blk_files(
         .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
         .collect();
     let signal = signal.clone();
-    spawn_thread("bulk_writer", move || -> Result<DBStore> {
-        for (rows, path) in rows_chan.into_receiver() {
-            trace!("indexed {:?}: {} rows", path, rows.len());
-            store.write(rows);
-            signal
-                .poll()
-                .chain_err(|| "stopping bulk indexing due to signal")?;
-        }
-        reader
-            .join()
-            .expect("reader panicked")
-            .expect("reader failed");
 
-        indexers.into_iter().for_each(|i| {
-            i.join()
-                .expect("indexer panicked")
-                .expect("indexing failed")
-        });
-        store.write(vec![parser.last_indexed_row()]);
-        Ok(store)
-    })
-    .join()
-    .expect("writer panicked")
+    for (rows, path) in rows_chan.into_receiver() {
+        trace!("indexed {:?}: {} rows", path, rows.len());
+        store.write(rows);
+        signal
+            .poll()
+            .chain_err(|| "stopping bulk indexing due to signal")?;
+    }
+    reader
+        .join()
+        .expect("reader panicked")
+        .expect("reader failed");
+
+    indexers.into_iter().for_each(|i| {
+        i.join()
+            .expect("indexer panicked")
+            .expect("indexing failed")
+    });
+    store.write(vec![parser.last_indexed_row()]);
+    Ok(())
 }
 
 #[cfg(test)]

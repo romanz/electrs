@@ -40,22 +40,26 @@ fn run_server(config: &Config) -> Result<()> {
         &metrics,
     )?;
     // Perform initial indexing from local blk*.dat block files.
-    let store = DBStore::open(&config.db_path, /*low_memory=*/ config.jsonrpc_import);
+    let mut store = DBStore::open(&config.db_path, /*low_memory=*/ config.jsonrpc_import);
     let index = Index::load(&store, &daemon, &metrics, config.index_batch_size)?;
-    let store = if is_fully_compacted(&store) {
-        store // initial import and full compaction are over
+    if is_fully_compacted(&store) {
+        // initial import and full compaction are over
+        store.enable_compaction(); // enable auto compactions before starting incremental index updates.
     } else if config.jsonrpc_import {
         index.update(&store, &signal)?; // slower: uses JSONRPC for fetching blocks
-        full_compaction(store)
+        full_compaction(&mut store)
     } else {
         // faster, but uses more memory
-        let store =
-            bulk::index_blk_files(&daemon, config.bulk_index_threads, &metrics, &signal, store)?;
-        let store = full_compaction(store);
+        bulk::index_blk_files(
+            &daemon,
+            config.bulk_index_threads,
+            &metrics,
+            &signal,
+            &store,
+        )?;
+        full_compaction(&mut store);
         index.reload(&store); // make sure the block header index is up-to-date
-        store
     }
-    .enable_compaction(); // enable auto compactions before starting incremental index updates.
 
     let app = App::new(store, index, daemon, &config)?;
     let tx_cache = TransactionCache::new(config.tx_cache_size, &metrics);
