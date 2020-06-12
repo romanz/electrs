@@ -5,3 +5,4 @@ _*/
 *.sublime*
 *~
 *.pyc
+.env
