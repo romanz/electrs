@@ -27,12 +27,22 @@ fn notify(signals: &[i32]) -> channel::Receiver<i32> {
 impl Waiter {
     pub fn start() -> Waiter {
         Waiter {
-            receiver: notify(&[signal_hook::SIGINT, signal_hook::SIGTERM]),
+            receiver: notify(&[
+                signal_hook::SIGINT,
+                signal_hook::SIGTERM,
+                signal_hook::SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
+            ]),
         }
     }
     pub fn wait(&self, duration: Duration) -> Result<()> {
         match self.receiver.recv_timeout(duration) {
-            Ok(sig) => bail!(ErrorKind::Interrupt(sig)),
+            Ok(sig) => {
+                trace!("notified via SIG{}", sig);
+                if sig != signal_hook::SIGUSR1 {
+                    bail!(ErrorKind::Interrupt(sig))
+                };
+                Ok(())
+            }
             Err(RecvTimeoutError::Timeout) => Ok(()),
             Err(RecvTimeoutError::Disconnected) => bail!("signal hook channel disconnected"),
         }
