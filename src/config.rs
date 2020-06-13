@@ -10,6 +10,7 @@ use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use stderrlog;
 
 use crate::daemon::CookieGetter;
@@ -131,6 +132,7 @@ pub struct Config {
     pub electrum_rpc_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
+    pub wait_duration: Duration,
     pub index_batch_size: usize,
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
@@ -262,6 +264,7 @@ impl Config {
             electrum_rpc_addr,
             monitoring_addr,
             jsonrpc_import: config.jsonrpc_import,
+            wait_duration: Duration::from_secs(config.wait_duration_secs),
             index_batch_size: config.index_batch_size,
             bulk_index_threads: config.bulk_index_threads,
             tx_cache_size: (config.tx_cache_size_mb * MB) as usize,

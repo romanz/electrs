@@ -7,7 +7,6 @@ extern crate log;
 use error_chain::ChainedError;
 use std::process;
 use std::sync::Arc;
-use std::time::Duration;
 
 use electrs::{
     app::App,
@@ -72,7 +71,7 @@ fn run_server(config: &Config) -> Result<()> {
                 RPC::start(config.electrum_rpc_addr, query.clone(), &metrics, relayfee)
             })
             .notify(); // update subscribed clients
-        if let Err(err) = signal.wait(Duration::from_secs(5)) {
+        if let Err(err) = signal.wait(config.wait_duration) {
             info!("stopping server: {}", err);
             break;
         }

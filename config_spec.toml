@@ -70,6 +70,12 @@ name = "jsonrpc_import"
 doc = "Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"
 
 [[param]]
+name = "wait_duration_secs"
+type = "u64"
+doc = "Duration to wait between bitcoind polling"
+default = "5"
+
+[[param]]
 name = "index_batch_size"
 type = "usize"
 doc = "Number of blocks to get in one JSONRPC request from bitcoind"
