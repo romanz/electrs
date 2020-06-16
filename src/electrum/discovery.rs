@@ -455,11 +455,11 @@ impl HealthCheck {
         }
     }
 
-    // allow the server to fail up to  MAX_CONSECTIVE_FAILURES times before giving up, unless its
-    // our first attempt, in which case we give up immediatly. default servers are retried forever.
+    // allow the server to fail up to MAX_CONSECTIVE_FAILURES time before giving up on it.
+    // if its a non-default server and the very first attempt fails, give up immediatly.
     fn should_retry(&self) -> bool {
-        (self.last_healthy.is_some() && self.consecutive_failures < MAX_CONSECUTIVE_FAILURES)
-            || self.is_default
+        (self.last_healthy.is_some() || self.is_default)
+            && self.consecutive_failures < MAX_CONSECUTIVE_FAILURES
     }
 }
 
