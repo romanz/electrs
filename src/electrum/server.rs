@@ -94,7 +94,7 @@ struct Connection {
     stats: Arc<Stats>,
     txs_limit: usize,
     #[cfg(feature = "electrum-discovery")]
-    discovery: Arc<DiscoveryManager>,
+    discovery: Option<Arc<DiscoveryManager>>,
 }
 
 impl Connection {
@@ -104,7 +104,7 @@ impl Connection {
         addr: SocketAddr,
         stats: Arc<Stats>,
         txs_limit: usize,
-        #[cfg(feature = "electrum-discovery")] discovery: Arc<DiscoveryManager>,
+        #[cfg(feature = "electrum-discovery")] discovery: Option<Arc<DiscoveryManager>>,
     ) -> Connection {
         Connection {
             query,
@@ -141,8 +141,9 @@ impl Connection {
 
     #[cfg(feature = "electrum-discovery")]
     fn server_features(&self) -> Result<Value> {
+        let hosts = self.query.config().electrum_public_hosts.clone();
         Ok(json!(ServerFeatures {
-            hosts: self.query.config().electrum_public_hosts.clone(),
+            hosts: hosts.unwrap_or_default(),
             server_version: format!("electrs-esplora {}", ELECTRS_VERSION),
             genesis_hash: self.query.network().genesis_hash(),
             protocol_min: PROTOCOL_VERSION,
@@ -158,23 +159,31 @@ impl Connection {
 
     fn server_peers_subscribe(&self) -> Result<Value> {
         #[cfg(feature = "electrum-discovery")]
-        let servers = self.discovery.get_servers();
+        let servers = self
+            .discovery
+            .as_ref()
+            .map_or_else(|| json!([]), |d| json!(d.get_servers()));
 
         #[cfg(not(feature = "electrum-discovery"))]
-        let servers: Vec<bool> = vec![]; // a dummy inner type, this is always empty
+        let servers = json!([]);
 
-        Ok(json!(servers))
+        Ok(servers)
     }
 
     #[cfg(feature = "electrum-discovery")]
     fn server_add_peer(&self, params: &[Value]) -> Result<Value> {
+        let discovery = self
+            .discovery
+            .as_ref()
+            .chain_err(|| "discovery is disabled")?;
+
         let features = params
             .get(0)
             .chain_err(|| "missing features param")?
             .clone();
         let features = serde_json::from_value(features).chain_err(|| "invalid features")?;
-        self.discovery
-            .add_server_request(self.addr.ip(), features)?;
+
+        discovery.add_server_request(self.addr.ip(), features)?;
         Ok(json!(true))
     }
 
@@ -647,14 +656,17 @@ impl RPC {
         });
         let notification = Channel::unbounded();
 
+        // Discovery is enabled when electrum-public-hosts is set
         #[cfg(feature = "electrum-discovery")]
-        let discovery = Arc::new(DiscoveryManager::new(
-            config.network_type,
-            PROTOCOL_VERSION,
-            config.tor_proxy,
-        ));
-        #[cfg(feature = "electrum-discovery")]
-        DiscoveryManager::spawn_jobs_thread(Arc::clone(&discovery));
+        let discovery = config.electrum_public_hosts.as_ref().map(|_| {
+            let discovery = Arc::new(DiscoveryManager::new(
+                config.network_type,
+                PROTOCOL_VERSION,
+                config.tor_proxy,
+            ));
+            DiscoveryManager::spawn_jobs_thread(Arc::clone(&discovery));
+            discovery
+        });
 
         let rpc_addr = config.electrum_rpc_addr;
         let txs_limit = config.electrum_txs_limit;
@@ -682,7 +694,7 @@ impl RPC {
                         let stats = Arc::clone(&stats);
                         let handles = Arc::clone(&handles);
                         #[cfg(feature = "electrum-discovery")]
-                        let discovery = Arc::clone(&discovery);
+                        let discovery = discovery.clone();
 
                         spawn_thread("peer", move || {
                             info!("[{}] connected peer #{}", addr, handle_id);

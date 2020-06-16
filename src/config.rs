@@ -41,7 +41,7 @@ pub struct Config {
     pub asset_db_path: Option<PathBuf>,
 
     #[cfg(feature = "electrum-discovery")]
-    pub electrum_public_hosts: crate::electrum::ServerHosts,
+    pub electrum_public_hosts: Option<crate::electrum::ServerHosts>,
     #[cfg(feature = "electrum-discovery")]
     pub tor_proxy: Option<std::net::SocketAddr>,
 }
@@ -187,7 +187,7 @@ impl Config {
         let args = args.arg(
                 Arg::with_name("electrum_public_hosts")
                     .long("electrum-public-hosts")
-                    .help("A dictionary of hosts where the Electrum server can be reached at. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
+                    .help("A dictionary of hosts where the Electrum server can be reached at. Required to enable server discovery. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
                     .takes_value(true)
             ).arg(
             Arg::with_name("tor_proxy")
@@ -304,11 +304,9 @@ impl Config {
         );
 
         #[cfg(feature = "electrum-discovery")]
-        let electrum_public_hosts = serde_json::from_str(
-            m.value_of("electrum_public_hosts")
-                .expect("--electrum-public-hosts is required in electrum-discovery mode"),
-        )
-        .expect("invalid --electrum-public-hosts");
+        let electrum_public_hosts = m
+            .value_of("electrum_public_hosts")
+            .map(|s| serde_json::from_str(s).expect("invalid --electrum-public-hosts"));
 
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
