@@ -19,9 +19,9 @@ use default_servers::add_default_servers;
 
 const HEALTH_CHECK_FREQ: Duration = Duration::from_secs(3600); // check servers every hour
 const JOB_INTERVAL: Duration = Duration::from_secs(1); // run one health check job every second
-const MAX_CONSECUTIVE_FAILURES: usize = 24; // drop servers after 2, ServerFeatures4 consecutive failing attempts (~24 hours) (~24 hours)
+const MAX_CONSECUTIVE_FAILURES: usize = 24; // drop servers after 24 consecutive failing attempts (~24 hours) (~24 hours)
 const MAX_QUEUE_SIZE: usize = 500; // refuse accepting new servers if we have that many health check jobs
-const MAX_SERVICES_PER_REQUEST: usize = 5; // maximum number of services added for server.add_peer calls
+const MAX_SERVICES_PER_REQUEST: usize = 5; // maximum number of services added per server.add_peer call
 
 #[derive(Default, Debug)]
 pub struct DiscoveryManager {
@@ -145,7 +145,10 @@ impl DiscoveryManager {
             .take(MAX_SERVICES_PER_REQUEST)
             .collect::<Vec<HealthCheck>>();
 
-        ensure!(!jobs.is_empty(), "no valid jobs");
+        ensure!(
+            !jobs.is_empty(),
+            "no valid services, or all services are known already"
+        );
 
         ensure!(
             queue.len() + jobs.len() <= MAX_QUEUE_SIZE,
@@ -156,7 +159,8 @@ impl DiscoveryManager {
         Ok(())
     }
 
-    /// Add a default server. Default servers are exempt from limits and re-tried forever.
+    /// Add a default server. Default servers are exempt from limits and given more leniency
+    /// before being removed due to unavailability.
     pub fn add_default_server(&self, hostname: Hostname, services: Vec<Service>) {
         let mut queue = self.queue.write().unwrap();
         queue.extend(
@@ -186,7 +190,6 @@ impl DiscoveryManager {
             next.last_check
                 .map_or(false, |t| t.elapsed() < HEALTH_CHECK_FREQ)
         }) {
-            debug!("no health checks to run");
             return Ok(());
         }
 
@@ -194,7 +197,7 @@ impl DiscoveryManager {
         debug!("processing {:?}", health_check);
 
         let resolve_and_check = |health_check: &mut HealthCheck| {
-            // HealthChecks are always initialized without an addr
+            // this is run once for each new health check job (they are always initialized without an addr)
             if health_check.addr.is_none() {
                 let addr = ServerAddr::resolve(
                     &health_check.hostname,
@@ -227,7 +230,10 @@ impl DiscoveryManager {
 
         match resolve_and_check(&mut health_check) {
             Ok(features) => {
-                debug!("{:?} is available", health_check.service);
+                debug!(
+                    "{} {:?} is available",
+                    health_check.hostname, health_check.service
+                );
 
                 if !was_healthy {
                     self.save_healthy_service(&health_check, features);
@@ -243,7 +249,10 @@ impl DiscoveryManager {
                 Ok(())
             }
             Err(e) => {
-                debug!("{:?} is unavailable: {:?}", health_check.service, e);
+                debug!(
+                    "{} {:?} is unavailable: {:?}",
+                    health_check.hostname, health_check.service, e
+                );
 
                 if was_healthy {
                     // XXX should we assume the server's other services are down too?
@@ -502,8 +511,14 @@ mod tests {
             vec![Service::Tcp(60001)],
         );
         discovery.add_default_server("testnet.hsmiths.com".into(), vec![Service::Ssl(53012)]);
-        discovery.add_default_server("tn.not.fyi".into(), vec![Service::Tcp(55001), Service::Ssl(55002)]);
-        discovery.add_default_server("electrum.blockstream.info".into(), vec![Service::Tcp(60001), Service::Ssl(60002)]);
+        discovery.add_default_server(
+            "tn.not.fyi".into(),
+            vec![Service::Tcp(55001), Service::Ssl(55002)],
+        );
+        discovery.add_default_server(
+            "electrum.blockstream.info".into(),
+            vec![Service::Tcp(60001), Service::Ssl(60002)],
+        );
         discovery.add_default_server(
             "explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion".into(),
             vec![Service::Tcp(143)],
