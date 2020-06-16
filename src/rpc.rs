@@ -92,9 +92,12 @@ impl Connection {
         stream: TcpStream,
         addr: SocketAddr,
         stats: Arc<Stats>,
-        script_hashes: HashMap<Sha256dHash, Value>,
         relayfee: f64,
     ) -> Connection {
+        let now = Instant::now();
+        let script_hashes = SubscriptionsManager::get_script_hashes()
+            .unwrap_or(HashMap::new());
+        debug!("subscribed_script_hashes.len() = {}, took {} milliseconds", script_hashes.len(), now.elapsed().as_millis());
         let mut conn = Connection {
             query,
             last_header_entry: None, // disable header subscription for now
@@ -612,10 +615,6 @@ impl RPC {
 
                 let acceptor = RPC::start_acceptor(addr);
 
-                let subscribed_script_hashes = SubscriptionsManager::get_script_hashes()
-                    .unwrap_or(HashMap::new());
-                debug!("subscribed_script_hashes.len() = {}", subscribed_script_hashes.len());
-
                 RPC::start_notifier(notification, senders.clone(), acceptor.sender());
 
                 let mut threads = HashMap::new();
@@ -626,11 +625,10 @@ impl RPC {
                     let senders = Arc::clone(&senders);
                     let stats = Arc::clone(&stats);
                     let garbage_sender = garbage_sender.clone();
-                    let script_hashes = subscribed_script_hashes.clone();
 
                     let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
-                        let conn = Connection::new(query, stream, addr, stats, script_hashes, relayfee);
+                        let conn = Connection::new(query, stream, addr, stats, relayfee);
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
                         info!("[{}] disconnected peer", addr);
