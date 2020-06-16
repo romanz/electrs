@@ -1,6 +1,5 @@
 use clap::{App, Arg};
 use dirs::home_dir;
-use serde_json::Value;
 use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -35,12 +34,16 @@ pub struct Config {
     pub utxos_limit: usize,
     pub electrum_txs_limit: usize,
     pub electrum_banner: String,
-    pub electrum_public_hosts: Option<Value>,
 
     #[cfg(feature = "liquid")]
     pub parent_network: Network,
     #[cfg(feature = "liquid")]
     pub asset_db_path: Option<PathBuf>,
+
+    #[cfg(feature = "electrum-discovery")]
+    pub electrum_public_hosts: crate::electrum::ServerHosts,
+    #[cfg(feature = "electrum-discovery")]
+    pub tor_proxy: Option<std::net::SocketAddr>,
 }
 
 fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
@@ -163,12 +166,6 @@ impl Config {
                     .long("electrum-banner")
                     .help("Welcome banner for the Electrum server, shown in the console to clients.")
                     .takes_value(true)
-            )
-            .arg(
-                Arg::with_name("electrum_public_hosts")
-                    .long("electrum-public-hosts")
-                    .help("A dictionary of hosts where the Electrum server can be reached at. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
-                    .takes_value(true)
             );
 
         #[cfg(feature = "liquid")]
@@ -185,6 +182,19 @@ impl Config {
                     .help("Directory for liquid/elements asset db")
                     .takes_value(true),
             );
+
+        #[cfg(feature = "electrum-discovery")]
+        let args = args.arg(
+                Arg::with_name("electrum_public_hosts")
+                    .long("electrum-public-hosts")
+                    .help("A dictionary of hosts where the Electrum server can be reached at. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
+                    .takes_value(true)
+            ).arg(
+            Arg::with_name("tor_proxy")
+                .long("tor-proxy")
+                .help("ip:addr of socks proxy for accessing onion hosts")
+                .takes_value(true),
+        );
 
         let m = args.get_matches();
 
@@ -292,9 +302,13 @@ impl Config {
             || format!("Welcome to electrs-esplora {}", ELECTRS_VERSION),
             |s| s.into(),
         );
-        let electrum_public_hosts = m
-            .value_of("electrum_public_hosts")
-            .map(|s| serde_json::from_str(s).expect("invalid --electrum-public-hosts json"));
+
+        #[cfg(feature = "electrum-discovery")]
+        let electrum_public_hosts = serde_json::from_str(
+            m.value_of("electrum_public_hosts")
+                .expect("--electrum-public-hosts is required in electrum-discovery mode"),
+        )
+        .expect("invalid --electrum-public-hosts");
 
         let mut log = stderrlog::new();
         log.verbosity(m.occurrences_of("verbosity") as usize);
@@ -315,7 +329,6 @@ impl Config {
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,
-            electrum_public_hosts,
             http_addr,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
@@ -328,6 +341,11 @@ impl Config {
             parent_network,
             #[cfg(feature = "liquid")]
             asset_db_path,
+
+            #[cfg(feature = "electrum-discovery")]
+            electrum_public_hosts,
+            #[cfg(feature = "electrum-discovery")]
+            tor_proxy: m.value_of("tor_proxy").map(|s| s.parse().unwrap()),
         };
         eprintln!("{:?}", config);
         config

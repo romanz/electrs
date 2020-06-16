@@ -20,6 +20,7 @@ use bitcoin::consensus::encode::serialize;
 use elements::encode::serialize;
 
 use crate::config::Config;
+use crate::electrum::ProtocolVersion;
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
@@ -27,7 +28,10 @@ use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get
 use crate::util::{full_hash, spawn_thread, BlockId, Channel, FullHash, HeaderEntry, SyncChannel};
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
-const PROTOCOL_VERSION: &str = "1.4";
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::new(1, 4);
+
+#[cfg(feature = "electrum-discovery")]
+use crate::electrum::{DiscoveryManager, ServerFeatures};
 
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
@@ -89,6 +93,8 @@ struct Connection {
     chan: SyncChannel<Message>,
     stats: Arc<Stats>,
     txs_limit: usize,
+    #[cfg(feature = "electrum-discovery")]
+    discovery: Arc<DiscoveryManager>,
 }
 
 impl Connection {
@@ -98,6 +104,7 @@ impl Connection {
         addr: SocketAddr,
         stats: Arc<Stats>,
         txs_limit: usize,
+        #[cfg(feature = "electrum-discovery")] discovery: Arc<DiscoveryManager>,
     ) -> Connection {
         Connection {
             query,
@@ -108,6 +115,8 @@ impl Connection {
             chan: SyncChannel::new(10),
             stats,
             txs_limit,
+            #[cfg(feature = "electrum-discovery")]
+            discovery,
         }
     }
 
@@ -130,15 +139,16 @@ impl Connection {
         Ok(json!(self.query.config().electrum_banner.clone()))
     }
 
+    #[cfg(feature = "electrum-discovery")]
     fn server_features(&self) -> Result<Value> {
-        Ok(json!({
-            "hosts": self.query.config().electrum_public_hosts,
-            "server_version": format!("electrs-esplora {}", ELECTRS_VERSION),
-            "genesis_hash": self.query.network().genesis_hash(),
-            "protocol_min": PROTOCOL_VERSION,
-            "protocol_max": PROTOCOL_VERSION,
-            "hash_function": "sha256",
-            "pruning": null,
+        Ok(json!(ServerFeatures {
+            hosts: self.query.config().electrum_public_hosts.clone(),
+            server_version: format!("electrs-esplora {}", ELECTRS_VERSION),
+            genesis_hash: self.query.network().genesis_hash(),
+            protocol_min: PROTOCOL_VERSION,
+            protocol_max: PROTOCOL_VERSION,
+            hash_function: "sha256".into(),
+            pruning: None,
         }))
     }
 
@@ -147,10 +157,24 @@ impl Connection {
     }
 
     fn server_peers_subscribe(&self) -> Result<Value> {
-        Ok(json!([]))
+        #[cfg(feature = "electrum-discovery")]
+        let servers = self.discovery.get_servers();
+
+        #[cfg(not(feature = "electrum-discovery"))]
+        let servers: Vec<bool> = vec![]; // a dummy inner type, this is always empty
+
+        Ok(json!(servers))
     }
 
-    fn server_add_peer(&self) -> Result<Value> {
+    #[cfg(feature = "electrum-discovery")]
+    fn server_add_peer(&self, params: &[Value]) -> Result<Value> {
+        let features = params
+            .get(0)
+            .chain_err(|| "missing features param")?
+            .clone();
+        let features = serde_json::from_value(features).chain_err(|| "invalid features")?;
+        self.discovery
+            .add_server_request(self.addr.ip(), features)?;
         Ok(json!(true))
     }
 
@@ -380,10 +404,14 @@ impl Connection {
             "server.banner" => self.server_banner(),
             "server.donation_address" => self.server_donation_address(),
             "server.peers.subscribe" => self.server_peers_subscribe(),
-            "server.add_peer" => self.server_add_peer(),
             "server.ping" => Ok(Value::Null),
             "server.version" => self.server_version(),
+
+            #[cfg(feature = "electrum-discovery")]
             "server.features" => self.server_features(),
+            #[cfg(feature = "electrum-discovery")]
+            "server.add_peer" => self.server_add_peer(&params),
+
             &_ => bail!("unknown method {} {:?}", method, params),
         };
         timer.observe_duration();
@@ -619,6 +647,15 @@ impl RPC {
         });
         let notification = Channel::unbounded();
 
+        #[cfg(feature = "electrum-discovery")]
+        let discovery = Arc::new(DiscoveryManager::new(
+            config.network_type,
+            PROTOCOL_VERSION,
+            config.tor_proxy,
+        ));
+        #[cfg(feature = "electrum-discovery")]
+        DiscoveryManager::spawn_jobs_thread(Arc::clone(&discovery));
+
         let rpc_addr = config.electrum_rpc_addr;
         let txs_limit = config.electrum_txs_limit;
 
@@ -644,10 +681,20 @@ impl RPC {
                         let senders = Arc::clone(&senders);
                         let stats = Arc::clone(&stats);
                         let handles = Arc::clone(&handles);
+                        #[cfg(feature = "electrum-discovery")]
+                        let discovery = Arc::clone(&discovery);
 
                         spawn_thread("peer", move || {
                             info!("[{}] connected peer #{}", addr, handle_id);
-                            let conn = Connection::new(query, stream, addr, stats, txs_limit);
+                            let conn = Connection::new(
+                                query,
+                                stream,
+                                addr,
+                                stats,
+                                txs_limit,
+                                #[cfg(feature = "electrum-discovery")]
+                                discovery,
+                            );
                             senders
                                 .lock()
                                 .unwrap()

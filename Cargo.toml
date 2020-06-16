@@ -14,6 +14,7 @@ edition = "2018"
 [features]
 default = [ "rocksdb" ]
 liquid = [ "elements" ]
+electrum-discovery = [ "electrum-client"]
 oldcpu = [ "rocksdb-oldcpu" ]
 
 [dependencies]
@@ -51,6 +52,9 @@ sysconf = ">=0.3.4"
 time = "0.1"
 tiny_http = "0.6"
 url = "2.1.1"
+
+# optional dependencies for electrum-discovery
+electrum-client = { version = "0.1.0-beta.6", optional = true }
 
 [dependencies.bitcoin]
 version = "0.23.0"
