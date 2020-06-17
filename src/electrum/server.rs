@@ -658,9 +658,10 @@ impl RPC {
 
         // Discovery is enabled when electrum-public-hosts is set
         #[cfg(feature = "electrum-discovery")]
-        let discovery = config.electrum_public_hosts.as_ref().map(|_| {
+        let discovery = config.electrum_public_hosts.as_ref().map(|hosts| {
             let discovery = Arc::new(DiscoveryManager::new(
                 config.network_type,
+                hosts,
                 PROTOCOL_VERSION,
                 config.tor_proxy,
             ));

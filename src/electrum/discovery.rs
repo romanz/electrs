@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use bitcoin::BlockHash;
 
 use crate::chain::Network;
-use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures};
+use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures, ServerHosts};
 use crate::errors::{Result, ResultExt};
 use crate::util::spawn_thread;
 
@@ -32,9 +32,14 @@ pub struct DiscoveryManager {
     /// A list of servers that were found to be healthy on their last health check
     healthy: RwLock<HashMap<ServerAddr, Server>>,
 
-    /// Used to test for compatibility
+    /// Used to test for network compatibility
     our_genesis_hash: BlockHash,
+
+    /// Used to test for protocol version compatibility
     our_version: ProtocolVersion,
+
+    /// So that we don't list ourselves
+    our_addrs: HashSet<ServerAddr>,
 
     /// Optional, will not support onion hosts without this
     tor_proxy: Option<SocketAddr>,
@@ -84,11 +89,21 @@ pub struct ServerEntry(ServerAddr, Hostname, Vec<String>);
 impl DiscoveryManager {
     pub fn new(
         our_network: Network,
+        our_hosts: &ServerHosts,
         our_version: ProtocolVersion,
         tor_proxy: Option<SocketAddr>,
     ) -> Self {
+        let our_addrs = our_hosts
+            .keys()
+            .filter_map(|hostname| {
+                ServerAddr::resolve(hostname)
+                    .map_err(|e| warn!("failed resolving own hostname {}: {:?}", hostname, e))
+                    .ok()
+            })
+            .collect();
         let discovery = Self {
             our_genesis_hash: our_network.genesis_hash(),
+            our_addrs,
             our_version,
             tor_proxy,
             ..Default::default()
@@ -132,6 +147,10 @@ impl DiscoveryManager {
                         return None;
                     }
                 };
+                if self.our_addrs.contains(&addr) {
+                    warn!("skipping own server addr");
+                    return None;
+                }
                 // ensure the server address matches the ip that advertised it to us.
                 // onion hosts are exempt.
                 if let ServerAddr::Clearnet(ip) = addr {
