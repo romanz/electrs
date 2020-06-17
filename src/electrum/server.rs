@@ -141,16 +141,11 @@ impl Connection {
 
     #[cfg(feature = "electrum-discovery")]
     fn server_features(&self) -> Result<Value> {
-        let hosts = self.query.config().electrum_public_hosts.clone();
-        Ok(json!(ServerFeatures {
-            hosts: hosts.unwrap_or_default(),
-            server_version: format!("electrs-esplora {}", ELECTRS_VERSION),
-            genesis_hash: self.query.network().genesis_hash(),
-            protocol_min: PROTOCOL_VERSION,
-            protocol_max: PROTOCOL_VERSION,
-            hash_function: "sha256".into(),
-            pruning: None,
-        }))
+        let discovery = self
+            .discovery
+            .as_ref()
+            .chain_err(|| "discovery is disabled")?;
+        Ok(json!(discovery.our_features()))
     }
 
     fn server_donation_address(&self) -> Result<Value> {
@@ -656,12 +651,22 @@ impl RPC {
         });
         let notification = Channel::unbounded();
 
+        #[cfg(feature = "electrum-discovery")]
         // Discovery is enabled when electrum-public-hosts is set
         #[cfg(feature = "electrum-discovery")]
-        let discovery = config.electrum_public_hosts.as_ref().map(|hosts| {
+        let discovery = config.electrum_public_hosts.clone().map(|hosts| {
+            let features = ServerFeatures {
+                hosts,
+                server_version: format!("electrs-esplora {}", ELECTRS_VERSION),
+                genesis_hash: config.network_type.genesis_hash(),
+                protocol_min: PROTOCOL_VERSION,
+                protocol_max: PROTOCOL_VERSION,
+                hash_function: "sha256".into(),
+                pruning: None,
+            };
             let discovery = Arc::new(DiscoveryManager::new(
                 config.network_type,
-                hosts,
+                features,
                 PROTOCOL_VERSION,
                 config.tor_proxy,
             ));

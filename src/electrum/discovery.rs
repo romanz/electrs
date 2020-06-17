@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use bitcoin::BlockHash;
 
 use crate::chain::Network;
-use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures, ServerHosts};
+use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures};
 use crate::errors::{Result, ResultExt};
 use crate::util::spawn_thread;
 
@@ -24,7 +24,7 @@ const MAX_QUEUE_SIZE: usize = 500; // refuse accepting new servers if we have th
 const MAX_SERVERS_PER_REQUEST: usize = 3; // maximum number of server hosts added per server.add_peer call
 const MAX_SERVICES_PER_REQUEST: usize = 6; // maximum number of services added per server.add_peer call
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DiscoveryManager {
     /// A queue of scheduled health check jobs, including for healthy, unhealthy and untested servers
     queue: RwLock<BinaryHeap<HealthCheck>>,
@@ -40,6 +40,8 @@ pub struct DiscoveryManager {
 
     /// So that we don't list ourselves
     our_addrs: HashSet<ServerAddr>,
+
+    our_features: ServerFeatures,
 
     /// Optional, will not support onion hosts without this
     tor_proxy: Option<SocketAddr>,
@@ -89,11 +91,12 @@ pub struct ServerEntry(ServerAddr, Hostname, Vec<String>);
 impl DiscoveryManager {
     pub fn new(
         our_network: Network,
-        our_hosts: &ServerHosts,
+        our_features: ServerFeatures,
         our_version: ProtocolVersion,
         tor_proxy: Option<SocketAddr>,
     ) -> Self {
-        let our_addrs = our_hosts
+        let our_addrs = our_features
+            .hosts
             .keys()
             .filter_map(|hostname| {
                 ServerAddr::resolve(hostname)
@@ -105,8 +108,10 @@ impl DiscoveryManager {
             our_genesis_hash: our_network.genesis_hash(),
             our_addrs,
             our_version,
+            our_features,
             tor_proxy,
-            ..Default::default()
+            healthy: Default::default(),
+            queue: Default::default(),
         };
         add_default_servers(&discovery, our_network);
         discovery
@@ -219,6 +224,10 @@ impl DiscoveryManager {
                 ServerEntry(addr.clone(), server.hostname.clone(), server.feature_strs())
             })
             .collect()
+    }
+
+    pub fn our_features(&self) -> &ServerFeatures {
+        &self.our_features
     }
 
     /// Run the next health check in the queue (a single one)
