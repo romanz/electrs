@@ -21,7 +21,8 @@ const HEALTH_CHECK_FREQ: Duration = Duration::from_secs(3600); // check servers 
 const JOB_INTERVAL: Duration = Duration::from_secs(1); // run one health check job every second
 const MAX_CONSECUTIVE_FAILURES: usize = 24; // drop servers after 24 consecutive failing attempts (~24 hours) (~24 hours)
 const MAX_QUEUE_SIZE: usize = 500; // refuse accepting new servers if we have that many health check jobs
-const MAX_SERVICES_PER_REQUEST: usize = 5; // maximum number of services added per server.add_peer call
+const MAX_SERVERS_PER_REQUEST: usize = 3; // maximum number of server hosts added per server.add_peer call
+const MAX_SERVICES_PER_REQUEST: usize = 6; // maximum number of services added per server.add_peer call
 
 #[derive(Default, Debug)]
 pub struct DiscoveryManager {
@@ -30,9 +31,6 @@ pub struct DiscoveryManager {
 
     /// A list of servers that were found to be healthy on their last health check
     healthy: RwLock<HashMap<ServerAddr, Server>>,
-
-    /// A cache of hostname dns resolutions
-    hostnames: RwLock<HashMap<Hostname, IpAddr>>,
 
     /// Used to test for compatibility
     our_genesis_hash: BlockHash,
@@ -69,8 +67,8 @@ pub enum Service {
 /// A queued health check job, one per service/port (and not per server)
 #[derive(Eq, Debug)]
 struct HealthCheck {
+    addr: ServerAddr,
     hostname: Hostname,
-    addr: Option<ServerAddr>,
     service: Service,
     is_default: bool,
     added_by: Option<IpAddr>,
@@ -101,54 +99,73 @@ impl DiscoveryManager {
 
     /// Add a server requested via `server.add_peer`
     pub fn add_server_request(&self, added_by: IpAddr, features: ServerFeatures) -> Result<()> {
-        let mut queue = self.queue.write().unwrap();
+        self.verify_compatibility(&features)?;
 
+        let mut queue = self.queue.write().unwrap();
         ensure!(queue.len() < MAX_QUEUE_SIZE, "queue size exceeded");
 
-        self.verify_compatibility(&features)?;
+        // TODO optimize
+        let mut existing_services: HashMap<ServerAddr, HashSet<Service>> = HashMap::new();
+        for health_check in queue.iter() {
+            existing_services
+                .entry(health_check.addr.clone())
+                .or_default()
+                .insert(health_check.service);
+        }
 
         // collect HealthChecks for candidate services
         let jobs = features
             .hosts
             .iter()
-            .filter(|(hostname, _)| {
+            .take(MAX_SERVERS_PER_REQUEST)
+            .filter_map(|(hostname, ports)| {
+                let hostname = hostname.to_lowercase();
+
                 if hostname.len() > 100 {
                     warn!("skipping invalid hostname");
-                    false
-                } else {
-                    true
+                    return None;
                 }
+                let addr = match ServerAddr::resolve(&hostname) {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        warn!("failed resolving {}: {:?}", hostname, e);
+                        return None;
+                    }
+                };
+                // ensure the server address matches the ip that advertised it to us.
+                // onion hosts are exempt.
+                if let ServerAddr::Clearnet(ip) = addr {
+                    if ip != added_by {
+                        warn!(
+                            "server ip does not match source ip ({}, {} != {})",
+                            hostname, ip, added_by
+                        );
+                        return None;
+                    }
+                }
+                Some((addr, hostname, ports))
             })
-            .flat_map(|(hostname, ports)| {
-                let hostname = hostname.to_lowercase();
+            .flat_map(|(addr, hostname, ports)| {
                 let tcp_service = ports.tcp_port.into_iter().map(Service::Tcp);
                 let ssl_service = ports.ssl_port.into_iter().map(Service::Ssl);
                 let services = tcp_service.chain(ssl_service).collect::<HashSet<Service>>();
-                // XXX reject invalid source ip here?
-
-                // find new services, skip ones that are we already know about
-                let services =
-                    match ServerAddr::resolve_noio(&hostname, &self.hostnames.read().unwrap()) {
-                        Some(addr) => match self.healthy.read().unwrap().get(&addr) {
-                            Some(server) => {
-                                services.difference(&server.services).cloned().collect()
-                            }
-                            None => services,
-                        },
-                        None => services,
-                    };
 
                 services
                     .into_iter()
-                    .map(move |service| HealthCheck::new(hostname.clone(), service, Some(added_by)))
+                    .filter(|service| {
+                        existing_services
+                            .get(&addr)
+                            .map_or(true, |s| !s.contains(service))
+                    })
+                    .map(|service| {
+                        HealthCheck::new(addr.clone(), hostname.clone(), service, Some(added_by))
+                    })
+                    .collect::<Vec<_>>()
             })
             .take(MAX_SERVICES_PER_REQUEST)
-            .collect::<Vec<HealthCheck>>();
+            .collect::<Vec<_>>();
 
-        ensure!(
-            !jobs.is_empty(),
-            "no valid services, or all services are known already"
-        );
+        ensure!(!jobs.is_empty(), "no new valid entries");
 
         ensure!(
             queue.len() + jobs.len() <= MAX_QUEUE_SIZE,
@@ -161,13 +178,15 @@ impl DiscoveryManager {
 
     /// Add a default server. Default servers are exempt from limits and given more leniency
     /// before being removed due to unavailability.
-    pub fn add_default_server(&self, hostname: Hostname, services: Vec<Service>) {
+    pub fn add_default_server(&self, hostname: Hostname, services: Vec<Service>) -> Result<()> {
+        let addr = ServerAddr::resolve(&hostname)?;
         let mut queue = self.queue.write().unwrap();
         queue.extend(
             services
                 .into_iter()
-                .map(|service| HealthCheck::new(hostname.clone(), service, None)),
+                .map(|service| HealthCheck::new(addr.clone(), hostname.clone(), service, None)),
         );
+        Ok(())
     }
 
     /// Get the list of healthy servers formatted for `servers.peers.subscribe`
@@ -196,39 +215,13 @@ impl DiscoveryManager {
         let mut health_check = self.queue.write().unwrap().pop().unwrap();
         debug!("processing {:?}", health_check);
 
-        let resolve_and_check = |health_check: &mut HealthCheck| {
-            // this is run once for each new health check job (they are always initialized without an addr)
-            if health_check.addr.is_none() {
-                let addr = ServerAddr::resolve(
-                    &health_check.hostname,
-                    &mut self.hostnames.write().unwrap(),
-                )
-                .chain_err(|| "hostname does not resolve")?;
-
-                if let Some(server) = self.healthy.read().unwrap().get(&addr) {
-                    ensure!(
-                        !server.services.contains(&health_check.service),
-                        "dropping duplicated service"
-                    )
-                }
-
-                // ensure the server address matches the ip that advertised it to us. onion hosts are exempt.
-                if let (ServerAddr::Clearnet(server_ip), Some(added_by)) =
-                    (&addr, &health_check.added_by)
-                {
-                    ensure!(server_ip == added_by, "server ip does not match source ip");
-                }
-
-                health_check.addr = Some(addr.clone());
-            };
-
-            let addr = health_check.addr.as_ref().unwrap();
-            self.check_server(addr, &health_check.hostname, health_check.service)
-        };
-
         let was_healthy = health_check.is_healthy();
 
-        match resolve_and_check(&mut health_check) {
+        match self.check_server(
+            &health_check.addr,
+            &health_check.hostname,
+            health_check.service,
+        ) {
             Ok(features) => {
                 debug!(
                     "{} {:?} is available",
@@ -275,7 +268,7 @@ impl DiscoveryManager {
 
     /// Upsert the server/service into the healthy set
     fn save_healthy_service(&self, health_check: &HealthCheck, features: ServerFeatures) {
-        let addr = health_check.addr.clone().unwrap();
+        let addr = health_check.addr.clone();
         let mut healthy = self.healthy.write().unwrap();
         assert!(healthy
             .entry(addr)
@@ -286,21 +279,16 @@ impl DiscoveryManager {
 
     /// Remove the service, and remove the server entirely if it has no other reamining healthy services
     fn remove_unhealthy_service(&self, health_check: &HealthCheck) {
-        let addr = health_check.addr.clone().unwrap();
+        let addr = health_check.addr.clone();
         let mut healthy = self.healthy.write().unwrap();
         if let Entry::Occupied(mut entry) = healthy.entry(addr) {
             let server = entry.get_mut();
             assert!(server.services.remove(&health_check.service));
             if server.services.is_empty() {
                 entry.remove_entry();
-                // TODO evict hostname entries for servers that never worked
-                self.hostnames
-                    .write()
-                    .unwrap()
-                    .remove(&health_check.hostname);
             }
         } else {
-            panic!("missing expected server");
+            unreachable!("missing expected server, corrupted state");
         }
     }
 
@@ -386,23 +374,11 @@ impl Server {
 }
 
 impl ServerAddr {
-    /// Attempt resolving the hostname without issuing a DNS query
-    fn resolve_noio(host: &str, cache: &HashMap<Hostname, IpAddr>) -> Option<Self> {
-        if host.ends_with(".onion") {
-            Some(ServerAddr::Onion(host.into()))
+    fn resolve(host: &str) -> Result<Self> {
+        Ok(if host.ends_with(".onion") {
+            ServerAddr::Onion(host.into())
         } else if let Ok(ip) = IpAddr::from_str(host) {
-            Some(ServerAddr::Clearnet(ip))
-        } else if let Some(ip) = cache.get(host) {
-            Some(ServerAddr::Clearnet(*ip))
-        } else {
-            None
-        }
-    }
-
-    /// Attempt resolving the hostname, with a DNS query if necessary
-    fn resolve(host: &str, cache: &mut HashMap<Hostname, IpAddr>) -> Result<Self> {
-        if let Some(addr) = ServerAddr::resolve_noio(host, cache) {
-            Ok(addr)
+            ServerAddr::Clearnet(ip)
         } else {
             let ip = format!("{}:1", host)
                 .to_socket_addrs()
@@ -410,9 +386,8 @@ impl ServerAddr {
                 .next()
                 .chain_err(|| "hostname resolution failed")?
                 .ip();
-            cache.insert(host.into(), ip);
-            Ok(ServerAddr::Clearnet(ip))
-        }
+            ServerAddr::Clearnet(ip)
+        })
     }
 }
 
@@ -435,13 +410,18 @@ impl serde::Serialize for ServerAddr {
 }
 
 impl HealthCheck {
-    fn new(hostname: Hostname, service: Service, added_by: Option<IpAddr>) -> Self {
+    fn new(
+        addr: ServerAddr,
+        hostname: Hostname,
+        service: Service,
+        added_by: Option<IpAddr>,
+    ) -> Self {
         HealthCheck {
+            addr,
             hostname,
             service,
             is_default: added_by.is_none(),
             added_by,
-            addr: None,
             last_check: None,
             last_healthy: None,
             consecutive_failures: 0,
