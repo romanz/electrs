@@ -106,11 +106,11 @@ impl DiscoveryManager {
 
         // TODO optimize
         let mut existing_services: HashMap<ServerAddr, HashSet<Service>> = HashMap::new();
-        for health_check in queue.iter() {
+        for job in queue.iter() {
             existing_services
-                .entry(health_check.addr.clone())
+                .entry(job.addr.clone())
                 .or_default()
-                .insert(health_check.service);
+                .insert(job.service);
         }
 
         // collect HealthChecks for candidate services
@@ -212,53 +212,43 @@ impl DiscoveryManager {
             return Ok(());
         }
 
-        let mut health_check = self.queue.write().unwrap().pop().unwrap();
-        debug!("processing {:?}", health_check);
+        let mut job = self.queue.write().unwrap().pop().unwrap();
+        debug!("processing {:?}", job);
 
-        let was_healthy = health_check.is_healthy();
+        let was_healthy = job.is_healthy();
 
-        match self.check_server(
-            &health_check.addr,
-            &health_check.hostname,
-            health_check.service,
-        ) {
+        match self.check_server(&job.addr, &job.hostname, job.service) {
             Ok(features) => {
-                debug!(
-                    "{} {:?} is available",
-                    health_check.hostname, health_check.service
-                );
+                debug!("{} {:?} is available", job.hostname, job.service);
 
                 if !was_healthy {
-                    self.save_healthy_service(&health_check, features);
+                    self.save_healthy_service(&job, features);
                 }
                 // XXX update features?
 
-                health_check.last_check = Some(Instant::now());
-                health_check.last_healthy = health_check.last_check;
-                health_check.consecutive_failures = 0;
+                job.last_check = Some(Instant::now());
+                job.last_healthy = job.last_check;
+                job.consecutive_failures = 0;
                 // schedule the next health check
-                self.queue.write().unwrap().push(health_check);
+                self.queue.write().unwrap().push(job);
 
                 Ok(())
             }
             Err(e) => {
-                debug!(
-                    "{} {:?} is unavailable: {:?}",
-                    health_check.hostname, health_check.service, e
-                );
+                debug!("{} {:?} is unavailable: {:?}", job.hostname, job.service, e);
 
                 if was_healthy {
                     // XXX should we assume the server's other services are down too?
-                    self.remove_unhealthy_service(&health_check);
+                    self.remove_unhealthy_service(&job);
                 }
 
-                health_check.last_check = Some(Instant::now());
-                health_check.consecutive_failures += 1;
+                job.last_check = Some(Instant::now());
+                job.consecutive_failures += 1;
 
-                if health_check.should_retry() {
-                    self.queue.write().unwrap().push(health_check);
+                if job.should_retry() {
+                    self.queue.write().unwrap().push(job);
                 } else {
-                    debug!("giving up on {:?}", health_check);
+                    debug!("giving up on {:?}", job);
                 }
 
                 Err(e)
@@ -267,23 +257,23 @@ impl DiscoveryManager {
     }
 
     /// Upsert the server/service into the healthy set
-    fn save_healthy_service(&self, health_check: &HealthCheck, features: ServerFeatures) {
-        let addr = health_check.addr.clone();
+    fn save_healthy_service(&self, job: &HealthCheck, features: ServerFeatures) {
+        let addr = job.addr.clone();
         let mut healthy = self.healthy.write().unwrap();
         assert!(healthy
             .entry(addr)
-            .or_insert_with(|| Server::new(health_check.hostname.clone(), features))
+            .or_insert_with(|| Server::new(job.hostname.clone(), features))
             .services
-            .insert(health_check.service));
+            .insert(job.service));
     }
 
     /// Remove the service, and remove the server entirely if it has no other reamining healthy services
-    fn remove_unhealthy_service(&self, health_check: &HealthCheck) {
-        let addr = health_check.addr.clone();
+    fn remove_unhealthy_service(&self, job: &HealthCheck) {
+        let addr = job.addr.clone();
         let mut healthy = self.healthy.write().unwrap();
         if let Entry::Occupied(mut entry) = healthy.entry(addr) {
             let server = entry.get_mut();
-            assert!(server.services.remove(&health_check.service));
+            assert!(server.services.remove(&job.service));
             if server.services.is_empty() {
                 entry.remove_entry();
             }
