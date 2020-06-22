@@ -546,6 +546,7 @@ impl Connection {
     }
 
     pub fn run(mut self) {
+        self.stats.clients.inc();
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         let tx = self.chan.sender();
         let child = spawn_thread("reader", || Connection::handle_requests(reader, tx));
@@ -561,6 +562,7 @@ impl Connection {
         if let Err(err) = child.join().expect("receiver panicked") {
             error!("[{}] receiver failed: {}", self.addr, err);
         }
+        self.stats.clients.dec();
     }
 }
 
@@ -594,6 +596,7 @@ pub struct RPC {
 
 struct Stats {
     latency: HistogramVec,
+    clients: Gauge,
     subscriptions: Gauge,
 }
 
@@ -644,6 +647,7 @@ impl RPC {
                 HistogramOpts::new("electrum_rpc", "Electrum RPC latency (seconds)"),
                 &["method"],
             ),
+            clients: metrics.gauge(MetricOpts::new("electrum_clients", "# of Electrum clients")),
             subscriptions: metrics.gauge(MetricOpts::new(
                 "electrum_subscriptions",
                 "# of Electrum subscriptions",
