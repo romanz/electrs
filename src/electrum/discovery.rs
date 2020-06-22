@@ -195,8 +195,6 @@ impl DiscoveryManager {
             .take(MAX_SERVICES_PER_REQUEST)
             .collect::<Vec<_>>();
 
-        ensure!(!jobs.is_empty(), "no new valid entries");
-
         ensure!(
             queue.len() + jobs.len() <= MAX_QUEUE_SIZE,
             "queue size exceeded"
