@@ -52,16 +52,13 @@ impl Client {
         .try_into()
     }
 
-    /*
-    pub fn server_add_perr(&mut self, features: ServerFeatures) -> Result<bool, ElectrumError> {
-        let req = Request::new("server.add_peer", vec![]);
-        Ok(match self {
-            Client::Tcp(c) => c.server_features(),
-            Client::Ssl(c) => c.server_features(),
-            Client::ProxyTcp(c) => c.server_features(),
-        })
+    pub fn server_add_peer(&mut self, features: &ServerFeatures) -> Result<bool, ElectrumError> {
+        match self {
+            Client::Tcp(c) => c.server_add_peer(features),
+            Client::Ssl(c) => c.server_add_peer(features),
+            Client::ProxyTcp(c) => c.server_add_peer(features),
+        }
     }
-    */
 }
 
 // Convert from electrum-client's server features struct to ours. We're using a different struct because

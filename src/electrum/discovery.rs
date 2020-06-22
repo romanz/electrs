@@ -41,7 +41,11 @@ pub struct DiscoveryManager {
     /// So that we don't list ourselves
     our_addrs: HashSet<ServerAddr>,
 
+    /// For advertising ourself to other servers
     our_features: ServerFeatures,
+
+    /// Whether we should announce ourselves to the servers we're connecting to
+    announce: bool,
 
     /// Optional, will not support onion hosts without this
     tor_proxy: Option<SocketAddr>,
@@ -93,6 +97,7 @@ impl DiscoveryManager {
         our_network: Network,
         our_features: ServerFeatures,
         our_version: ProtocolVersion,
+        announce: bool,
         tor_proxy: Option<SocketAddr>,
     ) -> Self {
         let our_addrs = our_features
@@ -109,6 +114,7 @@ impl DiscoveryManager {
             our_addrs,
             our_version,
             our_features,
+            announce,
             tor_proxy,
             healthy: Default::default(),
             queue: Default::default(),
@@ -333,9 +339,13 @@ impl DiscoveryManager {
         let features = client.server_features()?;
         self.verify_compatibility(&features)?;
 
-        // TODO register ourselves with add_peer
-        // XXX should we require this to succeed?
-        //ensure!(client.add_peer(self.our_features)?, "server does not reciprocate");
+        if self.announce {
+            // XXX should we require the other side to reciprocate?
+            ensure!(
+                client.server_add_peer(&self.our_features)?,
+                "server does not reciprocate"
+            );
+        }
 
         Ok(features)
     }

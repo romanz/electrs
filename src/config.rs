@@ -43,6 +43,8 @@ pub struct Config {
     #[cfg(feature = "electrum-discovery")]
     pub electrum_public_hosts: Option<crate::electrum::ServerHosts>,
     #[cfg(feature = "electrum-discovery")]
+    pub electrum_announce: bool,
+    #[cfg(feature = "electrum-discovery")]
     pub tor_proxy: Option<std::net::SocketAddr>,
 }
 
@@ -189,6 +191,10 @@ impl Config {
                     .long("electrum-public-hosts")
                     .help("A dictionary of hosts where the Electrum server can be reached at. Required to enable server discovery. See https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server-features")
                     .takes_value(true)
+            ).arg(
+                Arg::with_name("electrum_announce")
+                    .long("electrum-announce")
+                    .help("Announce the Electrum server to other servers")
             ).arg(
             Arg::with_name("tor_proxy")
                 .long("tor-proxy")
@@ -342,6 +348,8 @@ impl Config {
 
             #[cfg(feature = "electrum-discovery")]
             electrum_public_hosts,
+            #[cfg(feature = "electrum-discovery")]
+            electrum_announce: m.is_present("electrum_announce"),
             #[cfg(feature = "electrum-discovery")]
             tor_proxy: m.value_of("tor_proxy").map(|s| s.parse().unwrap()),
         };

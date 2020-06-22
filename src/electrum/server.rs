@@ -651,7 +651,6 @@ impl RPC {
         });
         let notification = Channel::unbounded();
 
-        #[cfg(feature = "electrum-discovery")]
         // Discovery is enabled when electrum-public-hosts is set
         #[cfg(feature = "electrum-discovery")]
         let discovery = config.electrum_public_hosts.clone().map(|hosts| {
@@ -668,6 +667,7 @@ impl RPC {
                 config.network_type,
                 features,
                 PROTOCOL_VERSION,
+                config.electrum_announce,
                 config.tor_proxy,
             ));
             DiscoveryManager::spawn_jobs_thread(Arc::clone(&discovery));
