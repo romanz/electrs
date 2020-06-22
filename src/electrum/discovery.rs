@@ -158,8 +158,8 @@ impl DiscoveryManager {
                         return None;
                     }
                 };
-                if self.our_addrs.contains(&addr) {
-                    warn!("skipping own server addr");
+                if !is_remote_addr(&addr) || self.our_addrs.contains(&addr) {
+                    warn!("skipping own or non-remote server addr");
                     return None;
                 }
                 // ensure the server address matches the ip that advertised it to us.
@@ -492,6 +492,21 @@ impl fmt::Display for Service {
         match self {
             Service::Tcp(port) => write!(f, "t{}", port),
             Service::Ssl(port) => write!(f, "s{}", port),
+        }
+    }
+}
+
+fn is_remote_addr(addr: &ServerAddr) -> bool {
+    match addr {
+        ServerAddr::Onion(_) => true,
+        ServerAddr::Clearnet(ip) => {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_multicast()
+                && !match ip {
+                    IpAddr::V4(ipv4) => ipv4.is_private(),
+                    IpAddr::V6(_) => false,
+                }
         }
     }
 }
