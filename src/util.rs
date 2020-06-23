@@ -170,7 +170,7 @@ impl HeaderList {
             new_headers.len(),
             new_height
         );
-        self.headers.split_off(new_height); // keep [0..new_height) entries
+        self.headers.truncate(new_height); // keep [0..new_height) entries
         assert_eq!(new_height, self.headers.len());
         for new_header in new_headers {
             assert_eq!(new_header.height(), self.headers.len());
