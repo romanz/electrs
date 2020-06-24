@@ -10,7 +10,7 @@ use serde_json::{from_str, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::mpsc::{Sender, SyncSender, TrySendError};
+use std::sync::mpsc::{Sender, SyncSender, TrySendError, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
@@ -97,26 +97,17 @@ impl Connection {
         let now = Instant::now();
         let script_hashes = SubscriptionsManager::get_script_hashes()
             .unwrap_or(HashMap::new());
-        debug!("subscribed_script_hashes.len() = {}, took {} milliseconds", script_hashes.len(), now.elapsed().as_millis());
-        let mut conn = Connection {
+        debug!("script_hashes.len() = {}, took {} milliseconds", script_hashes.len(), now.elapsed().as_millis());
+        Connection {
             query,
             last_header_entry: None, // disable header subscription for now
-            script_hashes: script_hashes.clone(),
+            script_hashes,
             stream,
             addr,
             chan: SyncChannel::new(10),
             stats,
             relayfee,
-        };
-
-        let now = Instant::now();
-        for script_hash in script_hashes.keys() {
-            conn.on_scripthash_change(script_hash.into_inner(), None)
-                .expect("Failed while comparing status hashes");
         }
-        debug!("Connection::run, comparing status hashes took {} seconds", now.elapsed().as_secs());
-
-        conn
     }
 
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
@@ -458,7 +449,7 @@ impl Connection {
                     };
                     self.send_values(&[reply])?
                 }
-                Message::ScriptHashChange(hash, txid) => self.on_scripthash_change(hash, Some(txid))?,
+                Message::ScriptHashChange(hash, txid) => self.on_scripthash_change(hash, txid)?,
                 Message::ChainTipChange(tip) => self.on_chaintip_change(tip)?,
                 Message::Done => return Ok(()),
             }
@@ -493,10 +484,51 @@ impl Connection {
         }
     }
 
+    fn compare_status_hashes(script_hashes: HashMap<Sha256dHash, Value>, query: Arc<Query>, tx: SyncSender<Message>, connection: SyncChannel<Message>) -> Result<()> {
+        debug!("compare_status_hashes: script_hashes.len() = {}, starting", script_hashes.len());
+        let now = Instant::now();
+        let rx = connection.receiver();
+        for (i, (scripthash, old_statushash)) in script_hashes.iter().enumerate() {
+            if i % 1000 == 0 {
+                debug!("compare_status_hashes: comparing {} out of {}", i, script_hashes.len());
+                match rx.try_recv() {
+                    Ok(_) | Err(TryRecvError::Disconnected) => {
+                        debug!("compare_status_hashes: channel is closed, shutting down");
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => {}
+                }
+            }
+
+            let scripthash_buffer = scripthash.into_inner();
+            let status = query.status(&scripthash_buffer)?;
+            let new_statushash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
+            if new_statushash == *old_statushash {
+                continue;
+            }
+
+            debug!("compare_status_hashes: found diff. scripthash = {}, old_statushash = {}, new_statushash = {}", scripthash, old_statushash, new_statushash);
+            if let Err(_) = tx.send(Message::ScriptHashChange(scripthash_buffer, None)) {
+                debug!("compare_status_hashes: send failed because the channel is closed, shutting down")
+            }
+        }
+
+        debug!("compare_status_hashes: script_hashes.len() = {}, took {} seconds", script_hashes.len(), now.elapsed().as_secs());
+        Ok(())
+    }
+
     pub fn run(mut self) {
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         let tx = self.chan.sender();
-        let child = spawn_thread("reader", || Connection::handle_requests(reader, tx));
+        let reader_child = spawn_thread("reader", || Connection::handle_requests(reader, tx));
+
+        let script_hashes = self.script_hashes.clone();
+        let query = Arc::clone(&self.query);
+        let tx2 = self.chan.sender();
+        let shutdown_channel = SyncChannel::new(1);
+        let shutdown_sender = shutdown_channel.sender();
+        spawn_thread("status_hashes_comparer", || Connection::compare_status_hashes(script_hashes, query, tx2, shutdown_channel));
+
         if let Err(e) = self.handle_replies() {
             error!(
                 "[{}] connection handling failed: {}",
@@ -506,7 +538,8 @@ impl Connection {
         }
         debug!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
-        if let Err(err) = child.join().expect("receiver panicked") {
+        let _ = shutdown_sender.send(Message::Done);
+        if let Err(err) = reader_child.join().expect("receiver panicked") {
             error!("[{}] receiver failed: {}", self.addr, err);
         }
     }
@@ -515,7 +548,7 @@ impl Connection {
 #[derive(Debug)]
 pub enum Message {
     Request(String),
-    ScriptHashChange(FullHash, FullHash),
+    ScriptHashChange(FullHash, Option<FullHash>),
     ChainTipChange(HeaderEntry),
     Done,
 }
@@ -550,7 +583,7 @@ impl RPC {
                     Notification::ScriptHashChange(hash, txid) => {
                         for sender in senders.split_off(0) {
                             if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::ScriptHashChange(hash, txid))
+                                sender.try_send(Message::ScriptHashChange(hash, Some(txid)))
                             {
                                 continue;
                             }
