@@ -24,8 +24,8 @@ $ cargo run --features liquid --release --bin electrs -- -vvvv --network liquid 
 See [electrs's original documentation](https://github.com/romanz/electrs/blob/master/doc/usage.md) for more detailed instructions.
 Note that our indexes are incompatible with electrs's and has to be created separately.
 
-The indexes require 440GB of storage after running compaction, but you'll need to have about 1TB
-of free space available for the initial (non-compacted) indexing process.
+The indexes require 610GB of storage after running compaction (as of June 2020), but you'll need to have
+free space of about double that available during the index compaction process.
 Creating the indexes should take a few hours on a beefy machine with SSD.
 
 To deploy with Docker, follow the [instructions here](https://github.com/Blockstream/esplora#how-to-build-the-docker-image).
@@ -33,8 +33,7 @@ To deploy with Docker, follow the [instructions here](https://github.com/Blockst
 ### Light mode
 
 For personal or low-volume use, you may set `--lightmode` to reduce disk storage requirements
-(at the time of writing, around block height 620k, by about 270GB)
-at the cost of slower and more expensive lookups.
+by roughly 50% at the cost of slower and more expensive lookups.
 
 With this option set, raw transactions and metadata associated with blocks will not be kept in rocksdb
 (the `T`, `X` and `M` indexes),
