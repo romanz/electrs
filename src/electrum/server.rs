@@ -653,6 +653,7 @@ impl RPC {
                 "# of Electrum subscriptions",
             )),
         });
+        stats.clients.set(0);
         let notification = Channel::unbounded();
 
         // Discovery is enabled when electrum-public-hosts is set
