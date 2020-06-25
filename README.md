@@ -65,9 +65,18 @@ In addition to electrs's original configuration options, a few new options are a
 
 - `--http-addr <addr:port>` - HTTP server address/port to listen on (default: `127.0.0.1:3000`).
 - `--lightmode` - enable light mode (see above)
-- `--parent-network <network>` - the parent network this chain is pegged to (Elements/Liquid only).
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 - `--address-search` - enables the by-prefix address search index.
+- `--utxos-limit <num>` - maximum number of utxos to return per address.
+- `--electrum-txs-limit <num>` - maximum number of txs to return per address in the electrum server (does not apply for the http api).
+- `--electrum-banner <text>` - welcome banner text for electrum server.
+
+Additional options with the `liquid` feature:
+- `--parent-network <network>` - the parent network this chain is pegged to.
+
+Additional options with the `electrum-discovery` feature:
+- `--electrum-hosts <json>` - a json map of the public hosts where the electrum server is reachable, in the [`server.features` format](https://electrumx.readthedocs.io/en/latest/protocol-methods.html#server.features).
+- `--electrum-announce` - announce the electrum server on the electrum p2p server discovery network.
 
 See `$ cargo run --release --bin electrs -- --help` for the full list of options.
 
