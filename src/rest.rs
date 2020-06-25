@@ -44,6 +44,7 @@ const ADDRESS_SEARCH_LIMIT: usize = 10;
 
 const TTL_LONG: u32 = 157_784_630; // ttl for static resources (5 years)
 const TTL_SHORT: u32 = 10; // ttl for volatie resources
+const TTL_MEMPOOL_RECENT: u32 = 5; // ttl for GET /mempool/recent
 const CONF_FINAL: usize = 10; // reorgs deeper than this are considered unlikely
 
 #[derive(Serialize, Deserialize)]
@@ -934,7 +935,7 @@ fn handle_request(
         (&Method::GET, Some(&"mempool"), Some(&"recent"), None, None, None) => {
             let mempool = query.mempool();
             let recent = mempool.recent_txs_overview();
-            json_response(recent, TTL_SHORT /* TODO: TTL TBD */)
+            json_response(recent, TTL_MEMPOOL_RECENT)
         }
 
         (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {
