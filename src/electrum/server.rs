@@ -272,7 +272,9 @@ impl Connection {
         let status_hash = get_status_hash(history_txids)
             .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
 
-        self.status_hashes.insert(script_hash, status_hash.clone());
+        if let None = self.status_hashes.insert(script_hash, status_hash.clone()) {
+            self.stats.subscriptions.inc();
+        }
         Ok(status_hash)
     }
 
@@ -468,9 +470,6 @@ impl Connection {
             *status_hash = new_status_hash;
         }
         timer.observe_duration();
-        self.stats
-            .subscriptions
-            .set(self.status_hashes.len() as i64);
         Ok(result)
     }
 
@@ -557,12 +556,16 @@ impl Connection {
                 e.display_chain().to_string()
             );
         }
+        self.stats.clients.dec();
+        self.stats
+            .subscriptions
+            .sub(self.status_hashes.len() as i64);
+
         debug!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
         if let Err(err) = child.join().expect("receiver panicked") {
             error!("[{}] receiver failed: {}", self.addr, err);
         }
-        self.stats.clients.dec();
     }
 }
 
@@ -654,6 +657,8 @@ impl RPC {
             )),
         });
         stats.clients.set(0);
+        stats.subscriptions.set(0);
+
         let notification = Channel::unbounded();
 
         // Discovery is enabled when electrum-public-hosts is set
