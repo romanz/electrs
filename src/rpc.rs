@@ -206,7 +206,10 @@ impl Connection {
             hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
-        self.status_hashes.insert(script_hash, result.clone());
+        if let None = self.status_hashes.insert(script_hash, result.clone()) {
+            self.stats.subscriptions.inc();
+        }
+
         Ok(result)
     }
 
@@ -371,9 +374,6 @@ impl Connection {
             *status_hash = new_status_hash;
         }
         timer.observe_duration();
-        self.stats
-            .subscriptions
-            .set(self.status_hashes.len() as i64);
         Ok(result)
     }
 
@@ -459,6 +459,9 @@ impl Connection {
                 e.display_chain().to_string()
             );
         }
+        self.stats
+            .subscriptions
+            .sub(self.status_hashes.len() as i64);
         debug!("[{}] shutting down connection", self.addr);
         let _ = self.stream.shutdown(Shutdown::Both);
         if let Err(err) = child.join().expect("receiver panicked") {
@@ -548,6 +551,7 @@ impl RPC {
                 "# of Electrum subscriptions",
             )),
         });
+        stats.subscriptions.set(0);
         let notification = Channel::unbounded();
 
         RPC {
