@@ -175,8 +175,12 @@ impl Tracker {
         }
     }
 
-    pub fn get_txn(&self, txid: &Txid) -> Option<Transaction> {
-        self.items.get(txid).map(|stats| stats.tx.clone())
+    pub fn has_txn(&self, txid: &Txid) -> bool {
+        self.items.contains_key(txid)
+    }
+
+    pub fn get_fee(&self, txid: &Txid) -> Option<u64> {
+        self.items.get(txid).map(|stats| stats.entry.fee())
     }
 
     /// Returns vector of (fee_rate, vsize) pairs, where fee_{n-1} > fee_n and vsize_n is the

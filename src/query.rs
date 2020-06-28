@@ -38,12 +38,32 @@ struct SpendingInput {
 pub struct Status {
     confirmed: (Vec<FundingOutput>, Vec<SpendingInput>),
     mempool: (Vec<FundingOutput>, Vec<SpendingInput>),
+    txn_fees: HashMap<Txid, u64>,
 }
 
 fn calc_balance((funding, spending): &(Vec<FundingOutput>, Vec<SpendingInput>)) -> i64 {
     let funded: u64 = funding.iter().map(|output| output.value).sum();
     let spent: u64 = spending.iter().map(|input| input.value).sum();
     funded as i64 - spent as i64
+}
+
+pub struct HistoryItem {
+    height: i32,
+    tx_hash: Txid,
+    fee: Option<u64>, // need to be set only for unconfirmed transactions (i.e. height <= 0)
+}
+
+impl HistoryItem {
+    pub fn to_json(&self) -> Value {
+        let mut result = json!({ "height": self.height, "tx_hash": self.tx_hash.to_hex()});
+        self.fee.map(|f| {
+            result
+                .as_object_mut()
+                .unwrap()
+                .insert("fee".to_string(), json!(f))
+        });
+        result
+    }
 }
 
 impl Status {
@@ -63,7 +83,7 @@ impl Status {
         calc_balance(&self.mempool)
     }
 
-    pub fn history(&self) -> Vec<(i32, Txid)> {
+    pub fn history(&self) -> Vec<HistoryItem> {
         let mut txns_map = HashMap::<Txid, i32>::new();
         for f in self.funding() {
             txns_map.insert(f.txn_id, f.height as i32);
@@ -71,10 +91,16 @@ impl Status {
         for s in self.spending() {
             txns_map.insert(s.txn_id, s.height as i32);
         }
-        let mut txns: Vec<(i32, Txid)> =
-            txns_map.into_iter().map(|item| (item.1, item.0)).collect();
-        txns.sort_unstable();
-        txns
+        let mut items: Vec<HistoryItem> = txns_map
+            .into_iter()
+            .map(|item| HistoryItem {
+                height: item.1,
+                tx_hash: item.0,
+                fee: self.txn_fees.get(&item.0).cloned(),
+            })
+            .collect();
+        items.sort_unstable_by_key(|item| item.height);
+        items
     }
 
     pub fn unspent(&self) -> Vec<&FundingOutput> {
@@ -102,8 +128,8 @@ impl Status {
         } else {
             let mut hash = FullHash::default();
             let mut sha2 = Sha256::new();
-            for (height, txn_id) in txns {
-                let part = format!("{}:{}:", txn_id.to_hex(), height);
+            for item in txns {
+                let part = format!("{}:{}:", item.tx_hash.to_hex(), item.height);
                 sha2.input(part.as_bytes());
             }
             sha2.result(&mut hash);
@@ -302,10 +328,10 @@ impl Query {
         &self,
         script_hash: &[u8],
         confirmed_funding: &[FundingOutput],
+        tracker: &Tracker,
     ) -> Result<(Vec<FundingOutput>, Vec<SpendingInput>)> {
         let mut funding = vec![];
         let mut spending = vec![];
-        let tracker = self.tracker.read().unwrap();
         let txid_prefixes = txids_by_script_hash(tracker.index(), script_hash);
         for t in self.load_txns_by_prefix(tracker.index(), txid_prefixes)? {
             funding.extend(self.find_funding_outputs(&t, script_hash));
@@ -329,16 +355,30 @@ impl Query {
             .chain_err(|| "failed to get confirmed status")?;
         timer.observe_duration();
 
+        let tracker = self.tracker.read().unwrap();
         let timer = self
             .duration
             .with_label_values(&["mempool_status"])
             .start_timer();
         let mempool = self
-            .mempool_status(script_hash, &confirmed.0)
+            .mempool_status(script_hash, &confirmed.0, &tracker)
             .chain_err(|| "failed to get mempool status")?;
         timer.observe_duration();
 
-        Ok(Status { confirmed, mempool })
+        let mut txn_fees = HashMap::new();
+        let funding_txn_ids = mempool.0.iter().map(|funding| funding.txn_id);
+        let spending_txn_ids = mempool.1.iter().map(|spending| spending.txn_id);
+        for mempool_txid in funding_txn_ids.chain(spending_txn_ids) {
+            tracker
+                .get_fee(&mempool_txid)
+                .map(|fee| txn_fees.insert(mempool_txid, fee));
+        }
+
+        Ok(Status {
+            confirmed,
+            mempool,
+            txn_fees,
+        })
     }
 
     fn lookup_confirmed_blockhash(
@@ -346,7 +386,7 @@ impl Query {
         tx_hash: &Txid,
         block_height: Option<u32>,
     ) -> Result<Option<BlockHash>> {
-        let blockhash = if self.tracker.read().unwrap().get_txn(&tx_hash).is_some() {
+        let blockhash = if self.tracker.read().unwrap().has_txn(&tx_hash) {
             None // found in mempool (as unconfirmed transaction)
         } else {
             // Lookup in confirmed transactions' index
