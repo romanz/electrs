@@ -25,7 +25,9 @@ use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
 use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
-use crate::util::{full_hash, spawn_thread, BlockId, Channel, FullHash, HeaderEntry, SyncChannel};
+use crate::util::{
+    full_hash, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry, SyncChannel,
+};
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::new(1, 4);
@@ -292,12 +294,17 @@ impl Connection {
     fn blockchain_scripthash_get_history(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
-        Ok(json!(Value::Array(
-            history_txids
-                .into_iter()
-                .map(|(txid, blockid)| json!({"height": blockid.map_or(0, |b| b.height), "tx_hash": txid.to_hex()}))
-                .collect()
-        )))
+
+        Ok(json!(history_txids
+            .into_iter()
+            .map(|(txid, blockid)| {
+                let is_mempool = blockid.is_none();
+                let fee = is_mempool.and_then(|| self.query.get_mempool_tx_fee(&txid));
+                // TODO use height of -1 for transactions with unconfirmed parents
+                let height = blockid.map_or(0, |blockid| blockid.height);
+                GetHistoryResult { txid, height, fee }
+            })
+            .collect::<Vec<_>>()))
     }
 
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
@@ -578,6 +585,15 @@ fn get_history(
     let history_txids = query.history_txids(scripthash, txs_limit + 1);
     ensure!(history_txids.len() <= txs_limit, ErrorKind::TooPopular);
     Ok(history_txids)
+}
+
+#[derive(Serialize, Debug)]
+struct GetHistoryResult {
+    #[serde(rename = "tx_hash")]
+    txid: Txid,
+    height: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee: Option<u64>,
 }
 
 #[derive(Debug)]

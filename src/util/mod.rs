@@ -90,3 +90,21 @@ where
         .spawn(f)
         .unwrap()
 }
+
+// Similar to https://doc.rust-lang.org/std/primitive.bool.html#method.then (nightly only),
+// but with a function that returns an `Option<T>` instead of `T`. Adding something like
+// this to std is being discussed: https://github.com/rust-lang/rust/issues/64260
+
+pub trait BoolThen {
+    fn and_then<T>(self, f: impl FnOnce() -> Option<T>) -> Option<T>;
+}
+
+impl BoolThen for bool {
+    fn and_then<T>(self, f: impl FnOnce() -> Option<T>) -> Option<T> {
+        if self {
+            f()
+        } else {
+            None
+        }
+    }
+}

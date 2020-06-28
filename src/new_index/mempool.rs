@@ -121,7 +121,10 @@ impl Mempool {
         self.edges.contains_key(outpoint)
     }
 
-    // XXX return as Vec<(Transaction,Option<BlockId>)>?
+    pub fn get_tx_fee(&self, txid: &Txid) -> Option<u64> {
+        Some(self.feeinfo.get(txid)?.fee)
+    }
+
     pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         self.history
