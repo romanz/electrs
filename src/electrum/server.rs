@@ -5,7 +5,6 @@ use std::sync::mpsc::{Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin::Txid;
 use crypto::digest::Digest;
@@ -39,7 +38,7 @@ use crate::electrum::{DiscoveryManager, ServerFeatures};
 fn hash_from_value(val: Option<&Value>) -> Result<Sha256dHash> {
     let script_hash = val.chain_err(|| "missing hash")?;
     let script_hash = script_hash.as_str().chain_err(|| "non-string hash")?;
-    let script_hash = Sha256dHash::from_hex(script_hash).chain_err(|| "non-hex hash")?;
+    let script_hash = script_hash.parse().chain_err(|| "non-hex hash")?;
     Ok(script_hash)
 }
 
@@ -82,7 +81,7 @@ fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<F
                 .and_then(|| Some(query.has_unconfirmed_parents(&txid)))
                 .unwrap_or(false);
             let height = get_electrum_height(blockid, has_unconfirmed_parents);
-            let part = format!("{}:{}:", txid.to_hex(), height);
+            let part = format!("{}:{}:", txid, height);
             sha2.input(part.as_bytes());
         }
         sha2.result(&mut hash);
@@ -208,12 +207,10 @@ impl Connection {
         }
         let (branch, root) = get_header_merkle_proof(self.query.chain(), height, cp_height)?;
 
-        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
-
         Ok(json!({
             "header": raw_header_hex,
-            "root": root.to_hex(),
-            "branch": branch_vec
+            "root": root,
+            "branch": branch
         }))
     }
 
@@ -244,14 +241,12 @@ impl Connection {
         let (branch, root) =
             get_header_merkle_proof(self.query.chain(), start_height + (count - 1), cp_height)?;
 
-        let branch_vec: Vec<String> = branch.into_iter().map(|b| b.to_hex()).collect();
-
         Ok(json!({
             "count": headers.len(),
             "hex": headers.join(""),
             "max": 2016,
-            "root": root.to_hex(),
-            "branch" : branch_vec
+            "root": root,
+            "branch" : branch,
         }))
     }
 
@@ -322,7 +317,7 @@ impl Connection {
                 .map(|utxo| json!({
                     "height": utxo.confirmed.map_or(0, |b| b.height),
                     "tx_pos": utxo.vout,
-                    "tx_hash": utxo.txid.to_hex(),
+                    "tx_hash": utxo.txid,
                     "value": utxo.value,
                 }))
                 .collect()
@@ -336,7 +331,7 @@ impl Connection {
         if let Err(e) = self.chan.sender().try_send(Message::PeriodicUpdate) {
             warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
         }
-        Ok(json!(txid.to_hex()))
+        Ok(json!(txid))
     }
 
     fn blockchain_transaction_get(&self, params: &[Value]) -> Result<Value> {
@@ -371,7 +366,6 @@ impl Connection {
         }
         let (merkle, pos) = get_tx_merkle_proof(self.query.chain(), &txid, &blockid.hash)
             .chain_err(|| "cannot create merkle proof")?;
-        let merkle: Vec<String> = merkle.into_iter().map(|txid| txid.to_hex()).collect();
         Ok(json!({
                 "block_height": blockid.height,
                 "merkle": merkle,
@@ -386,14 +380,12 @@ impl Connection {
         let (txid, merkle) = get_id_from_pos(self.query.chain(), height, tx_pos, want_merkle)?;
 
         if !want_merkle {
-            return Ok(json!(txid.to_hex()));
+            return Ok(json!(txid));
         }
 
-        let merkle_vec: Vec<String> = merkle.into_iter().map(|entry| entry.to_hex()).collect();
-
         Ok(json!({
-            "tx_hash" : txid.to_hex(),
-            "merkle" : merkle_vec}))
+            "tx_hash": txid,
+            "merkle" : merkle}))
     }
 
     fn handle_command(&mut self, method: &str, params: &[Value], id: &Value) -> Result<Value> {
@@ -479,7 +471,7 @@ impl Connection {
             result.push(json!({
                 "jsonrpc": "2.0",
                 "method": "blockchain.scripthash.subscribe",
-                "params": [script_hash.to_hex(), new_status_hash]}));
+                "params": [script_hash, new_status_hash]}));
             *status_hash = new_status_hash;
         }
         timer.observe_duration();
