@@ -125,6 +125,16 @@ impl Mempool {
         Some(self.feeinfo.get(txid)?.fee)
     }
 
+    pub fn has_unconfirmed_parents(&self, txid: &Txid) -> bool {
+        let tx = match self.txstore.get(txid) {
+            Some(tx) => tx,
+            None => return false,
+        };
+        tx.input
+            .iter()
+            .any(|txin| self.txstore.contains_key(&txin.previous_output.txid))
+    }
+
     pub fn history(&self, scripthash: &[u8], limit: usize) -> Vec<Transaction> {
         let _timer = self.latency.with_label_values(&["history"]).start_timer();
         self.history

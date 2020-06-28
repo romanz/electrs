@@ -20,7 +20,7 @@ use bitcoin::consensus::encode::serialize;
 use elements::encode::serialize;
 
 use crate::config::Config;
-use crate::electrum::ProtocolVersion;
+use crate::electrum::{get_electrum_height, ProtocolVersion};
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
@@ -70,15 +70,19 @@ fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<
 }
 
 // TODO: implement caching and delta updates
-fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>) -> Option<FullHash> {
+fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<FullHash> {
     if txs.is_empty() {
         None
     } else {
         let mut hash = FullHash::default();
         let mut sha2 = Sha256::new();
         for (txid, blockid) in txs {
-            // TODO: use height of 0 to indicate an unconfirmed tx with confirmed inputs, or -1 for unconfirmed tx with unconfirmed inputs
-            let part = format!("{}:{}:", txid.to_hex(), blockid.map_or(0, |b| b.height));
+            let is_mempool = blockid.is_none();
+            let has_unconfirmed_parents = is_mempool
+                .and_then(|| Some(query.has_unconfirmed_parents(&txid)))
+                .unwrap_or(false);
+            let height = get_electrum_height(blockid, has_unconfirmed_parents);
+            let part = format!("{}:{}:", txid.to_hex(), height);
             sha2.input(part.as_bytes());
         }
         sha2.result(&mut hash);
@@ -271,7 +275,7 @@ impl Connection {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
 
         let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
-        let status_hash = get_status_hash(history_txids)
+        let status_hash = get_status_hash(history_txids, &self.query)
             .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
 
         if let None = self.status_hashes.insert(script_hash, status_hash.clone()) {
@@ -300,8 +304,10 @@ impl Connection {
             .map(|(txid, blockid)| {
                 let is_mempool = blockid.is_none();
                 let fee = is_mempool.and_then(|| self.query.get_mempool_tx_fee(&txid));
-                // TODO use height of -1 for transactions with unconfirmed parents
-                let height = blockid.map_or(0, |blockid| blockid.height);
+                let has_unconfirmed_parents = is_mempool
+                    .and_then(|| Some(self.query.has_unconfirmed_parents(&txid)))
+                    .unwrap_or(false);
+                let height = get_electrum_height(blockid, has_unconfirmed_parents);
                 GetHistoryResult { txid, height, fee }
             })
             .collect::<Vec<_>>()))
@@ -465,7 +471,7 @@ impl Connection {
         }
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
-            let new_status_hash = get_status_hash(history_txids)
+            let new_status_hash = get_status_hash(history_txids, &self.query)
                 .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
             if new_status_hash == *status_hash {
                 continue;
@@ -591,7 +597,7 @@ fn get_history(
 struct GetHistoryResult {
     #[serde(rename = "tx_hash")]
     txid: Txid,
-    height: usize,
+    height: isize,
     #[serde(skip_serializing_if = "Option::is_none")]
     fee: Option<u64>,
 }

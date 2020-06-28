@@ -17,6 +17,15 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 use bitcoin::BlockHash;
 
 use crate::errors::ResultExt;
+use crate::util::BlockId;
+
+pub fn get_electrum_height(blockid: Option<BlockId>, has_unconfirmed_parents: bool) -> isize {
+    match (blockid, has_unconfirmed_parents) {
+        (Some(blockid), _) => blockid.height as isize,
+        (None, false) => 0,
+        (None, true) => -1,
+    }
+}
 
 pub type Port = u16;
 pub type Hostname = String;
