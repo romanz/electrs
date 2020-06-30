@@ -30,6 +30,11 @@ doc = "Data directory of Bitcoind (default: ~/.bitcoin/)"
 default = "crate::config::default_daemon_dir()"
 
 [[param]]
+name = "blocks_dir"
+type = "std::path::PathBuf"
+doc = "Analogous to bitcoind's -blocksdir option, this specifies the directory containing the raw blocks files (blk*.dat)"
+
+[[param]]
 name = "cookie"
 type = "String"
 doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from cookie file)"
