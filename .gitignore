@@ -6,3 +6,5 @@ _*/
 *~
 *.pyc
 .env
+*.dat
+electrs.toml
