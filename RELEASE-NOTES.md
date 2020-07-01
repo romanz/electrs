@@ -1,3 +1,14 @@
+# 0.8.5 (1 July 2020)
+
+* Add a 'blocks_dir' option (@darosior)
+* Return fee for unconfirmed transactions history (for Electrum 4.0)
+* Handle SIGUSR1 for external notifications
+
+# 0.8.4 (3 June 2020)
+
+* Update to latest rust-bitcoin (@dr-orlovsky)
+* Fix deadlock and refactor RPC threading (@Kixunil)
+
 # 0.8.3 (30 Jan 2020)
 
 * Fix memory leak (@champo)
