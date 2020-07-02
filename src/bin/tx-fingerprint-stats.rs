@@ -31,6 +31,7 @@ fn main() {
     let daemon = Arc::new(
         Daemon::new(
             &config.daemon_dir,
+            &config.blocks_dir,
             config.daemon_rpc_addr,
             config.cookie_getter(),
             config.network_type,

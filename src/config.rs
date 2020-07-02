@@ -21,6 +21,7 @@ pub struct Config {
     pub network_type: Network,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
+    pub blocks_dir: PathBuf,
     pub daemon_rpc_addr: SocketAddr,
     pub cookie: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
@@ -87,6 +88,12 @@ impl Config {
                 Arg::with_name("daemon_dir")
                     .long("daemon-dir")
                     .help("Data directory of Bitcoind (default: ~/.bitcoin/)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("blocks_dir")
+                    .long("blocks-dir")
+                    .help("Analogous to bitcoind's -blocksdir option, this specifies the directory containing the raw blocks files (blk*.dat) (default: ~/.bitcoin/blocks/)")
                     .takes_value(true),
             )
             .arg(
@@ -302,6 +309,10 @@ impl Config {
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
         }
+        let blocks_dir = m
+            .value_of("blocks_dir")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| daemon_dir.join("blocks"));
         let cookie = m.value_of("cookie").map(|s| s.to_owned());
 
         let electrum_banner = m.value_of("electrum_banner").map_or_else(
@@ -327,6 +338,7 @@ impl Config {
             network_type,
             db_path,
             daemon_dir,
+            blocks_dir,
             daemon_rpc_addr,
             cookie,
             utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
