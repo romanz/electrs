@@ -163,7 +163,7 @@ impl DB {
         rows.sort_unstable_by(|a, b| a.key.cmp(&b.key));
         let mut batch = rocksdb::WriteBatch::default();
         for row in rows {
-            batch.put(&row.key, &row.value).unwrap();
+            batch.put(&row.key, &row.value);
         }
         let do_flush = match flush {
             DBFlush::Enable => true,
