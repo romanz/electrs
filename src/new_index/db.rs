@@ -88,7 +88,7 @@ impl DB {
         db_opts.set_max_open_files(100_000); // TODO: make sure to `ulimit -n` this process correctly
         db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
-        db_opts.set_target_file_size_base(256 << 20);
+        db_opts.set_target_file_size_base(1_073_741_824);
         db_opts.set_write_buffer_size(256 << 20);
         db_opts.set_disable_auto_compactions(true); // for initial bulk load
 
