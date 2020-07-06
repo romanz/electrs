@@ -12,7 +12,6 @@ extern crate hyper;
 extern crate itertools;
 extern crate libc;
 extern crate lru;
-extern crate lru_cache;
 extern crate num_cpus;
 extern crate page_size;
 extern crate prometheus;
