@@ -1,4 +1,4 @@
-FROM rust:1.42.0-slim-buster
+FROM rust:1.44.1-slim-buster
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends clang=1:7.* cmake=3.* \
