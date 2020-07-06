@@ -1,8 +1,10 @@
 FROM rust:1.42.0-slim-buster
 
-RUN apt-get update
-RUN apt-get install -y clang cmake
-RUN apt-get install -y libsnappy-dev
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends clang=1:7.* cmake=3.* \
+     libsnappy-dev=1.* \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN adduser --disabled-login --system --shell /bin/false --uid 1000 user
 
