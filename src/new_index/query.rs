@@ -165,6 +165,9 @@ impl Query {
     }
 
     pub fn estimate_fee(&self, conf_target: u16) -> Option<f64> {
+        if self.config.network_type == Network::Regtest {
+            return self.get_relayfee().ok();
+        }
         if let (ref cache, Some(cache_time)) = *self.cached_estimates.read().unwrap() {
             if cache_time.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
                 return cache.get(&conf_target).copied();
