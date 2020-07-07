@@ -118,6 +118,10 @@ pub fn create_socket(addr: &SocketAddr) -> Socket {
     };
     let socket =
         Socket::new(domain, Type::stream(), Some(Protocol::tcp())).expect("creating socket failed");
+
+    #[cfg(unix)]
+    socket.set_reuse_port(true).expect("cannot enable SO_REUSEPORT");
+
     socket.bind(&addr.clone().into()).expect("cannot bind");
 
     socket
