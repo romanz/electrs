@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::slice;
-use time;
+use time::OffsetDateTime as DateTime;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockId {
@@ -50,14 +50,13 @@ impl HeaderEntry {
 
 impl fmt::Debug for HeaderEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let spec = time::Timespec::new(i64::from(self.header().time), 0);
-        let last_block_time = time::at_utc(spec).rfc3339().to_string();
+        let last_block_time = DateTime::from_unix_timestamp(self.header().time as i64);
         write!(
             f,
             "hash={} height={} @ {}",
             self.hash(),
             self.height(),
-            last_block_time,
+            last_block_time.format(time::Format::Rfc3339),
         )
     }
 }
