@@ -29,7 +29,6 @@ use {
     },
 };
 
-use async_std::task;
 use serde::Serialize;
 use serde_json;
 use std::collections::HashMap;
@@ -544,7 +543,7 @@ pub fn start(config: Arc<Config>, query: Arc<Query>) -> Handle {
 
     Handle {
         tx,
-        _thread: task::spawn(async move {
+        _thread: tokio::spawn(async move {
             run_server(config, query, rx);
         }),
     }
@@ -552,7 +551,7 @@ pub fn start(config: Arc<Config>, query: Arc<Query>) -> Handle {
 
 pub struct Handle {
     tx: oneshot::Sender<()>,
-    _thread: task::JoinHandle<()>,
+    _thread: tokio::task::JoinHandle<()>,
 }
 
 impl Handle {
