@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -644,8 +644,20 @@ impl RPC {
         let chan = Channel::unbounded();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
-            let listener =
-                TcpListener::bind(addr).unwrap_or_else(|_| panic!("bind({}) failed", addr));
+            let domain = match &addr {
+                SocketAddr::V4(_) => socket2::Domain::ipv4(),
+                SocketAddr::V6(_) => socket2::Domain::ipv6(),
+            };
+            let socket = socket2::Socket::new(
+                domain,
+                socket2::Type::stream(),
+                Some(socket2::Protocol::tcp()),
+            )
+            .expect("creating socket failed");
+            socket.listen(511).expect("setting backlog failed");
+            socket.set_nonblocking(false).expect("cannot set nonblocking to false");
+            let listener = socket.into_tcp_listener();
+
             info!("Electrum RPC server running on {}", addr);
             loop {
                 let (stream, addr) = listener.accept().expect("accept failed");
