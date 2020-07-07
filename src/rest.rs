@@ -35,6 +35,7 @@ use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread;
 use url::form_urlencoded;
 
 const CHAIN_TXS_PER_PAGE: usize = 25;
@@ -459,7 +460,6 @@ fn prepare_txs(
         .collect()
 }
 
-//pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
 #[tokio::main]
 async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receiver<()>) {
     let addr = &config.http_addr;
@@ -543,7 +543,7 @@ pub fn start(config: Arc<Config>, query: Arc<Query>) -> Handle {
 
     Handle {
         tx,
-        _thread: tokio::spawn(async move {
+        thread: thread::spawn(move || {
             run_server(config, query, rx);
         }),
     }
@@ -551,13 +551,13 @@ pub fn start(config: Arc<Config>, query: Arc<Query>) -> Handle {
 
 pub struct Handle {
     tx: oneshot::Sender<()>,
-    _thread: tokio::task::JoinHandle<()>,
+    thread: thread::JoinHandle<()>,
 }
 
 impl Handle {
     pub fn stop(self) {
         self.tx.send(()).expect("failed to send shutdown signal");
-        // the JoinHandle will detach the task when dropped
+        self.thread.join().expect("REST server failed");
     }
 }
 
