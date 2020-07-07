@@ -3,9 +3,9 @@ use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts, get_script_asm, get_tx_fee,
-    has_prevout, is_coinbase, script_to_address, BlockHeaderMeta, BlockId, FullHash,
-    TransactionStatus,
+    create_socket, electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts,
+    get_script_asm, get_tx_fee, has_prevout, is_coinbase, script_to_address, BlockHeaderMeta,
+    BlockId, FullHash, TransactionStatus,
 };
 
 #[cfg(not(feature = "liquid"))]
@@ -497,7 +497,10 @@ pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
     };
 
     let (tx, rx) = oneshot::channel::<()>();
-    let server = Server::bind(&addr)
+    let socket = create_socket(&addr);
+    socket.listen(511).expect("setting backlog failed");
+    let server = Server::from_tcp(socket.into_tcp_listener())
+        .expect("Server::from_tcp failed")
         .serve(new_service)
         .with_graceful_shutdown(rx)
         .map_err(|e| eprintln!("server error: {}", e));

@@ -25,7 +25,8 @@ use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::Query;
 use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
 use crate::util::{
-    full_hash, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry, SyncChannel,
+    create_socket, full_hash, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry,
+    SyncChannel,
 };
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -644,18 +645,11 @@ impl RPC {
         let chan = Channel::unbounded();
         let acceptor = chan.sender();
         spawn_thread("acceptor", move || {
-            let domain = match &addr {
-                SocketAddr::V4(_) => socket2::Domain::ipv4(),
-                SocketAddr::V6(_) => socket2::Domain::ipv6(),
-            };
-            let socket = socket2::Socket::new(
-                domain,
-                socket2::Type::stream(),
-                Some(socket2::Protocol::tcp()),
-            )
-            .expect("creating socket failed");
+            let socket = create_socket(&addr);
             socket.listen(511).expect("setting backlog failed");
-            socket.set_nonblocking(false).expect("cannot set nonblocking to false");
+            socket
+                .set_nonblocking(false)
+                .expect("cannot set nonblocking to false");
             let listener = socket.into_tcp_listener();
 
             info!("Electrum RPC server running on {}", addr);
