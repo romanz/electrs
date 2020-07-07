@@ -13,11 +13,10 @@ use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Error as HashError;
 use bitcoin::{BitcoinHash, BlockHash, Script, Txid};
-use futures::sync::oneshot;
 use hex::{self, FromHexError};
-use hyper::rt::{self, Future, Stream};
-use hyper::service::service_fn;
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Method, Response, Server, StatusCode};
+use tokio::sync::oneshot;
 
 #[cfg(feature = "liquid")]
 use {
@@ -28,13 +27,13 @@ use {
     },
 };
 
+use async_std::task;
 use serde::Serialize;
 use serde_json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread;
 use url::form_urlencoded;
 
 const CHAIN_TXS_PER_PAGE: usize = 25;
@@ -459,76 +458,91 @@ fn prepare_txs(
         .collect()
 }
 
-type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
-
-pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
+//pub fn run_server(config: Arc<Config>, query: Arc<Query>) -> Handle {
+#[tokio::main]
+async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receiver<()>) {
     let addr = &config.http_addr;
-    info!("REST server running on {}", addr);
 
-    let config = Arc::new(config.clone());
+    let config = Arc::clone(&config);
+    let query = Arc::clone(&query);
 
-    let new_service = move || {
+    let make_service = make_service_fn(move |_| {
         let query = Arc::clone(&query);
         let config = Arc::clone(&config);
 
-        service_fn(move |req: Request<Body>| -> BoxFut {
-            let method = req.method().clone();
-            let uri = req.uri().clone();
-            let query = Arc::clone(&query);
-            let config = Arc::clone(&config);
-            let future = req.into_body().concat2().and_then(move |body| {
-                let mut resp =
-                    handle_request(method, uri, body, &query, &config).unwrap_or_else(|err| {
-                        warn!("{:?}", err);
-                        Response::builder()
-                            .status(err.0)
-                            .header("Content-Type", "text/plain")
-                            .body(Body::from(err.1))
-                            .unwrap()
-                    });
-                if let Some(ref origins) = config.cors {
-                    resp.headers_mut()
-                        .insert("Access-Control-Allow-Origin", origins.parse().unwrap());
-                }
-                Ok(resp)
-            });
-            Box::new(future)
-        })
-    };
+        async move {
+            Ok::<_, hyper::Error>(service_fn(move |req| {
+                let query = Arc::clone(&query);
+                let config = Arc::clone(&config);
 
-    let (tx, rx) = oneshot::channel::<()>();
+                async move {
+                    let method = req.method().clone();
+                    let uri = req.uri().clone();
+                    let body = hyper::body::to_bytes(req.into_body()).await?;
+
+                    let mut resp = handle_request(method, uri, body, &query, &config)
+                        .unwrap_or_else(|err| {
+                            warn!("{:?}", err);
+                            Response::builder()
+                                .status(err.0)
+                                .header("Content-Type", "text/plain")
+                                .body(Body::from(err.1))
+                                .unwrap()
+                        });
+                    if let Some(ref origins) = config.cors {
+                        resp.headers_mut()
+                            .insert("Access-Control-Allow-Origin", origins.parse().unwrap());
+                    }
+                    Ok::<_, hyper::Error>(resp)
+                }
+            }))
+        }
+    });
+
     let socket = create_socket(&addr);
     socket.listen(511).expect("setting backlog failed");
+
     let server = Server::from_tcp(socket.into_tcp_listener())
         .expect("Server::from_tcp failed")
-        .serve(new_service)
-        .with_graceful_shutdown(rx)
-        .map_err(|e| eprintln!("server error: {}", e));
+        .serve(make_service)
+        .with_graceful_shutdown(async {
+            rx.await.ok();
+        });
+
+    info!("REST server running on {}", addr);
+
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
+    }
+}
+
+pub fn start(config: Arc<Config>, query: Arc<Query>) -> Handle {
+    let (tx, rx) = oneshot::channel::<()>();
 
     Handle {
         tx,
-        thread: thread::spawn(move || {
-            rt::run(server);
+        _thread: task::spawn(async move {
+            run_server(config, query, rx);
         }),
     }
 }
 
 pub struct Handle {
     tx: oneshot::Sender<()>,
-    thread: thread::JoinHandle<()>,
+    _thread: task::JoinHandle<()>,
 }
 
 impl Handle {
     pub fn stop(self) {
         self.tx.send(()).expect("failed to send shutdown signal");
-        self.thread.join().expect("REST server failed");
+        // the JoinHandle will detach the task when dropped
     }
 }
 
 fn handle_request(
     method: Method,
     uri: hyper::Uri,
-    body: hyper::Chunk,
+    body: hyper::body::Bytes,
     query: &Query,
     config: &Config,
 ) -> Result<Response<Body>, HttpError> {
