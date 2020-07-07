@@ -52,8 +52,9 @@ tiny_http = "0.7.0"
 url = "2.1.1"
 
 hyper = "0.13.6"
-# same tokio version as dependent by hyper v0.13.6 -- things can go awry if they mismatch
-tokio = { version = "=0.2.5", features = ["sync", "macros"] }
+hyperlocal = "0.7"
+# close to same tokio version as dependent by hyper v0.13.6 and hyperlocal 0.7 -- things can go awry if they mismatch
+tokio = { version = "=0.2.6", features = ["sync", "macros"] }
 
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.1.0-beta.6", optional = true }

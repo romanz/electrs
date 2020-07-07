@@ -18,6 +18,8 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
 use tokio::sync::oneshot;
 
+use hyperlocal::UnixServerExt;
+use std::fs;
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{peg::PegoutValue, IssuanceValue},
@@ -462,11 +464,12 @@ fn prepare_txs(
 #[tokio::main]
 async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receiver<()>) {
     let addr = &config.http_addr;
+    let socket_file = &config.http_socket_file;
 
     let config = Arc::clone(&config);
     let query = Arc::clone(&query);
 
-    let make_service = make_service_fn(move |_| {
+    let make_service_fn_inn = || {
         let query = Arc::clone(&query);
         let config = Arc::clone(&config);
 
@@ -497,21 +500,41 @@ async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receive
                 }
             }))
         }
-    });
+    };
 
-    let socket = create_socket(&addr);
-    socket.listen(511).expect("setting backlog failed");
+    let server = match socket_file {
+        None => {
+            info!("REST server running on {}", addr);
 
-    let server = Server::from_tcp(socket.into_tcp_listener())
-        .expect("Server::from_tcp failed")
-        .serve(make_service)
-        .with_graceful_shutdown(async {
-            rx.await.ok();
-        });
+            let socket = create_socket(&addr);
+            socket.listen(511).expect("setting backlog failed");
 
-    info!("REST server running on {}", addr);
+            Server::from_tcp(socket.into_tcp_listener())
+                .expect("Server::from_tcp failed")
+                .serve(make_service_fn(move |_| make_service_fn_inn()))
+                .with_graceful_shutdown(async {
+                    rx.await.ok();
+                })
+                .await
+        }
+        Some(path) => {
+            if path.exists() {
+                fs::remove_file(path).ok();
+            }
 
-    if let Err(e) = server.await {
+            info!("REST server running on unix socket {}", path.display());
+
+            Server::bind_unix(path)
+                .expect("Server::bind_unix failed")
+                .serve(make_service_fn(move |_| make_service_fn_inn()))
+                .with_graceful_shutdown(async {
+                    rx.await.ok();
+                })
+                .await
+        }
+    };
+
+    if let Err(e) = server {
         eprintln!("server error: {}", e);
     }
 }

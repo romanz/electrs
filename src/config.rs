@@ -26,6 +26,7 @@ pub struct Config {
     pub cookie: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
     pub http_addr: SocketAddr,
+    pub http_socket_file: Option<PathBuf>,
     pub monitoring_addr: SocketAddr,
     pub jsonrpc_import: bool,
     pub light_mode: bool,
@@ -177,6 +178,14 @@ impl Config {
                     .takes_value(true)
             );
 
+        #[cfg(unix)]
+        let args = args.arg(
+                Arg::with_name("http_socket_file")
+                    .long("http-socket-file")
+                    .help("HTTP server 'unix socket file' to listen on (default disabled, enabling this disables the http server)")
+                    .takes_value(true),
+            );
+
         #[cfg(feature = "liquid")]
         let args = args
             .arg(
@@ -285,6 +294,8 @@ impl Config {
                 .unwrap_or(&format!("127.0.0.1:{}", default_http_port)),
             "HTTP Server",
         );
+
+        let http_socket_file: Option<PathBuf> = m.value_of("http_socket_file").map(PathBuf::from);
         let monitoring_addr: SocketAddr = str_to_socketaddr(
             m.value_of("monitoring_addr")
                 .unwrap_or(&format!("127.0.0.1:{}", default_monitoring_port)),
@@ -346,6 +357,7 @@ impl Config {
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,
             http_addr,
+            http_socket_file,
             monitoring_addr,
             jsonrpc_import: m.is_present("jsonrpc_import"),
             light_mode: m.is_present("light_mode"),
