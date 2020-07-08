@@ -292,11 +292,11 @@ impl DiscoveryManager {
     fn save_healthy_service(&self, job: &HealthCheck, features: ServerFeatures) {
         let addr = job.addr.clone();
         let mut healthy = self.healthy.write().unwrap();
-        assert!(healthy
+        healthy
             .entry(addr)
             .or_insert_with(|| Server::new(job.hostname.clone(), features))
             .services
-            .insert(job.service));
+            .insert(job.service);
     }
 
     /// Remove the service, and remove the server entirely if it has no other reamining healthy services
