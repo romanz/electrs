@@ -33,6 +33,7 @@ use serde::Serialize;
 use serde_json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
+use std::os::unix::fs::FileTypeExt;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
@@ -517,8 +518,11 @@ async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receive
                 .await
         }
         Some(path) => {
-            if path.exists() {
-                fs::remove_file(path).ok();
+            if let Ok(meta) = fs::metadata(&path) {
+                // Cleanup socket file left by previous execution
+                if meta.file_type().is_socket() {
+                    fs::remove_file(path).ok();
+                }
             }
 
             info!("REST server running on unix socket {}", path.display());
