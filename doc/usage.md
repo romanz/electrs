@@ -46,7 +46,7 @@ There are currently no official/stable binary pckages.
 
 However, there's an [**experimental** repository for Debian 10](https://deb.ln-ask.me) (should work on recent Ubuntu, but not tested well-enough). The repository provides several significant advantages:
 
-* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash... It also connects to bitoind out-of-the-box, no messing with config files or anything else. It just works.
+* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash... It also connects to bitcoind out-of-the-box, no messing with config files or anything else. It just works.
 * Prebuilt binaries save you a lot of time. The binary installation of all the components is under 3 minutes on common hardware. Building from source is much longer.
 * The repository contains some seurity hardening out-of-the-box - separate users for services, use of [btc-rpc-proxy](https://github.com/Kixunil/btc-rpc-proxy), etc.
 
