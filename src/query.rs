@@ -224,7 +224,7 @@ impl Query {
             duration: metrics.histogram_vec(
                 HistogramOpts::new(
                     "electrs_query_duration",
-                    "Time to update mempool (in seconds)",
+                    "Request duration (in seconds)",
                 ),
                 &["type"],
             ),
