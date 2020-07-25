@@ -272,3 +272,21 @@ scrape_configs:
 $ sudo systemctl restart prometheus
 $ firefox 'http://localhost:9090/graph?g0.range_input=1h&g0.expr=index_height&g0.tab=0'
 ```
+
+## RPC examples
+
+You can invoke any supported RPC using `netcat`, for example:
+
+```
+$ echo '{"jsonrpc": "2.0", "method": "server.version", "id": 0}' | netcat 127.0.0.1 50001
+{"id":0,"jsonrpc":"2.0","result":["electrs 0.8.5","1.4"]}
+```
+
+For more complex tasks, you may need to convert addresses to 
+[script hashes](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see 
+[contrib/addr.py](https://github.com/romanz/electrs/blob/master/contrib/addr.py) for getting an address balance:
+
+```
+$ ./contrib/addr.py 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR  # sample address from block #640699
+144STc7gcb9XCp6t4hvrcUEKg9KemivsCR has {'confirmed': 12652436, 'unconfirmed': 0} satoshis
+```
