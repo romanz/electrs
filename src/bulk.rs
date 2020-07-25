@@ -240,30 +240,26 @@ pub fn index_blk_files(
     let indexers: Vec<JoinHandle> = (0..index_threads)
         .map(|_| start_indexer(blobs.clone(), parser.clone(), rows_chan.sender()))
         .collect();
-    let signal = signal.clone();
-    spawn_thread("bulk_writer", move || -> Result<DBStore> {
-        for (rows, path) in rows_chan.into_receiver() {
-            trace!("indexed {:?}: {} rows", path, rows.len());
-            store.write(rows);
-            signal
-                .poll()
-                .chain_err(|| "stopping bulk indexing due to signal")?;
-        }
-        reader
-            .join()
-            .expect("reader panicked")
-            .expect("reader failed");
 
-        indexers.into_iter().for_each(|i| {
-            i.join()
-                .expect("indexer panicked")
-                .expect("indexing failed")
-        });
-        store.write(vec![parser.last_indexed_row()]);
-        Ok(store)
-    })
-    .join()
-    .expect("writer panicked")
+    for (rows, path) in rows_chan.into_receiver() {
+        trace!("indexed {:?}: {} rows", path, rows.len());
+        store.write(rows);
+        signal
+            .poll()
+            .chain_err(|| "stopping bulk indexing due to signal")?;
+    }
+    reader
+        .join()
+        .expect("reader panicked")
+        .expect("reader failed");
+
+    indexers.into_iter().for_each(|i| {
+        i.join()
+            .expect("indexer panicked")
+            .expect("indexing failed")
+    });
+    store.write(vec![parser.last_indexed_row()]);
+    Ok(store)
 }
 
 #[cfg(test)]
