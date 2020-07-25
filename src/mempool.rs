@@ -1,6 +1,5 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::hash_types::Txid;
-use hex;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::FromIterator;
 use std::ops::Bound;
@@ -32,7 +31,7 @@ impl MempoolStore {
         let rows = index_transaction(tx, 0);
         for row in rows {
             let (key, value) = row.into_pair();
-            self.map.entry(key).or_insert_with(|| vec![]).push(value);
+            self.map.entry(key).or_insert_with(Vec::new).push(value);
         }
     }
 

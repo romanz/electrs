@@ -1,6 +1,5 @@
 use bitcoin::network::constants::Network;
 use dirs::home_dir;
-use num_cpus;
 use std::convert::TryInto;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -11,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use stderrlog;
 
 use crate::daemon::CookieGetter;
 use crate::errors::*;
@@ -235,12 +233,12 @@ impl Config {
             Network::Regtest => config.daemon_dir.push("regtest"),
         }
 
+        let daemon_dir = &config.daemon_dir;
         let blocks_dir = config
             .blocks_dir
-            .unwrap_or(default_blocks_dir(&config.daemon_dir));
+            .unwrap_or_else(|| default_blocks_dir(daemon_dir));
 
-        let cookie_getter =
-            create_cookie_getter(config.cookie, config.cookie_file, &config.daemon_dir);
+        let cookie_getter = create_cookie_getter(config.cookie, config.cookie_file, daemon_dir);
 
         let mut log = stderrlog::new();
         log.verbosity(

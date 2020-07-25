@@ -1,4 +1,3 @@
-use rocksdb;
 use std::path::{Path, PathBuf};
 
 use crate::util::Bytes;

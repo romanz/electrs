@@ -1,6 +1,5 @@
 use crossbeam_channel as channel;
 use crossbeam_channel::RecvTimeoutError;
-use signal_hook;
 use std::thread;
 use std::time::Duration;
 

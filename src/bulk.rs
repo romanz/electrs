@@ -1,7 +1,6 @@
 use bitcoin::blockdata::block::Block;
 use bitcoin::consensus::encode::{deserialize, Decodable};
 use bitcoin::hash_types::BlockHash;
-use libc;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Cursor;

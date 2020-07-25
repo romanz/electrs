@@ -1,12 +1,9 @@
-use page_size;
 use prometheus::{self, Encoder, IntGauge};
 use std::fs;
 use std::io;
 use std::net::SocketAddr;
 use std::thread;
 use std::time::Duration;
-use sysconf;
-use tiny_http;
 
 pub use prometheus::{
     GaugeVec, Histogram, HistogramOpts, HistogramTimer, HistogramVec, IntCounter as Counter,

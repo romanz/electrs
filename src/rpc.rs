@@ -3,7 +3,6 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin_hashes::hex::{FromHex, ToHex};
 use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
 use error_chain::ChainedError;
-use hex;
 use serde_json::{from_str, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -206,7 +205,11 @@ impl Connection {
             hash_from_value::<Sha256dHash>(params.get(0)).chain_err(|| "bad script_hash")?;
         let status = self.query.status(&script_hash[..])?;
         let result = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
-        if let None = self.status_hashes.insert(script_hash, result.clone()) {
+        if self
+            .status_hashes
+            .insert(script_hash, result.clone())
+            .is_none()
+        {
             self.stats.subscriptions.inc();
         }
 

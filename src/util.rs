@@ -8,7 +8,6 @@ use std::iter::FromIterator;
 use std::slice;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use std::thread;
-use time;
 
 pub type Bytes = Vec<u8>;
 pub type HeaderMap = HashMap<BlockHash, BlockHeader>;
