@@ -235,9 +235,9 @@ impl Config {
             Network::Regtest => config.daemon_dir.push("regtest"),
         }
 
-        let blocks_dir = config.blocks_dir.unwrap_or(
-            default_blocks_dir(&config.daemon_dir)
-        );
+        let blocks_dir = config
+            .blocks_dir
+            .unwrap_or(default_blocks_dir(&config.daemon_dir));
 
         let cookie_getter =
             create_cookie_getter(config.cookie, config.cookie_file, &config.daemon_dir);
