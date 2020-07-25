@@ -348,6 +348,9 @@ impl Daemon {
             if !info.initialblockdownload {
                 break;
             }
+            if network == Network::Regtest && info.headers == info.blocks {
+                break;
+            }
             warn!(
                 "wait until IBD is over: headers={} blocks={} progress={}",
                 info.headers, info.blocks, info.verificationprogress
