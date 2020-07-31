@@ -208,7 +208,7 @@ impl Tracker {
                 match daemon.getmempoolentry(txid) {
                     Ok(entry) => Some((txid, entry)),
                     Err(err) => {
-                        warn!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
+                        debug!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
                         None // ignore this transaction for now
                     }
                 }
@@ -219,7 +219,7 @@ impl Tracker {
             let txs = match daemon.gettransactions(&txids) {
                 Ok(txs) => txs,
                 Err(err) => {
-                    warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
+                    debug!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
                     return Ok(()); // keep the mempool until next update()
                 }
             };
