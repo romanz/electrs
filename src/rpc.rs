@@ -7,7 +7,7 @@ use serde_json::{from_str, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::mpsc::{self, Sender, SyncSender, Receiver, TrySendError};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -74,7 +74,7 @@ struct Connection {
     status_hashes: HashMap<Sha256dHash, Value>, // ScriptHash -> StatusHash
     stream: TcpStream,
     addr: SocketAddr,
-    chan: SyncSender<Message>,
+    sender: SyncSender<Message>,
     stats: Arc<Stats>,
     relayfee: f64,
 }
@@ -86,7 +86,7 @@ impl Connection {
         addr: SocketAddr,
         stats: Arc<Stats>,
         relayfee: f64,
-        chan: SyncSender<Message>,
+        sender: SyncSender<Message>,
     ) -> Connection {
         Connection {
             query,
@@ -94,7 +94,7 @@ impl Connection {
             status_hashes: HashMap::new(),
             stream,
             addr,
-            chan,
+            sender,
             stats,
             relayfee,
         }
@@ -252,7 +252,7 @@ impl Connection {
         let tx: Transaction = deserialize(&tx).chain_err(|| "failed to parse tx")?;
         let txid = self.query.broadcast(&tx)?;
         self.query.update_mempool()?;
-        if let Err(e) = self.chan.try_send(Message::PeriodicUpdate) {
+        if let Err(e) = self.sender.try_send(Message::PeriodicUpdate) {
             warn!("failed to issue PeriodicUpdate after broadcast: {}", e);
         }
         Ok(json!(txid.to_hex()))
@@ -424,7 +424,7 @@ impl Connection {
         }
     }
 
-    fn handle_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) -> Result<()> {
+    fn parse_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) -> Result<()> {
         loop {
             let mut line = Vec::<u8>::new();
             reader
@@ -454,8 +454,8 @@ impl Connection {
 
     pub fn run(mut self, receiver: Receiver<Message>) {
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
-        let tx = self.chan.clone();
-        let child = spawn_thread("reader", || Connection::handle_requests(reader, tx));
+        let sender = self.sender.clone();
+        let child = spawn_thread("reader", || Connection::parse_requests(reader, sender));
         if let Err(e) = self.handle_replies(receiver) {
             error!(
                 "[{}] connection handling failed: {}",
