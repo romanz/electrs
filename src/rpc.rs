@@ -267,6 +267,11 @@ impl Connection {
         Ok(self.query.get_transaction(&tx_hash, verbose)?)
     }
 
+    fn blockchain_transaction_get_confirmed_blockhash(&self, params: &[Value]) -> Result<Value> {
+        let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
+        self.query.get_confirmed_blockhash(&tx_hash)
+    }
+
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
         let height = usize_from_value(params.get(1), "height")?;
@@ -318,6 +323,7 @@ impl Connection {
             "blockchain.transaction.broadcast" => self.blockchain_transaction_broadcast(&params),
             "blockchain.transaction.get" => self.blockchain_transaction_get(&params),
             "blockchain.transaction.get_merkle" => self.blockchain_transaction_get_merkle(&params),
+            "blockchain.transaction.get_confirmed_blockhash" => self.blockchain_transaction_get_confirmed_blockhash(&params),
             "blockchain.transaction.id_from_pos" => {
                 self.blockchain_transaction_id_from_pos(&params)
             }
