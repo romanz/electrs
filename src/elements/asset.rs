@@ -112,6 +112,40 @@ impl IssuedAsset {
     }
 }
 
+impl LiquidAsset {
+    pub fn supply(&self) -> Option<u64> {
+        match self {
+            LiquidAsset::Native(asset) => Some(
+                asset.chain_stats.peg_in_amount
+                    - asset.chain_stats.peg_out_amount
+                    - asset.chain_stats.burned_amount
+                    + asset.mempool_stats.peg_in_amount
+                    - asset.mempool_stats.peg_out_amount
+                    - asset.mempool_stats.burned_amount,
+            ),
+            LiquidAsset::Issued(asset) => {
+                if asset.chain_stats.has_blinded_issuances
+                    || asset.mempool_stats.has_blinded_issuances
+                {
+                    None
+                } else {
+                    Some(
+                        asset.chain_stats.issued_amount - asset.chain_stats.burned_amount
+                            + asset.mempool_stats.issued_amount
+                            - asset.mempool_stats.burned_amount,
+                    )
+                }
+            }
+        }
+    }
+    pub fn precision(&self) -> u8 {
+        match self {
+            LiquidAsset::Native(_) => 8,
+            LiquidAsset::Issued(asset) => asset.meta.as_ref().map_or(0, |m| m.precision),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IssuingInfo {
     pub txid: FullHash,

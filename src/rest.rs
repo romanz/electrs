@@ -1056,6 +1056,26 @@ fn handle_request(
             json_response(prepare_txs(txs, query, config), TTL_SHORT)
         }
 
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"asset"), Some(asset_str), Some(&"supply"), param, None) => {
+            let asset_id = AssetId::from_hex(asset_str)?;
+            let asset_entry = query
+                .lookup_asset(&asset_id)?
+                .ok_or_else(|| HttpError::not_found("Asset id not found".to_string()))?;
+
+            let supply = asset_entry
+                .supply()
+                .ok_or_else(|| HttpError::from("Asset supply is blinded".to_string()))?;
+            let precision = asset_entry.precision();
+
+            if param == Some(&"decimal") && precision > 0 {
+                let supply_dec = supply as f64 / 10u32.pow(precision.into()) as f64;
+                http_message(StatusCode::OK, supply_dec.to_string(), TTL_SHORT)
+            } else {
+                http_message(StatusCode::OK, supply.to_string(), TTL_SHORT)
+            }
+        }
+
         _ => Err(HttpError::not_found(format!(
             "endpoint does not exist {:?}",
             uri.path()
