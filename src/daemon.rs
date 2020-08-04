@@ -323,7 +323,7 @@ impl Daemon {
             }
 
             warn!(
-                "waiting for bitcoind sync to finish: {}/{} blocks, vertification progress: {:.3}%",
+                "waiting for bitcoind sync to finish: {}/{} blocks, verification progress: {:.3}%",
                 info.blocks,
                 info.headers,
                 info.verificationprogress * 100.0
