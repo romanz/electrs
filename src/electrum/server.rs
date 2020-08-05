@@ -728,7 +728,7 @@ impl RPC {
                     let stats = Arc::clone(&stats);
                     let garbage_sender = garbage_sender.clone();
                     #[cfg(feature = "electrum-discovery")]
-                    let discovery = Arc::clone(&discovery);
+                    let discovery = discovery.clone();
 
                     let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
