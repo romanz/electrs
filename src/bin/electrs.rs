@@ -103,7 +103,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let electrum_server = ElectrumRPC::start(Arc::clone(&config), Arc::clone(&query), &metrics);
 
     loop {
-        if let Err(err) = signal.wait_sync(Duration::from_secs(5)) {
+        if let Err(err) = signal.wait(Duration::from_secs(5), true) {
             info!("stopping server: {}", err);
             rest_server.stop();
             // the electrum server is stopped when dropped

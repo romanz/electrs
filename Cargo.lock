@@ -34,6 +34,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d25d88fd6b8041580a654f9d0c581a047baee2b3efee13275f2fc392fc75034"
+
+[[package]]
 name = "arraydeque"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -156,21 +162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bit-set"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9bf6104718e80d7b26a68fdbacff3481cfc05df670821affc7e9cbc1884400c"
-dependencies = [
- "bit-vec",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b4ff8b16e6076c3e14220b39fbc1fabb6737522281a388998046859400895f"
-
-[[package]]
 name = "bitcoin"
 version = "0.23.0"
 source = "git+https://github.com/blockstream/rust-bitcoin?rev=0.23-electrs#dd131855022c2cdd691a531c1d5c2f5ab707e4d4"
@@ -252,27 +243,6 @@ name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
-
-[[package]]
-name = "chan"
-version = "0.1.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d14956a3dae065ffaa0d92ece848ab4ced88d32361e7fdfbfd653a5c454a1ed8"
-dependencies = [
- "rand 0.3.23",
-]
-
-[[package]]
-name = "chan-signal"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b829e3f5432da0cc46577d89fc88c937e78052e6735fb47ce0213b0db120b01"
-dependencies = [
- "bit-set",
- "chan",
- "lazy_static 0.2.11",
- "libc",
-]
 
 [[package]]
 name = "chrono"
@@ -422,8 +392,6 @@ dependencies = [
  "base64 0.12.3",
  "bincode",
  "bitcoin",
- "chan",
- "chan-signal",
  "clap",
  "crossbeam-channel",
  "dirs",
@@ -448,6 +416,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "signal-hook",
  "socket2",
  "stderrlog",
  "sysconf",
@@ -1529,6 +1498,26 @@ name = "shlex"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
+
+[[package]]
+name = "signal-hook"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "604508c1418b99dfe1925ca9224829bb2a8a9a04dda655cc01fcad46f4ab05ed"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94f478ede9f64724c5d173d7bb56099ec3e2d9fc2774aac65d34b8b890405f41"
+dependencies = [
+ "arc-swap",
+ "libc",
+]
 
 [[package]]
 name = "slab"

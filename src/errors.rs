@@ -1,5 +1,3 @@
-use chan_signal::Signal;
-
 error_chain! {
     types {
         Error, ErrorKind, ResultExt, Result;
@@ -11,9 +9,9 @@ error_chain! {
             display("Connection error: {}", msg)
         }
 
-        Interrupt(signal: Signal) {
+        Interrupt(sig: i32) {
             description("Interruption by external signal")
-            display("Iterrupted by SIG{:?}", signal)
+            display("Iterrupted by signal {}", sig)
         }
 
         TooPopular {

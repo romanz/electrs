@@ -7,8 +7,6 @@ extern crate rocksdb;
 extern crate rocksdb_oldcpu as rocksdb;
 
 #[macro_use]
-extern crate chan;
-#[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate arrayref;

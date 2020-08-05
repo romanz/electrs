@@ -134,7 +134,7 @@ fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
             Ok(conn) => return Ok(conn),
             Err(err) => {
                 warn!("failed to connect daemon at {}: {}", addr, err);
-                signal.wait(Duration::from_secs(3))?;
+                signal.wait(Duration::from_secs(3), false)?;
                 continue;
             }
         }
@@ -328,7 +328,7 @@ impl Daemon {
                 info.headers,
                 info.verificationprogress * 100.0
             );
-            signal.wait(Duration::from_secs(5))?;
+            signal.wait(Duration::from_secs(5), false)?;
         }
         Ok(daemon)
     }
@@ -400,7 +400,7 @@ impl Daemon {
             match self.handle_request_batch(method, params_list) {
                 Err(Error(ErrorKind::Connection(msg), _)) => {
                     warn!("reconnecting to bitcoind: {}", msg);
-                    self.signal.wait(Duration::from_secs(3))?;
+                    self.signal.wait(Duration::from_secs(3), false)?;
                     let mut conn = self.conn.lock().unwrap();
                     *conn = conn.reconnect()?;
                     continue;
