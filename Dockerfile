@@ -12,7 +12,6 @@ USER user
 WORKDIR /home/user
 COPY ./ /home/user
 
-RUN cargo build --release
 RUN cargo install --path .
 
 # Electrum RPC
