@@ -135,6 +135,7 @@ pub struct Config {
     pub bulk_index_threads: usize,
     pub tx_cache_size: usize,
     pub txid_limit: usize,
+    pub txid_warning_limit: usize,
     pub server_banner: String,
     pub blocktxids_cache_size: usize,
     pub cookie_getter: Arc<dyn CookieGetter>,
@@ -267,6 +268,7 @@ impl Config {
             tx_cache_size: (config.tx_cache_size_mb * MB) as usize,
             blocktxids_cache_size: (config.blocktxids_cache_size_mb * MB) as usize,
             txid_limit: config.txid_limit,
+            txid_warning_limit: config.txid_warning_limit,
             server_banner: config.server_banner,
             cookie_getter,
         };
@@ -307,6 +309,7 @@ debug_struct! { Config,
     bulk_index_threads,
     tx_cache_size,
     txid_limit,
+    txid_warning_limit,
     server_banner,
     blocktxids_cache_size,
 }

@@ -180,6 +180,7 @@ pub struct Query {
     tracker: RwLock<Tracker>,
     tx_cache: TransactionCache,
     txid_limit: usize,
+    txid_warning_limit: usize,
     duration: HistogramVec,
 }
 
@@ -189,12 +190,14 @@ impl Query {
         metrics: &Metrics,
         tx_cache: TransactionCache,
         txid_limit: usize,
+        txid_warning_limit: usize,
     ) -> Arc<Query> {
         Arc::new(Query {
             app,
             tracker: RwLock::new(Tracker::new(metrics)),
             tx_cache,
             txid_limit,
+            txid_warning_limit,
             duration: metrics.histogram_vec(
                 HistogramOpts::new(
                     "electrs_query_duration",
@@ -283,8 +286,15 @@ impl Query {
         // if the limit is enabled
         if self.txid_limit > 0 && txid_prefixes.len() > self.txid_limit {
             bail!(
-                "{}+ transactions found, query may take a long time",
-                txid_prefixes.len()
+                "{}+ transactions found for script_hash {}, query may take a long time",
+                txid_prefixes.len(),
+                Sha256dHash::from_slice(script_hash).unwrap()
+            );
+        } else if self.txid_warning_limit > 0 && txid_prefixes.len() > self.txid_warning_limit {
+            warn!("confirmed_status - Found {} transactions for script_hash {}, This is getting close to the limit {}",
+                  txid_prefixes.len(),
+                  Sha256dHash::from_slice(script_hash).unwrap(),
+                  self.txid_limit
             );
         }
         for t in self.load_txns_by_prefix(read_store, txid_prefixes)? {

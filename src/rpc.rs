@@ -369,7 +369,12 @@ impl Connection {
             .with_label_values(&["statushash_update"])
             .start_timer();
 
-        let status = self.query.status(&scripthash[..])?;
+        let status_result = self.query.status(&scripthash[..]);
+        if status_result.is_err() {
+            warn!("on_scripthash_change error - {}", status_result.err().unwrap());
+            return Ok(());
+        }
+        let status = status_result.unwrap();
         let new_statushash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
         if new_statushash == *old_statushash {
             return Ok(());
@@ -501,7 +506,12 @@ impl Connection {
             }
 
             let scripthash_buffer = scripthash.into_inner();
-            let status = query.status(&scripthash_buffer)?;
+            let status_result = query.status(&scripthash_buffer);
+            if status_result.is_err() {
+                warn!("compare_status_hashes error - {}", status_result.err().unwrap());
+                continue;
+            }
+            let status = status_result.unwrap();
             let new_statushash = status.hash().map_or(Value::Null, |h| json!(hex::encode(h)));
             if new_statushash == *old_statushash {
                 continue;
