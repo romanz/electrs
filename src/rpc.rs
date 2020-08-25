@@ -1,7 +1,6 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use bitcoin::hash_types::Txid;
-use bitcoin::util::hash::BitcoinHash;
+use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin_hashes::hex::{FromHex, ToHex};
 use bitcoin_hashes::{sha256d::Hash as Sha256dHash, Hash};
 use error_chain::ChainedError;
@@ -10,7 +9,7 @@ use serde_json::{from_str, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::mpsc::{Sender, SyncSender, TrySendError, TryRecvError};
+use std::sync::mpsc::{Sender, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
@@ -73,6 +72,17 @@ fn unspent_from_status(status: &Status) -> Value {
             }))
             .collect()
     ))
+}
+
+fn get_output_scripthash(txn: &Transaction, n: Option<usize>) -> Vec<FullHash> {
+    if let Some(out) = n {
+        vec![compute_script_hash(&txn.output[out].script_pubkey[..])]
+    } else {
+        txn.output
+            .iter()
+            .map(|o| compute_script_hash(&o.script_pubkey[..]))
+            .collect()
+    }
 }
 
 struct Connection {
@@ -356,6 +366,11 @@ impl Connection {
         let old_statushash;
         match self.script_hashes.get(&scripthash) {
             Some(statushash) => {
+                debug!("on_scripthash_change: scripthash = {}, statushash = {}{}",
+                    scripthash,
+                    statushash,
+                    txid_opt.map_or("".to_string(), |txid| format!(", txid = {}", txid))
+                );
                 old_statushash = statushash;
             }
             None => {
@@ -381,11 +396,12 @@ impl Connection {
         }
         timer.observe_duration();
 
-        if txid_opt.is_some() {
-            debug!("ScriptHash change: scripthash = {}, tx_hash = {}, statushash = {}", scripthash, txid_opt.unwrap(), new_statushash);
-        } else {
-            debug!("ScriptHash change: scripthash = {}, old_statushash = {}, new_statushash = {}", scripthash, old_statushash, new_statushash);
-        }
+        debug!("ScriptHash change: scripthash = {}, old_statushash = {}, new_statushash = {}{}",
+            scripthash,
+            old_statushash,
+            new_statushash,
+            txid_opt.map_or("".to_string(), |txid| format!(", txid = {}", txid))
+        );
 
         self.send_values(&vec![json!({
             "jsonrpc": "2.0",
@@ -591,24 +607,28 @@ impl RPC {
                 let mut senders = senders.lock().unwrap();
                 match msg {
                     Notification::ScriptHashChange(hash, txid) => {
-                        for sender in senders.split_off(0) {
-                            if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::ScriptHashChange(hash, Some(txid)))
+                        senders.retain(|sender| {
+                            if let Err(e) =
+                                sender.send(Message::ScriptHashChange(hash, Some(txid)))
                             {
-                                continue;
+                                warn!("ScriptHashChange failed with error = {}", e);
+                                false // drop disconnected clients
+                            } else {
+                                true
                             }
-                            senders.push(sender);
-                        }
-                    }
+                        })
+                    },
                     Notification::ChainTipChange(hash) => {
-                        for sender in senders.split_off(0) {
-                            if let Err(TrySendError::Disconnected(_)) =
-                                sender.try_send(Message::ChainTipChange(hash.clone()))
+                        senders.retain(|sender| {
+                            if let Err(e) =
+                                sender.send(Message::ChainTipChange(hash.clone()))
                             {
-                                continue;
+                                warn!("ChainTipChange failed with error = {}", e);
+                                false // drop disconnected clients
+                            } else {
+                                true
                             }
-                            senders.push(sender);
-                        }
+                        })
                     }
                     Notification::Exit => acceptor.send(None).unwrap(), // mark acceptor as done
                 }
@@ -705,94 +725,76 @@ impl RPC {
         }
     }
 
-    /// Attempt to notify scripthash subscriptions affected by transaction.
-    /// The `notified` hashset is an optimization to avoid double notifications.
-    /// When `notify_inputs` is set, we also notify scripthashes that are spent from.
-    fn try_notify_subscriptions_for_tx(
-        &self,
-        txid: &Txid,
-        block_height: Option<u32>,
-        notified: &mut HashSet<Txid>,
-        notify_inputs: bool,
-    ) -> Result<()> {
-        if notified.contains(txid) {
-            return Ok(());
-        }
-        notified.insert(txid.clone());
-
-        let txn = self.query.load_txn(txid, block_height)?;
-
-        let scripthashes: Vec<FullHash> = txn
-            .output
-            .iter()
-            .map(|o| compute_script_hash(&o.script_pubkey[..]))
-            .collect();
-
-        for s in scripthashes {
-            if let Err(e) = self.notification.send(Notification::ScriptHashChange(s, txid.into_inner())) {
-                trace!("ScriptHash change notification failed {}", e);
-            }
-        }
-
-        if notify_inputs {
-            for txin in txn.input {
-                if txin.previous_output.is_null() {
-                    continue;
-                }
-                let id: &Txid = &txin.previous_output.txid;
-
-                if let Err(e) = self.try_notify_subscriptions_for_tx(id, None, notified, false) {
-                    trace!("failed to load input transaction {}: {}", id, e);
-                    continue;
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub fn notify_scripthash_subscriptions(
         &self,
-        changed_headers: &Vec<HeaderEntry>,
-        changed_mempool_txs: HashSet<Txid>,
+        headers_changed: &Vec<HeaderEntry>,
+        txs_changed: HashSet<Txid>,
     ) {
-        // Keep track of which txs have been notified, so we don't spend time
-        // notifying them twice.
-        let mut notified: HashSet<Txid> = HashSet::new();
+        let mut txn_done: HashSet<Txid> = HashSet::new();
+        let mut scripthashes: HashMap<FullHash, Txid> = HashMap::new();
 
-        for txid in changed_mempool_txs {
-            if let Err(e) = self.try_notify_subscriptions_for_tx(&txid, None, &mut notified, true) {
-                trace!("Failed notifying subscriptions {}", e);
+        let mut insert_for_tx = |txid, blockhash| {
+            if !txn_done.insert(txid) {
+                return;
+            }
+            if let Ok(hashes) = self.get_scripthashes_effected_by_tx(&txid, blockhash) {
+                for h in hashes {
+                    scripthashes.insert(h, txid);
+                }
+            } else {
+                warn!("failed to get effected scripthashes for tx {}", txid);
+            }
+        };
+
+        for header in headers_changed {
+            let blockhash = header.hash();
+            let txids = match self.query.get_block_txids(&blockhash) {
+                Ok(txids) => txids,
+                Err(e) => {
+                    warn!("Failed to get blocktxids for {}: {}", blockhash, e);
+                    continue;
+                }
+            };
+            for txid in txids {
+                insert_for_tx(txid, Some(*blockhash));
             }
         }
+        for txid in txs_changed {
+            insert_for_tx(txid, None);
+        }
 
-        for header in changed_headers {
-            let blockhash = header.header().bitcoin_hash();
-            let blockheight = header.height();
-            let res = self.query.with_blocktxids(&blockhash, |txid| {
-                if let Err(e) = self.try_notify_subscriptions_for_tx(
-                    &txid,
-                    Some(blockheight as u32),
-                    &mut notified,
-                    true,
-                ) {
-                    trace!("Failed notifying subscriptions {}", e);
-                    return;
-                }
-            });
-            if let Err(e) = res {
-                trace!(
-                    "Failed to fetch transactions for block {}: {}",
-                    blockhash,
-                    e
-                );
+        for (scripthash, txid) in scripthashes.drain() {
+            if let Err(e) = self.notification.send(Notification::ScriptHashChange(scripthash, txid.into_inner())) {
+                warn!("Scripthash change notification failed: {}", e);
             }
         }
     }
 
     pub fn notify_subscriptions_chaintip(&self, header: HeaderEntry) {
         if let Err(e) = self.notification.send(Notification::ChainTipChange(header)) {
-            trace!("Failed to notify about chaintip change {}", e);
+            warn!("Failed to notify about chaintip change {}", e);
         }
+    }
+
+    fn get_scripthashes_effected_by_tx(
+        &self,
+        txid: &Txid,
+        blockhash: Option<BlockHash>,
+    ) -> Result<Vec<FullHash>> {
+        let txn = self.query.load_txn_with_blockhashlookup(txid, blockhash)?;
+        let mut scripthashes = get_output_scripthash(&txn, None);
+
+        for txin in txn.input {
+            if txin.previous_output.is_null() {
+                continue;
+            }
+            let id: &Txid = &txin.previous_output.txid;
+            let n = txin.previous_output.vout as usize;
+
+            let txn = self.query.load_txn_with_blockhashlookup(&id, None)?;
+            scripthashes.extend(get_output_scripthash(&txn, Some(n)));
+        }
+        Ok(scripthashes)
     }
 }
 
