@@ -111,6 +111,10 @@ pub struct Utxo {
 
     #[cfg(feature = "liquid")]
     pub asset: elements::confidential::Asset,
+    #[cfg(feature = "liquid")]
+    pub nonce: elements::confidential::Nonce,
+    #[cfg(feature = "liquid")]
+    pub witness: elements::TxOutWitness,
 }
 
 impl From<&Utxo> for OutPoint {
@@ -546,6 +550,10 @@ impl ChainQuery {
 
                     #[cfg(feature = "liquid")]
                     asset: txo.asset,
+                    #[cfg(feature = "liquid")]
+                    nonce: txo.nonce,
+                    #[cfg(feature = "liquid")]
+                    witness: txo.witness,
                 }
             })
             .collect())

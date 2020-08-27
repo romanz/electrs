@@ -24,7 +24,7 @@ use std::fs;
 use {
     crate::elements::{peg::PegoutValue, IssuanceValue},
     elements::{
-        confidential::{Asset, Value},
+        confidential::{Asset, Nonce, Value},
         encode, AssetId,
     },
 };
@@ -363,6 +363,22 @@ struct UtxoValue {
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
     assetcommitment: Option<String>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nonce: Option<String>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    noncecommitment: Option<String>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Vec::is_empty", with = "crate::util::serde_hex")]
+    surjection_proof: Vec<u8>,
+
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Vec::is_empty", with = "crate::util::serde_hex")]
+    range_proof: Vec<u8>,
 }
 impl From<Utxo> for UtxoValue {
     fn from(utxo: Utxo) -> Self {
@@ -394,6 +410,20 @@ impl From<Utxo> for UtxoValue {
                 Asset::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.asset))),
                 _ => None,
             },
+            #[cfg(feature = "liquid")]
+            nonce: match utxo.nonce {
+                Nonce::Explicit(nonce) => Some(nonce.to_hex()),
+                _ => None,
+            },
+            #[cfg(feature = "liquid")]
+            noncecommitment: match utxo.nonce {
+                Nonce::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.nonce))),
+                _ => None,
+            },
+            #[cfg(feature = "liquid")]
+            surjection_proof: utxo.witness.surjection_proof,
+            #[cfg(feature = "liquid")]
+            range_proof: utxo.witness.rangeproof,
         }
     }
 }

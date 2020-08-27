@@ -179,18 +179,27 @@ impl Mempool {
         entries
             .iter()
             .filter_map(|entry| match entry {
-                TxHistoryInfo::Funding(info) => Some(Utxo {
-                    txid: deserialize(&info.txid).expect("invalid txid"),
-                    vout: info.vout as u32,
-                    value: info.value,
-                    confirmed: None,
-
+                TxHistoryInfo::Funding(info) => {
+                    // Liquid requires some additional information from the txo that's not available in the TxHistoryInfo index.
                     #[cfg(feature = "liquid")]
-                    asset: self
+                    let txo = self
                         .lookup_txo(&entry.get_funded_outpoint())
-                        .expect("missing txo")
-                        .asset,
-                }),
+                        .expect("missing txo");
+
+                    Some(Utxo {
+                        txid: deserialize(&info.txid).expect("invalid txid"),
+                        vout: info.vout as u32,
+                        value: info.value,
+                        confirmed: None,
+
+                        #[cfg(feature = "liquid")]
+                        asset: txo.asset,
+                        #[cfg(feature = "liquid")]
+                        nonce: txo.nonce,
+                        #[cfg(feature = "liquid")]
+                        witness: txo.witness,
+                    })
+                }
                 TxHistoryInfo::Spending(_) => None,
                 #[cfg(feature = "liquid")]
                 TxHistoryInfo::Issuing(_)
