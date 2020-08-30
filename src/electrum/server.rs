@@ -222,14 +222,13 @@ impl Connection {
         let heights: Vec<usize> = (start_height..(start_height + count)).collect();
         let headers: Vec<String> = heights
             .into_iter()
-            .map(|height| {
+            .filter_map(|height| {
                 self.query
                     .chain()
                     .header_by_height(height)
                     .map(|entry| hex::encode(&serialize(entry.header())))
             })
-            .collect::<Option<Vec<String>>>()
-            .chain_err(|| "requested block headers not found")?;
+            .collect();
 
         if count == 0 || cp_height == 0 {
             return Ok(json!({
