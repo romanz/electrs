@@ -31,6 +31,7 @@ use crate::util::{
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::new(1, 4);
+const MAX_HEADERS: usize = 2016;
 
 #[cfg(feature = "electrum-discovery")]
 use crate::electrum::{DiscoveryManager, ServerFeatures};
@@ -217,7 +218,7 @@ impl Connection {
 
     fn blockchain_block_headers(&self, params: &[Value]) -> Result<Value> {
         let start_height = usize_from_value(params.get(0), "start_height")?;
-        let count = usize_from_value(params.get(1), "count")?;
+        let count = MAX_HEADERS.min(usize_from_value(params.get(1), "count")?);
         let cp_height = usize_from_value_or(params.get(2), "cp_height", 0)?;
         let heights: Vec<usize> = (start_height..(start_height + count)).collect();
         let headers: Vec<String> = heights
@@ -234,7 +235,7 @@ impl Connection {
             return Ok(json!({
                 "count": headers.len(),
                 "hex": headers.join(""),
-                "max": 2016,
+                "max": MAX_HEADERS,
             }));
         }
 
@@ -244,7 +245,7 @@ impl Connection {
         Ok(json!({
             "count": headers.len(),
             "hex": headers.join(""),
-            "max": 2016,
+            "max": MAX_HEADERS,
             "root": root,
             "branch" : branch,
         }))
