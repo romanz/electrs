@@ -431,6 +431,11 @@ impl Query {
             .gettransaction_raw(tx_hash, blockhash, verbose)
     }
 
+    pub fn get_confirmed_blockhash(&self, tx_hash: &Txid) -> Result<Value> {
+        let blockhash = self.lookup_confirmed_blockhash(tx_hash, None)?;
+        Ok(json!({ "block_hash": blockhash }))
+    }
+
     pub fn get_headers(&self, heights: &[usize]) -> Vec<HeaderEntry> {
         let _timer = self
             .duration
