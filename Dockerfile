@@ -8,9 +8,11 @@ RUN apt-get update \
 
 RUN adduser --disabled-login --system --shell /bin/false --uid 1000 user
 
-USER user
 WORKDIR /home/user
 COPY ./ /home/user
+RUN chown -R user .
+
+USER user
 
 RUN cargo install --path .
 
