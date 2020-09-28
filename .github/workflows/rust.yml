@@ -3,15 +3,20 @@ name: Rust
 on: [push, pull_request]
 
 jobs:
-  build:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Check
-      run: cargo check
-    - name: Build
-      run: cargo build
-    - name: Run tests
-      run: cargo test
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          profile: minimal
+          override: true
+      - uses: actions/checkout@v1
+      - name: Check
+        run: cargo check
+      - name: Build
+        run: cargo build
+      - name: Run tests
+        run: cargo test

@@ -4,7 +4,7 @@
 
 ### Build dependencies
 
-Install [recent Rust](https://rustup.rs/) (1.34+, `apt install cargo` is preferred for Debian 10),
+Install [recent Rust](https://rustup.rs/) (1.41.1+, `apt install cargo` is preferred for Debian 10),
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+)
 and [latest Electrum wallet](https://electrum.org/#download) (3.3+).
 

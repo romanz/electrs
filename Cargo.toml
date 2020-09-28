@@ -18,9 +18,6 @@ spec = "config_spec.toml"
 [profile.release]
 lto = true
 
-[features]
-latest_rust = []  # use latest Rust features (otherwise, support Rust 1.34)
-
 [dependencies]
 base64 = "0.10"
 bincode = "1.0"
