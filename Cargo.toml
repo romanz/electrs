@@ -38,6 +38,7 @@ lru = "0.1"
 num_cpus = "1.0"
 page_size = "0.4"
 prometheus = "0.5"
+protobuf = "= 2.14.0"   # https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21
 rocksdb = "= 0.12.2"	# due to https://github.com/romanz/electrs/issues/193
 rust-crypto = "0.2"
 serde = "1.0"
