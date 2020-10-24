@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "electrs_index",
+    "electrs_query",
+    "electrs_rpc",
+]

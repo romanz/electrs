@@ -1,0 +1,14 @@
+[package]
+name = "electrs_query"
+version = "0.1.0"
+authors = ["Roman Zeyde <me@romanzey.de>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+bitcoin = { version = "0.25", features = ["use-serde"] }
+log = "0.4"
+rayon = "1.3"
+libc = "0.2"
+
+electrs_index = { path = "../electrs_index" }
