@@ -34,29 +34,32 @@ struct Config {
 
 const CURRENT_FORMAT: u64 = 1;
 
+fn default_opts() -> rocksdb::Options {
+    let mut cf_opts = rocksdb::Options::default();
+    cf_opts.set_keep_log_file_num(10);
+    cf_opts.set_max_open_files(16);
+    cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    cf_opts.set_target_file_size_base(256 << 20);
+    cf_opts.set_write_buffer_size(256 << 20);
+    cf_opts.set_disable_auto_compactions(true); // for initial bulk load
+    cf_opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
+    cf_opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
+    cf_opts.set_compaction_readahead_size(1 << 20);
+    cf_opts
+}
+
 impl DBStore {
     fn open_opts(opts: Options) -> Result<Self> {
         debug!("opening DB with {:?}", opts);
-        let mut db_opts = rocksdb::Options::default();
+        let mut db_opts = default_opts();
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
-        db_opts.set_max_background_jobs(4);
 
-        let mut cf_opts = rocksdb::Options::default();
-        cf_opts.set_keep_log_file_num(10);
-        cf_opts.set_max_open_files(16);
-        cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
-        cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
-        cf_opts.set_target_file_size_base(256 << 20);
-        cf_opts.set_write_buffer_size(256 << 20);
-        cf_opts.set_disable_auto_compactions(true); // for initial bulk load
-        cf_opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
-        cf_opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
-        cf_opts.set_compaction_readahead_size(1 << 20);
         let cf_descriptors = vec![
-            rocksdb::ColumnFamilyDescriptor::new(CONFIG_CF, cf_opts.clone()),
-            rocksdb::ColumnFamilyDescriptor::new(HEADERS_CF, cf_opts.clone()),
-            rocksdb::ColumnFamilyDescriptor::new(INDEX_CF, cf_opts),
+            rocksdb::ColumnFamilyDescriptor::new(CONFIG_CF, default_opts()),
+            rocksdb::ColumnFamilyDescriptor::new(HEADERS_CF, default_opts()),
+            rocksdb::ColumnFamilyDescriptor::new(INDEX_CF, default_opts()),
         ];
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, &opts.path, cf_descriptors)
