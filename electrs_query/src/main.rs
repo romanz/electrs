@@ -6,7 +6,6 @@ use bitcoin::{Address, OutPoint, Script, Txid};
 use rayon::prelude::*;
 
 use std::collections::HashMap;
-use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
@@ -112,17 +111,6 @@ fn address_balance<'a>(
         .collect())
 }
 
-fn read_addresses_from_stdin() -> Vec<Address> {
-    let mut buffer = String::new();
-    std::io::stdin()
-        .read_to_string(&mut buffer)
-        .expect("failed to read stdin");
-    buffer
-        .split_whitespace()
-        .map(|a| Address::from_str(a).expect("invalid address"))
-        .collect()
-}
-
 fn query_index(index: &Index, daemon: &Daemon, addresses: &[Address]) -> Result<()> {
     if addresses.is_empty() {
         return Ok(());
@@ -155,7 +143,6 @@ fn query_index(index: &Index, daemon: &Daemon, addresses: &[Address]) -> Result<
 }
 
 fn main() -> Result<()> {
-    let addresses = read_addresses_from_stdin();
     let config = Config::from_args();
 
     let daemon = Daemon::new(config.daemon_rpc_addr, &config.daemon_dir)
@@ -163,6 +150,12 @@ fn main() -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr)?;
     let store = DBStore::open(Path::new(&config.db_path))?;
     let index = Index::new(store, &metrics).context("failed to open index")?;
+
+    let addresses: Vec<Address> = config
+        .args
+        .iter()
+        .map(|a| Address::from_str(a).expect("invalid address"))
+        .collect();
 
     loop {
         let tip = index.update(&daemon).context("failed to update index")?;

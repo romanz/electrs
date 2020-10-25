@@ -14,6 +14,7 @@ pub struct Config {
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub wait_duration: Duration,
+    pub args: Vec<String>,
 }
 
 impl Config {
@@ -39,6 +40,7 @@ impl Config {
                     .help("bitcoind directory")
                     .takes_value(true),
             )
+            .arg(Arg::with_name("args").takes_value(true).multiple(true))
             .get_matches();
 
         let network_str = matches.value_of("network").unwrap();
@@ -77,6 +79,12 @@ impl Config {
             Network::Regtest => daemon_dir.join("regtest"),
         };
 
+        let args = matches
+            .values_of("args")
+            .unwrap()
+            .map(String::from)
+            .collect();
+
         let mut db_path: PathBuf = matches.value_of("db-dir").unwrap().into();
         db_path.push(network_str);
 
@@ -92,6 +100,7 @@ impl Config {
             db_path,
             daemon_dir,
             wait_duration: Duration::from_secs(600),
+            args,
         }
     }
 }
