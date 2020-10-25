@@ -81,9 +81,8 @@ impl Config {
 
         let args = matches
             .values_of("args")
-            .unwrap()
-            .map(String::from)
-            .collect();
+            .map(|m| m.map(String::from).collect())
+            .unwrap_or(vec![]);
 
         let mut db_path: PathBuf = matches.value_of("db-dir").unwrap().into();
         db_path.push(network_str);
