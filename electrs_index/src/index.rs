@@ -28,6 +28,7 @@ pub struct Index {
     store: RwLock<db::DBStore>,
     map: Arc<RwLock<BlockMap>>,
     stats: Stats,
+    low_memory: bool,
 }
 
 #[derive(Clone)]
@@ -73,7 +74,7 @@ pub struct LookupResult {
 }
 
 impl Index {
-    pub fn new(store: db::DBStore, metrics: &Metrics) -> Result<Self> {
+    pub fn new(store: db::DBStore, metrics: &Metrics, low_memory: bool) -> Result<Self> {
         let update_duration = metrics.histogram_vec(
             "index_update_duration",
             "Index duration (in seconds)",
@@ -111,6 +112,7 @@ impl Index {
                 update_size,
                 lookup_duration,
             },
+            low_memory,
         })
     }
 
@@ -301,6 +303,33 @@ impl Index {
             new_blocks,
             read_requests.len()
         );
+
+        if self.low_memory {
+            let mut block_rows = vec![];
+            for r in read_requests {
+                debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
+                let mut blk_file = std::fs::File::open(r.blk_file)?;
+                let mut undo_file = std::fs::File::open(r.undo_file)?;
+                let mut batch = db::WriteBatch::new();
+                for loc in r.locations {
+                    let (loc, block, undo) =
+                        parse_block_and_undo(loc, &mut blk_file, &mut undo_file);
+                    batch.index(loc, block, undo);
+                }
+                let batch_block_rows = batch
+                    .header_rows
+                    .iter()
+                    .map(|row| BlockRow::from_db_row(row).expect("bad BlockRow"));
+                block_rows.extend(batch_block_rows);
+                self.stats
+                    .update_duration
+                    .observe_duration("write", || self.store.read().unwrap().write(batch));
+            }
+            self.store.write().unwrap().start_compactions();
+            self.map.write().unwrap().update_chain(block_rows, tip);
+            return Ok(tip);
+        }
+
         let (reader_tx, reader_rx) = sync_channel(0);
         let (indexer_tx, indexer_rx) = sync_channel(0);
 

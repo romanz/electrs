@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     let daemon = Daemon::new(config.daemon_rpc_addr, &config.daemon_dir)
         .context("failed to connect to daemon")?;
     let store = DBStore::open(Path::new(&config.db_path))?;
-    let index = Index::new(store, &metrics).context("failed to open index")?;
+    let index = Index::new(store, &metrics, config.low_memory).context("failed to open index")?;
     let rpc = Rpc::new(index, daemon, &metrics)?;
 
     let handle = task::spawn(accept_loop(config.electrum_rpc_addr, rpc));

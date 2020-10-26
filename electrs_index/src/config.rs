@@ -14,6 +14,7 @@ pub struct Config {
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub wait_duration: Duration,
+    pub low_memory: bool,
     pub args: Vec<String>,
 }
 
@@ -41,6 +42,11 @@ impl Config {
                     .takes_value(true),
             )
             .arg(Arg::with_name("args").takes_value(true).multiple(true))
+            .arg(
+                Arg::with_name("low-memory")
+                    .long("low-memory")
+                    .help("use less RAM"),
+            )
             .get_matches();
 
         let network_str = matches.value_of("network").unwrap();
@@ -79,6 +85,8 @@ impl Config {
             Network::Regtest => daemon_dir.join("regtest"),
         };
 
+        let low_memory = matches.is_present("low-memory");
+
         let args = matches
             .values_of("args")
             .map(|m| m.map(String::from).collect())
@@ -99,6 +107,7 @@ impl Config {
             db_path,
             daemon_dir,
             wait_duration: Duration::from_secs(600),
+            low_memory,
             args,
         }
     }

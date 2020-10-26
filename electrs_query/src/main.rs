@@ -149,7 +149,7 @@ fn main() -> Result<()> {
         .context("failed to connect to daemon")?;
     let metrics = Metrics::new(config.monitoring_addr)?;
     let store = DBStore::open(Path::new(&config.db_path))?;
-    let index = Index::new(store, &metrics).context("failed to open index")?;
+    let index = Index::new(store, &metrics, config.low_memory).context("failed to open index")?;
 
     let addresses: Vec<Address> = config
         .args
