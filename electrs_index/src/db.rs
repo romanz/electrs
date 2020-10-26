@@ -35,18 +35,18 @@ struct Config {
 const CURRENT_FORMAT: u64 = 1;
 
 fn default_opts() -> rocksdb::Options {
-    let mut cf_opts = rocksdb::Options::default();
-    cf_opts.set_keep_log_file_num(10);
-    cf_opts.set_max_open_files(16);
-    cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
-    cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
-    cf_opts.set_target_file_size_base(256 << 20);
-    cf_opts.set_write_buffer_size(256 << 20);
-    cf_opts.set_disable_auto_compactions(true); // for initial bulk load
-    cf_opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
-    cf_opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
-    cf_opts.set_compaction_readahead_size(1 << 20);
-    cf_opts
+    let mut opts = rocksdb::Options::default();
+    opts.set_keep_log_file_num(10);
+    opts.set_max_open_files(16);
+    opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    opts.set_target_file_size_base(256 << 20);
+    opts.set_write_buffer_size(256 << 20);
+    opts.set_disable_auto_compactions(true); // for initial bulk load
+    opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
+    opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
+    opts.set_compaction_readahead_size(1 << 20);
+    opts
 }
 
 impl DBStore {
