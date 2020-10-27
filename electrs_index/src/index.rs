@@ -325,7 +325,7 @@ impl Index {
                     .update_duration
                     .observe_duration("write", || self.store.read().unwrap().write(batch));
             }
-            self.store.write().unwrap().start_compactions();
+            self.store.write().unwrap().flush();
             return self.map.write().unwrap().update_chain(block_rows, tip);
         }
 
@@ -375,7 +375,7 @@ impl Index {
         assert_eq!(new_blocks, block_rows.len());
 
         // allow only one thread to apply full compaction
-        self.store.write().unwrap().start_compactions();
+        self.store.write().unwrap().flush();
         self.map.write().unwrap().update_chain(block_rows, tip)
     }
 }
