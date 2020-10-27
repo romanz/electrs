@@ -7,7 +7,7 @@ mod registry;
 
 use asset::get_issuance_entropy;
 pub use asset::{lookup_asset, LiquidAsset};
-pub use registry::AssetRegistry;
+pub use registry::{AssetRegistry, AssetSorting};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {

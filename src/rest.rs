@@ -22,7 +22,7 @@ use hyperlocal::UnixServerExt;
 use std::fs;
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{peg::PegoutValue, IssuanceValue},
+    crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue},
     elements::{
         confidential::{Asset, Nonce, Value},
         encode, AssetId,
@@ -43,6 +43,11 @@ const CHAIN_TXS_PER_PAGE: usize = 25;
 const MAX_MEMPOOL_TXS: usize = 50;
 const BLOCK_LIMIT: usize = 10;
 const ADDRESS_SEARCH_LIMIT: usize = 10;
+
+#[cfg(feature = "liquid")]
+const ASSETS_PER_PAGE: usize = 25;
+#[cfg(feature = "liquid")]
+const ASSETS_MAX_PER_PAGE: usize = 100;
 
 const TTL_LONG: u32 = 157_784_630; // ttl for static resources (5 years)
 const TTL_SHORT: u32 = 10; // ttl for volatie resources
@@ -1013,6 +1018,26 @@ fn handle_request(
 
         (&Method::GET, Some(&"fee-estimates"), None, None, None, None) => {
             json_response(query.estimate_fee_map(), TTL_SHORT)
+        }
+
+        #[cfg(feature = "liquid")]
+        (&Method::GET, Some(&"assets"), Some(&"registry"), None, None, None) => {
+            let start_index: usize = query_params
+                .get("start_index")
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
+
+            let limit: usize = query_params
+                .get("limit")
+                .and_then(|n| n.parse().ok())
+                .map(|n: usize| n.min(ASSETS_MAX_PER_PAGE))
+                .unwrap_or(ASSETS_PER_PAGE);
+
+            let sorting = AssetSorting::from_query_params(&query_params)?;
+
+            let assets = query.list_registry_assets(start_index, limit, sorting)?;
+
+            json_response(assets, TTL_SHORT)
         }
 
         #[cfg(feature = "liquid")]

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 
 use bitcoin::hashes::{hex::FromHex, sha256, Hash};
 use bitcoin::{BlockHash, Txid};
@@ -343,8 +344,9 @@ fn asset_history_row(
 
 pub fn lookup_asset(
     query: &Query,
-    registry: Option<&AssetRegistry>,
+    registry: Option<&Arc<RwLock<AssetRegistry>>>,
     asset_id: &AssetId,
+    meta: Option<&AssetMeta>, // may optionally be provided if already known
 ) -> Result<Option<LiquidAsset>> {
     if asset_id == query.network().native_asset() {
         let (chain_stats, mempool_stats) = native_asset_stats(query);
@@ -370,7 +372,10 @@ pub fn lookup_asset(
     Ok(if let Some(row) = row {
         let reissuance_token = parse_asset_id(&row.reissuance_token);
 
-        let meta = registry.map_or_else(|| Ok(None), |r| r.load(asset_id))?;
+        let registry = registry.map(|r| r.read().unwrap());
+        let meta = meta
+            .or_else(|| registry.as_ref().and_then(|r| r.get(asset_id)))
+            .cloned();
         let stats = issued_asset_stats(query, asset_id, &reissuance_token);
         let status = query.get_tx_status(&deserialize(&row.issuance_txid).unwrap());
 

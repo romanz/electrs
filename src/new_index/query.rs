@@ -16,7 +16,7 @@ use bitcoin::Txid;
 #[cfg(feature = "liquid")]
 use crate::{
     chain::AssetId,
-    elements::{lookup_asset, AssetRegistry, LiquidAsset},
+    elements::{lookup_asset, AssetRegistry, AssetSorting, LiquidAsset},
 };
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
@@ -34,7 +34,7 @@ pub struct Query {
     cached_estimates: RwLock<(HashMap<u16, f64>, Option<Instant>)>,
     cached_relayfee: RwLock<Option<f64>>,
     #[cfg(feature = "liquid")]
-    asset_db: Option<AssetRegistry>,
+    asset_db: Option<Arc<RwLock<AssetRegistry>>>,
 }
 
 impl Query {
@@ -221,7 +221,7 @@ impl Query {
         mempool: Arc<RwLock<Mempool>>,
         daemon: Arc<Daemon>,
         config: Arc<Config>,
-        asset_db: Option<AssetRegistry>,
+        asset_db: Option<Arc<RwLock<AssetRegistry>>>,
     ) -> Self {
         Query {
             chain,
@@ -236,6 +236,29 @@ impl Query {
 
     #[cfg(feature = "liquid")]
     pub fn lookup_asset(&self, asset_id: &AssetId) -> Result<Option<LiquidAsset>> {
-        lookup_asset(&self, self.asset_db.as_ref(), asset_id)
+        lookup_asset(&self, self.asset_db.as_ref(), asset_id, None)
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn list_registry_assets(
+        &self,
+        start_index: usize,
+        limit: usize,
+        sorting: AssetSorting,
+    ) -> Result<Vec<LiquidAsset>> {
+        let asset_db = match &self.asset_db {
+            None => return Ok(vec![]),
+            Some(db) => db.read().unwrap(),
+        };
+        Ok(asset_db
+            .list(start_index, limit, sorting)
+            .into_iter()
+            .filter_map(|(asset_id, metadata)| {
+                // Attach on-chain information alongside the registry metadata
+                lookup_asset(&self, None, asset_id, Some(metadata))
+                    .ok()
+                    .flatten()
+            })
+            .collect())
     }
 }

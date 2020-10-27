@@ -84,10 +84,11 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     mempool.write().unwrap().update(&daemon)?;
 
     #[cfg(feature = "liquid")]
-    let asset_db = config
-        .asset_db_path
-        .as_ref()
-        .map(|dir| AssetRegistry::new(dir.clone()));
+    let asset_db = config.asset_db_path.as_ref().map(|db_dir| {
+        let asset_db = Arc::new(RwLock::new(AssetRegistry::new(db_dir.clone())));
+        AssetRegistry::spawn_sync(asset_db.clone());
+        asset_db
+    });
 
     let query = Arc::new(Query::new(
         Arc::clone(&chain),
