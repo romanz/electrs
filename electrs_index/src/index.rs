@@ -326,8 +326,7 @@ impl Index {
                     .observe_duration("write", || self.store.read().unwrap().write(batch));
             }
             self.store.write().unwrap().start_compactions();
-            self.map.write().unwrap().update_chain(block_rows, tip);
-            return Ok(tip);
+            return self.map.write().unwrap().update_chain(block_rows, tip);
         }
 
         let (reader_tx, reader_rx) = sync_channel(0);
@@ -377,8 +376,7 @@ impl Index {
 
         // allow only one thread to apply full compaction
         self.store.write().unwrap().start_compactions();
-        self.map.write().unwrap().update_chain(block_rows, tip);
-        Ok(tip)
+        self.map.write().unwrap().update_chain(block_rows, tip)
     }
 }
 

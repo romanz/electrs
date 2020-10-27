@@ -1,3 +1,4 @@
+use anyhow::Result;
 use bitcoin::{BlockHash, BlockHeader};
 use chrono::{offset::TimeZone, Utc};
 
@@ -134,7 +135,11 @@ impl BlockMap {
         self.chain.by_hash.get(hash).map(|height| (hash, *height))
     }
 
-    pub(crate) fn update_chain(&mut self, block_rows: Vec<BlockRow>, tip: BlockHash) {
+    pub(crate) fn update_chain(
+        &mut self,
+        block_rows: Vec<BlockRow>,
+        tip: BlockHash,
+    ) -> Result<BlockHash> {
         self.update_blocks(block_rows);
         assert_eq!(self.by_hash.len(), self.by_pos.len());
         // make sure there is no overlap between blocks
@@ -172,5 +177,6 @@ impl BlockMap {
             tip_time
         );
         self.chain = chain;
+        Ok(tip)
     }
 }
