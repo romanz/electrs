@@ -985,7 +985,7 @@ fn add_transaction(
 
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if !txo.script_pubkey.is_provably_unspendable() {
+        if is_spendable(txo) {
             rows.push(TxOutRow::new(&txid, txo_index, txo).into_row());
         }
     }
