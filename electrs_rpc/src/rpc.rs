@@ -130,14 +130,15 @@ async fn wait_for_new_blocks(
     daemon: Daemon,
     mut new_block_tx: Sender<BlockHash>,
 ) -> Result<()> {
+    let mut new_tip = daemon.get_best_block_hash()?;
     loop {
-        let new_tip = daemon
-            .wait_for_new_block(Duration::from_secs(60))
-            .context("failed to wait for new block")?;
         if tip != new_tip {
             tip = new_tip;
             new_block_tx.send(tip).await?;
         }
+        new_tip = daemon
+            .wait_for_new_block(Duration::from_secs(60))
+            .context("failed to wait for new block")?;
     }
 }
 
