@@ -13,6 +13,7 @@ pub(crate) struct WriteBatch {
 struct Options {
     path: PathBuf,
     bulk_import: bool,
+    low_memory: bool,
 }
 
 pub struct DBStore {
@@ -34,7 +35,7 @@ struct Config {
 
 const CURRENT_FORMAT: u64 = 1;
 
-fn default_opts() -> rocksdb::Options {
+fn default_opts(low_memory: bool) -> rocksdb::Options {
     let mut opts = rocksdb::Options::default();
     opts.set_keep_log_file_num(10);
     opts.set_max_open_files(16);
@@ -45,21 +46,23 @@ fn default_opts() -> rocksdb::Options {
     opts.set_disable_auto_compactions(true); // for initial bulk load
     opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
-    opts.set_compaction_readahead_size(1 << 20);
+    if !low_memory {
+        opts.set_compaction_readahead_size(1 << 20);
+    }
     opts
 }
 
 impl DBStore {
     fn open_opts(opts: Options) -> Result<Self> {
         debug!("opening DB with {:?}", opts);
-        let mut db_opts = default_opts();
+        let mut db_opts = default_opts(opts.low_memory);
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
 
         let cf_descriptors = vec![
-            rocksdb::ColumnFamilyDescriptor::new(CONFIG_CF, default_opts()),
-            rocksdb::ColumnFamilyDescriptor::new(HEADERS_CF, default_opts()),
-            rocksdb::ColumnFamilyDescriptor::new(INDEX_CF, default_opts()),
+            rocksdb::ColumnFamilyDescriptor::new(CONFIG_CF, default_opts(opts.low_memory)),
+            rocksdb::ColumnFamilyDescriptor::new(HEADERS_CF, default_opts(opts.low_memory)),
+            rocksdb::ColumnFamilyDescriptor::new(INDEX_CF, default_opts(opts.low_memory)),
         ];
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, &opts.path, cf_descriptors)
@@ -94,10 +97,11 @@ impl DBStore {
     }
 
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, low_memory: bool) -> Result<Self> {
         DBStore::open_opts(Options {
             path: path.to_path_buf(),
             bulk_import: true,
+            low_memory,
         })
     }
 

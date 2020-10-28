@@ -148,7 +148,7 @@ fn main() -> Result<()> {
     let daemon = Daemon::new(config.daemon_rpc_addr, &config.daemon_dir)
         .context("failed to connect to daemon")?;
     let metrics = Metrics::new(config.monitoring_addr)?;
-    let store = DBStore::open(Path::new(&config.db_path))?;
+    let store = DBStore::open(Path::new(&config.db_path), config.low_memory)?;
     let index = Index::new(store, &metrics, config.low_memory).context("failed to open index")?;
 
     let addresses: Vec<Address> = config
