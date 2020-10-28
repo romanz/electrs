@@ -140,8 +140,12 @@ impl DBStore {
 
     pub(crate) fn flush(&mut self) {
         let mut config = self.get_config();
-        self.db.flush_cf(self.index_cf()).expect("index flush failed");
-        self.db.flush_cf(self.headers_cf()).expect("headers flush failed");
+        self.db
+            .flush_cf(self.index_cf())
+            .expect("index flush failed");
+        self.db
+            .flush_cf(self.headers_cf())
+            .expect("headers flush failed");
         if !config.compacted {
             info!("starting full compaction");
             let cf = self.index_cf();
