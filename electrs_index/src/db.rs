@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 
 pub(crate) type Row = Box<[u8]>;
 
+#[derive(Default)]
 pub(crate) struct WriteBatch {
     pub(crate) header_rows: Vec<Row>,
     pub(crate) index_rows: Vec<Row>,
+    pub(crate) txid_rows: Vec<Row>,
 }
 
 #[derive(Debug)]
@@ -19,10 +21,12 @@ struct Options {
 pub struct DBStore {
     db: rocksdb::DB,
     opts: Options,
+    cfs: Vec<&'static str>,
 }
 
 const CONFIG_CF: &str = "config";
 const HEADERS_CF: &str = "headers";
+const TXID_CF: &str = "txid";
 const INDEX_CF: &str = "index";
 
 const CONFIG_KEY: &str = "C";
@@ -59,15 +63,15 @@ impl DBStore {
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
 
-        let cf_descriptors = vec![
-            rocksdb::ColumnFamilyDescriptor::new(CONFIG_CF, default_opts(opts.low_memory)),
-            rocksdb::ColumnFamilyDescriptor::new(HEADERS_CF, default_opts(opts.low_memory)),
-            rocksdb::ColumnFamilyDescriptor::new(INDEX_CF, default_opts(opts.low_memory)),
-        ];
+        let cfs = vec![CONFIG_CF, HEADERS_CF, TXID_CF, INDEX_CF];
+        let cf_descriptors: Vec<rocksdb::ColumnFamilyDescriptor> = cfs
+            .iter()
+            .map(|&name| rocksdb::ColumnFamilyDescriptor::new(name, default_opts(opts.low_memory)))
+            .collect();
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, &opts.path, cf_descriptors)
             .context("failed to open DB")?;
-        let mut store = DBStore { db, opts };
+        let mut store = DBStore { db, opts, cfs };
 
         let config = store.get_config();
         debug!("DB {:?}", config);
@@ -90,6 +94,10 @@ impl DBStore {
 
     fn index_cf(&self) -> &rocksdb::ColumnFamily {
         self.db.cf_handle(INDEX_CF).expect("missing INDEX_CF")
+    }
+
+    fn txid_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db.cf_handle(TXID_CF).expect("missing TXID_CF")
     }
 
     fn headers_cf(&self) -> &rocksdb::ColumnFamily {
@@ -115,6 +123,16 @@ impl DBStore {
         }
     }
 
+    pub(crate) fn iter_txid<'a>(&'a self, prefix: &'a [u8]) -> ScanIterator<'a> {
+        let mode = rocksdb::IteratorMode::From(prefix, rocksdb::Direction::Forward);
+        let iter = self.db.iterator_cf(self.txid_cf(), mode);
+        ScanIterator {
+            prefix,
+            iter,
+            done: false,
+        }
+    }
+
     pub(crate) fn read_headers(&self) -> Vec<Row> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
@@ -129,6 +147,9 @@ impl DBStore {
         for key in batch.index_rows {
             db_batch.put_cf(self.index_cf(), key, b"");
         }
+        for key in batch.txid_rows {
+            db_batch.put_cf(self.txid_cf(), key, b"");
+        }
         for key in batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
         }
@@ -140,20 +161,19 @@ impl DBStore {
 
     pub(crate) fn flush(&mut self) {
         let mut config = self.get_config();
-        self.db
-            .flush_cf(self.index_cf())
-            .expect("index flush failed");
-        self.db
-            .flush_cf(self.headers_cf())
-            .expect("headers flush failed");
+        for name in &self.cfs {
+            let cf = self.db.cf_handle(name).expect("missing CF");
+            self.db.flush_cf(cf).expect("CF flush failed");
+        }
         if !config.compacted {
-            info!("starting full compaction");
-            let cf = self.index_cf();
-            self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>); // would take a while
-            info!("finished full compaction");
-
+            for name in &self.cfs {
+                info!("starting {} compaction", name);
+                let cf = self.db.cf_handle(name).expect("missing CF");
+                self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
+            }
             config.compacted = true;
             self.set_config(config);
+            info!("finished full compaction");
         }
         if self.opts.bulk_import {
             self.opts.bulk_import = false;

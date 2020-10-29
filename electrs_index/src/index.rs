@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 
 use bitcoin::{
     consensus::{serialize, Decodable},
-    Block, BlockHash, BlockHeader, VarInt,
+    hashes::hex::ToHex,
+    Block, BlockHash, BlockHeader, Txid, VarInt,
 };
 
 use std::{
@@ -21,7 +22,7 @@ use crate::{
     db,
     map::BlockMap,
     metrics::{Histogram, Metrics},
-    types::{BlockRow, BlockUndo, Confirmed, FilePos, Reader, ScriptHash, ScriptHashRow},
+    types::{BlockRow, BlockUndo, Confirmed, FilePos, Reader, ScriptHash, ScriptHashRow, TxidRow},
 };
 
 pub struct Index {
@@ -53,17 +54,12 @@ struct IndexRequest {
 }
 
 impl db::WriteBatch {
-    fn new() -> Self {
-        Self {
-            header_rows: vec![],
-            index_rows: vec![],
-        }
-    }
-
     fn index(&mut self, loc: BlockLocation, block: Block, undo: BlockUndo) {
-        let (index_rows, header_row) = index_single_block(loc, block, undo);
+        let (index_rows, txid_rows, header_row) = index_single_block(loc, block, undo);
         self.index_rows
             .extend(index_rows.iter().map(ScriptHashRow::to_db_row));
+        self.txid_rows
+            .extend(txid_rows.iter().map(TxidRow::to_db_row));
         self.header_rows.push(header_row.to_db_row());
     }
 }
@@ -130,9 +126,30 @@ impl Index {
         })
     }
 
-    pub fn lookup(&self, script_hash: &ScriptHash, daemon: &Daemon) -> Result<LookupResult> {
+    pub fn lookup_by_txid(&self, txid: &Txid, daemon: &Daemon) -> Result<LookupResult> {
+        let txid_prefix = TxidRow::scan_prefix(txid);
+        let positions: Vec<FilePos> =
+            self.stats
+                .lookup_duration
+                .observe_duration("lookup_scan_rows", || {
+                    self.store
+                        .read()
+                        .unwrap()
+                        .iter_txid(&txid_prefix)
+                        .map(|row| TxidRow::from_db_row(&row).map(|row| *row.position()))
+                        .collect::<Result<Vec<_>>>()
+                        .context("failed to parse txid rows")
+                })?;
+        self.create_readers(txid.to_hex(), positions, daemon)
+    }
+
+    pub fn lookup_by_scripthash(
+        &self,
+        script_hash: &ScriptHash,
+        daemon: &Daemon,
+    ) -> Result<LookupResult> {
         let scan_prefix = ScriptHashRow::scan_prefix(script_hash);
-        let rows: Vec<ScriptHashRow> =
+        let positions: Vec<FilePos> =
             self.stats
                 .lookup_duration
                 .observe_duration("lookup_scan_rows", || {
@@ -140,28 +157,36 @@ impl Index {
                         .read()
                         .unwrap()
                         .iter_index(&scan_prefix)
-                        .map(|row| ScriptHashRow::from_db_row(&row))
+                        .map(|row| ScriptHashRow::from_db_row(&row).map(|row| *row.position()))
                         .collect::<Result<Vec<_>>>()
                         .context("failed to parse index rows")
                 })?;
 
-        debug!("{} has {} index rows", script_hash, rows.len());
+        self.create_readers(script_hash.to_hex(), positions, daemon)
+    }
 
+    fn create_readers(
+        &self,
+        label: String,
+        positions: Vec<FilePos>,
+        daemon: &Daemon,
+    ) -> Result<LookupResult> {
+        debug!("{} has {} txid rows", label, positions.len());
         let map = self.map(); // lock block map for concurrent updates
-        let readers = rows
+        let readers = positions
             .into_iter()
-            .filter_map(|row| match map.find_block(row.position()) {
+            .filter_map(|pos| match map.find_block(&pos) {
                 Some((hash, height)) => {
                     let header = map.get_by_hash(hash).expect("missing block header");
                     Some(ConfirmedReader {
-                        reader: row.position().reader(daemon),
+                        reader: pos.reader(daemon),
                         lookup_duration: self.stats.lookup_duration.clone(),
                         header: *header,
                         height,
                     })
                 }
                 None => {
-                    warn!("{:?} not confirmed", row);
+                    warn!("{:?} {} not confirmed", pos, label);
                     None
                 }
             })
@@ -233,7 +258,7 @@ impl Index {
                     });
                 let blocks_count = parsed.len();
 
-                let mut result = db::WriteBatch::new();
+                let mut result = db::WriteBatch::default();
                 update_duration.observe_duration("index", || {
                     parsed.into_iter().for_each(|(loc, block, undo)| {
                         result.index(loc, block, undo);
@@ -264,6 +289,9 @@ impl Index {
         self.stats
             .update_size
             .observe_size("write_index_rows", db_rows_size(&batch.index_rows));
+        self.stats
+            .update_size
+            .observe_size("write_txid_rows", db_rows_size(&batch.txid_rows));
         self.stats
             .update_size
             .observe_size("write_header_rows", db_rows_size(&batch.header_rows));
@@ -310,7 +338,7 @@ impl Index {
                 debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
                 let mut blk_file = std::fs::File::open(r.blk_file)?;
                 let mut undo_file = std::fs::File::open(r.undo_file)?;
-                let mut batch = db::WriteBatch::new();
+                let mut batch = db::WriteBatch::default();
                 for loc in r.locations {
                     let (loc, block, undo) =
                         parse_block_and_undo(loc, &mut blk_file, &mut undo_file);
@@ -388,9 +416,10 @@ fn index_single_block(
     loc: BlockLocation,
     block: Block,
     undo: BlockUndo,
-) -> (Vec<ScriptHashRow>, BlockRow) {
+) -> (Vec<ScriptHashRow>, Vec<TxidRow>, BlockRow) {
     assert!(undo.txdata.len() + 1 == block.txdata.len());
     let mut script_hash_rows = vec![];
+    let mut txid_rows = Vec::with_capacity(block.txdata.len());
 
     let file_id = loc.file as u16;
     let txcount = VarInt(block.txdata.len() as u64);
@@ -400,6 +429,12 @@ fn index_single_block(
 
     for tx in &block.txdata {
         let tx_offset = next_tx_offset as u32;
+        let pos = FilePos {
+            file_id,
+            offset: tx_offset,
+        };
+        txid_rows.push(TxidRow::new(tx.txid(), pos));
+
         next_tx_offset += tx.get_size();
 
         let create_index_row = |script| {
@@ -432,6 +467,7 @@ fn index_single_block(
     let block_size = (next_tx_offset - loc.data) as u32;
     (
         script_hash_rows,
+        txid_rows,
         BlockRow::new(block.header, block_pos, block_size),
     )
 }

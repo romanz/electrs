@@ -340,7 +340,7 @@ impl Rpc {
     fn get_confirmed(&self, scripthash: &ScriptHash) -> Result<(Vec<TxEntry>, BlockHash)> {
         let result = self
             .index
-            .lookup(&scripthash, &self.daemon)
+            .lookup_by_scripthash(&scripthash, &self.daemon)
             .context("index lookup failed")?;
         let mut confirmed: Vec<Confirmed> = result
             .readers
@@ -375,14 +375,24 @@ impl Rpc {
         unconfirmed
     }
 
-    fn transaction_get(&self, params: Value) -> Result<Value> {
-        let (txid, verbose) = match from_value::<(Txid,)>(params.clone()) {
-            Ok((txid,)) => (txid, false),
-            Err(_) => from_value::<(Txid, bool)>(params)?,
-        };
+    fn transaction_get(&self, (txid,): (Txid,)) -> Result<Value> {
         match self.tx_cache.read().unwrap().get(&txid) {
-            Some(tx) => Ok(json!(serialize(tx).to_hex())),
-            None => panic!("tx {} is not cached", txid), // TODO: do we need txindex?
+            Some(tx) => return Ok(json!(serialize(tx).to_hex())),
+            None => debug!("tx {} is not cached", txid),
+        }
+        let result = self.index.lookup_by_txid(&txid, &self.daemon)?;
+        let confirmed: Vec<Confirmed> = result
+            .readers
+            .into_par_iter()
+            .map(|r| r.read())
+            .collect::<Result<Vec<Confirmed>>>()
+            .context("transaction reading failed")?
+            .into_iter()
+            .filter(|c| c.txid == txid)
+            .collect();
+        match confirmed.len() {
+            1 => Ok(json!(serialize(&confirmed[0].tx).to_hex())),
+            n => bail!("expected single tx {}, found {}", txid, n),
         }
     }
 
@@ -448,7 +458,7 @@ impl Rpc {
                 "blockchain.transaction.broadcast" => {
                     self.transaction_broadcast(from_value(params)?)
                 }
-                "blockchain.transaction.get" => self.transaction_get(params),
+                "blockchain.transaction.get" => self.transaction_get(from_value(params)?),
                 "blockchain.transaction.get_merkle" => {
                     self.transaction_get_merkle(from_value(params)?)
                 }

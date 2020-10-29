@@ -241,6 +241,15 @@ struct ScriptHashPrefix {
 
 impl_consensus_encoding!(ScriptHashPrefix, prefix);
 
+const TXID_PREFIX_LEN: usize = 8;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct TxidPrefix {
+    prefix: [u8; TXID_PREFIX_LEN],
+}
+
+impl_consensus_encoding!(TxidPrefix, prefix);
+
 impl ScriptHash {
     pub fn new(script: &Script) -> Self {
         ScriptHash::hash(&script[..])
@@ -251,6 +260,12 @@ impl ScriptHash {
         prefix.copy_from_slice(&self.0[..SCRIPT_HASH_PREFIX_LEN]);
         ScriptHashPrefix { prefix }
     }
+}
+
+fn txid_prefix(txid: &Txid) -> TxidPrefix {
+    let mut prefix = [0u8; TXID_PREFIX_LEN];
+    prefix.copy_from_slice(&txid[..TXID_PREFIX_LEN]);
+    TxidPrefix { prefix }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -281,6 +296,39 @@ impl ScriptHashRow {
 
     pub fn from_db_row(row: &[u8]) -> Result<Self> {
         deserialize(&row).context("bad ScriptHashRow")
+    }
+
+    pub fn position(&self) -> &FilePos {
+        &self.pos
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub(crate) struct TxidRow {
+    prefix: TxidPrefix,
+    pos: FilePos, // transaction position on disk
+}
+
+impl_consensus_encoding!(TxidRow, prefix, pos);
+
+impl TxidRow {
+    pub fn scan_prefix(txid: &Txid) -> Box<[u8]> {
+        txid[..TXID_PREFIX_LEN].to_vec().into_boxed_slice()
+    }
+
+    pub fn new(txid: Txid, pos: FilePos) -> Self {
+        Self {
+            prefix: txid_prefix(&txid),
+            pos,
+        }
+    }
+
+    pub fn to_db_row(&self) -> db::Row {
+        serialize(self).into_boxed_slice()
+    }
+
+    pub fn from_db_row(row: &[u8]) -> Result<Self> {
+        deserialize(&row).context("bad TxidRow")
     }
 
     pub fn position(&self) -> &FilePos {

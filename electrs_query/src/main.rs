@@ -59,7 +59,7 @@ fn address_balance<'a>(
     let script = &address.payload.script_pubkey();
 
     let confirmed: Vec<Confirmed> = index
-        .lookup(&ScriptHash::new(script), daemon)?
+        .lookup_by_scripthash(&ScriptHash::new(script), daemon)?
         .readers
         .into_par_iter()
         .map(|r| r.read())
