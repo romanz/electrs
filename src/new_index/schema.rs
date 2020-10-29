@@ -169,6 +169,7 @@ pub struct Indexer {
 struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
+    index_unspendables: bool,
     network: Network,
     #[cfg(feature = "liquid")]
     parent_network: Network,
@@ -179,6 +180,7 @@ impl From<&Config> for IndexerConfig {
         IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
+            index_unspendables: config.index_unspendables,
             network: config.network_type,
             #[cfg(feature = "liquid")]
             parent_network: config.parent_network,
@@ -1072,7 +1074,7 @@ fn index_transaction(
     //      S{funding-txid:vout}{spending-txid:vin} → ""
     let txid = full_hash(&tx.txid()[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
-        if is_spendable(txo) {
+        if is_spendable(txo) || iconfig.index_unspendables {
             let history = TxHistoryRow::new(
                 &txo.script_pubkey,
                 confirmed_height,

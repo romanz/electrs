@@ -378,12 +378,14 @@ impl Mempool {
                 )
             });
 
+            let config = &self.config;
+
             // An iterator over (ScriptHash, TxHistoryInfo)
             let funding = tx
                 .output
                 .iter()
                 .enumerate()
-                .filter(|(_, txo)| is_spendable(txo))
+                .filter(|(_, txo)| is_spendable(txo) || config.index_unspendables)
                 .map(|(index, txo)| {
                     (
                         compute_script_hash(&txo.script_pubkey),

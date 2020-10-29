@@ -31,6 +31,7 @@ pub struct Config {
     pub jsonrpc_import: bool,
     pub light_mode: bool,
     pub address_search: bool,
+    pub index_unspendables: bool,
     pub cors: Option<String>,
     pub precache_scripts: Option<String>,
     pub utxos_limit: usize,
@@ -147,6 +148,11 @@ impl Config {
                 Arg::with_name("address_search")
                     .long("address-search")
                     .help("Enable prefix address search")
+            )
+            .arg(
+                Arg::with_name("index_unspendables")
+                    .long("index-unspendables")
+                    .help("Enable indexing of provably unspendable outputs")
             )
             .arg(
                 Arg::with_name("cors")
@@ -362,6 +368,7 @@ impl Config {
             jsonrpc_import: m.is_present("jsonrpc_import"),
             light_mode: m.is_present("light_mode"),
             address_search: m.is_present("address_search"),
+            index_unspendables: m.is_present("index_unspendables"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
 

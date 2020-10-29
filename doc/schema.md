@@ -43,7 +43,7 @@ When the indexer is synced up to the tip of the chain, the hash of the tip is sa
 
 ### `history`
 
-Each funding output (except for provably unspendable ones) results in the following new rows (`H` is for history, `F` is for funding):
+Each funding output (except for provably unspendable ones when `--index-unspendables` is not enabled) results in the following new rows (`H` is for history, `F` is for funding):
 
  * `"H{funding-scripthash}{funding-height}F{funding-txid:vout}{value}" → ""`
  * `"a{funding-address-str}" → ""` (for prefix address search, only saved when `--address-search` is enabled)

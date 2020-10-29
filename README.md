@@ -66,6 +66,7 @@ In addition to electrs's original configuration options, a few new options are a
 - `--lightmode` - enable light mode (see above)
 - `--cors <origins>` - origins allowed to make cross-site request (optional, defaults to none).
 - `--address-search` - enables the by-prefix address search index.
+- `--index-unspendables` - enables indexing of provably unspendable outputs.
 - `--utxos-limit <num>` - maximum number of utxos to return per address.
 - `--electrum-txs-limit <num>` - maximum number of txs to return per address in the electrum server (does not apply for the http api).
 - `--electrum-banner <text>` - welcome banner text for electrum server.
