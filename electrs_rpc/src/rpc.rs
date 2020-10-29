@@ -375,7 +375,11 @@ impl Rpc {
         unconfirmed
     }
 
-    fn transaction_get(&self, (txid,): (Txid,)) -> Result<Value> {
+    fn transaction_get(&self, params: Value) -> Result<Value> {
+        let (txid, verbose) = match from_value::<(Txid,)>(params.clone()) {
+            Ok((txid,)) => (txid, false),
+            Err(_) => from_value::<(Txid, bool)>(params)?,
+        };
         match self.tx_cache.read().unwrap().get(&txid) {
             Some(tx) => Ok(json!(serialize(tx).to_hex())),
             None => panic!("tx {} is not cached", txid), // TODO: do we need txindex?
@@ -444,7 +448,7 @@ impl Rpc {
                 "blockchain.transaction.broadcast" => {
                     self.transaction_broadcast(from_value(params)?)
                 }
-                "blockchain.transaction.get" => self.transaction_get(from_value(params)?),
+                "blockchain.transaction.get" => self.transaction_get(params),
                 "blockchain.transaction.get_merkle" => {
                     self.transaction_get_merkle(from_value(params)?)
                 }
