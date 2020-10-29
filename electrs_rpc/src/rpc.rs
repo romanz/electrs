@@ -117,7 +117,7 @@ fn notification(method: &str, params: &[Value]) -> Value {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Request {
-    id: u64,
+    id: Value,
     jsonrpc: String,
     method: String,
 
