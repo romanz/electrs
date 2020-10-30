@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use bitcoin::{hash_types::BlockHash, Amount, Transaction, Txid};
 use bitcoincore_rpc::{Auth, Client, RpcApi};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -81,6 +81,17 @@ impl Daemon {
         self.client
             .get_best_block_hash()
             .context("get_best_block_hash failed")
+    }
+
+    pub fn get_raw_transaction(
+        &self,
+        txid: &Txid,
+        block_hash: Option<&BlockHash>,
+    ) -> Result<Value> {
+        self.client
+            .get_raw_transaction_info(txid, block_hash)
+            .context("get_raw_transaction failed")
+            .map(|result| json!(result))
     }
 
     pub fn wait_for_new_block(&self, timeout: Duration) -> Result<BlockHash> {

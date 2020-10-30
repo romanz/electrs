@@ -169,6 +169,7 @@ impl Decodable for BlockUndo {
     }
 }
 
+#[derive(Debug)]
 pub struct Confirmed {
     pub tx: Transaction,
     pub txid: Txid,

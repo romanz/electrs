@@ -14,6 +14,7 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::{from_value, json, Value};
 use std::{
     cmp::min,
+    collections::hash_map::Entry::{Occupied, Vacant},
     collections::HashMap,
     sync::RwLock,
     time::{Duration, Instant},
@@ -160,6 +161,22 @@ impl Stats {
                 "RPC sync duration (in seconds)",
                 &["name"],
             ),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum TxGetArgs {
+    Txid((Txid,)),
+    TxidVerbose(Txid, bool),
+}
+
+impl From<TxGetArgs> for (Txid, bool) {
+    fn from(args: TxGetArgs) -> Self {
+        match args {
+            TxGetArgs::Txid((txid,)) => (txid, false),
+            TxGetArgs::TxidVerbose(txid, verbose) => (txid, verbose),
         }
     }
 }
@@ -375,25 +392,53 @@ impl Rpc {
         unconfirmed
     }
 
-    fn transaction_get(&self, (txid,): (Txid,)) -> Result<Value> {
-        match self.tx_cache.read().unwrap().get(&txid) {
-            Some(tx) => return Ok(json!(serialize(tx).to_hex())),
-            None => debug!("tx {} is not cached", txid),
-        }
+    fn transaction_get_confirmed(&self, txid: &Txid) -> Result<Option<Confirmed>> {
         let result = self.index.lookup_by_txid(&txid, &self.daemon)?;
-        let confirmed: Vec<Confirmed> = result
+        let mut confirmed: Vec<Confirmed> = result
             .readers
             .into_par_iter()
             .map(|r| r.read())
             .collect::<Result<Vec<Confirmed>>>()
             .context("transaction reading failed")?
             .into_iter()
-            .filter(|c| c.txid == txid)
+            .filter(|c| c.txid == *txid)
             .collect();
-        match confirmed.len() {
-            1 => Ok(json!(serialize(&confirmed[0].tx).to_hex())),
-            n => bail!("expected single tx {}, found {}", txid, n),
+        Ok(match confirmed.len() {
+            0 => None,
+            1 => Some(confirmed.remove(0)),
+            _ => panic!("duplicate transactions: {:?}", confirmed),
+        })
+    }
+
+    fn transaction_get(&self, args: TxGetArgs) -> Result<Value> {
+        let (txid, verbose) = args.into();
+        debug!("transaction_get: {} verbose={}", txid, verbose);
+        if verbose {
+            let block_hash = self
+                .transaction_get_confirmed(&txid)?
+                .map(|confirmed| confirmed.header.block_hash());
+            return self.daemon.get_raw_transaction(&txid, block_hash.as_ref());
         }
+        let mut cache = self.tx_cache.write().unwrap();
+        let tx_bytes = {
+            match cache.entry(txid) {
+                Occupied(entry) => serialize(entry.get()),
+                Vacant(entry) => {
+                    debug!("tx {} is not cached", txid);
+                    match self.transaction_get_confirmed(&txid)? {
+                        Some(confirmed) => serialize(entry.insert(confirmed.tx)),
+                        None => {
+                            debug!("unconfirmed transaction {}", txid);
+                            match self.mempool.get(&txid) {
+                                Some(e) => serialize(&e.tx),
+                                None => bail!("missing transaction {}", txid),
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        Ok(json!(tx_bytes.to_hex()))
     }
 
     fn transaction_get_merkle(&self, (txid, height): (Txid, usize)) -> Result<Value> {
@@ -445,7 +490,8 @@ impl Rpc {
     pub(crate) fn handle_request(&mut self, sub: &mut Subscription, value: Value) -> Result<Value> {
         let rpc_duration = self.stats.rpc_duration.clone();
         let req_str = value.to_string();
-        let mut req: Request = from_value(value).context("invalid request")?;
+        let mut req: Request =
+            from_value(value).with_context(|| format!("invalid request: {}", req_str))?;
         let params = req.params.take();
         rpc_duration.observe_duration(req.method.as_str(), || {
             let result = match req.method.as_str() {
