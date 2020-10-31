@@ -400,13 +400,10 @@ impl Rpc {
             .filter_map(|r| {
                 let result: Result<Confirmed> = r.read();
                 match result.as_ref().map(|confirmed| confirmed.txid) {
+                    Ok(read_txid) if read_txid == *txid => Some(result),
                     Ok(read_txid) => {
-                        if read_txid == *txid {
-                            Some(result)
-                        } else {
-                            warn!("read {}, expecting {}", read_txid, txid);
-                            None
-                        }
+                        warn!("read {}, expecting {}", read_txid, txid);
+                        None
                     }
                     Err(_) => Some(result),
                 }
