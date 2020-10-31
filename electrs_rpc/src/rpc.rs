@@ -394,18 +394,27 @@ impl Rpc {
 
     fn transaction_get_confirmed(&self, txid: &Txid) -> Result<Option<Confirmed>> {
         let result = self.index.lookup_by_txid(&txid, &self.daemon)?;
-        let mut confirmed: Vec<Confirmed> = result
+        let confirmed: Vec<Confirmed> = result
             .readers
             .into_par_iter()
-            .map(|r| r.read())
+            .filter_map(|r| {
+                let result: Result<Confirmed> = r.read();
+                match result.as_ref().map(|confirmed| confirmed.txid) {
+                    Ok(read_txid) => {
+                        if read_txid == *txid {
+                            Some(result)
+                        } else {
+                            warn!("read {}, expecting {}", read_txid, txid);
+                            None
+                        }
+                    }
+                    Err(_) => Some(result),
+                }
+            })
             .collect::<Result<Vec<Confirmed>>>()
-            .context("transaction reading failed")?
-            .into_iter()
-            .filter(|c| c.txid == *txid)
-            .collect();
+            .context("transaction reading failed")?;
         Ok(match confirmed.len() {
-            0 => None,
-            1 => Some(confirmed.remove(0)),
+            0 | 1 => confirmed.into_iter().next(),
             _ => panic!("duplicate transactions: {:?}", confirmed),
         })
     }
