@@ -88,10 +88,10 @@ impl Daemon {
         txid: &Txid,
         block_hash: Option<&BlockHash>,
     ) -> Result<Value> {
+        let args = [json!(txid), json!(true), json!(block_hash)];
         self.client
-            .get_raw_transaction_info(txid, block_hash)
-            .context("get_raw_transaction failed")
-            .map(|result| json!(result))
+            .call("getrawtransaction", &args)
+            .context("getrawtransaction failed")
     }
 
     pub fn wait_for_new_block(&self, timeout: Duration) -> Result<BlockHash> {
