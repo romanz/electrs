@@ -421,7 +421,6 @@ impl Rpc {
 
     fn transaction_get(&self, args: TxGetArgs) -> Result<Value> {
         let (txid, verbose) = args.into();
-        debug!("transaction_get: {} verbose={}", txid, verbose);
         if verbose {
             let block_hash = self
                 .transaction_get_confirmed(&txid)?
