@@ -71,11 +71,13 @@ impl DBStore {
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, &opts.path, cf_descriptors)
             .context("failed to open DB")?;
+        // The old version of electrs used the default column family.
+        let is_old = db.iterator(rocksdb::IteratorMode::Start).next().is_some();
         let mut store = DBStore { db, opts, cfs };
 
         let config = store.get_config();
         debug!("DB {:?}", config);
-        if config.format < CURRENT_FORMAT {
+        if config.format < CURRENT_FORMAT || is_old {
             bail!(
                 "unsupported storage format {}, re-index required",
                 config.format
