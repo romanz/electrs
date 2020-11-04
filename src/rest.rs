@@ -65,6 +65,7 @@ struct BlockValue {
     weight: u32,
     merkle_root: String,
     previousblockhash: Option<String>,
+    mediantime: u32,
 
     #[cfg(not(feature = "liquid"))]
     nonce: u32,
@@ -96,6 +97,7 @@ impl BlockValue {
             } else {
                 None
             },
+            mediantime: blockhm.mtp,
 
             #[cfg(not(feature = "liquid"))]
             bits: header.bits,

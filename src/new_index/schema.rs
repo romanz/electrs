@@ -425,11 +425,18 @@ impl ChainQuery {
         Some(*self.header_by_hash(hash)?.header())
     }
 
+    pub fn get_mtp(&self, height: usize) -> u32 {
+        let _timer = self.start_timer("get_block_mtp");
+        self.store.indexed_headers.read().unwrap().get_mtp(height)
+    }
+
     pub fn get_block_with_meta(&self, hash: &BlockHash) -> Option<BlockHeaderMeta> {
         let _timer = self.start_timer("get_block_with_meta");
+        let header_entry = self.header_by_hash(hash)?;
         Some(BlockHeaderMeta {
-            header_entry: self.header_by_hash(hash)?,
             meta: self.get_block_meta(hash)?,
+            mtp: self.get_mtp(header_entry.height()),
+            header_entry,
         })
     }
 

@@ -10,6 +10,8 @@ use std::iter::FromIterator;
 use std::slice;
 use time::OffsetDateTime as DateTime;
 
+const MTP_SPAN: usize = 11;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockId {
     pub height: usize,
@@ -231,6 +233,23 @@ impl HeaderList {
     pub fn iter(&self) -> slice::Iter<HeaderEntry> {
         self.headers.iter()
     }
+
+    /// Get the Median Time Past
+    pub fn get_mtp(&self, height: usize) -> u32 {
+        // Use the timestamp as the mtp of the genesis block.
+        // Matches bitcoind's behaviour: bitcoin-cli getblock `bitcoin-cli getblockhash 0` | jq '.time == .mediantime'
+        if height == 0 {
+            self.headers.get(0).unwrap().header.time
+        } else if height > self.len() - 1 {
+            0
+        } else {
+            let mut timestamps = (height.saturating_sub(MTP_SPAN - 1)..=height)
+                .map(|p_height| self.headers.get(p_height).unwrap().header.time)
+                .collect::<Vec<_>>();
+            timestamps.sort_unstable();
+            timestamps[timestamps.len() / 2]
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -269,6 +288,7 @@ pub struct BlockMeta {
 pub struct BlockHeaderMeta {
     pub header_entry: HeaderEntry,
     pub meta: BlockMeta,
+    pub mtp: u32,
 }
 
 impl From<&BlockEntry> for BlockMeta {
