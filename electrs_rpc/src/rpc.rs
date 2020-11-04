@@ -24,6 +24,10 @@ use crate::mempool::{Mempool, MempoolEntry};
 use crate::util::{spawn, unbounded, Receiver, Sender};
 use electrs_index::{Confirmed, Daemon, Histogram, Index, Metrics, ScriptHash};
 
+const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PROTOCOL_VERSION: &str = "1.4";
+const BANNER: &str = "Welcome to the (WIP) Electrum Rust Server!";
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct TxEntry {
     #[serde(rename = "tx_hash")]
@@ -492,6 +496,19 @@ impl Rpc {
         Ok(json!(self.mempool.histogram()))
     }
 
+    fn version(&self, (client_id, client_version): (String, String)) -> Result<Value> {
+        if client_version != PROTOCOL_VERSION {
+            bail!(
+                "{} requested {}, server supports {}",
+                client_id,
+                client_version,
+                PROTOCOL_VERSION
+            );
+        }
+        let server_id = format!("electrs/{}", ELECTRS_VERSION);
+        Ok(json!([server_id, PROTOCOL_VERSION]))
+    }
+
     pub(crate) fn handle_request(&mut self, sub: &mut Subscription, value: Value) -> Result<Value> {
         let rpc_duration = self.stats.rpc_duration.clone();
         let req_str = value.to_string();
@@ -513,7 +530,7 @@ impl Rpc {
                 "blockchain.transaction.get_merkle" => {
                     self.transaction_get_merkle(from_value(params)?)
                 }
-                "server.banner" => Ok(json!("Welcome to Electrum Rust Server V2 (WIP)!")),
+                "server.banner" => Ok(json!(BANNER)),
                 "server.donation_address" => Ok(Value::Null),
                 "server.peers.subscribe" => Ok(json!([])),
                 "blockchain.block.header" => self.block_header(from_value(params)?),
@@ -523,7 +540,7 @@ impl Rpc {
                 "blockchain.relayfee" => self.relayfee(),
                 "mempool.get_fee_histogram" => self.get_fee_histogram(),
                 "server.ping" => Ok(Value::Null),
-                "server.version" => Ok(json!(["electrs v2 - WIP", "1.4"])),
+                "server.version" => self.version(from_value(params)?),
                 &_ => bail!("unknown method '{}' with {}", req.method, params,),
             };
 
@@ -532,7 +549,7 @@ impl Rpc {
                 Err(err) => {
                     let msg = format!("RPC {} failed: {:#}", req_str, err);
                     warn!("{}", msg);
-                    let error = json!({"code": -32603, "message": msg});
+                    let error = json!({"code": 1, "message": msg});
                     json!({"jsonrpc": req.jsonrpc, "id": req.id, "error": error})
                 }
             })
