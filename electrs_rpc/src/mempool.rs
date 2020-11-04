@@ -11,6 +11,7 @@ use serde_json::json;
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
+    iter::FromIterator,
     ops::Bound,
     time::Instant,
 };
@@ -294,7 +295,14 @@ fn build_histogram<'a>(
     entries: impl Iterator<Item = &'a MempoolEntry>,
     gauge: &mut FeeRatesGauge,
 ) -> Vec<HistogramEntry> {
-    let mut fee_rates: Vec<(Amount, u64)> = entries.map(|e| (e.fee / e.vsize, e.vsize)).collect();
+    let mut fee_rates = HashMap::<Amount, u64>::new();
+    for e in entries {
+        let rate = e.fee / e.vsize;
+        let total_vsize = fee_rates.entry(rate).or_default();
+        *total_vsize += e.vsize;
+    }
+    let mut fee_rates = Vec::from_iter(fee_rates); // fee rates should be unique now
+
     fee_rates.sort_by_key(|item| item.0);
     gauge.observe_histogram(&fee_rates);
 
@@ -305,6 +313,7 @@ fn build_histogram<'a>(
         bin_fee_rate = fee_rate;
         bin_vsize += vsize;
         if bin_vsize > 100_000 {
+            // `vsize` transactions are paying >= `fee_rate`.
             histogram.push(HistogramEntry::new(bin_fee_rate, bin_vsize));
             bin_vsize = 0;
         }
