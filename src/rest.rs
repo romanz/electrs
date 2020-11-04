@@ -673,6 +673,16 @@ fn handle_request(
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
             json_response(txids, TTL_LONG)
         }
+        (&Method::GET, Some(&"block"), Some(hash), Some(&"header"), None, None) => {
+            let hash = BlockHash::from_hex(hash)?;
+            let header = query
+                .chain()
+                .get_block_header(&hash)
+                .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
+
+            let header_hex = hex::encode(encode::serialize(&header));
+            http_message(StatusCode::OK, header_hex, TTL_LONG)
+        }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"raw"), None, None) => {
             let hash = BlockHash::from_hex(hash)?;
             let raw = query
@@ -718,7 +728,7 @@ fn handle_request(
                 )));
             }
 
-            // header_by_hash() only returns the BlockId for non-orphaned blocks,
+            // blockid_by_hash() only returns the BlockId for non-orphaned blocks,
             // or None for orphaned
             let confirmed_blockid = query.chain().blockid_by_hash(&hash);
 

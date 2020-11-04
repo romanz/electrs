@@ -420,6 +420,11 @@ impl ChainQuery {
         }
     }
 
+    pub fn get_block_header(&self, hash: &BlockHash) -> Option<BlockHeader> {
+        let _timer = self.start_timer("get_block_header");
+        Some(*self.header_by_hash(hash)?.header())
+    }
+
     pub fn get_block_with_meta(&self, hash: &BlockHash) -> Option<BlockHeaderMeta> {
         let _timer = self.start_timer("get_block_with_meta");
         Some(BlockHeaderMeta {
