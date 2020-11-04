@@ -185,6 +185,13 @@ impl From<TxGetArgs> for (Txid, bool) {
     }
 }
 
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+enum ClientVersion {
+    Single(String),
+    Range(String, String),
+}
+
 pub(crate) struct Rpc {
     index: Index,
     daemon: Daemon,
@@ -496,15 +503,18 @@ impl Rpc {
         Ok(json!(self.mempool.histogram()))
     }
 
-    fn version(&self, (client_id, client_version): (String, String)) -> Result<Value> {
-        if client_version != PROTOCOL_VERSION {
-            bail!(
-                "{} requested {}, server supports {}",
-                client_id,
-                client_version,
-                PROTOCOL_VERSION
-            );
-        }
+    fn version(&self, (client_id, client_version): (String, ClientVersion)) -> Result<Value> {
+        match client_version {
+            ClientVersion::Single(v) if v == PROTOCOL_VERSION => (),
+            _ => {
+                bail!(
+                    "{} requested {:?}, server supports {}",
+                    client_id,
+                    client_version,
+                    PROTOCOL_VERSION
+                );
+            }
+        };
         let server_id = format!("electrs/{}", ELECTRS_VERSION);
         Ok(json!([server_id, PROTOCOL_VERSION]))
     }
