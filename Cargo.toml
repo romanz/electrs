@@ -18,6 +18,9 @@ spec = "config_spec.toml"
 [profile.release]
 lto = true
 
+[features]
+default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "rocksdb/bzip2"]
+
 [dependencies]
 base64 = "0.10"
 bincode = "1.0"
@@ -36,7 +39,7 @@ num_cpus = "1.0"
 page_size = "0.4"
 prometheus = "0.5"
 protobuf = "= 2.14.0"   # https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21
-rocksdb = "= 0.12.2"	# due to https://github.com/romanz/electrs/issues/193
+rocksdb = { version = "0.12.2", default-features = false } # due to https://github.com/romanz/electrs/issues/193
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
