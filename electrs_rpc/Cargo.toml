@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 async-signals = "0.3"
-async-std = { version = "1.6" }
+async-std = { version = "1.7" }
 bitcoin = { version = "0.25", features = ["use-serde"] }
 bitcoincore-rpc = "0.12"
 clap = "2.33"
