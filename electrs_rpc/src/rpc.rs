@@ -6,7 +6,7 @@ use serde_json::{from_value, json, Value};
 use std::{
     cmp::min,
     collections::hash_map::Entry::{Occupied, Vacant},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::RwLock,
     time::{Duration, Instant},
 };
@@ -91,7 +91,12 @@ struct Status {
 }
 
 impl Status {
-    fn new(entries: Vec<TxEntry>, tip: BlockHash) -> Self {
+    fn new(mut entries: Vec<TxEntry>, tip: BlockHash) -> Self {
+        let mut txids = HashSet::new();
+        entries = entries
+            .into_iter()
+            .filter(|e| txids.insert(e.txid)) // deduplicate txids, assuming the latter are from mempool
+            .collect();
         let hash = StatusHash::new(&entries);
         Self { entries, hash, tip }
     }
