@@ -40,14 +40,14 @@ impl Daemon {
         }
         let blockchain_info = client
             .get_blockchain_info()
-            .context("get_network_info failed")?;
+            .with_context(|| format!("get_blockchain_info failed at {}", addr))?;
         debug!("{:?}", blockchain_info);
         if blockchain_info.pruned {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)")
         }
         let network_info = client
             .get_network_info()
-            .context("get_network_info failed")?;
+            .with_context(|| format!("get_network_info failed at {}", addr))?;
         debug!("{:?}", network_info);
         if network_info.version < 20_00_00 {
             bail!(
