@@ -17,7 +17,7 @@ env_logger = "0.7"
 hyper = "0.10"
 log = "0.4"
 prometheus = { version = "0.10", features = ["process"] }
-protobuf = "=2.14.0"  # due to https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21
+protobuf = "=2.14.0"  # due to https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21 (for Rust 1.41.1 compatibility)
 rocksdb = { version = "=0.15.0", default-features = false }
 rust-crypto = "0.2"
 serde = "1.0"
