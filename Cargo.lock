@@ -206,9 +206,8 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302fba01c5210a0321cc459dbe7f6b4fc21dffe77241c1690bce129814fa11fc"
+version = "0.25.2"
+source = "git+https://github.com/rust-bitcoin/rust-bitcoin?rev=93df7cbd3e02961835d250cf606e65b6826b78fe#93df7cbd3e02961835d250cf606e65b6826b78fe"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
@@ -228,8 +227,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02ef687583cf0445fdce53765e0479a6f21a422cf6604103246e759f75af87c1"
+source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=e6848320ecf8be76a2a980919acc58e64a8b66eb#e6848320ecf8be76a2a980919acc58e64a8b66eb"
 dependencies = [
  "bitcoincore-rpc-json",
  "jsonrpc",
@@ -241,8 +239,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76d488ec31e9cb6726c361be5160f7d2aaace89a0681acf1f476b8fada770b6e"
+source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=e6848320ecf8be76a2a980919acc58e64a8b66eb#e6848320ecf8be76a2a980919acc58e64a8b66eb"
 dependencies = [
  "bitcoin",
  "hex 0.3.2",

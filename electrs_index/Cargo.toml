@@ -9,8 +9,8 @@ default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "roc
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.25", features = ["use-serde"] }
-bitcoincore-rpc = "0.12"
+bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "93df7cbd3e02961835d250cf606e65b6826b78fe", features = ["use-serde"] }
+bitcoincore-rpc = { git = "https://github.com/romanz/rust-bitcoincore-rpc", rev = "e6848320ecf8be76a2a980919acc58e64a8b66eb" }
 chrono = "0.4"
 clap = "2.33"
 env_logger = "0.7"

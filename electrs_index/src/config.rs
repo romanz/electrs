@@ -24,7 +24,7 @@ impl Config {
             .arg(
                 Arg::with_name("network")
                     .long("network")
-                    .help("mainnet/testnet/regtest")
+                    .help("mainnet/testnet/regtest/signet")
                     .required(true)
                     .takes_value(true),
             )
@@ -54,13 +54,15 @@ impl Config {
             "mainnet" => Network::Bitcoin,
             "testnet" => Network::Testnet,
             "regtest" => Network::Regtest,
-            _ => panic!("unknown network"),
+            "signet" => Network::Signet,
+            _ => panic!("unknown network: {}", network_str),
         };
 
         let electrum_port = match network {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
+            Network::Signet => 60601,
         };
         let electrum_rpc_addr: SocketAddr = ([127, 0, 0, 1], electrum_port).into();
 
@@ -68,6 +70,7 @@ impl Config {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
+            Network::Signet => 38332,
         };
         let daemon_rpc_addr: SocketAddr = ([127, 0, 0, 1], daemon_port).into();
 
@@ -75,6 +78,7 @@ impl Config {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
+            Network::Signet => 34224,
         };
         let monitoring_addr: SocketAddr = ([127, 0, 0, 1], monitoring_port).into();
 
@@ -83,6 +87,7 @@ impl Config {
             Network::Bitcoin => daemon_dir,
             Network::Testnet => daemon_dir.join("testnet3"),
             Network::Regtest => daemon_dir.join("regtest"),
+            Network::Signet => daemon_dir.join("signet"),
         };
 
         let low_memory = matches.is_present("low-memory");
