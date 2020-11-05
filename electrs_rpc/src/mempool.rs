@@ -1,11 +1,4 @@
 use anyhow::{Context, Result};
-use bitcoin::{
-    consensus::deserialize, hashes::hex::FromHex, Amount, OutPoint, Script, Transaction, Txid,
-};
-use bitcoincore_rpc::{
-    json::{GetMempoolEntryResult, GetTxOutResult},
-    RpcApi,
-};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_json::json;
 
@@ -17,6 +10,13 @@ use std::{
 };
 
 use electrs_index::{
+    bitcoin::{
+        consensus::deserialize, hashes::hex::FromHex, Amount, OutPoint, Script, Transaction, Txid,
+    },
+    bitcoincore_rpc::{
+        json::{GetMempoolEntryResult, GetTxOutResult},
+        RpcApi,
+    },
     Daemon, ScriptHash, {Gauge, GaugeVec, Histogram, Metrics},
 };
 

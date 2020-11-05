@@ -469,7 +469,6 @@ name = "electrs_query"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bitcoin",
  "electrs_index",
  "libc",
  "log 0.4.11",
@@ -483,8 +482,6 @@ dependencies = [
  "anyhow",
  "async-signals",
  "async-std",
- "bitcoin",
- "bitcoincore-rpc",
  "clap",
  "electrs_index",
  "futures",

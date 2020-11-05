@@ -1,13 +1,4 @@
 use anyhow::{bail, Context, Result};
-use bitcoin::{
-    consensus::{deserialize, serialize},
-    hashes::{
-        borrow_slice_impl, hash_newtype,
-        hex::{FromHex, ToHex},
-        hex_fmt_impl, index_impl, serde_impl, sha256, Hash,
-    },
-    BlockHash, Transaction, TxMerkleNode, Txid,
-};
 use futures::sink::SinkExt;
 use rayon::prelude::*;
 use serde_derive::{Deserialize, Serialize};
@@ -22,7 +13,19 @@ use std::{
 
 use crate::mempool::{Mempool, MempoolEntry};
 use crate::util::{spawn, unbounded, Receiver, Sender};
-use electrs_index::{Confirmed, Daemon, Histogram, Index, Metrics, ScriptHash};
+
+use electrs_index::{
+    bitcoin::{
+        consensus::{deserialize, serialize},
+        hashes::{
+            borrow_slice_impl, hash_newtype,
+            hex::{FromHex, ToHex},
+            hex_fmt_impl, index_impl, serde_impl, sha256, Hash,
+        },
+        BlockHash, Transaction, TxMerkleNode, Txid,
+    },
+    Confirmed, Daemon, Histogram, Index, Metrics, ScriptHash,
+};
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
@@ -593,7 +596,7 @@ fn create_merkle_branch<T: Hash>(mut hashes: Vec<T>, mut index: usize) -> Vec<T>
 #[cfg(test)]
 mod tests {
     use crate::rpc::StatusHash;
-    use bitcoin::hashes::Hash;
+    use electrs_index::bitcoin::hashes::Hash;
     use serde_json::json;
 
     #[test]
