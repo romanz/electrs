@@ -218,7 +218,6 @@ impl Rpc {
             poll_period: Duration::from_secs(1),
         };
         rpc.sync_index().context("failed to sync with bitcoind")?;
-        rpc.sync_mempool();
         info!("loaded {} mempool txs", rpc.mempool.count());
         Ok(rpc)
     }
