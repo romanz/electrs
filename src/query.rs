@@ -1,8 +1,8 @@
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::hash_types::{BlockHash, TxMerkleNode, Txid};
-use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin::hashes::hex::ToHex;
+use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin::hashes::Hash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
