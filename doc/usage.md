@@ -8,10 +8,10 @@ Install [recent Rust](https://rustup.rs/) (1.41.1+, `apt install cargo` is prefe
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+)
 and [latest Electrum wallet](https://electrum.org/#download) (3.3+).
 
-Also, install the following packages (on Debian):
+Also, install the following packages (on Debian or Ubuntu):
 ```bash
 $ sudo apt update
-$ sudo apt install clang cmake  # for building 'rust-rocksdb'
+$ sudo apt install clang cmake build-essential  # for building 'rust-rocksdb'
 ```
 
 Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries. Make sure to use latest OS! (see #226)
