@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 edition = "2018"
 
+[features]
+default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "rocksdb/bzip2"]
+
 [dependencies]
 anyhow = "1.0"
 bitcoin = { version = "0.25", features = ["use-serde"] }
@@ -15,7 +18,7 @@ hyper = "0.10"
 log = "0.4"
 prometheus = { version = "0.10", features = ["process"] }
 protobuf = "=2.14.0"  # due to https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21
-rocksdb = "=0.15.0"
+rocksdb = { version = "=0.15.0", default-features = false }
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
