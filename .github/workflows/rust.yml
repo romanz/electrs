@@ -1,22 +1,37 @@
-name: Rust
+name: electrs CI
 
 on: [push, pull_request]
 
 jobs:
-
+  electrs:
+    name: electrs
     runs-on: ubuntu-latest
-
     steps:
-      - name: Install Rust
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.toolchain }}
+          toolchain: stable
+          components: rustfmt
           profile: minimal
           override: true
-      - uses: actions/checkout@v1
-      - name: Check
-        run: cargo check
+
+      - name: Format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
       - name: Build
-        run: cargo build
-      - name: Run tests
-        run: cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release --all
