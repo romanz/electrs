@@ -141,10 +141,10 @@ impl AssetSorting {
             AssetSortField::Name => {
                 // Order by name first, use asset id as a tie breaker. the other sorting fields
                 // don't require this because they're guaranteed to be unique.
-                Box::new(|a, b| a.1.name.cmp(&b.1.name).then_with(|| a.0.cmp(b.0)))
+                Box::new(|a, b| lc_cmp(&a.1.name, &b.1.name).then_with(|| a.0.cmp(b.0)))
             }
             AssetSortField::Domain => Box::new(|a, b| a.1.domain().cmp(&b.1.domain())),
-            AssetSortField::Ticker => Box::new(|a, b| a.1.ticker.cmp(&b.1.ticker)),
+            AssetSortField::Ticker => Box::new(|a, b| lc_cmp(&a.1.ticker, &b.1.ticker)),
         };
 
         match self.1 {
@@ -171,4 +171,8 @@ impl AssetSorting {
 
         Ok(Self(field, dir))
     }
+}
+
+fn lc_cmp(a: &str, b: &str) -> cmp::Ordering {
+    a.to_lowercase().cmp(&b.to_lowercase())
 }
