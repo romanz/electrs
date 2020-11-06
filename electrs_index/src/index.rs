@@ -27,7 +27,7 @@ use crate::{
 
 pub struct Index {
     store: RwLock<db::DBStore>,
-    map: Arc<RwLock<BlockMap>>,
+    map: RwLock<BlockMap>,
     stats: Stats,
     low_memory: bool,
 }
@@ -102,7 +102,7 @@ impl Index {
 
         Ok(Index {
             store: RwLock::new(store),
-            map: Arc::new(RwLock::new(map)),
+            map: RwLock::new(map),
             stats: Stats {
                 update_duration,
                 update_size,
