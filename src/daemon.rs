@@ -121,7 +121,7 @@ pub struct MempoolEntry {
 }
 
 impl MempoolEntry {
-    fn new(fee: u64, vsize: u32) -> MempoolEntry {
+    pub(crate) fn new(fee: u64, vsize: u32) -> MempoolEntry {
         MempoolEntry {
             fee,
             vsize,

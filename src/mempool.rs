@@ -270,18 +270,42 @@ impl Tracker {
 fn electrum_fees(entries: &[&MempoolEntry]) -> Vec<(f32, u32)> {
     let mut histogram = vec![];
     let mut bin_size = 0;
-    let mut last_fee_rate = None;
+    let mut last_fee_rate = 0.0;
     for e in entries.iter().rev() {
-        last_fee_rate = Some(e.fee_per_vbyte());
-        bin_size += e.vsize();
-        if bin_size > VSIZE_BIN_WIDTH {
+        let fee_rate = e.fee_per_vbyte();
+        if bin_size > VSIZE_BIN_WIDTH && last_fee_rate != fee_rate {
             // vsize of transactions paying >= e.fee_per_vbyte()
-            histogram.push((e.fee_per_vbyte(), bin_size));
+            histogram.push((last_fee_rate, bin_size));
             bin_size = 0;
         }
+        last_fee_rate = fee_rate;
+        bin_size += e.vsize();
     }
-    if let Some(fee_rate) = last_fee_rate {
-        histogram.push((fee_rate, bin_size));
+    if bin_size > 0 {
+        histogram.push((last_fee_rate, bin_size));
     }
     histogram
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_fakestore() {
+        use crate::daemon::MempoolEntry;
+        use crate::mempool::electrum_fees;
+
+        let entries = [
+            // (fee: u64, vsize: u32)
+            &MempoolEntry::new(1_000, 1_000),
+            &MempoolEntry::new(10_000, 10_000),
+            &MempoolEntry::new(50_000, 50_000),
+            &MempoolEntry::new(120_000, 60_000),
+            &MempoolEntry::new(210_000, 70_000),
+            &MempoolEntry::new(320_000, 80_000),
+        ];
+        assert_eq!(
+            electrum_fees(&entries[..]),
+            vec![(3.0, 150_000), (1.0, 121_000)]
+        );
+    }
 }
