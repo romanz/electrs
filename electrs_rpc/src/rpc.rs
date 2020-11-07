@@ -7,7 +7,7 @@ use std::{
     cmp::min,
     collections::hash_map::Entry::{Occupied, Vacant},
     collections::{HashMap, HashSet},
-    sync::RwLock,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
@@ -201,7 +201,7 @@ enum ClientVersion {
 }
 
 pub(crate) struct Rpc {
-    index: Index,
+    index: Arc<Index>,
     daemon: Daemon,
     mempool: RwLock<Mempool>,
     tx_cache: RwLock<HashMap<Txid, Transaction>>,
@@ -211,7 +211,7 @@ pub(crate) struct Rpc {
 impl Rpc {
     pub(crate) fn new(index: Index, daemon: Daemon, metrics: &Metrics) -> Result<Self> {
         let rpc = Self {
-            index,
+            index: Arc::new(index),
             daemon,
             mempool: RwLock::new(Mempool::empty(metrics)),
             tx_cache: RwLock::new(HashMap::new()),
