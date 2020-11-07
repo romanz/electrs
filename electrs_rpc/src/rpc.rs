@@ -446,7 +446,7 @@ impl Rpc {
                         None => {
                             debug!("unconfirmed transaction {}", txid);
                             match self.mempool.get(&txid) {
-                                Some(e) => serialize(&e.tx),
+                                Some(e) => serialize(entry.insert(e.tx.clone())),
                                 None => bail!("missing transaction {}", txid),
                             }
                         }
