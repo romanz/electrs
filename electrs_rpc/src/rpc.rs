@@ -223,12 +223,12 @@ impl Rpc {
     }
 
     pub(crate) fn sync_index(&mut self) -> Result<BlockHash> {
-        let result = self
+        let tip = self
             .stats
             .sync_duration
-            .observe_duration("index", || self.index.update(&self.daemon));
+            .observe_duration("index", || self.index.update(&self.daemon))?;
         self.sync_mempool(); // remove confirmed transactions from mempool
-        result
+        Ok(tip)
     }
 
     pub(crate) fn sync_mempool(&mut self) {
