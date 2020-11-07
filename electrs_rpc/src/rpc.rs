@@ -8,7 +8,7 @@ use std::{
     collections::hash_map::Entry::{Occupied, Vacant},
     collections::{HashMap, HashSet},
     sync::RwLock,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use crate::mempool::{Mempool, MempoolEntry};
@@ -206,9 +206,6 @@ pub(crate) struct Rpc {
     mempool: Mempool,
     tx_cache: RwLock<HashMap<Txid, Transaction>>,
     stats: Stats,
-    // mempool polling
-    next_poll: Instant,
-    poll_period: Duration,
 }
 
 impl Rpc {
@@ -219,8 +216,6 @@ impl Rpc {
             mempool: Mempool::empty(metrics),
             tx_cache: RwLock::new(HashMap::new()),
             stats: Stats::new(metrics),
-            next_poll: Instant::now(),
-            poll_period: Duration::from_secs(1),
         };
         rpc.sync_index().context("failed to sync with bitcoind")?;
         info!("loaded {} mempool txs", rpc.mempool.count());
@@ -232,7 +227,6 @@ impl Rpc {
             .stats
             .sync_duration
             .observe_duration("index", || self.index.update(&self.daemon));
-        self.next_poll = Instant::now();
         self.sync_mempool(); // remove confirmed transactions from mempool
         result
     }
@@ -240,11 +234,6 @@ impl Rpc {
     pub(crate) fn sync_mempool(&mut self) {
         let sync_duration = self.stats.sync_duration.clone();
         sync_duration.observe_duration("mempool", || {
-            let now = Instant::now();
-            if now <= self.next_poll {
-                return;
-            }
-            self.next_poll = now + self.poll_period;
             if let Err(e) = self.mempool.update(&self.daemon) {
                 warn!("failed to sync mempool: {:?}", e);
             }
@@ -501,7 +490,6 @@ impl Rpc {
             .daemon
             .broadcast(&tx)
             .with_context(|| format!("failed to broadcast transaction: {}", tx.txid()))?;
-        self.next_poll = Instant::now();
         self.sync_mempool();
         Ok(json!(txid))
     }
