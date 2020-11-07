@@ -107,7 +107,7 @@ impl Peer {
     }
 }
 
-async fn server_loop(events: Receiver<Event>, mut rpc: Rpc) -> Result<()> {
+async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
     let mut peers: HashMap<usize, Peer> = HashMap::new();
 
     let (disconnect_tx, disconnect_rx) = unbounded::<(usize, Receiver<Value>)>();

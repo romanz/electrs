@@ -203,26 +203,26 @@ enum ClientVersion {
 pub(crate) struct Rpc {
     index: Index,
     daemon: Daemon,
-    mempool: Mempool,
+    mempool: RwLock<Mempool>,
     tx_cache: RwLock<HashMap<Txid, Transaction>>,
     stats: Stats,
 }
 
 impl Rpc {
     pub(crate) fn new(index: Index, daemon: Daemon, metrics: &Metrics) -> Result<Self> {
-        let mut rpc = Self {
+        let rpc = Self {
             index,
             daemon,
-            mempool: Mempool::empty(metrics),
+            mempool: RwLock::new(Mempool::empty(metrics)),
             tx_cache: RwLock::new(HashMap::new()),
             stats: Stats::new(metrics),
         };
         rpc.sync_index().context("failed to sync with bitcoind")?;
-        info!("loaded {} mempool txs", rpc.mempool.count());
+        info!("loaded {} mempool txs", rpc.mempool.read().unwrap().count());
         Ok(rpc)
     }
 
-    pub(crate) fn sync_index(&mut self) -> Result<BlockHash> {
+    pub(crate) fn sync_index(&self) -> Result<BlockHash> {
         let tip = self
             .stats
             .sync_duration
@@ -231,10 +231,10 @@ impl Rpc {
         Ok(tip)
     }
 
-    pub(crate) fn sync_mempool(&mut self) {
+    pub(crate) fn sync_mempool(&self) {
         let sync_duration = self.stats.sync_duration.clone();
         sync_duration.observe_duration("mempool", || {
-            if let Err(e) = self.mempool.update(&self.daemon) {
+            if let Err(e) = self.mempool.write().unwrap().update(&self.daemon) {
                 warn!("failed to sync mempool: {:?}", e);
             }
         })
@@ -386,13 +386,14 @@ impl Rpc {
     }
 
     fn get_unconfirmed(&self, scripthash: &ScriptHash) -> Vec<TxEntry> {
-        let entries: Vec<&MempoolEntry> = self.mempool.lookup(*scripthash);
+        let mempool = self.mempool.read().unwrap();
+        let entries: Vec<&MempoolEntry> = mempool.lookup(*scripthash);
         let mut unconfirmed: Vec<TxEntry> = entries
             .iter()
-            .map(|e| TxEntry::unconfirmed(e, &self.mempool))
+            .map(|e| TxEntry::unconfirmed(e, &mempool))
             .collect();
         unconfirmed.sort_by_key(|u| u.txid);
-        let getter = |txid| match self.mempool.get(txid) {
+        let getter = |txid| match mempool.get(txid) {
             Some(e) => e.tx.clone(),
             None => panic!("missing mempool entry {}", txid),
         };
@@ -445,7 +446,7 @@ impl Rpc {
                         Some(confirmed) => serialize(entry.insert(confirmed.tx)),
                         None => {
                             debug!("unconfirmed transaction {}", txid);
-                            match self.mempool.get(&txid) {
+                            match self.mempool.read().unwrap().get(&txid) {
                                 Some(e) => serialize(entry.insert(e.tx.clone())),
                                 None => bail!("missing transaction {}", txid),
                             }
@@ -483,7 +484,7 @@ impl Rpc {
         Ok(json!({"block_height": height, "pos": pos, "merkle": merkle}))
     }
 
-    fn transaction_broadcast(&mut self, (tx_hex,): (String,)) -> Result<Value> {
+    fn transaction_broadcast(&self, (tx_hex,): (String,)) -> Result<Value> {
         let tx_bytes = Vec::from_hex(&tx_hex).context("non-hex transaction")?;
         let tx: Transaction = deserialize(&tx_bytes).context("invalid transaction")?;
         let txid = self
@@ -499,7 +500,7 @@ impl Rpc {
     }
 
     fn get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!(self.mempool.histogram()))
+        Ok(json!(self.mempool.read().unwrap().histogram()))
     }
 
     fn version(&self, (client_id, client_version): (String, ClientVersion)) -> Result<Value> {
@@ -518,7 +519,7 @@ impl Rpc {
         Ok(json!([server_id, PROTOCOL_VERSION]))
     }
 
-    pub(crate) fn handle_request(&mut self, sub: &mut Subscription, value: Value) -> Result<Value> {
+    pub(crate) fn handle_request(&self, sub: &mut Subscription, value: Value) -> Result<Value> {
         let rpc_duration = self.stats.rpc_duration.clone();
         let req_str = value.to_string();
         let mut req: Request =
