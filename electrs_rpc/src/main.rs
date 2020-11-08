@@ -124,7 +124,10 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
 
     loop {
         for peer in peers.values_mut() {
-            for notification in rpc.notify(&mut peer.subscription)? {
+            for notification in rpc
+                .notify(&mut peer.subscription)
+                .context("subscription notification failed")?
+            {
                 peer.sender.send(notification).await.unwrap();
             }
         }
@@ -174,7 +177,9 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
         match event {
             Event::Message { id, req } => match peers.get_mut(&id) {
                 Some(peer) => {
-                    let response = rpc.handle_request(&mut peer.subscription, req)?;
+                    let response = rpc
+                        .handle_request(&mut peer.subscription, req)
+                        .context("RPC failed")?;
                     peer.sender.send(response).await.unwrap();
                 }
                 None => warn!("unknown client {}", id),
