@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
-use futures::sink::SinkExt;
+use async_std::task;
+use futures::{select, sink::SinkExt, stream::StreamExt};
 use rayon::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{from_value, json, Value};
@@ -138,16 +139,16 @@ struct Request {
     params: Value,
 }
 
-async fn wait_for_new_blocks(
-    mut tip: BlockHash,
+async fn waiter_loop(
+    mut tip: Option<BlockHash>,
     daemon: Daemon,
     mut new_block_tx: Sender<BlockHash>,
 ) -> Result<()> {
     let mut new_tip = daemon.get_best_block_hash()?;
     loop {
-        if tip != new_tip {
-            tip = new_tip;
-            new_block_tx.send(tip).await?;
+        if tip != Some(new_tip) {
+            tip = Some(new_tip);
+            new_block_tx.send(new_tip).await?;
         }
         new_tip = daemon
             .wait_for_new_block(Duration::from_secs(60))
@@ -200,6 +201,42 @@ enum ClientVersion {
     Range(String, String),
 }
 
+pub(crate) struct Indexer {
+    pub(crate) notify: Sender<()>,
+    pub(crate) result: Receiver<Result<BlockHash>>,
+    pub(crate) task: task::JoinHandle<()>,
+}
+
+impl Indexer {
+    // TODO: can this be done with lifetime annotations?
+    fn new(index: Arc<Index>, daemon: Daemon, sync_duration: Histogram) -> Self {
+        let (notify_tx, mut notify_rx) = unbounded();
+        let (mut result_tx, result_rx) = unbounded();
+        Indexer {
+            notify: notify_tx, // notify indexer to run
+            result: result_rx,
+            task: task::spawn(async move {
+                loop {
+                    select! {
+                        msg = notify_rx.next() => {
+                            match msg {
+                                Some(_) => (),
+                                None => break,
+                            }
+                        },
+                    };
+                    let result = sync_duration.observe_duration("index", || index.update(&daemon));
+                    result_tx
+                        .send(result)
+                        .await
+                        .expect("failed to send index result");
+                }
+                debug!("indexer stopped");
+            }),
+        }
+    }
+}
+
 pub(crate) struct Rpc {
     index: Arc<Index>,
     daemon: Daemon,
@@ -209,26 +246,35 @@ pub(crate) struct Rpc {
 }
 
 impl Rpc {
-    pub(crate) fn new(index: Index, daemon: Daemon, metrics: &Metrics) -> Result<Self> {
-        let rpc = Self {
+    pub(crate) fn new(index: Index, daemon: Daemon, metrics: &Metrics) -> Self {
+        Self {
             index: Arc::new(index),
             daemon,
             mempool: RwLock::new(Mempool::empty(metrics)),
             tx_cache: RwLock::new(HashMap::new()),
             stats: Stats::new(metrics),
-        };
-        rpc.sync_index().context("failed to sync with bitcoind")?;
-        info!("loaded {} mempool txs", rpc.mempool.read().unwrap().count());
-        Ok(rpc)
+        }
     }
 
-    pub(crate) fn sync_index(&self) -> Result<BlockHash> {
-        let tip = self
-            .stats
-            .sync_duration
-            .observe_duration("index", || self.index.update(&self.daemon))?;
-        self.sync_mempool(); // remove confirmed transactions from mempool
-        Ok(tip)
+    pub(crate) fn start_indexer(&self) -> Result<Indexer> {
+        Ok(Indexer::new(
+            Arc::clone(&self.index),
+            self.daemon.reconnect()?,
+            self.stats.sync_duration.clone(),
+        ))
+    }
+
+    pub(crate) fn start_waiter(&self) -> Result<Receiver<BlockHash>> {
+        let (new_block_tx, new_block_rx) = unbounded::<BlockHash>();
+        spawn(
+            "waiter",
+            waiter_loop(
+                self.index.map().chain().last().copied(),
+                self.daemon.reconnect()?,
+                new_block_tx,
+            ),
+        );
+        Ok(new_block_rx)
     }
 
     pub(crate) fn sync_mempool(&self) {
@@ -238,19 +284,6 @@ impl Rpc {
                 warn!("failed to sync mempool: {:?}", e);
             }
         })
-    }
-
-    pub(crate) fn start_waiter(&self) -> Result<Receiver<BlockHash>> {
-        let (new_block_tx, new_block_rx) = unbounded::<BlockHash>();
-        let current_tip = match self.index.map().chain().last() {
-            None => bail!("empty chain"),
-            Some(tip) => *tip,
-        };
-        spawn(
-            "waiter",
-            wait_for_new_blocks(current_tip, self.daemon.reconnect()?, new_block_tx),
-        );
-        Ok(new_block_rx)
     }
 
     pub(crate) fn notify(&self, subscription: &mut Subscription) -> Result<Vec<Value>> {

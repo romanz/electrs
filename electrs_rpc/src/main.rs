@@ -16,7 +16,7 @@ use async_std::{
     prelude::*,
     task,
 };
-use bitcoin::BlockHash;
+
 use futures::{
     sink::SinkExt,
     stream::StreamExt,
@@ -32,7 +32,7 @@ use std::{
 };
 
 use electrs_index::*;
-use rpc::{Rpc, Subscription};
+use rpc::{Indexer, Rpc, Subscription};
 use util::{spawn, unbounded, Receiver, Sender};
 
 fn main() -> Result<()> {
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         .context("failed to connect to daemon")?;
     let store = DBStore::open(Path::new(&config.db_path), config.low_memory)?;
     let index = Index::new(store, &metrics, config.low_memory).context("failed to open index")?;
-    let rpc = Rpc::new(index, daemon, &metrics)?;
+    let rpc = Rpc::new(index, daemon, &metrics);
 
     let handle = task::spawn(accept_loop(config.electrum_rpc_addr, rpc));
     task::block_on(handle)
@@ -63,9 +63,6 @@ enum Event {
     Message {
         id: usize,
         req: Value,
-    },
-    NewBlock {
-        tip: BlockHash,
     },
 }
 
@@ -118,6 +115,13 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
         .fuse();
     let mut new_block_rx = rpc.start_waiter()?;
 
+    let Indexer {
+        result: index_result,
+        notify: mut index_notify,
+        task: index_task,
+    } = rpc.start_indexer()?;
+    let mut index_result = index_result.fuse();
+
     loop {
         for peer in peers.values_mut() {
             for notification in rpc.notify(&mut peer.subscription)? {
@@ -137,8 +141,23 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
             }
             msg = new_block_rx.next() => {
                 match msg {
-                    Some(tip) => Event::NewBlock { tip },
-                    None => break,
+                    Some(tip) => {
+                        debug!("notifying indexer: {:?}", tip);
+                        index_notify.send(()).await.expect("failed to notify indexer");
+                        continue;
+                    },
+                    None => break,  // waiter has exited
+                }
+            },
+            msg = index_result.next() => {
+                match msg {
+                    Some(result) => {
+                        debug!("indexing finished: {:?}", result);
+                        // TODO: rate-limit?
+                        rpc.sync_mempool();  // remove confirmed transactions from mempool
+                        continue;
+                    },
+                    None => break,  // indexer has exited
                 }
             },
             disconnect = disconnect_rx.next() => {
@@ -153,10 +172,6 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
             },
         };
         match event {
-            Event::NewBlock { tip } => {
-                debug!("new block: {}", tip);
-                rpc.sync_index().context("failed to sync with bitcoind")?;
-            }
             Event::Message { id, req } => match peers.get_mut(&id) {
                 Some(peer) => {
                     let response = rpc.handle_request(&mut peer.subscription, req)?;
@@ -186,6 +201,10 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
             },
         }
     }
+    debug!("stopping indexer");
+    drop(index_notify);
+    task::block_on(index_task);
+    while let Some(_) = index_result.next().await {}
     debug!("disconnecting {} clients: {:?}", peers.len(), peers.keys());
     drop(peers); // drop all senders that write responses
     drop(disconnect_tx);

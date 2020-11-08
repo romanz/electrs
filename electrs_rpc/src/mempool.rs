@@ -196,10 +196,6 @@ impl Mempool {
     pub fn histogram(&self) -> &[HistogramEntry] {
         &self.histogram
     }
-
-    pub fn count(&self) -> usize {
-        self.entries.len()
-    }
 }
 
 struct FeeRatesIter {
