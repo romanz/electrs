@@ -332,7 +332,10 @@ impl Rpc {
         let map = self.index.map();
         let chain = map.chain();
         Ok(match chain.last() {
-            None => bail!("empty chain"),
+            None => {
+                subscription.tip = Some(BlockHash::default());
+                json!({}) // no tip when waiting for index sync
+            }
             Some(tip) => {
                 subscription.tip = Some(*tip);
                 let header = serialize(map.get_by_hash(tip).unwrap());
