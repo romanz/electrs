@@ -293,7 +293,7 @@ impl Rpc {
             let map = self.index.map();
             let chain = map.chain();
             let current_tip = match chain.last() {
-                None => bail!("empty chain"),
+                None => return Ok(vec![]), // waiting for chain to sync
                 Some(tip) => *tip,
             };
             if let Some(last_tip) = subscription.tip {
