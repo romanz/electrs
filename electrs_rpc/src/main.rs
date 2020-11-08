@@ -260,11 +260,17 @@ async fn send_loop(
                     debug!("{}: send {}", id, line);
                     stream.write_all((line + "\n").as_bytes()).await?;
                 },
-                None => break,
+                None => {
+                    debug!("{}: closed", id);
+                    break;
+                }
             },
-            void = shutdown.next().fuse() => match void {
-                Some(void) => match void {},
-                None => break,
+            void = shutdown.next().fuse() => {
+                debug!("stopping send_loop");
+                match void {
+                    Some(void) => match void {},
+                    None => break,
+                }
             }
         }
     }
