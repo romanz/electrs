@@ -345,7 +345,7 @@ fn get_entries_map(
                 .context("no mempool entry")
         })
         .collect::<Result<_>>()?;
-    debug!("got {} mempool entries", entries.len());
+    trace!("got {} mempool entries", entries.len());
     assert_eq!(entries.len(), args_vec.len());
     Ok(txids.into_iter().zip(entries.into_iter()).collect())
 }
@@ -378,7 +378,7 @@ fn get_transactions_map(
             Ok(deserialize(&bytes).expect("invalid transaction"))
         })
         .collect::<Result<_>>()?;
-    debug!("got {} mempool transactions", txs.len());
+    trace!("got {} mempool transactions", txs.len());
     assert_eq!(txs.len(), txids.len());
     Ok(txids.into_iter().zip(txs.into_iter()).collect())
 }
@@ -415,7 +415,7 @@ fn get_confirmed_outpoints(
             Ok(ScriptHash::new(&Script::from(utxo.script_pub_key.hex)))
         })
         .collect::<Result<_>>()?;
-    debug!("got {} confirmed scripthashes", scripthashes.len());
+    trace!("got {} confirmed scripthashes", scripthashes.len());
     assert_eq!(scripthashes.len(), outpoints.len());
     Ok(outpoints
         .into_iter()
