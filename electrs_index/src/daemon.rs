@@ -41,14 +41,29 @@ impl Daemon {
         let blockchain_info = client
             .get_blockchain_info()
             .with_context(|| format!("get_blockchain_info failed at {}", addr))?;
-        debug!("{:?}", blockchain_info);
+        debug!(
+            "chain: {}, blocks: {}, headers: {}, best: {}, IBD: {}, pruned: {}, size: {:.3} GB",
+            blockchain_info.chain,
+            blockchain_info.blocks,
+            blockchain_info.headers,
+            blockchain_info.best_block_hash,
+            blockchain_info.initial_block_download,
+            blockchain_info.pruned,
+            blockchain_info.size_on_disk as f64 / 1e9
+        );
         if blockchain_info.pruned {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)")
         }
         let network_info = client
             .get_network_info()
             .with_context(|| format!("get_network_info failed at {}", addr))?;
-        debug!("{:?}", network_info);
+        debug!(
+            "version: {} {}, protocol: {}, connections: {}",
+            network_info.version,
+            network_info.subversion,
+            network_info.protocol_version,
+            network_info.connections
+        );
         if network_info.version < 20_00_00 {
             bail!(
                 "{} is not supported - please use bitcoind 0.20+",
