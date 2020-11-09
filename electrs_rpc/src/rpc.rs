@@ -401,6 +401,14 @@ impl Rpc {
         Ok(json!(hash))
     }
 
+    fn scripthash_unsubscribe(
+        &self,
+        subscription: &mut Subscription,
+        (scripthash,): (ScriptHash,),
+    ) -> Result<Value> {
+        Ok(json!(subscription.status.remove(&scripthash).is_some()))
+    }
+
     fn get_confirmed(&self, scripthash: &ScriptHash) -> Result<(Vec<TxEntry>, BlockHash)> {
         let result = self
             .index
@@ -568,6 +576,9 @@ impl Rpc {
                 }
                 "blockchain.scripthash.subscribe" => {
                     self.scripthash_subscribe(sub, from_value(params)?)
+                }
+                "blockchain.scripthash.unsubscribe" => {
+                    self.scripthash_unsubscribe(sub, from_value(params)?)
                 }
                 "blockchain.transaction.broadcast" => {
                     self.transaction_broadcast(from_value(params)?)
