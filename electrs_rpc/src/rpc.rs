@@ -113,14 +113,14 @@ impl Status {
 
 pub(crate) struct Subscription {
     tip: Option<BlockHash>,
-    status: HashMap<ScriptHash, Status>,
+    scripthashes: HashMap<ScriptHash, Status>,
 }
 
 impl Subscription {
     pub(crate) fn new() -> Self {
         Self {
             tip: None,
-            status: HashMap::new(),
+            scripthashes: HashMap::new(),
         }
     }
 }
@@ -308,7 +308,7 @@ impl Rpc {
             };
             drop(map);
 
-            for (scripthash, status) in subscription.status.iter_mut() {
+            for (scripthash, status) in subscription.scripthashes.iter_mut() {
                 let current_hash = status.hash;
                 let (mut entries, tip) = if status.tip == current_tip {
                     (status.confirmed(), status.tip)
@@ -382,7 +382,7 @@ impl Rpc {
         subscription: &Subscription,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        match subscription.status.get(&scripthash) {
+        match subscription.scripthashes.get(&scripthash) {
             Some(status) => Ok(json!(status.entries)),
             None => bail!("no subscription for scripthash"),
         }
@@ -397,7 +397,7 @@ impl Rpc {
         entries.extend(self.get_unconfirmed(&scripthash));
         let status = Status::new(entries, tip);
         let hash = status.hash;
-        subscription.status.insert(scripthash, status);
+        subscription.scripthashes.insert(scripthash, status);
         Ok(json!(hash))
     }
 
@@ -406,7 +406,10 @@ impl Rpc {
         subscription: &mut Subscription,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        Ok(json!(subscription.status.remove(&scripthash).is_some()))
+        Ok(json!(subscription
+            .scripthashes
+            .remove(&scripthash)
+            .is_some()))
     }
 
     fn get_confirmed(&self, scripthash: &ScriptHash) -> Result<(Vec<TxEntry>, BlockHash)> {
