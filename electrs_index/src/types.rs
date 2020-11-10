@@ -263,12 +263,6 @@ impl ScriptHash {
     }
 }
 
-fn txid_prefix(txid: &Txid) -> TxidPrefix {
-    let mut prefix = [0u8; TXID_PREFIX_LEN];
-    prefix.copy_from_slice(&txid[..TXID_PREFIX_LEN]);
-    TxidPrefix { prefix }
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct ScriptHashRow {
     prefix: ScriptHashPrefix,
@@ -304,6 +298,12 @@ impl ScriptHashRow {
     }
 }
 
+fn txid_prefix(txid: &Txid) -> TxidPrefix {
+    let mut prefix = [0u8; TXID_PREFIX_LEN];
+    prefix.copy_from_slice(&txid[..TXID_PREFIX_LEN]);
+    TxidPrefix { prefix }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct TxidRow {
     prefix: TxidPrefix,
@@ -314,7 +314,7 @@ impl_consensus_encoding!(TxidRow, prefix, pos);
 
 impl TxidRow {
     pub fn scan_prefix(txid: &Txid) -> Box<[u8]> {
-        txid[..TXID_PREFIX_LEN].to_vec().into_boxed_slice()
+        Box::new(txid_prefix(&txid).prefix)
     }
 
     pub fn new(txid: Txid, pos: FilePos) -> Self {

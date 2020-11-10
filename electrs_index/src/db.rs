@@ -144,21 +144,26 @@ impl DBStore {
             .collect()
     }
 
-    pub(crate) fn write(&self, batch: WriteBatch) {
+    pub(crate) fn write(&self, batch: WriteBatch) -> usize {
         let mut db_batch = rocksdb::WriteBatch::default();
+        let mut total_rows_count = 0;
         for key in batch.index_rows {
             db_batch.put_cf(self.index_cf(), key, b"");
+            total_rows_count += 1;
         }
         for key in batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
+            total_rows_count += 1;
         }
         for key in batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
+            total_rows_count += 1;
         }
         let mut opts = rocksdb::WriteOptions::new();
         opts.set_sync(!self.opts.bulk_import);
         opts.disable_wal(self.opts.bulk_import);
         self.db.write_opt(db_batch, &opts).unwrap();
+        total_rows_count
     }
 
     pub(crate) fn flush(&mut self) {
