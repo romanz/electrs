@@ -243,6 +243,7 @@ pub(crate) struct Rpc {
     mempool: RwLock<Mempool>,
     tx_cache: RwLock<HashMap<Txid, Transaction>>,
     stats: Stats,
+    history_limit: Option<usize>,
 }
 
 impl Rpc {
@@ -253,6 +254,7 @@ impl Rpc {
             mempool: RwLock::new(Mempool::empty(metrics)),
             tx_cache: RwLock::new(HashMap::new()),
             stats: Stats::new(metrics),
+            history_limit: Some(10_000),
         }
     }
 
@@ -417,6 +419,17 @@ impl Rpc {
             .index
             .lookup_by_scripthash(&scripthash, &self.daemon)
             .context("index lookup failed")?;
+        if self
+            .history_limit
+            .map(|limit| result.readers.len() > limit)
+            .unwrap_or(false)
+        {
+            bail!(
+                "Too many ({}) history entries for {}",
+                result.readers.len(),
+                scripthash
+            );
+        }
         let mut confirmed: Vec<Confirmed> = result
             .readers
             .into_par_iter()
