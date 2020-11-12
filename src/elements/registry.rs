@@ -144,7 +144,7 @@ impl AssetSorting {
                 Box::new(|a, b| lc_cmp(&a.1.name, &b.1.name).then_with(|| a.0.cmp(b.0)))
             }
             AssetSortField::Domain => Box::new(|a, b| a.1.domain().cmp(&b.1.domain())),
-            AssetSortField::Ticker => Box::new(|a, b| lc_cmp(&a.1.ticker, &b.1.ticker)),
+            AssetSortField::Ticker => Box::new(|a, b| lc_cmp_opt(&a.1.ticker, &b.1.ticker)),
         };
 
         match self.1 {
@@ -175,4 +175,9 @@ impl AssetSorting {
 
 fn lc_cmp(a: &str, b: &str) -> cmp::Ordering {
     a.to_lowercase().cmp(&b.to_lowercase())
+}
+fn lc_cmp_opt(a: &Option<String>, b: &Option<String>) -> cmp::Ordering {
+    a.as_ref()
+        .map(|a| a.to_lowercase())
+        .cmp(&b.as_ref().map(|b| b.to_lowercase()))
 }
