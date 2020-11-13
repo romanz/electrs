@@ -1047,9 +1047,15 @@ fn handle_request(
 
             let sorting = AssetSorting::from_query_params(&query_params)?;
 
-            let assets = query.list_registry_assets(start_index, limit, sorting)?;
+            let (total_num, assets) = query.list_registry_assets(start_index, limit, sorting)?;
 
-            json_response(assets, TTL_SHORT)
+            Ok(Response::builder()
+                // Disable caching because we don't currently support caching with query string params
+                .header("Cache-Control", "no-store")
+                .header("Content-Type", "application/json")
+                .header("X-Total-Results", total_num.to_string())
+                .body(Body::from(serde_json::to_string(&assets)?))
+                .unwrap())
         }
 
         #[cfg(feature = "liquid")]

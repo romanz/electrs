@@ -245,20 +245,20 @@ impl Query {
         start_index: usize,
         limit: usize,
         sorting: AssetSorting,
-    ) -> Result<Vec<LiquidAsset>> {
+    ) -> Result<(usize, Vec<LiquidAsset>)> {
         let asset_db = match &self.asset_db {
-            None => return Ok(vec![]),
+            None => return Ok((0, vec![])),
             Some(db) => db.read().unwrap(),
         };
-        Ok(asset_db
-            .list(start_index, limit, sorting)
+        let (total_num, results) = asset_db.list(start_index, limit, sorting);
+        // Attach on-chain information alongside the registry metadata
+        let results = results
             .into_iter()
-            .filter_map(|(asset_id, metadata)| {
-                // Attach on-chain information alongside the registry metadata
-                lookup_asset(&self, None, asset_id, Some(metadata))
-                    .ok()
-                    .flatten()
+            .map(|(asset_id, metadata)| {
+                Ok(lookup_asset(&self, None, asset_id, Some(metadata))?
+                    .chain_err(|| "missing registered asset")?)
             })
-            .collect())
+            .collect::<Result<Vec<_>>>()?;
+        Ok((total_num, results))
     }
 }

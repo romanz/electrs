@@ -35,14 +35,22 @@ impl AssetRegistry {
             .map(|(_, metadata)| metadata)
     }
 
-    pub fn list(&self, start_index: usize, limit: usize, sorting: AssetSorting) -> Vec<AssetEntry> {
+    pub fn list(
+        &self,
+        start_index: usize,
+        limit: usize,
+        sorting: AssetSorting,
+    ) -> (usize, Vec<AssetEntry>) {
         let mut assets: Vec<AssetEntry> = self
             .assets_cache
             .iter()
             .map(|(asset_id, (_, metadata))| (asset_id, metadata))
             .collect();
         assets.sort_by(sorting.as_comparator());
-        assets.into_iter().skip(start_index).take(limit).collect()
+        (
+            assets.len(),
+            assets.into_iter().skip(start_index).take(limit).collect(),
+        )
     }
 
     pub fn fs_sync(&mut self) -> Result<()> {
