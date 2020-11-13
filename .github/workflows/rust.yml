@@ -13,7 +13,7 @@ jobs:
       - name: Install
         uses: actions-rs/toolchain@v1
         with:
-          components: rustfmt
+          components: rustfmt, clippy
           profile: minimal
           override: true
 
@@ -34,3 +34,8 @@ jobs:
         with:
           command: test
           args: --release --all
+
+      - name: Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
