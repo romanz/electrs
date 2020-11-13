@@ -188,7 +188,7 @@ impl Index {
         let map = self.map(); // lock block map for concurrent updates
         let readers = positions
             .into_iter()
-            .filter_map(|pos| match map.find_block(&pos) {
+            .filter_map(|pos| match map.find_block(pos) {
                 Some((hash, height)) => {
                     let header = map.get_by_hash(hash).expect("missing block header");
                     Some(ConfirmedReader {

@@ -121,7 +121,7 @@ impl BlockMap {
         );
     }
 
-    pub(crate) fn find_block(&self, tx_pos: &FilePos) -> Option<(&BlockHash, usize)> {
+    pub(crate) fn find_block(&self, tx_pos: FilePos) -> Option<(&BlockHash, usize)> {
         // look up the block that ends after this position
         let (start, HashLimit { limit, hash }) =
             match self.by_pos.range((Unbounded, Included(tx_pos))).next_back() {
@@ -129,8 +129,8 @@ impl BlockMap {
                 None => panic!("block not found: {:?}", tx_pos),
             };
         // make sure the position is in the block
-        assert!(tx_pos < limit);
-        assert!(tx_pos >= start);
+        assert!(tx_pos < *limit);
+        assert!(tx_pos >= *start);
         // make sure it's part of an active chain
         self.chain.by_hash.get(hash).map(|height| (hash, *height))
     }

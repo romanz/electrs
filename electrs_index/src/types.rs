@@ -203,7 +203,7 @@ pub(crate) struct FilePos {
 }
 
 impl FilePos {
-    pub fn reader(&self, daemon: &Daemon) -> Reader {
+    pub fn reader(self, daemon: &Daemon) -> Reader {
         let file = daemon.blk_file_path(self.file_id as usize);
         Reader {
             file,
