@@ -310,22 +310,34 @@ impl Rpc {
             };
             drop(map);
 
-            for (scripthash, status) in subscription.scripthashes.iter_mut() {
-                let current_hash = status.hash;
-                let (mut entries, tip) = if status.tip == current_tip {
-                    (status.confirmed(), status.tip)
-                } else {
-                    self.get_confirmed(&scripthash)?
-                };
-                entries.extend(self.get_unconfirmed(&scripthash));
-                *status = Status::new(entries, tip);
-                if current_hash != status.hash {
-                    result.push(notification(
-                        "blockchain.scripthash.subscribe",
-                        &[json!(scripthash), json!(status.hash)],
-                    ));
-                }
-            }
+            let scripthash_notifications = subscription
+                .scripthashes
+                .par_iter_mut()
+                .filter_map(
+                    |(scripthash, status): (&ScriptHash, &mut Status)| -> Option<Result<Value>> {
+                        let current_hash = status.hash;
+                        let (mut entries, tip) = if status.tip == current_tip {
+                            (status.confirmed(), status.tip)
+                        } else {
+                            // TODO: use the map above, otherwise each lookup will lock separately
+                            match self.get_confirmed(&scripthash) {
+                                Ok(confirmed) => confirmed,
+                                Err(e) => return Some(Err(e)),
+                            }
+                        };
+                        entries.extend(self.get_unconfirmed(&scripthash));
+                        *status = Status::new(entries, tip);
+                        if current_hash == status.hash {
+                            return None;
+                        }
+                        Some(Ok(notification(
+                            "blockchain.scripthash.subscribe",
+                            &[json!(scripthash), json!(status.hash)],
+                        )))
+                    },
+                )
+                .collect::<Result<Vec<Value>>>()?;
+            result.extend(scripthash_notifications);
             Ok(result)
         })
     }
