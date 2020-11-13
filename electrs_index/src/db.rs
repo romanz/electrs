@@ -84,7 +84,7 @@ impl DBStore {
             );
         }
         if config.compacted {
-            store.opts.bulk_import = false;
+            store.start_compactions();
         }
         store.set_config(config);
         Ok(store)
@@ -181,13 +181,18 @@ impl DBStore {
             config.compacted = true;
             self.set_config(config);
             info!("finished full compaction");
+            self.start_compactions();
         }
-        if self.opts.bulk_import {
-            self.opts.bulk_import = false;
+    }
+
+    fn start_compactions(&mut self) {
+        self.opts.bulk_import = false;
+        for name in &self.cfs {
+            let cf = self.db.cf_handle(name).expect("missing CF");
             self.db
-                .set_options(&[("disable_auto_compactions", "false")])
-                .unwrap();
-            info!("auto-compactions enabled");
+                .set_options_cf(cf, &[("disable_auto_compactions", "false")])
+                .expect("failed to start auto-compactions");
+            info!("auto-compactions enabled on {}", name);
         }
     }
 
