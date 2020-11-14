@@ -121,9 +121,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.47.3"
+version = "0.47.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df683a55b54b41d5ea8ebfaebb5aa7e6b84e3f3006a78f010dadc9ca88469260"
+checksum = "2a817f8356b784c37ee29b7a9a15c3fec321cd46b0ec67bcebe5530207f62e2d"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -138,6 +138,7 @@ dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",
  "regex",
+ "shlex",
  "which",
 ]
 
@@ -585,9 +586,9 @@ dependencies = [
 
 [[package]]
 name = "librocksdb-sys"
-version = "5.18.3"
+version = "5.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d19778314deaa7048f2ea7d07b8aa12e1c227acebe975a37eeab6d2f8c74e41b"
+checksum = "16dcd864797c422ebf942e40686180528c795fdf34eff05016a626b83653fb3d"
 dependencies = [
  "bindgen",
  "cc",
@@ -987,6 +988,12 @@ dependencies = [
  "ryu",
  "serde",
 ]
+
+[[package]]
+name = "shlex"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "signal-hook"
