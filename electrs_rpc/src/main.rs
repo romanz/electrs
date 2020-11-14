@@ -123,14 +123,7 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
     let mut index_result = index_result.fuse();
 
     loop {
-        for peer in peers.values_mut() {
-            for notification in rpc
-                .notify(&mut peer.subscription)
-                .context("subscription notification failed")?
-            {
-                peer.sender.send(notification).await.unwrap();
-            }
-        }
+        notify_peers(&rpc, &mut peers).await?;
         let event = select! {
             sig = future::timeout(Duration::from_secs(5), signals.next()).fuse() => {
                 match sig {
@@ -174,37 +167,7 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
                 None => break,
             },
         };
-        match event {
-            Event::Message { id, req } => match peers.get_mut(&id) {
-                Some(peer) => {
-                    let response = rpc
-                        .handle_request(&mut peer.subscription, req)
-                        .context("RPC failed")?;
-                    peer.sender.send(response).await.unwrap();
-                }
-                None => warn!("unknown client {}", id),
-            },
-            Event::NewPeer {
-                id,
-                stream,
-                shutdown,
-            } => match peers.entry(id) {
-                Entry::Occupied(..) => panic!("duplicate connection ID: {}", id),
-                Entry::Vacant(entry) => {
-                    let (sender_tx, mut sender_rx) = unbounded();
-                    entry.insert(Peer::new(sender_tx));
-                    let mut disconnect_tx = disconnect_tx.clone();
-                    spawn("send_loop", async move {
-                        let res = send_loop(id, &mut sender_rx, stream, shutdown).await;
-                        disconnect_tx
-                            .send((id, sender_rx))
-                            .await
-                            .with_context(|| format!("failed to disconnect {}", id))?;
-                        res
-                    });
-                }
-            },
-        }
+        handle_event(&rpc, &mut peers, event, &disconnect_tx).await?;
     }
     debug!("stopping indexer");
     drop(index_notify);
@@ -217,6 +180,58 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
         debug!("{}: gone", id)
     }
     debug!("server_loop is done");
+    Ok(())
+}
+
+async fn notify_peers(rpc: &Rpc, peers: &mut HashMap<usize, Peer>) -> Result<()> {
+    for peer in peers.values_mut() {
+        let notifications = rpc
+            .notify(&mut peer.subscription)
+            .context("subscription notification failed")?;
+        for notification in notifications {
+            peer.sender.send(notification).await.unwrap();
+        }
+    }
+    Ok(())
+}
+
+async fn handle_event(
+    rpc: &Rpc,
+    peers: &mut HashMap<usize, Peer>,
+    event: Event,
+    disconnect_tx: &Sender<(usize, Receiver<Value>)>,
+) -> Result<()> {
+    match event {
+        Event::Message { id, req } => match peers.get_mut(&id) {
+            Some(peer) => {
+                let response = rpc
+                    .handle_request(&mut peer.subscription, req)
+                    .context("RPC failed")?;
+                peer.sender.send(response).await.unwrap();
+            }
+            None => warn!("unknown client {}", id),
+        },
+        Event::NewPeer {
+            id,
+            stream,
+            shutdown,
+        } => match peers.entry(id) {
+            Entry::Occupied(..) => panic!("duplicate connection ID: {}", id),
+            Entry::Vacant(entry) => {
+                let (sender_tx, mut sender_rx) = unbounded();
+                entry.insert(Peer::new(sender_tx));
+                let mut disconnect_tx = disconnect_tx.clone();
+                spawn("send_loop", async move {
+                    let res = send_loop(id, &mut sender_rx, stream, shutdown).await;
+                    disconnect_tx
+                        .send((id, sender_rx))
+                        .await
+                        .with_context(|| format!("failed to disconnect {}", id))?;
+                    res
+                });
+            }
+        },
+    }
     Ok(())
 }
 
