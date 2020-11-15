@@ -553,21 +553,19 @@ fn parse_block_and_undo<F>(loc: BlockLocation, blk_file: &mut F, undo_file: &mut
 where
     F: Read + Seek,
 {
-    blk_file
-        .seek(SeekFrom::Start(loc.data as u64))
-        .expect("failed to seek");
-    let block: Block =
-        parse_from(blk_file, loc.data).unwrap_or_else(|_| panic!("bad Block at {:?}", loc));
-    let undo: BlockUndo = loc
-        .undo
-        .map(|offset| {
-            parse_from(undo_file, offset).unwrap_or_else(|_| panic!("bad BlockUndo at {:?}", loc))
-        })
-        .unwrap_or_else(|| {
+    let block: Block = match parse_from(blk_file, loc.data) {
+        Ok(block) => block,
+        Err(err) => panic!("bad Block at {:?}: {}", loc, err),
+    };
+    let undo: BlockUndo = match loc.undo.map(|offset| parse_from(undo_file, offset)) {
+        Some(Ok(undo)) => undo,
+        Some(Err(err)) => panic!("bad BlockUndo at {:?}: {}", loc, err),
+        None => {
             // genesis block has no undo
             assert_eq!(block.header.prev_blockhash, BlockHash::default());
             BlockUndo::default() // create an empty undo
-        });
+        }
+    };
     ParseResult { loc, block, undo }
 }
 
