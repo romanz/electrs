@@ -20,7 +20,7 @@ There are two ways to compile `electrs`: by statically linking to `librocksdb` o
 
 The advantages of static linking:
 
-* The binary is self-contained and doesn't need other dependencies, it can be transferred to other machine without worryingg
+* The binary is self-contained and doesn't need other dependencies, it can be transferred to other machine without worrying
 * The binary should work pretty much with every common distro
 * Different library installed elsewhere doesn't affect the behavior of `electrs`
 
