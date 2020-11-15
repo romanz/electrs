@@ -313,10 +313,43 @@ impl Index {
         );
     }
 
+    fn low_memory_update(
+        &self,
+        read_requests: Vec<ReadRequest>,
+        tip: BlockHash,
+        new_blocks: usize,
+    ) -> Result<BlockHash> {
+        let mut block_rows = Vec::with_capacity(new_blocks);
+        for r in read_requests {
+            debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
+            let mut blk_file = std::fs::File::open(r.blk_file)?;
+            let mut undo_file = std::fs::File::open(r.undo_file)?;
+            let mut batch = db::WriteBatch::default();
+            r.locations.into_iter().for_each(|loc| {
+                let parsed = self.stats.update_duration.observe_duration("parse", || {
+                    parse_block_and_undo(loc, &mut blk_file, &mut undo_file)
+                });
+                self.stats
+                    .update_duration
+                    .observe_duration("index", || index_single_block(parsed).extend(&mut batch));
+            });
+            block_rows.extend(get_header_rows(&batch));
+            self.stats
+                .update_duration
+                .observe_duration("sort", || batch.sort());
+            self.stats
+                .update_duration
+                .observe_duration("write", || self.store.read().unwrap().write(batch));
+        }
+        self.store.write().unwrap().flush();
+        assert_eq!(new_blocks, block_rows.len());
+        self.map.write().unwrap().update_chain(block_rows, tip)
+    }
+
     pub fn update(&self, daemon: &Daemon) -> Result<BlockHash> {
         let start = Instant::now();
         let tip = daemon.get_best_block_hash()?;
-        let locations = {
+        let locations: Vec<BlockLocation> = {
             let map = self.map();
             if map.chain().last() == Some(&tip) {
                 debug!("skip update, same tip: {}", tip);
@@ -324,6 +357,7 @@ impl Index {
             }
             load_locations(daemon, tip, &map)?
         };
+        let new_blocks = locations.len();
         let read_requests = group_locations_by_file(locations)
             .into_iter()
             .map(|(file_id, locations)| ReadRequest {
@@ -333,10 +367,6 @@ impl Index {
                 undo_file: daemon.undo_file_path(file_id),
             })
             .collect::<Vec<_>>();
-        let new_blocks = read_requests
-            .iter()
-            .map(|r| r.locations.len())
-            .sum::<usize>();
         info!(
             "reading {} new blocks from {} blk*.dat files",
             new_blocks,
@@ -344,31 +374,7 @@ impl Index {
         );
 
         if self.low_memory {
-            let mut block_rows = Vec::with_capacity(new_blocks);
-            for r in read_requests {
-                debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
-                let mut blk_file = std::fs::File::open(r.blk_file)?;
-                let mut undo_file = std::fs::File::open(r.undo_file)?;
-                let mut batch = db::WriteBatch::default();
-                r.locations.into_iter().for_each(|loc| {
-                    let parsed = self.stats.update_duration.observe_duration("parse", || {
-                        parse_block_and_undo(loc, &mut blk_file, &mut undo_file)
-                    });
-                    self.stats.update_duration.observe_duration("index", || {
-                        index_single_block(parsed).extend(&mut batch)
-                    });
-                });
-                block_rows.extend(get_header_rows(&batch));
-                self.stats
-                    .update_duration
-                    .observe_duration("sort", || batch.sort());
-                self.stats
-                    .update_duration
-                    .observe_duration("write", || self.store.read().unwrap().write(batch));
-            }
-            self.store.write().unwrap().flush();
-            assert_eq!(new_blocks, block_rows.len());
-            return self.map.write().unwrap().update_chain(block_rows, tip);
+            return self.low_memory_update(read_requests, tip, new_blocks);
         }
 
         let (reader_tx, reader_rx) = sync_channel(0);
