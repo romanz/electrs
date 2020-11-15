@@ -534,16 +534,13 @@ fn load_locations(
 }
 
 fn group_locations_by_file(locations: Vec<BlockLocation>) -> BTreeMap<usize, Vec<BlockLocation>> {
-    let mut locations_by_file = BTreeMap::new();
-    for loc in locations.into_iter() {
-        locations_by_file
-            .entry(loc.file)
-            .or_insert_with(Vec::new)
-            .push(loc);
-    }
-    for locations in &mut locations_by_file.values_mut() {
-        locations.sort_by_key(|loc| loc.data);
-    }
+    let mut locations_by_file = BTreeMap::<usize, Vec<BlockLocation>>::new();
+    locations
+        .into_iter()
+        .for_each(|loc| locations_by_file.entry(loc.file).or_default().push(loc));
+    locations_by_file
+        .values_mut()
+        .for_each(|locations| locations.sort_by_key(|loc| loc.data));
     locations_by_file
 }
 
