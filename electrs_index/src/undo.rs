@@ -75,7 +75,6 @@ fn script_decode<D: std::io::Read>(
     mut d: D,
 ) -> std::result::Result<Script, bitcoin::consensus::encode::Error> {
     let len = varint_decode(&mut d)?;
-    // info!("script len={}", len);
     Ok(if len < SPECIAL_SCRIPTS {
         let script_type = len as u8;
         let size = match script_type {
