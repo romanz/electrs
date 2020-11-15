@@ -12,14 +12,6 @@ use bitcoin::{
 
 use crate::{daemon::Daemon, db};
 
-hash_newtype!(
-    ScriptHash,
-    sha256::Hash,
-    32,
-    doc = "SHA256(scriptPubkey)",
-    true
-);
-
 macro_rules! impl_consensus_encoding {
     ($thing:ident, $($field:ident),+) => (
         impl Encodable for $thing {
@@ -111,23 +103,15 @@ impl Reader {
     }
 }
 
-const SCRIPT_HASH_PREFIX_LEN: usize = 8;
+// ***************************************************************************
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct ScriptHashPrefix {
-    prefix: [u8; SCRIPT_HASH_PREFIX_LEN],
-}
-
-impl_consensus_encoding!(ScriptHashPrefix, prefix);
-
-const TXID_PREFIX_LEN: usize = 8;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct TxidPrefix {
-    prefix: [u8; TXID_PREFIX_LEN],
-}
-
-impl_consensus_encoding!(TxidPrefix, prefix);
+hash_newtype!(
+    ScriptHash,
+    sha256::Hash,
+    32,
+    doc = "SHA256(scriptPubkey)",
+    true
+);
 
 impl ScriptHash {
     pub fn new(script: &Script) -> Self {
@@ -140,6 +124,15 @@ impl ScriptHash {
         ScriptHashPrefix { prefix }
     }
 }
+
+const SCRIPT_HASH_PREFIX_LEN: usize = 8;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct ScriptHashPrefix {
+    prefix: [u8; SCRIPT_HASH_PREFIX_LEN],
+}
+
+impl_consensus_encoding!(ScriptHashPrefix, prefix);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct ScriptHashRow {
@@ -175,6 +168,17 @@ impl ScriptHashRow {
         &self.pos
     }
 }
+
+// ***************************************************************************
+
+const TXID_PREFIX_LEN: usize = 8;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct TxidPrefix {
+    prefix: [u8; TXID_PREFIX_LEN],
+}
+
+impl_consensus_encoding!(TxidPrefix, prefix);
 
 fn txid_prefix(txid: &Txid) -> TxidPrefix {
     let mut prefix = [0u8; TXID_PREFIX_LEN];
@@ -214,6 +218,8 @@ impl TxidRow {
         &self.pos
     }
 }
+
+// ***************************************************************************
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct BlockRow {
