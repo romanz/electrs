@@ -1,17 +1,16 @@
 use bitcoin::{
     blockdata::opcodes::all::*,
-    consensus::encode::{Decodable, ReadExt, VarInt},
+    consensus::encode::{Decodable, Error, ReadExt, VarInt},
     util::key::PublicKey,
     Script,
 };
+use std::io::Read;
 
 pub(crate) struct TxUndo {
     pub scripts: Vec<Script>,
 }
 
-fn varint_decode<D: std::io::Read>(
-    mut d: D,
-) -> std::result::Result<usize, bitcoin::consensus::encode::Error> {
+fn varint_decode<D: Read>(mut d: D) -> Result<usize, Error> {
     let mut n = 0usize;
     // TODO: add checks
     loop {
@@ -25,10 +24,7 @@ fn varint_decode<D: std::io::Read>(
     }
 }
 
-fn decode_bytes<D: std::io::Read>(
-    mut d: D,
-    len: usize,
-) -> std::result::Result<Vec<u8>, bitcoin::consensus::encode::Error> {
+fn decode_bytes<D: Read>(mut d: D, len: usize) -> Result<Vec<u8>, Error> {
     let mut ret = vec![0; len];
     d.read_slice(&mut ret)?;
     Ok(ret)
@@ -36,10 +32,7 @@ fn decode_bytes<D: std::io::Read>(
 
 const SPECIAL_SCRIPTS: usize = 6;
 
-fn decompress_script(
-    script_type: u8,
-    mut bytes: Vec<u8>,
-) -> std::result::Result<Script, bitcoin::consensus::encode::Error> {
+fn decompress_script(script_type: u8, mut bytes: Vec<u8>) -> Result<Script, Error> {
     let builder = bitcoin::blockdata::script::Builder::new();
     let script = match script_type {
         0 => builder
@@ -71,9 +64,7 @@ fn decompress_script(
     Ok(script)
 }
 
-fn script_decode<D: std::io::Read>(
-    mut d: D,
-) -> std::result::Result<Script, bitcoin::consensus::encode::Error> {
+fn script_decode<D: Read>(mut d: D) -> Result<Script, Error> {
     let len = varint_decode(&mut d)?;
     Ok(if len < SPECIAL_SCRIPTS {
         let script_type = len as u8;
@@ -91,17 +82,16 @@ fn script_decode<D: std::io::Read>(
 }
 
 impl Decodable for TxUndo {
-    fn consensus_decode<D: std::io::Read>(
-        mut d: D,
-    ) -> std::result::Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<D: Read>(mut d: D) -> Result<Self, Error> {
         let len = VarInt::consensus_decode(&mut d)?.0;
-        let mut scripts = vec![];
-        for _ in 0..len {
-            let _height_coinbase = varint_decode(&mut d)?;
-            assert_eq!(varint_decode(&mut d)?, 0); // unused today
-            let _amount = varint_decode(&mut d)?;
-            scripts.push(script_decode(&mut d)?)
-        }
+        let scripts = (0..len)
+            .map(|_| {
+                let _height_coinbase = varint_decode(&mut d)?;
+                assert_eq!(varint_decode(&mut d)?, 0); // unused today
+                let _amount = varint_decode(&mut d)?;
+                script_decode(&mut d)
+            })
+            .collect::<Result<Vec<Script>, Error>>()?;
         Ok(TxUndo { scripts })
     }
 }
@@ -112,9 +102,7 @@ pub(crate) struct BlockUndo {
 }
 
 impl Decodable for BlockUndo {
-    fn consensus_decode<D: std::io::Read>(
-        mut d: D,
-    ) -> std::result::Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<D: Read>(mut d: D) -> Result<Self, Error> {
         let len = VarInt::consensus_decode(&mut d)?.0;
         let mut txdata = vec![];
         for _ in 0..len {
