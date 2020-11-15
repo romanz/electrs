@@ -389,15 +389,16 @@ impl Index {
         drop(indexer_tx); // no need for the original sender
 
         let mut block_rows = Vec::with_capacity(new_blocks);
-        let mut total_rows_count = 0usize;
-        for batch in indexer_rx.into_iter() {
-            block_rows.extend(get_header_rows(&batch));
-            self.report_stats(&batch);
-            total_rows_count += self
-                .stats
-                .update_duration
-                .observe_duration("write", || self.store.read().unwrap().write(batch));
-        }
+        let total_rows_count: usize = indexer_rx
+            .into_iter()
+            .map(|batch| {
+                block_rows.extend(get_header_rows(&batch));
+                self.report_stats(&batch);
+                self.stats
+                    .update_duration
+                    .observe_duration("write", || self.store.read().unwrap().write(batch))
+            })
+            .sum();
 
         indexers
             .into_iter()
