@@ -285,10 +285,7 @@ impl Index {
                     result.index_rows.len()
                 );
 
-                update_duration.observe_duration("sort", || {
-                    result.index_rows.sort_unstable();
-                    result.header_rows.sort_unstable();
-                });
+                update_duration.observe_duration("sort", || result.sort());
 
                 indexer_tx
                     .send(result)
@@ -347,26 +344,30 @@ impl Index {
         );
 
         if self.low_memory {
-            let mut block_rows = vec![];
+            let mut block_rows = Vec::with_capacity(new_blocks);
             for r in read_requests {
                 debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
                 let mut blk_file = std::fs::File::open(r.blk_file)?;
                 let mut undo_file = std::fs::File::open(r.undo_file)?;
                 let mut batch = db::WriteBatch::default();
-                for loc in r.locations {
-                    let parsed = parse_block_and_undo(loc, &mut blk_file, &mut undo_file);
-                    index_single_block(parsed).extend(&mut batch);
-                }
-                let batch_block_rows = batch
-                    .header_rows
-                    .iter()
-                    .map(|row| BlockRow::from_db_row(row).expect("bad BlockRow"));
-                block_rows.extend(batch_block_rows);
+                r.locations.into_iter().for_each(|loc| {
+                    let parsed = self.stats.update_duration.observe_duration("parse", || {
+                        parse_block_and_undo(loc, &mut blk_file, &mut undo_file)
+                    });
+                    self.stats.update_duration.observe_duration("index", || {
+                        index_single_block(parsed).extend(&mut batch)
+                    });
+                });
+                block_rows.extend(get_header_rows(&batch));
+                self.stats
+                    .update_duration
+                    .observe_duration("sort", || batch.sort());
                 self.stats
                     .update_duration
                     .observe_duration("write", || self.store.read().unwrap().write(batch));
             }
             self.store.write().unwrap().flush();
+            assert_eq!(new_blocks, block_rows.len());
             return self.map.write().unwrap().update_chain(block_rows, tip);
         }
 
@@ -381,15 +382,10 @@ impl Index {
             .collect();
         drop(indexer_tx); // no need for the original sender
 
-        let mut block_rows = vec![];
+        let mut block_rows = Vec::with_capacity(new_blocks);
         let mut total_rows_count = 0usize;
         for batch in indexer_rx.into_iter() {
-            let batch_block_rows = batch
-                .header_rows
-                .iter()
-                .map(|row| BlockRow::from_db_row(row).expect("bad BlockRow"));
-            block_rows.extend(batch_block_rows);
-
+            block_rows.extend(get_header_rows(&batch));
             self.report_stats(&batch);
             total_rows_count += self
                 .stats
@@ -420,6 +416,13 @@ impl Index {
         self.store.write().unwrap().flush();
         self.map.write().unwrap().update_chain(block_rows, tip)
     }
+}
+
+fn get_header_rows(batch: &db::WriteBatch) -> impl Iterator<Item = BlockRow> + '_ {
+    batch
+        .header_rows
+        .iter()
+        .map(|row| BlockRow::from_db_row(row).expect("bad BlockRow"))
 }
 
 fn db_rows_size(rows: &[db::Row]) -> usize {

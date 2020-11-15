@@ -11,6 +11,14 @@ pub(crate) struct WriteBatch {
     pub(crate) txid_rows: Vec<Row>,
 }
 
+impl WriteBatch {
+    pub(crate) fn sort(&mut self) {
+        self.header_rows.sort_unstable();
+        self.index_rows.sort_unstable();
+        self.txid_rows.sort_unstable();
+    }
+}
+
 #[derive(Debug)]
 struct Options {
     path: PathBuf,
