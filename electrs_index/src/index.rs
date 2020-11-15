@@ -22,7 +22,8 @@ use crate::{
     db,
     map::BlockMap,
     metrics::{Histogram, Metrics},
-    types::{BlockRow, BlockUndo, Confirmed, FilePos, Reader, ScriptHash, ScriptHashRow, TxidRow},
+    types::{BlockRow, Confirmed, FilePos, Reader, ScriptHash, ScriptHashRow, TxidRow},
+    undo::BlockUndo,
 };
 
 pub struct Index {

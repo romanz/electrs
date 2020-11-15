@@ -18,6 +18,7 @@ mod index;
 mod map;
 mod metrics;
 mod types;
+mod undo;
 
 pub use {
     config::Config,
