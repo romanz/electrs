@@ -192,8 +192,8 @@ impl DBStore {
             self.db
                 .set_options_cf(cf, &[("disable_auto_compactions", "false")])
                 .expect("failed to start auto-compactions");
-            info!("auto-compactions enabled on {}", name);
         }
+        info!("auto-compactions enabled");
     }
 
     fn set_config(&self, config: Config) {
