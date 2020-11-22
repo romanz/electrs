@@ -66,7 +66,7 @@ fn default_opts(low_memory: bool) -> rocksdb::Options {
 
 impl DBStore {
     fn open_opts(opts: Options) -> Result<Self> {
-        debug!("opening DB with {:?}", opts);
+        debug!("opening RocksDB with {:?}", opts);
         let mut db_opts = default_opts(opts.low_memory);
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
@@ -79,6 +79,14 @@ impl DBStore {
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, &opts.path, cf_descriptors)
             .context("failed to open DB")?;
+        let live_files = db.live_files()?;
+        info!(
+            "{:?}: {} SST files, {} GB, {} Grows",
+            opts.path,
+            live_files.len(),
+            live_files.iter().map(|f| f.size).sum::<usize>() as f64 / 1e9,
+            live_files.iter().map(|f| f.num_entries).sum::<u64>() as f64 / 1e9
+        );
         // The old version of electrs used the default column family.
         let is_old = db.iterator(rocksdb::IteratorMode::Start).next().is_some();
         let mut store = DBStore { db, opts, cfs };
