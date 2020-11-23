@@ -17,7 +17,9 @@ env_logger = "0.7"
 hyper = "0.10"
 log = "0.4"
 prometheus = { version = "0.10", features = ["process"] }
-protobuf = "=2.14.0"  # due to https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21 (for Rust 1.41.1 compatibility)
+# keeping older protobuf due to https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21 (for Rust 1.41.1 compatibility)
+protobuf = "=2.14.0"
+# cannot update to latest rocksdb due to https://github.com/rust-rocksdb/rust-rocksdb/commit/3e223d15919e4e31e50af0dc3d52439a4635852c (for Rust 1.41.1 compatibility)
 rocksdb = { git = "https://github.com/romanz/rust-rocksdb", rev = "9f639dd7cd378569a96a5824b09ea03104cadfff", default-features = false }
 rust-crypto = "0.2"
 serde = "1.0"
