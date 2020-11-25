@@ -1,5 +1,5 @@
 use bitcoin::network::constants::Network;
-use dirs::home_dir;
+use dirs_next::home_dir;
 use std::convert::TryInto;
 use std::ffi::{OsStr, OsString};
 use std::fmt;

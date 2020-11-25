@@ -2,8 +2,7 @@ use bitcoin::blockdata::block::{Block, BlockHeader};
 use bitcoin::blockdata::transaction::{Transaction, TxIn, TxOut};
 use bitcoin::consensus::encode::{deserialize, serialize};
 use bitcoin::hash_types::{BlockHash, Txid};
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::RwLock;
@@ -161,11 +160,9 @@ struct BlockKey {
 }
 
 pub fn compute_script_hash(data: &[u8]) -> FullHash {
-    let mut hash = FullHash::default();
     let mut sha2 = Sha256::new();
-    sha2.input(data);
-    sha2.result(&mut hash);
-    hash
+    sha2.update(data);
+    sha2.finalize().into()
 }
 
 pub fn index_transaction<'a>(
