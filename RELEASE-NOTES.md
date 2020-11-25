@@ -1,3 +1,11 @@
+# 0.8.6 (25 Nov 2020)
+* [Fix](https://github.com/romanz/electrs/commit/c88a0dc331eb16163276becf98fcc020565d97eb) Electrum fee histogram duplicates
+* [Fix](https://github.com/romanz/electrs/commit/8f2f53303a62321e3ccd1a8dc42b46c63629a03f) Electrum protocol negotiation
+* Update multiple crates (@kixunil): [lru](#333), [prometheus](#334), [dirs-next](#335)
+* Support Rust 1.41.1 (for Debian stable)
+* [Update](https://github.com/romanz/electrs/commit/af6ff09a275ec12b6fd0d6a101637f4710902a3c) bitcoin crate (@dr-orlovsky)
+* [Fix](https://github.com/romanz/electrs/commit/4764dccbbe4cd04a6dc79771a686847d8e6e2edf) a deadlock when shutting down (@kixunil)
+
 # 0.8.5 (1 July 2020)
 
 * Add a 'blocks_dir' option (@darosior)
