@@ -1,3 +1,10 @@
-target/
-.git/
-_*/
+.*
+_*
+db
+dist
+doc
+Dockerfile
+examples
+scripts
+target
+tests
