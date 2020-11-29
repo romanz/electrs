@@ -371,8 +371,8 @@ $ firefox 'http://localhost:9090/graph?g0.range_input=1h&g0.expr=index_height&g0
 You can invoke any supported RPC using `netcat`, for example:
 
 ```
-$ echo '{"jsonrpc": "2.0", "method": "server.version", "id": 0}' | netcat 127.0.0.1 50001
-{"id":0,"jsonrpc":"2.0","result":["electrs 0.8.5","1.4"]}
+$ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}' | netcat 127.0.0.1 50001
+{"id":0,"jsonrpc":"2.0","result":["electrs 0.8.6","1.4"]}
 ```
 
 For more complex tasks, you may need to convert addresses to 
