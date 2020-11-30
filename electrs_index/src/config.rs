@@ -20,7 +20,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_args() -> Self {
-        let matches = App::new("Electrum Server in Rust")
+        let matches = App::new(format!("electrs {}", env!("CARGO_PKG_VERSION")))
             .arg(
                 Arg::with_name("network")
                     .long("network")

@@ -442,7 +442,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "electrs_index"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "bitcoin",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "electrs_query"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "electrs_index",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "electrs_rpc"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-signals",
