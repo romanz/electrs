@@ -408,7 +408,7 @@ pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
 // Asset stats
 //
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct IssuedAssetStats {
     pub tx_count: usize,
     pub issuance_count: usize,
@@ -419,21 +419,7 @@ pub struct IssuedAssetStats {
     pub burned_reissuance_tokens: u64,
 }
 
-impl Default for IssuedAssetStats {
-    fn default() -> Self {
-        Self {
-            tx_count: 0,
-            issuance_count: 0,
-            issued_amount: 0,
-            burned_amount: 0,
-            has_blinded_issuances: false,
-            reissuance_tokens: None,
-            burned_reissuance_tokens: 0,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NativeAssetStats {
     pub tx_count: usize,
     pub peg_in_count: usize,
@@ -442,20 +428,6 @@ pub struct NativeAssetStats {
     pub peg_out_amount: u64,
     pub burn_count: usize,
     pub burned_amount: u64,
-}
-
-impl Default for NativeAssetStats {
-    fn default() -> Self {
-        Self {
-            tx_count: 0,
-            peg_in_count: 0,
-            peg_in_amount: 0,
-            peg_out_count: 0,
-            peg_out_amount: 0,
-            burn_count: 0,
-            burned_amount: 0,
-        }
-    }
 }
 
 type AssetStatApplyFn<T> = fn(&TxHistoryInfo, &mut T, &mut HashSet<Txid>);
