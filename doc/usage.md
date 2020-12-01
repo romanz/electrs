@@ -87,6 +87,9 @@ $ cd electrs
 
 ### Build
 
+Note: you need to have enough free RAM to build `electrs`. The build will fail otherwise.
+Close those 100 old tabs in the browser. ;)
+
 #### Static linking
 
 First build should take ~20 minutes:
@@ -383,3 +386,42 @@ For more complex tasks, you may need to convert addresses to
 $ ./contrib/addr.py 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR  # sample address from block #640699
 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR has {'confirmed': 12652436, 'unconfirmed': 0} satoshis
 ```
+
+## Upgrading
+
+As with any other application, you need to remember how you installed `electrs` to upgrade it.
+If you don't then here's a little help: run `which electrs` and compare the output
+
+* If you got an error you didn't install `electrs` into your system in any way, it's probably sitting in the `target/release` directory of source
+* If the path starts with `/bin/` then either you have used packaging system or you made a mistake the first time (non-packaged binaries must go to `/usr/local/bin`)
+* If the path starts with `/usr/local/bin` you most likely copied electrs there after building
+* If the path starts with `/home/YOUR_USERNAME/.cargo/bin` you most likely ran `cargo install`
+
+### Upgrading distribution package
+
+If you used Debian packaging system you only need this:
+
+```
+sudo apt update
+sudo apt upgrade
+```
+
+Similarly for other distributions - use their respective commands.  
+If a new version of `electrs` is not yet in the package system, try wait a few days or contact the maintainers of the packages if it's been a long time.
+
+### Upgrading manual installation
+
+1. Enter your `electrs` source directory, usually in `~/` but some people like to put it in something like `~/sources`.
+   If you've deleted it, you need to `git clone` again.
+2. `git checkout master`
+3. `git pull`
+4. Strongly recommended: `git verify-tag v0.8.6` (fix the version number if we've forgotten to update this docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
+5. `git checkout v0.8.6`
+6. If you used static linking: `cargo build --locked --release`.
+   If you used dynamic linking `ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --no-default-features --release`.
+   If you don't remember which linking you used, you probably used static.
+   This step will take a few tens of minutes (but dynamic linking is a bit faster), go grab a coffee.
+   Also remember that you need enough free RAM, the build will die otherwise
+7. If you've previously copied `electrs` into `/usr/local/bin` run: sudo `cp target/release/electrs /usr/local/bin`
+   If you've previously installed `electrs` using `cargo install`: `cargo install --locked --path . -f`
+8. If you've manually configured systemd service: `sudo systemctl restart electrs`
