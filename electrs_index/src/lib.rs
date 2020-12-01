@@ -7,6 +7,8 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate configure_me;
+
 // export specific versions of rust-bitcoin crates
 pub use bitcoin;
 pub use bitcoincore_rpc;

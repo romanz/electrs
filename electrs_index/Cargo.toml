@@ -3,16 +3,20 @@ name = "electrs_index"
 version = "0.9.0"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 edition = "2018"
+build = "build.rs"
 
 [features]
 default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "rocksdb/bzip2"]
+
+[package.metadata.configure_me]
+spec = "config_spec.toml"
 
 [dependencies]
 anyhow = "1.0"
 bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "93df7cbd3e02961835d250cf606e65b6826b78fe", features = ["use-serde"] }
 bitcoincore-rpc = { git = "https://github.com/romanz/rust-bitcoincore-rpc", rev = "e6848320ecf8be76a2a980919acc58e64a8b66eb" }
 chrono = "0.4"
-clap = "2.33"
+configure_me = "0.3"
 env_logger = "0.7"
 hyper = "0.10"
 log = "0.4"
@@ -25,3 +29,6 @@ rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
+
+[build-dependencies]
+configure_me_codegen = "0.3"

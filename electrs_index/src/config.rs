@@ -1,10 +1,44 @@
 use bitcoin::Network;
 
-use clap::{App, Arg};
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
+
+mod internal {
+    #![allow(unused)]
+    include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
+}
+
+/// This newtype implements `ParseArg` for `Network`.
+#[derive(Deserialize)]
+pub struct BitcoinNetwork(Network);
+
+impl Default for BitcoinNetwork {
+    fn default() -> Self {
+        BitcoinNetwork(Network::Bitcoin)
+    }
+}
+
+impl FromStr for BitcoinNetwork {
+    type Err = <Network as FromStr>::Err;
+
+    fn from_str(string: &str) -> std::result::Result<Self, Self::Err> {
+        Network::from_str(string).map(BitcoinNetwork)
+    }
+}
+
+impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
+    fn describe_type<W: std::fmt::Write>(mut writer: W) -> std::fmt::Result {
+        write!(writer, "either 'bitcoin', 'testnet' or 'regtest'")
+    }
+}
+
+impl Into<Network> for BitcoinNetwork {
+    fn into(self) -> Network {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct Config {
@@ -20,45 +54,12 @@ pub struct Config {
 
 impl Config {
     pub fn from_args() -> Self {
-        let matches = App::new(format!("electrs {}", env!("CARGO_PKG_VERSION")))
-            .arg(
-                Arg::with_name("network")
-                    .long("network")
-                    .help("mainnet/testnet/regtest/signet")
-                    .required(true)
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("db-dir")
-                    .long("db-dir")
-                    .help("RocksDB directory")
-                    .default_value("./db")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("daemon-dir")
-                    .long("daemon-dir")
-                    .help("bitcoind directory")
-                    .takes_value(true),
-            )
-            .arg(Arg::with_name("args").takes_value(true).multiple(true))
-            .arg(
-                Arg::with_name("low-memory")
-                    .long("low-memory")
-                    .help("use less RAM"),
-            )
-            .get_matches();
+        use internal::ResultExt;
+        let (config, args) =
+            internal::Config::including_optional_config_files(&["electrs.toml"]).unwrap_or_exit();
+        let args = args.map(|a| a.into_string().unwrap()).collect();
 
-        let network_str = matches.value_of("network").unwrap();
-        let network = match network_str {
-            "mainnet" => Network::Bitcoin,
-            "testnet" => Network::Testnet,
-            "regtest" => Network::Regtest,
-            "signet" => Network::Signet,
-            _ => panic!("unknown network: {}", network_str),
-        };
-
-        let electrum_port = match network {
+        let electrum_port = match config.network {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
             Network::Regtest => 60401,
@@ -66,7 +67,7 @@ impl Config {
         };
         let electrum_rpc_addr: SocketAddr = ([127, 0, 0, 1], electrum_port).into();
 
-        let daemon_port = match network {
+        let daemon_port = match config.network {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
@@ -74,7 +75,7 @@ impl Config {
         };
         let daemon_rpc_addr: SocketAddr = ([127, 0, 0, 1], daemon_port).into();
 
-        let monitoring_port = match network {
+        let monitoring_port = match config.network {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
             Network::Regtest => 24224,
@@ -82,23 +83,13 @@ impl Config {
         };
         let monitoring_addr: SocketAddr = ([127, 0, 0, 1], monitoring_port).into();
 
-        let daemon_dir: PathBuf = matches.value_of("daemon-dir").unwrap().into();
-        let daemon_dir = match network {
+        let daemon_dir: PathBuf = config.daemon_dir;
+        let daemon_dir = match config.network {
             Network::Bitcoin => daemon_dir,
             Network::Testnet => daemon_dir.join("testnet3"),
             Network::Regtest => daemon_dir.join("regtest"),
             Network::Signet => daemon_dir.join("signet"),
         };
-
-        let low_memory = matches.is_present("low-memory");
-
-        let args = matches
-            .values_of("args")
-            .map(|m| m.map(String::from).collect())
-            .unwrap_or_default();
-
-        let mut db_path: PathBuf = matches.value_of("db-dir").unwrap().into();
-        db_path.push(network_str);
 
         env_logger::Builder::from_default_env()
             .default_format()
@@ -109,10 +100,10 @@ impl Config {
             electrum_rpc_addr,
             daemon_rpc_addr,
             monitoring_addr,
-            db_path,
+            db_path: config.db_dir.join(config.network.to_string()),
             daemon_dir,
             wait_duration: Duration::from_secs(600),
-            low_memory,
+            low_memory: config.low_memory,
             args,
         }
     }

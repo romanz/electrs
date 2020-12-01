@@ -1,0 +1,22 @@
+[[switch]]
+name = "low_memory"
+doc = "Use less RAM during indexing"
+
+[[param]]
+name = "db_dir"
+type = "std::path::PathBuf"
+doc = "Directory to store index database (default: ./db/)"
+default = "\"./db\".into()"
+
+[[param]]
+name = "daemon_dir"
+type = "std::path::PathBuf"
+doc = "Directory to store index database (default: ./db/)"
+default = "\"./db\".into()"
+
+[[param]]
+name = "network"
+type = "crate::config::BitcoinNetwork"
+convert_into = "::bitcoin::Network"
+doc = "Select Bitcoin network type ('bitcoin', 'testnet' or 'regtest')"
+default = "Default::default()"
