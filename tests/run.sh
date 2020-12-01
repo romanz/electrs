@@ -22,24 +22,22 @@ echo `$BTC getblockchaininfo | jq -r '"Generated \(.blocks) regtest blocks (\(.s
 TIP=`$BTC getbestblockhash`
 $BTC getblocklocations $TIP 1000 > /dev/null  # make sure the new RPC works
 
-echo "Starting `electrs -V`..."
 export RUST_LOG=electrs=debug
 electrs --db-dir=data/electrs --daemon-dir=data/bitcoin --network=regtest 2> data/electrs/regtest-debug.log &
 sleep 1
 
+ELECTRS_VERSION=`contrib/health_check.py localhost 60401 | jq -r .[0]`
 TIP_HEADER=`contrib/get_tip.py localhost 60401`
-test `jq -r .height <<< "$TIP_HEADER"` == 110  # Make sure electrs is synced to the tip
+echo "Started ${ELECTRS_VERSION/\// } with `jq -r .height <<< "$TIP_HEADER"` blocks indexed"
 test `jq -r .hex <<< "$TIP_HEADER"` == `$BTC getblockheader $TIP false`
 
-echo "Starting Electrum daemon..."
 $ELECTRUM daemon --server localhost:60401:t -1 -vDEBUG 2> data/electrum/regtest-debug.log &
 sleep 1
+$EL getinfo | jq -c .
 
 echo "Loading Electrum wallet..."
 test `$EL load_wallet` == "true"
 sleep 1
-
-$EL getinfo | jq -c .
 
 echo "Running integration tests:"
 
