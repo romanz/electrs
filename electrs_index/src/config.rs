@@ -91,12 +91,7 @@ impl Config {
             Network::Signet => daemon_dir.join("signet"),
         };
 
-        env_logger::Builder::from_default_env()
-            .default_format()
-            .format_timestamp_millis()
-            .init();
-
-        Self {
+        let config = Self {
             electrum_rpc_addr,
             daemon_rpc_addr,
             monitoring_addr,
@@ -105,6 +100,14 @@ impl Config {
             wait_duration: Duration::from_secs(600),
             low_memory: config.low_memory,
             args,
-        }
+        };
+        eprintln!("{:?}", config);
+
+        env_logger::Builder::from_default_env()
+            .default_format()
+            .format_timestamp_millis()
+            .init();
+
+        config
     }
 }

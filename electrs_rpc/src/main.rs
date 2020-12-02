@@ -37,8 +37,6 @@ use util::{spawn, unbounded, Receiver, Sender};
 
 fn main() -> Result<()> {
     let config = Config::from_args();
-    info!("{:?}", config);
-
     let metrics = Metrics::new(config.monitoring_addr)?;
     let daemon = Daemon::new(config.daemon_rpc_addr, &config.daemon_dir)
         .context("failed to connect to daemon")?;
