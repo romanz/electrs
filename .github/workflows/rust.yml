@@ -1,41 +1,15 @@
-name: electrs CI
+name: electrs
 
 on: [push, pull_request]
 
 jobs:
   electrs:
-    name: electrs
+    name: Electrum Integration Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
-      - name: Install
-        uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt, clippy
-          profile: minimal
-          override: true
-
-      - name: Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all
-
+        run: docker build . --rm -t electrs:tests
       - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --all
-
-      - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
+        run: docker run -v $PWD/contrib/:/contrib -v $PWD/tests/:/tests --rm electrs:tests bash /tests/run.sh

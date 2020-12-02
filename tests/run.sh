@@ -26,14 +26,14 @@ export RUST_LOG=electrs=debug
 electrs --db-dir=data/electrs --daemon-dir=data/bitcoin --network=regtest 2> data/electrs/regtest-debug.log &
 sleep 1
 
-ELECTRS_VERSION=`contrib/health_check.py localhost 60401 | jq -r .[0]`
+ELECTRS_VERSION=`contrib/health_check.py localhost 60401 | jq -C .[0]`
 TIP_HEADER=`contrib/get_tip.py localhost 60401`
 echo "Started ${ELECTRS_VERSION/\// } with `jq -r .height <<< "$TIP_HEADER"` blocks indexed"
 test `jq -r .hex <<< "$TIP_HEADER"` == `$BTC getblockheader $TIP false`
 
 $ELECTRUM daemon --server localhost:60401:t -1 -vDEBUG 2> data/electrum/regtest-debug.log &
 sleep 1
-$EL getinfo | jq -c .
+$EL getinfo | jq -C -c .
 
 echo "Loading Electrum wallet..."
 test `$EL load_wallet` == "true"
