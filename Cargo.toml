@@ -13,7 +13,7 @@ edition = "2018"
 build = "build.rs"
 
 [package.metadata.configure_me]
-spec = "config_spec.toml"
+spec = "internal/config_specification.toml"
 
 [profile.release]
 lto = true
