@@ -1,3 +1,16 @@
+### Electrum Rust Server ###
+FROM rust:1.41.1-slim as electrs-build
+RUN apt-get update
+RUN apt-get install -qq -y clang cmake
+RUN rustup component add rustfmt
+
+# Build, test and install electrs
+WORKDIR /build/electrs
+COPY . .
+RUN cargo fmt -- --check
+RUN cargo build --locked --release --all
+RUN cargo test --locked --release --all
+
 FROM debian:buster-slim as updated
 RUN apt-get update
 # Install Bitcoin Core runtime dependencies
@@ -18,17 +31,6 @@ RUN git clone --branch locations https://github.com/romanz/bitcoin.git .
 RUN ./autogen.sh
 RUN ./configure --disable-tests --disable-wallet --disable-bench --without-gui --without-miniupnpc
 RUN make -j"$(($(nproc)+1))"
-
-### Electrum Rust Server ###
-FROM updated as electrs-build
-# Install Rust 1.41.1
-RUN apt-get install -qq -y clang cmake cargo rustc
-
-# Build, test and install electrs
-WORKDIR /build/electrs
-COPY . .
-RUN cargo build --locked --release --all
-RUN cargo test --locked --release --all
 
 FROM updated as result
 ### Electrum ###
