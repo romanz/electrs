@@ -15,8 +15,6 @@ FROM debian:buster-slim as updated
 RUN apt-get update
 # Install Bitcoin Core runtime dependencies
 RUN apt-get install -qqy libevent-dev libboost-system-dev libboost-filesystem-dev libboost-test-dev libboost-thread-dev
-# Install a few test tools
-RUN apt-get install -qqy jq netcat
 
 ### Bitcoin Core ###
 FROM updated as bitcoin-build
@@ -34,12 +32,12 @@ RUN make -j"$(($(nproc)+1))"
 
 FROM updated as result
 ### Electrum ###
-# Download latest Electrum wallet
-RUN apt-get install -qqy wget libsecp256k1-0 python3-cryptography
-ARG ELECTRUM_VERSION=4.0.5
+# Download latest Electrum wallet and a few test tools
+RUN apt-get install -qqy wget libsecp256k1-0 python3-cryptography jq netcat
+ARG ELECTRUM_VERSION=4.0.6
 WORKDIR /build/electrum
 RUN wget -q https://download.electrum.org/$ELECTRUM_VERSION/Electrum-$ELECTRUM_VERSION.tar.gz \
-&& (echo "6790407e21366186d928c8e653e3ab38476ca86e4797aa4db94dcca2384db41a Electrum-$ELECTRUM_VERSION.tar.gz" | sha256sum -c -)
+&& (echo "4d90047060aaa717184e7c32b538ebf74948b6e00ab6260ab4388f07c4b9e86a Electrum-$ELECTRUM_VERSION.tar.gz" | sha256sum -c -)
 # Unpack Electrum and install it
 RUN tar xfz Electrum-$ELECTRUM_VERSION.tar.gz && ln -s $PWD/Electrum-$ELECTRUM_VERSION/run_electrum /usr/bin/electrum
 RUN electrum version --offline

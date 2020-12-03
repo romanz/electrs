@@ -8,3 +8,5 @@ _*/
 .env
 *.dat
 electrs.toml
+bin/
+data/
