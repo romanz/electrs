@@ -10,6 +10,7 @@ COPY . .
 RUN cargo fmt -- --check
 RUN cargo build --locked --release --all
 RUN cargo test --locked --release --all
+RUN cargo install --locked --path electrs_rpc
 
 FROM debian:buster-slim as updated
 RUN apt-get update
@@ -44,7 +45,7 @@ RUN electrum version --offline
 
 # Copy the binaries
 RUN apt-get install -qqy jq netcat
-COPY --from=electrs-build /build/electrs/target/release/electrs_rpc /usr/bin/electrs
+COPY --from=electrs-build /usr/local/cargo/bin/electrs_rpc /usr/bin/electrs
 COPY --from=bitcoin-build /build/bitcoin/src/bitcoind /build/bitcoin/src/bitcoin-cli /usr/bin/
 RUN bitcoind -version && bitcoin-cli -version
 WORKDIR /
