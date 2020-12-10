@@ -11,6 +11,7 @@ use std::{
     io::{Cursor, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{sync_channel, Receiver, SyncSender},
         Arc, Mutex, RwLock, RwLockReadGuard,
     },
@@ -26,11 +27,35 @@ use crate::{
     undo::BlockUndo,
 };
 
+struct StopFlag {
+    flag: AtomicBool,
+}
+
+impl StopFlag {
+    fn new() -> Self {
+        StopFlag {
+            flag: AtomicBool::new(false),
+        }
+    }
+
+    fn set(&self) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+
+    fn bail_if_set(&self, msg: &str) -> Result<()> {
+        if self.flag.load(Ordering::Relaxed) {
+            bail!("interrupted {}", msg);
+        }
+        Ok(())
+    }
+}
+
 pub struct Index {
     store: RwLock<db::DBStore>,
     map: RwLock<BlockMap>,
     stats: Stats,
     low_memory: bool,
+    stop_flag: StopFlag,
 }
 
 #[derive(Clone)]
@@ -123,7 +148,12 @@ impl Index {
                 lookup_duration,
             },
             low_memory,
+            stop_flag: StopFlag::new(),
         })
+    }
+
+    pub fn stop(&self) {
+        self.stop_flag.set();
     }
 
     pub fn map(&self) -> RwLockReadGuard<BlockMap> {
@@ -321,6 +351,7 @@ impl Index {
     ) -> Result<BlockHash> {
         let mut block_rows = Vec::with_capacity(new_blocks);
         for r in read_requests {
+            self.stop_flag.bail_if_set("during block indexing")?;
             debug!("reading {} blocks from {:?}", r.locations.len(), r.blk_file);
             let mut blk_file = std::fs::File::open(r.blk_file)?;
             let mut undo_file = std::fs::File::open(r.undo_file)?;
@@ -355,7 +386,7 @@ impl Index {
                 debug!("skip update, same tip: {}", tip);
                 return Ok(tip);
             }
-            load_locations(daemon, tip, &map)?
+            load_locations(daemon, tip, &map, &self.stop_flag)?
         };
         let new_blocks = locations.len();
         let read_requests = group_locations_by_file(locations)
@@ -389,16 +420,16 @@ impl Index {
         drop(indexer_tx); // no need for the original sender
 
         let mut block_rows = Vec::with_capacity(new_blocks);
-        let total_rows_count: usize = indexer_rx
-            .into_iter()
-            .map(|batch| {
-                block_rows.extend(get_header_rows(&batch));
-                self.report_stats(&batch);
-                self.stats
-                    .update_duration
-                    .observe_duration("write", || self.store.read().unwrap().write(batch))
-            })
-            .sum();
+        let mut total_rows_count: usize = 0;
+        for batch in indexer_rx {
+            self.stop_flag.bail_if_set("during block indexing")?;
+            block_rows.extend(get_header_rows(&batch));
+            self.report_stats(&batch);
+            total_rows_count += self
+                .stats
+                .update_duration
+                .observe_duration("write", || self.store.read().unwrap().write(batch))
+        }
 
         indexers
             .into_iter()
@@ -495,6 +526,7 @@ fn load_locations(
     daemon: &Daemon,
     mut blockhash: BlockHash,
     existing: &BlockMap,
+    stop_flag: &StopFlag,
 ) -> Result<Vec<BlockLocation>> {
     let start = Instant::now();
     let null = BlockHash::default();
@@ -507,6 +539,7 @@ fn load_locations(
     let mut chunk_size = 10;
     // scan until genesis
     while blockhash != null {
+        stop_flag.bail_if_set("while loading blocks' locations")?;
         if existing.in_valid_chain(&blockhash) {
             break; // no need to continue validation
         }

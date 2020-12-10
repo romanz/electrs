@@ -129,7 +129,10 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
                         rpc.sync_mempool();
                         continue;
                     },
-                    Ok(Some(_)) => break,  // unsupported signal
+                    Ok(Some(_)) => {
+                        rpc.stop_indexer();
+                        break;
+                    },
                     Ok(None) => panic!("missing signal"),
                 };
             }
@@ -146,7 +149,7 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
             msg = index_result.next() => {
                 match msg {
                     Some(result) => {
-                        debug!("indexing finished: {:?}", result);
+                        info!("indexing finished: {:?}", result);
                         // TODO: rate-limit?
                         rpc.sync_mempool();  // remove confirmed transactions from mempool
                         continue;
@@ -167,9 +170,9 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
         };
         handle_event(&rpc, &mut peers, event, &disconnect_tx).await?;
     }
-    debug!("stopping indexer");
     drop(index_notify);
-    task::block_on(index_task);
+    debug!("waiting for index_task");
+    task::block_on(index_task).context("index_task failed")?;
     while let Some(_) = index_result.next().await {}
     debug!("disconnecting {} clients: {:?}", peers.len(), peers.keys());
     drop(peers); // drop all senders that write responses

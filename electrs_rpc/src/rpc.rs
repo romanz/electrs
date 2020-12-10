@@ -203,8 +203,8 @@ enum ClientVersion {
 
 pub(crate) struct Indexer {
     pub(crate) notify: Sender<()>,
-    pub(crate) result: Receiver<Result<BlockHash>>,
-    pub(crate) task: task::JoinHandle<()>,
+    pub(crate) result: Receiver<BlockHash>,
+    pub(crate) task: task::JoinHandle<Result<()>>,
 }
 
 impl Indexer {
@@ -225,13 +225,14 @@ impl Indexer {
                             }
                         },
                     };
-                    let result = sync_duration.observe_duration("index", || index.update(&daemon));
+                    let tip = sync_duration.observe_duration("index", || index.update(&daemon))?;
                     result_tx
-                        .send(result)
+                        .send(tip)
                         .await
                         .expect("failed to send index result");
                 }
                 debug!("indexer stopped");
+                Ok(())
             }),
         }
     }
@@ -264,6 +265,10 @@ impl Rpc {
             self.daemon.reconnect()?,
             self.stats.sync_duration.clone(),
         ))
+    }
+
+    pub(crate) fn stop_indexer(&self) {
+        self.index.stop()
     }
 
     pub(crate) fn start_waiter(&self) -> Result<Receiver<BlockHash>> {
