@@ -40,7 +40,7 @@ RUN bitcoind -version && bitcoin-cli -version
 ### Electrum ###
 # Download latest Electrum wallet and a few test tools
 RUN apt-get install -qqy wget libsecp256k1-0 python3-cryptography jq netcat gnupg
-ARG ELECTRUM_VERSION=4.0.6
+ARG ELECTRUM_VERSION=4.0.7
 
 WORKDIR /build/electrum
 
