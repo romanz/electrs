@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 async-signals = "0.3"
-async-std = { version = "1.7" }
+async-std = { version = "1.8" }
 futures = "0.3"
 libc = "0.2"
 log = "0.4"
