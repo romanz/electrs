@@ -108,7 +108,7 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
     let (disconnect_tx, disconnect_rx) = unbounded::<(usize, Receiver<Value>)>();
     let mut disconnect_rx = disconnect_rx.fuse();
     let mut events = events.fuse();
-    let mut signals = Signals::new(vec![libc::SIGINT, libc::SIGUSR1])
+    let mut signals = Signals::new(vec![libc::SIGINT, libc::SIGUSR1, libc::SIGTERM])
         .context("failed to register signal handler")?
         .fuse();
     let mut new_block_rx = rpc.start_waiter()?;
