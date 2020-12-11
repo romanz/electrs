@@ -129,7 +129,8 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
                         rpc.sync_mempool();
                         continue;
                     },
-                    Ok(Some(_)) => {
+                    Ok(Some(s)) => {
+                        debug!("got SIG{}, stopping indexer", s);
                         rpc.stop_indexer();
                         break;
                     },
