@@ -38,18 +38,11 @@ COPY --from=bitcoin-build /build/bitcoin/src/bitcoind /build/bitcoin/src/bitcoin
 RUN bitcoind -version && bitcoin-cli -version
 
 ### Electrum ###
-# Download latest Electrum wallet and a few test tools
-RUN apt-get install -qqy wget libsecp256k1-0 python3-cryptography jq netcat gnupg
-ARG ELECTRUM_VERSION=4.0.9
+# Clone latest Electrum wallet and a few test tools
+WORKDIR /build/
+RUN apt-get install -qqy git libsecp256k1-0 python3-cryptography python3-setuptools python3-pip jq netcat
+RUN git clone --recurse-submodules https://github.com/spesmilo/electrum/ && cd electrum/ && git log -1
+RUN python3 -m pip install -e electrum/
 
-WORKDIR /build/electrum
-
-RUN wget -q https://download.electrum.org/$ELECTRUM_VERSION/Electrum-$ELECTRUM_VERSION.tar.gz && \
-	wget -q https://download.electrum.org/$ELECTRUM_VERSION/Electrum-$ELECTRUM_VERSION.tar.gz.asc && \
-	gpg --version && gpg --keyserver keyserver.ubuntu.com --recv-keys 0x6694D8DE7BE8EE5631BED9502BD5824B7F9470E6 && \
-	gpg --trusted-key 2BD5824B7F9470E6 --verify Electrum-$ELECTRUM_VERSION.tar.gz.asc Electrum-$ELECTRUM_VERSION.tar.gz
-
-# Unpack Electrum and install it
-RUN tar xfz Electrum-$ELECTRUM_VERSION.tar.gz && ln -s $PWD/Electrum-$ELECTRUM_VERSION/run_electrum /usr/bin/electrum
 RUN electrum version --offline
 WORKDIR /

@@ -25,6 +25,7 @@ bitcoind -regtest -datadir=data/bitcoin -printtoconsole=0 &
 
 $BTC -rpcwait getblockcount > /dev/null
 
+(cd /build/electrum && echo -e "Electrum built from `git log -1`\n")
 echo "Creating Electrum `electrum version --offline` wallet..."
 WALLET=`$EL --offline create --seed_type=segwit`
 MINING_ADDR=`$EL --offline getunusedaddress`
