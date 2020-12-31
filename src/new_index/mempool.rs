@@ -317,8 +317,10 @@ impl Mempool {
     }
 
     pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) {
-        if let Ok(tx) = daemon.getmempooltx(&txid) {
-            self.add(vec![tx])
+        if self.txstore.get(txid).is_none() {
+            if let Ok(tx) = daemon.getmempooltx(&txid) {
+                self.add(vec![tx])
+            }
         }
     }
 
