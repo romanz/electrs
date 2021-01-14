@@ -13,8 +13,8 @@ spec = "config_spec.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "93df7cbd3e02961835d250cf606e65b6826b78fe", features = ["use-serde"] }
-bitcoincore-rpc = { git = "https://github.com/romanz/rust-bitcoincore-rpc", rev = "e6848320ecf8be76a2a980919acc58e64a8b66eb" }
+bitcoin = { version = "0.26", features = ["use-serde"] }
+bitcoincore-rpc = { git = "https://github.com/romanz/rust-bitcoincore-rpc", rev = "16bd0473ce440ff302da2157933c4e15cd947eeb" }
 chrono = "0.4"
 configure_me = "0.3"
 env_logger = "0.7"
