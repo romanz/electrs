@@ -1,3 +1,7 @@
+# 0.8.7 (15 Jan 2021)
+
+* Support signet (#239)
+
 # 0.8.6 (25 Nov 2020)
 * [Fix](https://github.com/romanz/electrs/commit/c88a0dc331eb16163276becf98fcc020565d97eb) Electrum fee histogram duplicates
 * [Fix](https://github.com/romanz/electrs/commit/8f2f53303a62321e3ccd1a8dc42b46c63629a03f) Electrum protocol negotiation
