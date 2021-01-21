@@ -12,7 +12,6 @@ pub use {
 
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::network::constants::Network as BNetwork;
-use bitcoin::util::hash::BitcoinHash;
 use bitcoin::BlockHash;
 
 use std::collections::HashMap;
@@ -46,7 +45,7 @@ impl Network {
             return *block_hash;
         }
 
-        let block_hash = genesis_block(BNetwork::from(self)).bitcoin_hash();
+        let block_hash = genesis_block(BNetwork::from(self)).block_hash();
         CACHED_GENESIS.write().unwrap().insert(self, block_hash);
         block_hash
     }

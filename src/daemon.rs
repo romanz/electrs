@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use base64;
 use bitcoin::hashes::hex::{FromHex, ToHex};
-use bitcoin::util::hash::BitcoinHash;
 use bitcoin::{BlockHash, Txid};
 use glob;
 use hex;
@@ -461,7 +460,7 @@ impl Daemon {
         let block = block_from_value(
             self.request("getblock", json!([blockhash.to_hex(), /*verbose=*/ false]))?,
         )?;
-        assert_eq!(block.bitcoin_hash(), *blockhash);
+        assert_eq!(block.block_hash(), *blockhash);
         Ok(block)
     }
 
@@ -588,7 +587,7 @@ impl Daemon {
         let mut blockhash = BlockHash::default();
         for header in &result {
             assert_eq!(header.prev_blockhash, blockhash);
-            blockhash = header.bitcoin_hash();
+            blockhash = header.block_hash();
         }
         assert_eq!(blockhash, *tip);
         Ok(result)

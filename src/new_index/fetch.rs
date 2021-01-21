@@ -1,6 +1,6 @@
 use crate::chain::Block;
 
-use bitcoin::{BitcoinHash, BlockHash};
+use bitcoin::BlockHash;
 use rayon::prelude::*;
 
 #[cfg(not(feature = "liquid"))]
@@ -124,7 +124,7 @@ fn blkfiles_fetcher(
                 let block_entries: Vec<BlockEntry> = sizedblocks
                     .into_iter()
                     .filter_map(|(block, size)| {
-                        let blockhash = block.bitcoin_hash();
+                        let blockhash = block.block_hash();
                         entry_map
                             .remove(&blockhash)
                             .map(|entry| BlockEntry { block, entry, size })
