@@ -14,8 +14,7 @@ use std::str::FromStr;
 
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use bitcoin::BlockHash;
-
+use crate::chain::BlockHash;
 use crate::errors::ResultExt;
 use crate::util::BlockId;
 

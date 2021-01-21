@@ -7,9 +7,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use bitcoin::BlockHash;
-
-use crate::chain::Network;
+use crate::chain::{BlockHash, Network};
 use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures};
 use crate::errors::{Result, ResultExt};
 use crate::util::spawn_thread;

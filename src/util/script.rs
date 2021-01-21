@@ -1,30 +1,33 @@
-use bitcoin::blockdata::script::{Instruction::PushBytes, Script};
-
 #[cfg(feature = "liquid")]
 use elements::address as elements_address;
 
-use crate::chain::Network;
-use crate::chain::{TxIn, TxOut};
+use crate::chain::{script, Network, Script, TxIn, TxOut};
+use script::Instruction::PushBytes;
 
 pub struct InnerScripts {
     pub redeem_script: Option<Script>,
     pub witness_script: Option<Script>,
 }
 
-pub fn script_to_address(script: &Script, network: Network) -> Option<String> {
-    match network {
-        #[cfg(feature = "liquid")]
-        Network::Liquid | Network::LiquidRegtest => {
-            elements_address::Address::from_script(script, None, network.address_params())
-                .map(|a| a.to_string())
-        }
-        _ => bitcoin::Address::from_script(script, network.into()).map(|s| s.to_string()),
+pub trait ScriptExt: std::fmt::Debug {
+    fn to_asm(&self) -> String {
+        let asm = format!("{:?}", self);
+        (&asm[7..asm.len() - 1]).to_string()
+    }
+
+    fn to_address(&self, network: Network) -> Option<String>;
+}
+impl ScriptExt for bitcoin::Script {
+    fn to_address(&self, network: Network) -> Option<String> {
+        bitcoin::Address::from_script(self, network.into()).map(|s| s.to_string())
     }
 }
-
-pub fn get_script_asm(script: &Script) -> String {
-    let asm = format!("{:?}", script);
-    (&asm[7..asm.len() - 1]).to_string()
+#[cfg(feature = "liquid")]
+impl ScriptExt for elements::Script {
+    fn to_address(&self, network: Network) -> Option<String> {
+        elements_address::Address::from_script(self, None, network.address_params())
+            .map(|a| a.to_string())
+    }
 }
 
 // Returns the witnessScript in the case of p2wsh, or the redeemScript in the case of p2sh.

@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use base64;
 use bitcoin::hashes::hex::{FromHex, ToHex};
-use bitcoin::{BlockHash, Txid};
 use glob;
 use hex;
 use serde_json::{from_str, from_value, Value};
@@ -17,7 +16,7 @@ use bitcoin::consensus::encode::{deserialize, serialize};
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, serialize};
 
-use crate::chain::{Block, BlockHeader, Network, Transaction};
+use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::HeaderList;

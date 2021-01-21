@@ -1,8 +1,8 @@
-use bitcoin::{hashes::hex::ToHex, Script};
+use bitcoin::hashes::hex::ToHex;
 use elements::{confidential::Asset, PeginData, PegoutData, TxIn, TxOut};
 
-use crate::chain::Network;
-use crate::util::{get_script_asm, script_to_address, FullHash};
+use crate::chain::{genesis_hash, BNetwork, Network};
+use crate::util::{FullHash, ScriptExt};
 
 pub fn get_pegin_data(txout: &TxIn, network: Network) -> Option<PeginData> {
     txout
@@ -13,11 +13,11 @@ pub fn get_pegin_data(txout: &TxIn, network: Network) -> Option<PeginData> {
 pub fn get_pegout_data(
     txout: &TxOut,
     network: Network,
-    parent_network: Network,
+    parent_network: BNetwork,
 ) -> Option<PegoutData> {
     txout.pegout_data().filter(|pegout| {
         pegout.asset == Asset::Explicit(*network.native_asset())
-            && pegout.genesis_hash == parent_network.genesis_hash()
+            && pegout.genesis_hash == genesis_hash(parent_network)
     })
 }
 
@@ -25,21 +25,24 @@ pub fn get_pegout_data(
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PegoutValue {
     pub genesis_hash: String,
-    pub scriptpubkey: Script,
+    pub scriptpubkey: bitcoin::Script,
     pub scriptpubkey_asm: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scriptpubkey_address: Option<String>,
 }
 
 impl PegoutValue {
-    pub fn from_txout(txout: &TxOut, network: Network, parent_network: Network) -> Option<Self> {
+    pub fn from_txout(txout: &TxOut, network: Network, parent_network: BNetwork) -> Option<Self> {
         let pegoutdata = get_pegout_data(txout, network, parent_network)?;
+
+        // pending https://github.com/ElementsProject/rust-elements/pull/69 is merged
+        let scriptpubkey = bitcoin::Script::from(pegoutdata.script_pubkey.into_bytes());
 
         Some(PegoutValue {
             genesis_hash: pegoutdata.genesis_hash.to_hex(),
-            scriptpubkey_asm: get_script_asm(&pegoutdata.script_pubkey),
-            scriptpubkey_address: script_to_address(&pegoutdata.script_pubkey, parent_network),
-            scriptpubkey: pegoutdata.script_pubkey,
+            scriptpubkey_asm: scriptpubkey.to_asm(),
+            scriptpubkey_address: scriptpubkey.to_address(parent_network.into()),
+            scriptpubkey,
         })
     }
 }

@@ -2,12 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use bitcoin::hashes::{hex::FromHex, sha256, Hash};
-use bitcoin::{BlockHash, Txid};
 use elements::confidential::{Asset, Value};
 use elements::encode::{deserialize, serialize};
 use elements::{issuance::ContractHash, AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 
-use crate::chain::Network;
+use crate::chain::{BNetwork, BlockHash, Network, Txid};
 use crate::elements::peg::{get_pegin_data, get_pegout_data, PeginInfo, PegoutInfo};
 use crate::elements::registry::{AssetMeta, AssetRegistry};
 use crate::errors::*;
@@ -169,7 +168,7 @@ pub fn index_confirmed_tx_assets(
     tx: &Transaction,
     confirmed_height: u32,
     network: Network,
-    parent_network: Network,
+    parent_network: BNetwork,
     rows: &mut Vec<DBRow>,
 ) {
     let (history, issuances) = index_tx_assets(tx, network, parent_network);
@@ -193,7 +192,7 @@ pub fn index_confirmed_tx_assets(
 pub fn index_mempool_tx_assets(
     tx: &Transaction,
     network: Network,
-    parent_network: Network,
+    parent_network: BNetwork,
     asset_history: &mut HashMap<AssetId, Vec<TxHistoryInfo>>,
     asset_issuance: &mut HashMap<AssetId, AssetRow>,
 ) {
@@ -231,7 +230,7 @@ pub fn remove_mempool_tx_assets(
 fn index_tx_assets(
     tx: &Transaction,
     network: Network,
-    parent_network: Network,
+    parent_network: BNetwork,
 ) -> (Vec<(AssetId, TxHistoryInfo)>, Vec<(AssetId, AssetRow)>) {
     let mut history = vec![];
     let mut issuances = vec![];

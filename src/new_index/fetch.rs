@@ -1,6 +1,3 @@
-use crate::chain::Block;
-
-use bitcoin::BlockHash;
 use rayon::prelude::*;
 
 #[cfg(not(feature = "liquid"))]
@@ -15,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
+use crate::chain::{Block, BlockHash};
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::util::{spawn_thread, HeaderEntry, SyncChannel};

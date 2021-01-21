@@ -9,8 +9,10 @@ use stderrlog;
 
 use crate::chain::Network;
 use crate::daemon::CookieGetter;
-
 use crate::errors::*;
+
+#[cfg(feature = "liquid")]
+use bitcoin::Network as BNetwork;
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -39,7 +41,7 @@ pub struct Config {
     pub electrum_banner: String,
 
     #[cfg(feature = "liquid")]
-    pub parent_network: Network,
+    pub parent_network: BNetwork,
     #[cfg(feature = "liquid")]
     pub asset_db_path: Option<PathBuf>,
 
@@ -235,9 +237,10 @@ impl Config {
         let parent_network = m
             .value_of("parent_network")
             .map(Network::from)
+            .map(BNetwork::from)
             .unwrap_or_else(|| match network_type {
-                Network::Liquid => Network::Bitcoin,
-                Network::LiquidRegtest => Network::Regtest,
+                Network::Liquid => BNetwork::Bitcoin,
+                Network::LiquidRegtest => BNetwork::Regtest,
                 _ => panic!("unknown liquid network, --parent-network is required"),
             });
 

@@ -4,14 +4,12 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::{Duration, Instant};
 
-use crate::chain::{Network, OutPoint, Transaction, TxOut};
+use crate::chain::{Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
-
-use bitcoin::Txid;
 
 #[cfg(feature = "liquid")]
 use crate::{

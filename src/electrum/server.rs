@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
-use bitcoin::Txid;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use error_chain::ChainedError;
@@ -18,6 +17,7 @@ use bitcoin::consensus::encode::serialize;
 #[cfg(feature = "liquid")]
 use elements::encode::serialize;
 
+use crate::chain::Txid;
 use crate::config::Config;
 use crate::electrum::{get_electrum_height, ProtocolVersion};
 use crate::errors::*;

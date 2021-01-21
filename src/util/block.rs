@@ -1,8 +1,6 @@
-use crate::chain::BlockHeader;
+use crate::chain::{BlockHash, BlockHeader};
 use crate::errors::*;
 use crate::new_index::BlockEntry;
-
-use bitcoin::BlockHash;
 
 use std::collections::HashMap;
 use std::fmt;

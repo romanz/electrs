@@ -1,18 +1,16 @@
-use crate::chain::{address, Network, OutPoint, Transaction, TxIn, TxOut};
+use crate::chain::{address, BlockHash, Network, OutPoint, Script, Transaction, TxIn, TxOut, Txid};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    create_socket, electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts,
-    get_script_asm, get_tx_fee, has_prevout, is_coinbase, script_to_address, BlockHeaderMeta,
-    BlockId, FullHash, TransactionStatus,
+    create_socket, electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts, get_tx_fee,
+    has_prevout, is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptExt, TransactionStatus,
 };
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Error as HashError;
-use bitcoin::{BlockHash, Script, Txid};
 use hex::{self, FromHexError};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
@@ -208,17 +206,17 @@ impl TxInValue {
             txid: txin.previous_output.txid,
             vout: txin.previous_output.vout,
             prevout: prevout.map(|prevout| TxOutValue::new(prevout, config)),
-            scriptsig_asm: get_script_asm(&txin.script_sig),
+            scriptsig_asm: txin.script_sig.to_asm(),
             witness,
 
             inner_redeemscript_asm: innerscripts
                 .as_ref()
                 .and_then(|i| i.redeem_script.as_ref())
-                .map(get_script_asm),
+                .map(ScriptExt::to_asm),
             inner_witnessscript_asm: innerscripts
                 .as_ref()
                 .and_then(|i| i.witness_script.as_ref())
-                .map(get_script_asm),
+                .map(ScriptExt::to_asm),
 
             is_coinbase,
             sequence: txin.sequence,
@@ -299,8 +297,8 @@ impl TxOutValue {
         let is_fee = txout.is_fee();
 
         let script = &txout.script_pubkey;
-        let script_asm = get_script_asm(&script);
-        let script_addr = script_to_address(&script, config.network_type);
+        let script_asm = script.to_asm();
+        let script_addr = script.to_address(config.network_type);
 
         // TODO should the following something to put inside rust-elements lib?
         let script_type = if is_fee {
