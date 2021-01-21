@@ -22,9 +22,11 @@ arraydeque = "0.4"
 arrayref = "0.3.6"
 base64 = "0.13.0"
 bincode = "1.3.1"
+bitcoin = { version = "0.25.0", features = [ "use-serde" ] }
 clap = "2.33.3"
 crossbeam-channel = "0.5.0"
 dirs = "3.0.1"
+elements = { version = "0.15.0", features = [ "serde-feature" ], optional = true }
 error-chain = "0.12.4"
 glob = "0.3"
 hex = "0.4.2"
@@ -57,15 +59,6 @@ tokio = { version = "=0.2.6", features = ["sync", "macros"] }
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.1.0-beta.6", optional = true }
 
-[dependencies.bitcoin]
-version = "0.23.0"
-features = ["use-serde"]
-
-[dependencies.elements]
-optional = true
-version = "0.12.1"
-features = ["serde-feature"]
-
 [dev-dependencies]
 tempfile = "3.0"
 
@@ -73,14 +66,6 @@ tempfile = "3.0"
 lto = true
 panic = 'abort'
 codegen-units = 1
-
-[patch.crates-io.bitcoin]
-git = "https://github.com/blockstream/rust-bitcoin"
-rev = "0.23-electrs"
-
-[patch.crates-io.elements]
-git = "https://github.com/elementsproject/rust-elements"
-rev = "98e0c4ba1b55cd876d1d8bcff64bcf01c4c370b6"
 
 [patch.crates-io.electrum-client]
 git = "https://github.com/Blockstream/rust-electrum-client"
