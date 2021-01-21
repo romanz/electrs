@@ -1,12 +1,10 @@
-use bitcoin::{BlockHash, Txid};
-
-#[cfg(feature = "liquid")]
-use bitcoin::hashes::hex::FromHex;
-
-use crate::chain::{OutPoint, Transaction, TxIn, TxOut};
+use crate::chain::{BlockHash, OutPoint, Transaction, TxIn, TxOut, Txid};
 use crate::util::BlockId;
 
 use std::collections::HashMap;
+
+#[cfg(feature = "liquid")]
+use bitcoin::hashes::hex::FromHex;
 
 #[cfg(feature = "liquid")]
 lazy_static! {

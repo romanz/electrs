@@ -1,8 +1,7 @@
-use bitcoin::blockdata::script::Script;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::util::merkleblock::MerkleBlock;
-use bitcoin::{BlockHash, Txid, VarInt};
+use bitcoin::VarInt;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use itertools::Itertools;
@@ -20,14 +19,16 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use crate::chain::{BlockHeader, Network, OutPoint, Transaction, TxOut, Value};
+use crate::chain::{
+    BlockHash, BlockHeader, Network, OutPoint, Script, Transaction, TxOut, Txid, Value,
+};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
-    full_hash, has_prevout, is_spendable, script_to_address, BlockHeaderMeta, BlockId, BlockMeta,
-    BlockStatus, Bytes, HeaderEntry, HeaderList,
+    full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, Bytes,
+    HeaderEntry, HeaderList, ScriptExt,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -172,7 +173,7 @@ struct IndexerConfig {
     index_unspendables: bool,
     network: Network,
     #[cfg(feature = "liquid")]
-    parent_network: Network,
+    parent_network: crate::chain::BNetwork,
 }
 
 impl From<&Config> for IndexerConfig {
@@ -1147,7 +1148,7 @@ fn index_transaction(
 }
 
 fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {
-    script_to_address(spk, network).map(|address| DBRow {
+    spk.to_address(network).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
     })

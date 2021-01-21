@@ -1,6 +1,4 @@
 use arraydeque::{ArrayDeque, Wrapping};
-use bitcoin::consensus::encode::deserialize;
-use bitcoin::Txid;
 use itertools::Itertools;
 
 #[cfg(not(feature = "liquid"))]
@@ -13,7 +11,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::chain::{Network, OutPoint, Transaction, TxOut};
+use crate::chain::{deserialize, Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;

@@ -1,18 +1,20 @@
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
-pub use bitcoin::{util::address, Block, BlockHeader, OutPoint, Transaction, TxIn, TxOut};
+pub use bitcoin::{
+    blockdata::script, consensus::deserialize, util::address, Block, BlockHash, BlockHeader,
+    OutPoint, Script, Transaction, TxIn, TxOut, Txid,
+};
 
 #[cfg(feature = "liquid")]
 pub use {
     crate::elements::asset,
     elements::{
-        address, confidential, Address, AssetId, Block, BlockHeader, OutPoint, Transaction, TxIn,
-        TxOut,
+        address, confidential, encode::deserialize, script, Address, AssetId, Block, BlockHash,
+        BlockHeader, OutPoint, Script, Transaction, TxIn, TxOut, Txid,
     },
 };
 
 use bitcoin::blockdata::constants::genesis_block;
-use bitcoin::network::constants::Network as BNetwork;
-use bitcoin::BlockHash;
+pub use bitcoin::network::constants::Network as BNetwork;
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -21,11 +23,6 @@ use std::sync::{Arc, RwLock};
 pub type Value = u64;
 #[cfg(feature = "liquid")]
 pub use confidential::Value;
-
-lazy_static! {
-    static ref CACHED_GENESIS: Arc<RwLock<HashMap<Network, BlockHash>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
@@ -40,16 +37,6 @@ pub enum Network {
 }
 
 impl Network {
-    pub fn genesis_hash(self) -> BlockHash {
-        if let Some(block_hash) = CACHED_GENESIS.read().unwrap().get(&self) {
-            return *block_hash;
-        }
-
-        let block_hash = genesis_block(BNetwork::from(self)).block_hash();
-        CACHED_GENESIS.write().unwrap().insert(self, block_hash);
-        block_hash
-    }
-
     pub fn magic(self) -> u32 {
         match self {
             Network::Bitcoin => 0xD9B4_BEF9,
@@ -100,6 +87,22 @@ impl Network {
             "liquidregtest".to_string(),
         ];
     }
+}
+
+// For bitcoin (non-elements) chains only
+pub fn genesis_hash(network: BNetwork) -> bitcoin::BlockHash {
+    lazy_static! {
+        static ref CACHED_GENESIS: Arc<RwLock<HashMap<BNetwork, bitcoin::BlockHash>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+    }
+
+    if let Some(block_hash) = CACHED_GENESIS.read().unwrap().get(&network) {
+        return *block_hash;
+    }
+
+    let block_hash = genesis_block(network).block_hash();
+    CACHED_GENESIS.write().unwrap().insert(network, block_hash);
+    block_hash
 }
 
 impl From<&str> for Network {

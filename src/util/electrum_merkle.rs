@@ -1,8 +1,7 @@
-use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
-use bitcoin::{BlockHash, Txid};
-
+use crate::chain::{BlockHash, Txid};
 use crate::errors::*;
 use crate::new_index::ChainQuery;
+use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
 
 pub fn get_tx_merkle_proof(
     chain: &ChainQuery,

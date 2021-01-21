@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::net::ToSocketAddrs;
 
-use bitcoin::{hashes::Hash, BlockHash};
+use bitcoin::hashes::Hash;
 use electrum_client::client::{
     Client as RClient, ElectrumPlaintextStream, ElectrumProxyStream, ElectrumSslStream,
 };
 pub use electrum_client::types::ServerFeaturesRes;
 pub use electrum_client::Error as ElectrumError;
 
+use crate::chain::BlockHash;
 use crate::electrum::ServerFeatures;
 use crate::errors::{Error, ResultExt};
 
