@@ -64,10 +64,7 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
 
 impl Config {
     pub fn from_args() -> Config {
-        let network_help = format!(
-            "Select Bitcoin network type ({})",
-            Network::names().join(", ")
-        );
+        let network_help = format!("Select network type ({})", Network::names().join(", "));
 
         let args = App::new("Electrum Rust Server")
             .version(crate_version!())
@@ -236,20 +233,21 @@ impl Config {
         #[cfg(feature = "liquid")]
         let parent_network = m
             .value_of("parent_network")
-            .map(Network::from)
-            .map(BNetwork::from)
+            .map(|s| s.parse().expect("invalid parent network"))
             .unwrap_or_else(|| match network_type {
                 Network::Liquid => BNetwork::Bitcoin,
                 Network::LiquidRegtest => BNetwork::Regtest,
-                _ => panic!("unknown liquid network, --parent-network is required"),
             });
 
         #[cfg(feature = "liquid")]
         let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
 
         let default_daemon_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => 8332,
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => 18332,
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => 18443,
 
             #[cfg(feature = "liquid")]
@@ -258,8 +256,11 @@ impl Config {
             Network::LiquidRegtest => 7041,
         };
         let default_electrum_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => 50001,
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => 60001,
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => 60401,
 
             #[cfg(feature = "liquid")]
@@ -268,8 +269,11 @@ impl Config {
             Network::LiquidRegtest => 51401,
         };
         let default_http_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => 3000,
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => 3001,
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => 3002,
 
             #[cfg(feature = "liquid")]
@@ -278,8 +282,11 @@ impl Config {
             Network::LiquidRegtest => 3002,
         };
         let default_monitoring_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => 4224,
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => 14224,
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => 24224,
 
             #[cfg(feature = "liquid")]
@@ -320,8 +327,11 @@ impl Config {
                 default_dir
             });
         match network_type {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => (),
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => daemon_dir.push("testnet3"),
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => daemon_dir.push("regtest"),
 
             #[cfg(feature = "liquid")]

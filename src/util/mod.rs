@@ -7,7 +7,7 @@ pub mod fees;
 
 pub use self::block::{BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, HeaderEntry, HeaderList};
 pub use self::fees::get_tx_fee;
-pub use self::script::{get_innerscripts, ScriptExt};
+pub use self::script::{get_innerscripts, ScriptToAddr, ScriptToAsm};
 pub use self::transaction::{
     extract_tx_prevouts, has_prevout, is_coinbase, is_spendable, TransactionStatus, TxInput,
 };

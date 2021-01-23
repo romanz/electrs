@@ -16,9 +16,6 @@ pub use {
 use bitcoin::blockdata::constants::genesis_block;
 pub use bitcoin::network::constants::Network as BNetwork;
 
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-
 #[cfg(not(feature = "liquid"))]
 pub type Value = u64;
 #[cfg(feature = "liquid")]
@@ -26,8 +23,11 @@ pub use confidential::Value;
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
+    #[cfg(not(feature = "liquid"))]
     Bitcoin,
+    #[cfg(not(feature = "liquid"))]
     Testnet,
+    #[cfg(not(feature = "liquid"))]
     Regtest,
 
     #[cfg(feature = "liquid")]
@@ -39,8 +39,11 @@ pub enum Network {
 impl Network {
     pub fn magic(self) -> u32 {
         match self {
+            #[cfg(not(feature = "liquid"))]
             Network::Bitcoin => 0xD9B4_BEF9,
+            #[cfg(not(feature = "liquid"))]
             Network::Testnet => 0x0709_110B,
+            #[cfg(not(feature = "liquid"))]
             Network::Regtest => 0xDAB5_BFFA,
 
             #[cfg(feature = "liquid")]
@@ -50,13 +53,22 @@ impl Network {
         }
     }
 
+    pub fn is_regtest(self) -> bool {
+        match self {
+            #[cfg(not(feature = "liquid"))]
+            Network::Regtest => true,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => true,
+            _ => false,
+        }
+    }
+
     #[cfg(feature = "liquid")]
     pub fn address_params(self) -> &'static address::AddressParams {
         // Liquid regtest uses elements's address params
         match self {
             Network::Liquid => &address::AddressParams::LIQUID,
             Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
-            _ => panic!("the liquid-only address_params() called with non-liquid network"),
         }
     }
 
@@ -66,7 +78,6 @@ impl Network {
             Network::Liquid => &*asset::NATIVE_ASSET_ID,
             // same for testnet and regtest
             Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_TESTNET,
-            _ => panic!("the liquid-only native_asset_id() called with non-liquid network"),
         }
     }
 
@@ -79,37 +90,59 @@ impl Network {
         ];
 
         #[cfg(feature = "liquid")]
-        return vec![
-            "mainnet".to_string(),
-            "testnet".to_string(),
-            "regtest".to_string(),
-            "liquid".to_string(),
-            "liquidregtest".to_string(),
-        ];
+        return vec!["liquid".to_string(), "liquidregtest".to_string()];
     }
 }
 
-// For bitcoin (non-elements) chains only
-pub fn genesis_hash(network: BNetwork) -> bitcoin::BlockHash {
+pub fn genesis_hash(network: Network) -> BlockHash {
+    #[cfg(not(feature = "liquid"))]
+    return bitcoin_genesis_hash(network.into());
+    #[cfg(feature = "liquid")]
+    return liquid_genesis_hash(network);
+}
+
+pub fn bitcoin_genesis_hash(network: BNetwork) -> bitcoin::BlockHash {
     lazy_static! {
-        static ref CACHED_GENESIS: Arc<RwLock<HashMap<BNetwork, bitcoin::BlockHash>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        static ref BITCOIN_GENESIS: bitcoin::BlockHash =
+            genesis_block(BNetwork::Bitcoin).block_hash();
+        static ref TESTNET_GENESIS: bitcoin::BlockHash =
+            genesis_block(BNetwork::Testnet).block_hash();
+        static ref REGTEST_GENESIS: bitcoin::BlockHash =
+            genesis_block(BNetwork::Regtest).block_hash();
+    }
+    match network {
+        BNetwork::Bitcoin => *BITCOIN_GENESIS,
+        BNetwork::Testnet => *TESTNET_GENESIS,
+        BNetwork::Regtest => *REGTEST_GENESIS,
+    }
+}
+
+#[cfg(feature = "liquid")]
+pub fn liquid_genesis_hash(network: Network) -> elements::BlockHash {
+    lazy_static! {
+        static ref LIQUID_GENESIS: BlockHash =
+            "1466275836220db2944ca059a3a10ef6fd2ea684b0688d2c379296888a206003"
+                .parse()
+                .unwrap();
     }
 
-    if let Some(block_hash) = CACHED_GENESIS.read().unwrap().get(&network) {
-        return *block_hash;
+    match network {
+        Network::Liquid => *LIQUID_GENESIS,
+        // The genesis block for liquid regtest chains varies based on the chain configuration.
+        // This instead uses an all zeroed-out hash, which doesn't matter in practice because its
+        // only used for Electrum server discovery, which isn't active on regtest.
+        _ => Default::default(),
     }
-
-    let block_hash = genesis_block(network).block_hash();
-    CACHED_GENESIS.write().unwrap().insert(network, block_hash);
-    block_hash
 }
 
 impl From<&str> for Network {
     fn from(network_name: &str) -> Self {
         match network_name {
+            #[cfg(not(feature = "liquid"))]
             "mainnet" => Network::Bitcoin,
+            #[cfg(not(feature = "liquid"))]
             "testnet" => Network::Testnet,
+            #[cfg(not(feature = "liquid"))]
             "regtest" => Network::Regtest,
 
             #[cfg(feature = "liquid")]
@@ -122,34 +155,24 @@ impl From<&str> for Network {
     }
 }
 
+#[cfg(not(feature = "liquid"))]
 impl From<Network> for BNetwork {
     fn from(network: Network) -> Self {
         match network {
             Network::Bitcoin => BNetwork::Bitcoin,
             Network::Testnet => BNetwork::Testnet,
             Network::Regtest => BNetwork::Regtest,
-
-            #[cfg(feature = "liquid")]
-            Network::Liquid => BNetwork::Bitcoin, // @FIXME
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => BNetwork::Regtest, // @FIXME
         }
     }
 }
 
+#[cfg(not(feature = "liquid"))]
 impl From<BNetwork> for Network {
     fn from(network: BNetwork) -> Self {
         match network {
-            #[cfg(not(feature = "liquid"))]
             BNetwork::Bitcoin => Network::Bitcoin,
-            #[cfg(not(feature = "liquid"))]
+            BNetwork::Testnet => Network::Testnet,
             BNetwork::Regtest => Network::Regtest,
-
-            #[cfg(feature = "liquid")]
-            BNetwork::Bitcoin => Network::Liquid, // @FIXME
-            #[cfg(feature = "liquid")]
-            BNetwork::Regtest => Network::LiquidRegtest, // @FIXME
-            BNetwork::Testnet => Network::Testnet, // @FIXME
         }
     }
 }

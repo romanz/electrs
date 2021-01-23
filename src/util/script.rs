@@ -9,22 +9,28 @@ pub struct InnerScripts {
     pub witness_script: Option<Script>,
 }
 
-pub trait ScriptExt: std::fmt::Debug {
+pub trait ScriptToAsm: std::fmt::Debug {
     fn to_asm(&self) -> String {
         let asm = format!("{:?}", self);
         (&asm[7..asm.len() - 1]).to_string()
     }
-
-    fn to_address(&self, network: Network) -> Option<String>;
 }
-impl ScriptExt for bitcoin::Script {
-    fn to_address(&self, network: Network) -> Option<String> {
+impl ScriptToAsm for bitcoin::Script {}
+#[cfg(feature = "liquid")]
+impl ScriptToAsm for elements::Script {}
+
+pub trait ScriptToAddr {
+    fn to_address_str(&self, network: Network) -> Option<String>;
+}
+#[cfg(not(feature = "liquid"))]
+impl ScriptToAddr for bitcoin::Script {
+    fn to_address_str(&self, network: Network) -> Option<String> {
         bitcoin::Address::from_script(self, network.into()).map(|s| s.to_string())
     }
 }
 #[cfg(feature = "liquid")]
-impl ScriptExt for elements::Script {
-    fn to_address(&self, network: Network) -> Option<String> {
+impl ScriptToAddr for elements::Script {
+    fn to_address_str(&self, network: Network) -> Option<String> {
         elements_address::Address::from_script(self, None, network.address_params())
             .map(|a| a.to_string())
     }
