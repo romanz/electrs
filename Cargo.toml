@@ -12,8 +12,8 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-default = [ "rocksdb" ]
-liquid = [ "elements" ]
+default = [ "rocksdb", "bitcoin" ]
+liquid = [ "elements", "elements-bitcoin" ]
 electrum-discovery = [ "electrum-client"]
 oldcpu = [ "rocksdb-oldcpu" ]
 
@@ -22,7 +22,6 @@ arraydeque = "0.4"
 arrayref = "0.3.6"
 base64 = "0.13.0"
 bincode = "1.3.1"
-bitcoin = { version = "0.25.0", features = [ "use-serde" ] }
 clap = "2.33.3"
 crossbeam-channel = "0.5.0"
 dirs = "3.0.1"
@@ -58,6 +57,11 @@ tokio = { version = "=0.2.6", features = ["sync", "macros"] }
 
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.1.0-beta.6", optional = true }
+
+# use rust-bitcoin v0.25 in liquid mode, v0.26 otherwise
+# temporary, until rust-elements is upgraded to v0.26
+bitcoin = { version = "0.26.0", optional = true, package = "bitcoin", features = [ "use-serde" ] }
+elements-bitcoin = { version = "0.25.2", optional = true, package = "bitcoin", features = [ "use-serde" ] }
 
 [dev-dependencies]
 tempfile = "3.0"
