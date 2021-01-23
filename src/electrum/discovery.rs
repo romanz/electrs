@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::chain::{BlockHash, Network};
+use crate::chain::Network;
 use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures};
 use crate::errors::{Result, ResultExt};
 use crate::util::spawn_thread;
@@ -29,9 +29,6 @@ pub struct DiscoveryManager {
 
     /// A list of servers that were found to be healthy on their last health check
     healthy: RwLock<HashMap<ServerAddr, Server>>,
-
-    /// Used to test for network compatibility
-    our_genesis_hash: BlockHash,
 
     /// Used to test for protocol version compatibility
     our_version: ProtocolVersion,
@@ -108,7 +105,6 @@ impl DiscoveryManager {
             })
             .collect();
         let discovery = Self {
-            our_genesis_hash: our_network.genesis_hash(),
             our_addrs,
             our_version,
             our_features,
@@ -348,7 +344,7 @@ impl DiscoveryManager {
 
     fn verify_compatibility(&self, features: &ServerFeatures) -> Result<()> {
         ensure!(
-            features.genesis_hash == self.our_genesis_hash,
+            features.genesis_hash == self.our_features.genesis_hash,
             "incompatible networks"
         );
 

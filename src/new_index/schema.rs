@@ -28,7 +28,7 @@ use crate::errors::*;
 use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
 use crate::util::{
     full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, Bytes,
-    HeaderEntry, HeaderList, ScriptExt,
+    HeaderEntry, HeaderList, ScriptToAddr,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -1148,7 +1148,7 @@ fn index_transaction(
 }
 
 fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {
-    spk.to_address(network).map(|address| DBRow {
+    spk.to_address_str(network).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
     })

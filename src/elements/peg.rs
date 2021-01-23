@@ -1,8 +1,8 @@
 use bitcoin::hashes::hex::ToHex;
 use elements::{confidential::Asset, PeginData, PegoutData, TxIn, TxOut};
 
-use crate::chain::{genesis_hash, BNetwork, Network};
-use crate::util::{FullHash, ScriptExt};
+use crate::chain::{bitcoin_genesis_hash, BNetwork, Network};
+use crate::util::{FullHash, ScriptToAsm};
 
 pub fn get_pegin_data(txout: &TxIn, network: Network) -> Option<PeginData> {
     txout
@@ -17,7 +17,7 @@ pub fn get_pegout_data(
 ) -> Option<PegoutData> {
     txout.pegout_data().filter(|pegout| {
         pegout.asset == Asset::Explicit(*network.native_asset())
-            && pegout.genesis_hash == genesis_hash(parent_network)
+            && pegout.genesis_hash == bitcoin_genesis_hash(parent_network)
     })
 }
 
@@ -37,11 +37,12 @@ impl PegoutValue {
 
         // pending https://github.com/ElementsProject/rust-elements/pull/69 is merged
         let scriptpubkey = bitcoin::Script::from(pegoutdata.script_pubkey.into_bytes());
+        let address = bitcoin::Address::from_script(&scriptpubkey, parent_network);
 
         Some(PegoutValue {
             genesis_hash: pegoutdata.genesis_hash.to_hex(),
             scriptpubkey_asm: scriptpubkey.to_asm(),
-            scriptpubkey_address: scriptpubkey.to_address(parent_network.into()),
+            scriptpubkey_address: address.map(|s| s.to_string()),
             scriptpubkey,
         })
     }

@@ -4,7 +4,8 @@ use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
     create_socket, electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts, get_tx_fee,
-    has_prevout, is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptExt, TransactionStatus,
+    has_prevout, is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm,
+    TransactionStatus,
 };
 
 #[cfg(not(feature = "liquid"))]
@@ -212,11 +213,11 @@ impl TxInValue {
             inner_redeemscript_asm: innerscripts
                 .as_ref()
                 .and_then(|i| i.redeem_script.as_ref())
-                .map(ScriptExt::to_asm),
+                .map(ScriptToAsm::to_asm),
             inner_witnessscript_asm: innerscripts
                 .as_ref()
                 .and_then(|i| i.witness_script.as_ref())
-                .map(ScriptExt::to_asm),
+                .map(ScriptToAsm::to_asm),
 
             is_coinbase,
             sequence: txin.sequence,
@@ -298,7 +299,7 @@ impl TxOutValue {
 
         let script = &txout.script_pubkey;
         let script_asm = script.to_asm();
-        let script_addr = script.to_address(config.network_type);
+        let script_addr = script.to_address_str(config.network_type);
 
         // TODO should the following something to put inside rust-elements lib?
         let script_type = if is_fee {
@@ -1227,7 +1228,6 @@ fn to_scripthash(
     }
 }
 
-#[allow(unused_variables)] // `network` is unused in liquid mode
 fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpError> {
     let addr = address::Address::from_str(addr)?;
 

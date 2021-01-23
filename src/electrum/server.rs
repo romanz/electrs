@@ -687,10 +687,11 @@ impl RPC {
         // Discovery is enabled when electrum-public-hosts is set
         #[cfg(feature = "electrum-discovery")]
         let discovery = config.electrum_public_hosts.clone().map(|hosts| {
+            use crate::chain::genesis_hash;
             let features = ServerFeatures {
                 hosts,
                 server_version: format!("electrs-esplora {}", ELECTRS_VERSION),
-                genesis_hash: config.network_type.genesis_hash(),
+                genesis_hash: genesis_hash(config.network_type),
                 protocol_min: PROTOCOL_VERSION,
                 protocol_max: PROTOCOL_VERSION,
                 hash_function: "sha256".into(),
