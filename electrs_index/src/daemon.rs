@@ -64,9 +64,9 @@ impl Daemon {
             network_info.protocol_version,
             network_info.connections
         );
-        if network_info.version < 20_00_00 {
+        if network_info.version < 21_00_00 {
             bail!(
-                "{} is not supported - please use bitcoind 0.20+",
+                "{} is not supported - please use bitcoind 0.21+",
                 network_info.subversion,
             )
         }
