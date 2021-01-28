@@ -39,20 +39,15 @@ pub enum Network {
 }
 
 impl Network {
+    #[cfg(not(feature = "liquid"))]
+    pub fn magic(self) -> u32 {
+        BNetwork::from(self).magic()
+    }
+
+    #[cfg(feature = "liquid")]
     pub fn magic(self) -> u32 {
         match self {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => 0xD9B4_BEF9,
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => 0x0709_110B,
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => 0xDAB5_BFFA,
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => 0x0A03_CF40,
-
-            #[cfg(feature = "liquid")]
             Network::Liquid => 0xDAB5_BFFA,
-            #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 0xDAB5_BFFA,
         }
     }
