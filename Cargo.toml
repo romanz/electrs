@@ -25,8 +25,7 @@ default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "roc
 base64 = "0.10"
 bincode = "1.0"
 bitcoin = { version = "0.26.0", features = ["use-serde"] }
-configure_me = "0.3.4"
-configure_me_codegen = "0.3.14"
+configure_me = "0.4.0"
 crossbeam-channel = "0.3"
 dirs-next = "2.0.0"
 error-chain = "0.12"
@@ -51,4 +50,4 @@ time = "0.1"
 tiny_http = "0.6"
 
 [build-dependencies]
-configure_me_codegen = "0.3.12"
+configure_me_codegen = "0.4.0"
