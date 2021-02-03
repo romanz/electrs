@@ -8,7 +8,7 @@ cargo build --all --release
 NETWORK=$1
 shift
 
-QUERY="target/release/electrs_query --network $NETWORK --db-dir ./db --daemon-dir $HOME/.bitcoin"
+QUERY="target/release/electrs_query --network $NETWORK --db-dir ./db1 --daemon-dir $HOME/.bitcoin"
 export RUST_LOG=${RUST_LOG-info}
 $QUERY $*
 
