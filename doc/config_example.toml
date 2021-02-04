@@ -32,5 +32,5 @@ network = "bitcoin"
 electrum_rpc_addr = "127.0.0.1:50001"
 
 # How much information about internal workings should electrs print. Increase before reporting a bug.
-verbosity = 3
+verbose = 3
 
