@@ -291,7 +291,7 @@ impl Mempool {
         let to_add = match daemon.gettransactions(&txids) {
             Ok(txs) => txs,
             Err(err) => {
-                warn!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
+                warn!("failed to get {} transactions: {}", txids.len(), err); // e.g. new block or RBF
                 return Ok(()); // keep the mempool until next update()
             }
         };
