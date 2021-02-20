@@ -295,7 +295,7 @@ impl Config {
             #[cfg(not(feature = "liquid"))]
             Network::Regtest => 24224,
             #[cfg(not(feature = "liquid"))]
-            Network::Signet => 34224,
+            Network::Signet => 54224,
 
             #[cfg(feature = "liquid")]
             Network::Liquid => 34224,
