@@ -6,11 +6,6 @@ extern crate rocksdb;
 #[cfg(feature = "oldcpu")]
 extern crate rocksdb_oldcpu as rocksdb;
 
-#[cfg(not(feature = "liquid"))]
-extern crate bitcoin;
-#[cfg(feature = "liquid")]
-extern crate elements_bitcoin as bitcoin;
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
