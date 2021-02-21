@@ -4,7 +4,8 @@
 
 ### Build dependencies
 
-Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries. Make sure to use latest OS! (see #226)
+Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries.
+Make sure to use latest OS! (see #226)
 
 Install [recent Rust](https://rustup.rs/) (1.41.1+, `apt install cargo` is preferred for Debian 10),
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.16+)
@@ -33,7 +34,8 @@ The advantages of dynamic linking:
 * Cross compilation is more reliable
 * If another application is also using `rocksdb`, you don't store it on disk and in RAM twice
 
-If you decided to use dynamic linking, you will also need to install the library. On Debian:
+If you decided to use dynamic linking, you will also need to install the library.
+On Debian:
 
 ```bash
 $ sudo apt install librocksdb-dev
@@ -42,10 +44,12 @@ $ sudo apt install librocksdb-dev
 #### Preparing for cross compilation
 
 Cross compilation can save you some time since you can compile `electrs` for a slower computer (like Raspberry Pi) on a faster machine
-even with different CPU architecture. Skip this if it's not your case.
+even with different CPU architecture.
+Skip this if it's not your case.
 
 If you want to cross-compile, you need to install some additional packages.
-These cross compilation instructions use `aarch64`/`arm64` + Linux as an example. (The resulting binary should work on RPi 4 with aarch64-enabled OS).
+These cross compilation instructions use `aarch64`/`arm64` + Linux as an example.
+(The resulting binary should work on RPi 4 with aarch64-enabled OS).
 Change to your desired architecture/OS.
 
 If you use Debian (or a derived distribution) you need to enable the target architecture:
@@ -76,7 +80,8 @@ $ sudo apt install librocksdb-dev:arm64
 
 #### Preparing man page generation (optional)
 
-Optionally, you may install [`cfg_me`](https://github.com/Kixunil/cfg_me) tool for generating the manual page. The easiest way is to run `cargo install cfg_me`.
+Optionally, you may install [`cfg_me`](https://github.com/Kixunil/cfg_me) tool for generating the manual page.
+The easiest way is to run `cargo install cfg_me`.
 
 #### Download electrs
 
@@ -87,7 +92,8 @@ $ cd electrs
 
 ### Build
 
-Note: you need to have enough free RAM to build `electrs`. The build will fail otherwise.
+Note: you need to have enough free RAM to build `electrs`.
+The build will fail otherwise.
 Close those 100 old tabs in the browser. ;)
 
 #### Static linking
@@ -138,28 +144,41 @@ $ docker run --network host \
 
 There are currently no official/stable binary packages.
 
-However, there's a [*beta* repository for Debian 10](https://deb.ln-ask.me) (should work on recent Ubuntu, but not tested well-enough). The repository provides several significant advantages:
+However, there's a [*beta* repository for Debian 10](https://deb.ln-ask.me) (should work on recent Ubuntu, but not tested well-enough)
+The repository provides several significant advantages:
 
-* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash... It also connects to bitcoind out-of-the-box, no messing with config files or anything else. It just works.
-* Prebuilt binaries save you a lot of time. The binary installation of all the components is under 3 minutes on common hardware. Building from source is much longer.
+* Everything is completely automatic - after installing `electrs` via `apt`, it's running and will automatically run on reboot, restart after crash..
+  It also connects to bitcoind out-of-the-box, no messing with config files or anything else.
+  It just works.
+* Prebuilt binaries save you a lot of time.
+  The binary installation of all the components is under 3 minutes on common hardware.
+  Building from source is much longer.
 * The repository contains some seurity hardening out-of-the-box - separate users for services, use of [btc-rpc-proxy](https://github.com/Kixunil/btc-rpc-proxy), etc.
 
 And two disadvantages:
 
 * It's currently not trivial to independently verify the built packages, so you may need to trust the author of the repository.
   The build is now deterministic but nobody verified it independently yet.
-* The repository is considered beta. `electrs` seems to work well so far but was not tested heavily.
-  The author of the repository is also a contributor to `electrs` and appreciates [bug reports](https://github.com/Kixunil/cryptoanarchy-deb-repo-builder/issues), [test reports](https://github.com/Kixunil/cryptoanarchy-deb-repo-builder/issues/61), and other contributions.
+* The repository is considered beta.
+  electrs` seems to work well so far but was not tested heavily.
+  The author of the repository is also a contributor to `electrs` and appreciates [bug reports](https://github.com/Kixunil/cryptoanarchy-deb-repo-builder/issues),
+  [test reports](https://github.com/Kixunil/cryptoanarchy-deb-repo-builder/issues/61), and other contributions.
 
 ## Manual configuration
 
-This applies only if you do **not** use some other automated systems such as Debian packages. If you use automated systems, refer to their documentation first!
+This applies only if you do **not** use some other automated systems such as Debian packages.
+If you use automated systems, refer to their documentation first!
 
 ### Bitcoind configuration
 
-Pruning must be turned **off** for `electrs` to work. `txindex` is allowed but unnecessary for `electrs`. However, you might still need it if you run other services (e.g.`eclair`)
+Pruning must be turned **off** for `electrs` to work.
+`txindex` is allowed but unnecessary for `electrs`.
+However, you might still need it if you run other services (e.g.`eclair`)
 
-The highly recommended way of authenticating `electrs` is using cookie file. It's the most [secure](https://github.com/Kixunil/security_writings/blob/master/cookie_files.md) and robust method. Set `rpccookiefile` option of `bitcoind` to a file within an existing directory which it can access. You can skip it if you're running both daemons under the same user and with the default directories.
+The highly recommended way of authenticating `electrs` is using cookie file.
+It's the most [secure](https://github.com/Kixunil/security_writings/blob/master/cookie_files.md) and robust method.
+Set `rpccookiefile` option of `bitcoind` to a file within an existing directory which it can access.
+You can skip it if you're running both daemons under the same user and with the default directories.
 
 `electrs` will wait for `bitcoind` to sync, however, you will be unabe to use it until the syncing is done.
 
@@ -170,23 +189,43 @@ $ bitcoind -server=1 -txindex=0 -prune=0
 ```
 ### Electrs configuration
 
-Electrs can be configured using command line, environment variables and configuration files (or their combination). It is highly recommended to use configuration files for any non-trivial setups since it's easier to manage. If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
+Electrs can be configured using command line, environment variables and configuration files (or their combination).
+It is highly recommended to use configuration files for any non-trivial setups since it's easier to manage.
+If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
 
 ### Configuration files and priorities
 
-The config files must be in the Toml format.
-If you've never seen a Toml configuration file, there's an [example configuration file](config_example.toml) available.
+The Toml-formatted config files ([an example here](config_example.toml)) are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
 
-The config files are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
+The options in highest-priority config files override options set in lowest-priority config files.
 
-The options in highest-priority config files override options set in lowest-priority config files. Environment variables override options in config files and finally arguments override everythig else. There are two special arguments `--conf` which reads the specified file and `--conf-dir`, which read all the files in the specified directory. The options in those files override **everything that was set previously, including arguments that were passed before these arguments**. In general, later arguments override previous ones. It is a good practice to use these special arguments at the beginning of the command line in order to avoid confusion.
+**Environment variables** override options in config files and finally **arguments** override everythig else.
 
-For each command line argument an environment variable of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`). Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`). In addition, config files support `cookie` option to specify cookie - this is not available using command line or environment variables for security reasons (other applications could read it otherwise). Note that this is different from using `cookie_path`, which points to a file containing the cookie instead of being the cookie itself.
+There are two special arguments `--conf` which reads the specified file and `--conf-dir`, which read all the files in the specified directory.
 
-Finally, you need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
+The options in those files override **everything** that was set previously, **including arguments** that were passed before these two special arguments.
+
+In general, later arguments override previous ones.
+It is a good practice to use these special arguments at the beginning of the command line in order to avoid confusion.
+
+**Naming convention**
+
+For each command line argument an **environment variable** of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists
+(e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`).
+
+Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`).
+
+You need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
+
+**Authentication**
+
+In addition, config files support `cookie` option (warning: it will be renamed in near future!) to specify username and password.
+This is not available using command line or environment variables for security reasons (other applications could read it otherwise).
+**Important note**: `cookie` is different from `cookie_file`, which points to a file containing the cookie instead of being the cookie itself!
 
 If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` of `bitcoind` for authentication, please use `cookie="USER:PASSWORD"` option in one of the [config files](https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities).
-Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be used as the default cookie file, allowing this server to use bitcoind JSONRPC interface.
+Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be used as the default cookie file,
+allowing this server to use bitcoind JSONRPC interface.
 
 ### Electrs usage
 
@@ -215,11 +254,13 @@ $ ./target/release/electrs -vvv --timestamp --db-dir ./db --electrum-rpc-addr="1
 2018-08-17T19:58:28 - DEBUG - applying 14 new headers from height 537205
 2018-08-17T19:58:29 - INFO - RPC server running on 127.0.0.1:50001
 ```
-You can specify options via command-line parameters, environment variables or using config files. See the documentation above.
+You can specify options via command-line parameters, environment variables or using config files.
+See the documentation above.
 
 Note that the final DB size should be ~20% of the `blk*.dat` files, but it may increase to ~35% at the end of the inital sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
 
-If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`. It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the following command:
+If initial sync fails due to `memory allocation of xxxxxxxx bytes failedAborted` errors, as may happen on devices with limited RAM, try the following arguments when starting `electrs`.
+It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the following command:
 
 ```bash
 $ ./target/release/electrs -vvvv --index-batch-size=10 --jsonrpc-import --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
@@ -235,7 +276,8 @@ See below for [extra configuration suggestions](https://github.com/romanz/electr
 
 ## Electrum client
 
-If you happen to use the Electrum client from [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), it's pre-configured out-of-the-box already. Read below otherwise.
+If you happen to use the Electrum client from [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), it's pre-configured out-of-the-box already
+Read below otherwise.
 
 There's a prepared script for launching `electrum` in such way to connect only to the local `electrs` instance to protect your privacy.
 
@@ -259,7 +301,8 @@ $ electrum   # will connect only to the local server
 
 ### SSL connection
 
-In order to use a secure connection, you can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#) by placing the following block in `nginx.conf`.
+In order to use a secure connection, you can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#)
+by placing the following block in `nginx.conf`.
 
 ```nginx
 stream {
@@ -310,7 +353,8 @@ HiddenServiceVersion 3
 HiddenServicePort 50001 127.0.0.1:50001
 ```
 
-If you use [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), it is cleaner to install `tor-hs-patch-config` using `apt` and then placing the configuration into a file inside `/etc/tor/hidden-services.d`.
+If you use [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages),
+it is cleaner to install `tor-hs-patch-config` using `apt` and then placing the configuration into a file inside `/etc/tor/hidden-services.d`.
 
 Restart the service:
 ```
@@ -332,9 +376,11 @@ For more details, see http://docs.electrum.org/en/latest/tor.html.
 
 ### Sample Systemd Unit File
 
-If you use [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), you should skip this section, as the appropriate systemd unit file is installed automatically.
+If you use [the *beta* Debian repository](https://github.com/romanz/electrs/blob/master/doc/usage.md#cnative-os-packages), you should skip this section,
+as the appropriate systemd unit file is installed automatically.
 
-You may wish to have systemd manage electrs so that it's "always on." Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
+You may wish to have systemd manage electrs so that it's "always on".
+Here is a sample unit file (which assumes that the bitcoind unit file is `bitcoind.service`):
 
 ```
 [Unit]
