@@ -219,13 +219,18 @@ You need to use a number in config file if you want to increase verbosity (e.g. 
 
 **Authentication**
 
-In addition, config files support `cookie` option (warning: it will be renamed in near future!) to specify username and password.
-This is not available using command line or environment variables for security reasons (other applications could read it otherwise).
-**Important note**: `cookie` is different from `cookie_file`, which points to a file containing the cookie instead of being the cookie itself!
+**Warning:** If you're reading this before version 0.8.8 exists either use `cookie_file` or check the version of documentation before this line was committed.
 
-If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` of `bitcoind` for authentication, please use `cookie="USER:PASSWORD"` option in one of the [config files](https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities).
+In addition, config files support `auth` option to specify username and password.
+This is not available using command line or environment variables for security reasons (other applications could read it otherwise).
+**Important note**: `auth` is different from `cookie_file`, which points to a file containing the cookie instead of being the cookie itself!
+
+If you are using `-rpcuser=USER` and `-rpcpassword=PASSWORD` of `bitcoind` for authentication, please use `auth="USER:PASSWORD"` option in one of the [config files](https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities).
 Otherwise, [`~/.bitcoin/.cookie`](https://github.com/bitcoin/bitcoin/blob/0212187fc624ea4a02fc99bc57ebd413499a9ee1/contrib/debian/examples/bitcoin.conf#L70-L72) will be used as the default cookie file,
 allowing this server to use bitcoind JSONRPC interface.
+
+Note: there was a `cookie` option in the version 0.8.7 and below, it's now deprecated - do **not** use, it will be removed.
+Please read upgrade notes if you're upgrading to a newer version.
 
 ### Electrs usage
 
@@ -437,6 +442,13 @@ $ ./contrib/addr.py 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR  # sample address from bl
 ```
 
 ## Upgrading
+
+> **If you're upgrading from version 0.8.7 to a higher version and used `cookie` option you should change your configuration!**
+> The `cookie` option was deprecated and **will be removed eventually**!
+> If you had actual cookie (from `~/bitcoin/.cookie` file) specified in `cookie` option, this was wrong as it wouldn't get updated when needed.
+> It's strongly recommended to use proper cookie authentication using `cookie_file`.
+> If you really have to use fixed username and password, explicitly specified in `bitcoind` config, use `auth` option instead.
+> Users of `btc-rpc-proxy` using `public:public` need to use `auth` too.
 
 As with any other application, you need to remember how you installed `electrs` to upgrade it.
 If you don't then here's a little help: run `which electrs` and compare the output

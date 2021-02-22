@@ -171,6 +171,30 @@ fn create_cookie_getter(
     }
 }
 
+/// Processes deprecation of cookie in favor of auth
+fn select_auth(auth: Option<String>, cookie: Option<String>) -> Option<String> {
+    match (auth, cookie) {
+        (None, None) => None,
+        (Some(value), None) => {
+            eprintln!("WARNING: cookie option is deprecated and will be removed in the future!");
+            eprintln!();
+            eprintln!("You most likely want to use cookie_file instead.");
+            eprintln!("If you really don't want to use cookie_file for a good reason and knowing the consequences use the auth option");
+            eprintln!(
+                "See authentication section in electrs usage documentation for more details."
+            );
+            eprintln!("https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities");
+            Some(value)
+        }
+        (None, Some(value)) => Some(value),
+        (Some(_), Some(_)) => {
+            eprintln!("Error: cookie and auth can't be specified at the same time");
+            eprintln!("It looks like you made a mistake during migrating cookie option, please check your config.");
+            std::process::exit(1);
+        }
+    }
+}
+
 impl Config {
     /// Parses args, env vars, config files and post-processes them
     pub fn from_args() -> Config {
@@ -243,7 +267,8 @@ impl Config {
             .blocks_dir
             .unwrap_or_else(|| default_blocks_dir(daemon_dir));
 
-        let cookie_getter = create_cookie_getter(config.cookie, config.cookie_file, daemon_dir);
+        let auth = select_auth(config.auth, config.cookie);
+        let cookie_getter = create_cookie_getter(auth, config.cookie_file, daemon_dir);
 
         let mut log = stderrlog::new();
         log.verbosity(

@@ -37,7 +37,15 @@ doc = "Analogous to bitcoind's -blocksdir option, this specifies the directory c
 [[param]]
 name = "cookie"
 type = "String"
-doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from cookie file)"
+doc = "DEPRECATED: use cookie_file or auth instead!"
+# Force the user to use config file in order to avoid password leaks
+argument = false
+env_var = false
+
+[[param]]
+name = "auth"
+type = "String"
+doc = "JSONRPC authentication ('USER:PASSWORD', default: use cookie file)"
 # Force the user to use config file in order to avoid password leaks
 argument = false
 env_var = false
