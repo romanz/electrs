@@ -219,8 +219,6 @@ You need to use a number in config file if you want to increase verbosity (e.g. 
 
 **Authentication**
 
-**Warning:** If you're reading this before version 0.8.8 exists either use `cookie_file` or check the version of documentation before this line was committed.
-
 In addition, config files support `auth` option to specify username and password.
 This is not available using command line or environment variables for security reasons (other applications could read it otherwise).
 **Important note**: `auth` is different from `cookie_file`, which points to a file containing the cookie instead of being the cookie itself!
@@ -449,6 +447,7 @@ $ ./contrib/addr.py 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR  # sample address from bl
 > It's strongly recommended to use proper cookie authentication using `cookie_file`.
 > If you really have to use fixed username and password, explicitly specified in `bitcoind` config, use `auth` option instead.
 > Users of `btc-rpc-proxy` using `public:public` need to use `auth` too.
+> You can read [a detailed explanation of cookie deprecation with motivation explained](cookie_deprecation.md).
 
 As with any other application, you need to remember how you installed `electrs` to upgrade it.
 If you don't then here's a little help: run `which electrs` and compare the output
