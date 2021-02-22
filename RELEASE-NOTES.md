@@ -1,4 +1,4 @@
-# 0.8.7 (22 Feb 2021)
+# 0.8.8 (22 Feb 2021)
 
 * Deprecate `--cookie` configuration (@Kixunil)
 * Update dependencies (@Kixunil)
