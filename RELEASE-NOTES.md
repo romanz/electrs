@@ -1,3 +1,9 @@
+# 0.8.7 (22 Feb 2021)
+
+* Deprecate `--cookie` configuration (@Kixunil)
+* Update dependencies (@Kixunil)
+* Improve documentation (@Kixunil)
+
 # 0.8.7 (15 Jan 2021)
 
 * Support signet (#239)
