@@ -118,6 +118,12 @@ struct NetworkInfo {
     relayfee: f64, // in BTC
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct FeeEstimate {
+    feerate: f64, // in BTC/kilobyte
+    blocks: usize,
+}
+
 pub struct MempoolEntry {
     fee: u64,   // in satoshis
     vsize: u32, // in virtual bytes (= weight/4)
@@ -464,6 +470,12 @@ impl Daemon {
 
     pub fn get_relayfee(&self) -> Result<f64> {
         Ok(self.getnetworkinfo()?.relayfee)
+    }
+
+    pub fn estimatesmartfee(&self, conf_target: usize, estimate_mode: &str) -> Result<f64> {
+        let val: Value = self.request("estimatesmartfee", json!([conf_target, estimate_mode]))?;
+        let fee_estimate: Result<FeeEstimate> = Ok(from_value(val).chain_err(|| "invalid fee estimate")?);
+        Ok(fee_estimate?.feerate)
     }
 
     pub fn getbestblockhash(&self) -> Result<BlockHash> {

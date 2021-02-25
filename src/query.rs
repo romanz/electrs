@@ -550,18 +550,8 @@ impl Query {
     }
 
     // Fee rate [BTC/kB] to be confirmed in `blocks` from now.
-    pub fn estimate_fee(&self, blocks: usize) -> f64 {
-        let mut total_vsize = 0u32;
-        let mut last_fee_rate = 0.0;
-        let blocks_in_vbytes = (blocks * 1_000_000) as u32; // assume ~1MB blocks
-        for (fee_rate, vsize) in self.tracker.read().unwrap().fee_histogram() {
-            last_fee_rate = *fee_rate;
-            total_vsize += vsize;
-            if total_vsize >= blocks_in_vbytes {
-                break; // under-estimate the fee rate a bit
-            }
-        }
-        (last_fee_rate as f64) * 1e-5 // [BTC/kB] = 10^5 [sat/B]
+    pub fn estimate_fee(&self, blocks: usize, estimate_mode: &str) -> Result<f64> {
+        self.app.daemon().estimatesmartfee(blocks, estimate_mode)
     }
 
     pub fn get_banner(&self) -> Result<String> {

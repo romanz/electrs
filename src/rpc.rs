@@ -213,8 +213,12 @@ impl Connection {
 
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let blocks_count = usize_from_value(params.get(0), "blocks_count")?;
-        let fee_rate = self.query.estimate_fee(blocks_count); // in BTC/kB
-        Ok(json!(fee_rate.max(self.relayfee)))
+        let estimate_mode = match params.get(1) {
+            Some(value) => value.as_str().chain_err(|| "non-string estimate_mode")?,
+            None => "ECONOMICAL",
+        };
+        let fee_rate = self.query.estimate_fee(blocks_count, estimate_mode)?; // in BTC/kB
+        Ok(json!(fee_rate))
     }
 
     fn blockchain_relayfee(&self) -> Result<Value> {
