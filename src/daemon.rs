@@ -541,21 +541,6 @@ impl Daemon {
         Ok(self.request("getrawtransaction", args)?)
     }
 
-    pub fn gettransactions(&self, txhashes: &[&Txid]) -> Result<Vec<Transaction>> {
-        let params_list: Vec<Value> = txhashes
-            .iter()
-            .map(|txhash| json!([txhash.to_hex(), /*verbose=*/ false]))
-            .collect();
-
-        let values = self.requests("getrawtransaction", &params_list)?;
-        let mut txs = vec![];
-        for value in values {
-            txs.push(tx_from_value(value)?);
-        }
-        assert_eq!(txhashes.len(), txs.len());
-        Ok(txs)
-    }
-
     pub fn getmempooltxids(&self) -> Result<HashSet<Txid>> {
         let txids: Value = self.request("getrawmempool", json!([/*verbose=*/ false]))?;
         let mut result = HashSet::new();
