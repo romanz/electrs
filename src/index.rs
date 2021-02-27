@@ -384,9 +384,13 @@ impl Index {
         let blockhashes: Vec<BlockHash> = new_headers.iter().map(|h| *h.hash()).collect();
         let batch_size = self.batch_size;
         let fetcher = spawn_thread("fetcher", move || {
-            for chunk in blockhashes.chunks(batch_size) {
+            for blockhashes_chunk in blockhashes.chunks(batch_size) {
+                let blocks = blockhashes_chunk
+                    .iter()
+                    .map(|blockhash| daemon.getblock(blockhash))
+                    .collect();
                 sender
-                    .send(daemon.getblocks(&chunk))
+                    .send(blocks)
                     .expect("failed sending blocks to be indexed");
             }
             sender

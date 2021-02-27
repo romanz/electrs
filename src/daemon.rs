@@ -516,19 +516,6 @@ impl Daemon {
             .get_or_else(&blockhash, || self.load_blocktxids(blockhash))
     }
 
-    pub fn getblocks(&self, blockhashes: &[BlockHash]) -> Result<Vec<Block>> {
-        let params_list: Vec<Value> = blockhashes
-            .iter()
-            .map(|hash| json!([hash.to_hex(), /*verbose=*/ false]))
-            .collect();
-        let values = self.requests("getblock", &params_list)?;
-        let mut blocks = vec![];
-        for value in values {
-            blocks.push(block_from_value(value)?);
-        }
-        Ok(blocks)
-    }
-
     pub fn gettransaction(
         &self,
         txhash: &Txid,
