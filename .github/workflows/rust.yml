@@ -9,6 +9,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: Install 1.41.0-nightly (3e525e3f6 2019-11-18)
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly-2019-11-19
+        override: true
     - name: Check
       run: cargo check
     - name: Build
