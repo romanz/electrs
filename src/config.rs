@@ -173,7 +173,7 @@ fn create_cookie_getter(
 
 /// Processes deprecation of cookie in favor of auth
 fn select_auth(auth: Option<String>, cookie: Option<String>) -> Option<String> {
-    match (auth, cookie) {
+    match (cookie, auth) {
         (None, None) => None,
         (Some(value), None) => {
             eprintln!("WARNING: cookie option is deprecated and will be removed in the future!");
