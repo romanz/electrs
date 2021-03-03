@@ -1234,7 +1234,12 @@ fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpE
     #[cfg(not(feature = "liquid"))]
     let is_expected_net = {
         let addr_network = Network::from(addr.network);
-        addr_network == network || (addr_network == Network::Testnet && network == Network::Regtest)
+
+        // Testnet, Regtest and Signet all share the same version bytes,
+        // `addr_network` will be detected as Testnet for all of them.
+        addr_network == network
+            || (addr_network == Network::Testnet
+                && matches!(network, Network::Regtest | Network::Signet))
     };
 
     #[cfg(feature = "liquid")]
