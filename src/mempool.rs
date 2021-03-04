@@ -203,32 +203,24 @@ impl Tracker {
 
         let timer = self.stats.start_timer("add");
         let txids_iter = new_txids.difference(&old_txids);
-        let entries: Vec<(&Txid, MempoolEntry)> = txids_iter
-            .filter_map(|txid| {
-                match daemon.getmempoolentry(txid) {
-                    Ok(entry) => Some((txid, entry)),
-                    Err(err) => {
-                        debug!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
-                        None // ignore this transaction for now
-                    }
-                }
-            })
-            .collect();
-        if !entries.is_empty() {
-            let txs = match entries
-                .iter()
-                .map(|(txid, _)| daemon.gettransaction(txid, None))
-                .collect::<Result<Vec<_>>>()
-            {
-                Ok(txs) => txs,
+        let entries = txids_iter.filter_map(|txid| {
+            match daemon.getmempoolentry(txid) {
+                Ok(entry) => Some((txid, entry)),
                 Err(err) => {
-                    debug!("failed to get {} transactions: {}", entries.len(), err); // e.g. new block or RBF
-                    return Ok(()); // keep the mempool until next update()
+                    debug!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
+                    None // ignore this transaction for now
                 }
-            };
-            for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
-                assert_eq!(tx.txid(), *txid);
-                self.add(txid, tx, entry);
+            }
+        });
+        for (txid, entry) in entries {
+            match daemon.gettransaction(txid, None) {
+                Ok(tx) => {
+                    assert_eq!(tx.txid(), *txid);
+                    self.add(txid, tx, entry);
+                }
+                Err(err) => {
+                    debug!("failed to get transaction {}: {}", txid, err); // e.g. new block or RBF
+                }
             }
         }
         timer.observe_duration();
