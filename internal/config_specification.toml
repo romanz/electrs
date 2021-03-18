@@ -86,7 +86,7 @@ doc = "Use JSONRPC instead of directly importing blk*.dat files. Useful for remo
 name = "wait_duration_secs"
 type = "u64"
 doc = "Duration to wait between bitcoind polling"
-default = "5"
+default = "10"
 
 [[param]]
 name = "index_batch_size"
