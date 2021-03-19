@@ -1,6 +1,7 @@
 # 0.8.9 (19 Feb 2021)
 
 * Use non-batched RPC to reduce bitcoind memory usage (#373)
+* Fix inverted logic of deprecation (#379)
 * Ignore individual mempool transaction fetch fails (#381)
 * Increase default wait_duration_secs to 10s (#384)
 
