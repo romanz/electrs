@@ -137,7 +137,7 @@ $ mkdir db
 $ docker run --network host \
              --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
              --volume $PWD/db:/home/user/db \
-             --env ELECTRS_DB_DIR=/home/user/db
+             --env ELECTRS_DB_DIR=/home/user/db \
              --rm -i -t electrs-app
 ```
 
