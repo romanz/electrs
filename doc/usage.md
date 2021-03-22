@@ -133,11 +133,12 @@ Note: currently Docker installation links statically
 
 ```bash
 $ docker build -t electrs-app .
+$ mkdir db
 $ docker run --network host \
              --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
-             --volume $PWD:/home/user \
-             --rm -i -t electrs-app \
-             electrs -vvvv --timestamp --db-dir /home/user/db
+             --volume $PWD/db:/home/user/db \
+             --env ELECTRS_DB_DIR=/home/user/db \
+             --rm -i -t electrs-app
 ```
 
 ## Native OS packages
