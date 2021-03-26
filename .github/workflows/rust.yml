@@ -1,22 +1,15 @@
-name: Rust
+name: electrs
 
 on: [push, pull_request]
 
 jobs:
-
+  electrs:
+    name: Electrum Integration Test
     runs-on: ubuntu-latest
-
     steps:
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.toolchain }}
-          profile: minimal
-          override: true
-      - uses: actions/checkout@v1
-      - name: Check
-        run: cargo check
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Build
-        run: cargo build
-      - name: Run tests
-        run: cargo test
+        run: docker build . --rm -t electrs:tests
+      - name: Test
+        run: docker run -v $PWD/contrib/:/contrib -v $PWD/tests/:/tests --rm electrs:tests bash /tests/run.sh

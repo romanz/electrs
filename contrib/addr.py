@@ -22,9 +22,13 @@ def main():
     for addr in args.address:
         script = network.parse.address(addr).script()
         script_hash = hashlib.sha256(script).digest()[::-1].hex()
-        reply = conn.call('blockchain.scripthash.get_balance', script_hash)
+        reply = conn.call('blockchain.scripthash.subscribe', script_hash)
+        print(f'{reply}')
+        reply = conn.call('blockchain.scripthash.get_history', script_hash)
         result = reply['result']
-        print('{} has {} satoshis'.format(addr, result))
+        print(f'{addr} has {len(result)} transactions:')
+        for tx in result:
+            print(f'* {tx["tx_hash"]}')
 
 
 if __name__ == '__main__':

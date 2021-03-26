@@ -1,287 +1,199 @@
-use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::hash_types::Txid;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use anyhow::Result;
+
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::convert::TryInto;
 use std::iter::FromIterator;
 use std::ops::Bound;
-use std::sync::Mutex;
 
-use crate::daemon::{Daemon, MempoolEntry};
-use crate::errors::*;
-use crate::index::index_transaction;
-use crate::metrics::{
-    Gauge, GaugeVec, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics,
-};
-use crate::store::{ReadStore, Row};
-use crate::util::Bytes;
+use bitcoin::hashes::Hash;
+use bitcoin::{Amount, OutPoint, Transaction, Txid};
+use bitcoincore_rpc::json;
+use rayon::prelude::*;
+use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-const VSIZE_BIN_WIDTH: u32 = 100_000; // in vbytes
+use crate::{daemon::Daemon, types::ScriptHash};
 
-struct MempoolStore {
-    map: BTreeMap<Bytes, Vec<Bytes>>,
+pub(crate) struct Entry {
+    pub txid: Txid,
+    pub tx: Transaction,
+    pub fee: Amount,
+    pub vsize: u64,
+    pub has_unconfirmed_inputs: bool,
 }
 
-impl MempoolStore {
-    fn new() -> MempoolStore {
-        MempoolStore {
-            map: BTreeMap::new(),
-        }
-    }
+/// Mempool current state
+pub(crate) struct Mempool {
+    entries: HashMap<Txid, Entry>,
+    by_funding: BTreeSet<(ScriptHash, Txid)>,
+    by_spending: BTreeSet<(OutPoint, Txid)>,
+    histogram: Histogram,
 
-    fn add(&mut self, tx: &Transaction) {
-        let rows = index_transaction(tx, 0);
-        for row in rows {
-            let (key, value) = row.into_pair();
-            self.map.entry(key).or_insert_with(Vec::new).push(value);
-        }
-    }
-
-    fn remove(&mut self, tx: &Transaction) {
-        let rows = index_transaction(tx, 0);
-        for row in rows {
-            let (key, value) = row.into_pair();
-            let no_values_left = {
-                let values = self
-                    .map
-                    .get_mut(&key)
-                    .unwrap_or_else(|| panic!("missing key {} in mempool", hex::encode(&key)));
-                let last_value = values
-                    .pop()
-                    .unwrap_or_else(|| panic!("no values found for key {}", hex::encode(&key)));
-                // TxInRow and TxOutRow have an empty value, TxRow has height=0 as value.
-                assert_eq!(
-                    value,
-                    last_value,
-                    "wrong value for key {}: {}",
-                    hex::encode(&key),
-                    hex::encode(&last_value)
-                );
-                values.is_empty()
-            };
-            if no_values_left {
-                self.map.remove(&key).unwrap();
-            }
-        }
-    }
+    txid_min: Txid,
+    txid_max: Txid,
 }
 
-impl ReadStore for MempoolStore {
-    fn get(&self, key: &[u8]) -> Option<Bytes> {
-        Some(self.map.get(key)?.last()?.to_vec())
-    }
-    fn scan(&self, prefix: &[u8]) -> Vec<Row> {
-        let range = self
-            .map
-            .range((Bound::Included(prefix.to_vec()), Bound::Unbounded));
-        let mut rows = vec![];
-        for (key, values) in range {
-            if !key.starts_with(prefix) {
-                break;
-            }
-            if let Some(value) = values.last() {
-                rows.push(Row {
-                    key: key.to_vec(),
-                    value: value.to_vec(),
-                });
-            }
-        }
-        rows
-    }
-}
+impl Mempool {
+    pub fn new() -> Self {
+        Self {
+            entries: Default::default(),
+            by_funding: Default::default(),
+            by_spending: Default::default(),
+            histogram: Histogram::empty(),
 
-struct Item {
-    tx: Transaction,     // stored for faster retrieval and index removal
-    entry: MempoolEntry, // caches mempool fee rates
-}
-
-struct Stats {
-    count: Gauge,
-    update: HistogramVec,
-    vsize: GaugeVec,
-    max_fee_rate: Mutex<f32>,
-}
-
-impl Stats {
-    fn start_timer(&self, step: &str) -> HistogramTimer {
-        self.update.with_label_values(&[step]).start_timer()
-    }
-
-    fn update(&self, entries: &[&MempoolEntry]) {
-        let mut bands: Vec<(f32, u32)> = vec![];
-        let mut fee_rate = 1.0f32; // [sat/vbyte]
-        let mut vsize = 0u32; // vsize of transactions paying <= fee_rate
-        for e in entries {
-            while fee_rate < e.fee_per_vbyte() {
-                bands.push((fee_rate, vsize));
-                fee_rate *= 2.0;
-            }
-            vsize += e.vsize();
-        }
-        let mut max_fee_rate = self.max_fee_rate.lock().unwrap();
-        loop {
-            bands.push((fee_rate, vsize));
-            if fee_rate < *max_fee_rate {
-                fee_rate *= 2.0;
-                continue;
-            }
-            *max_fee_rate = fee_rate;
-            break;
-        }
-        drop(max_fee_rate);
-        for (fee_rate, vsize) in bands {
-            // labels should be ordered by fee_rate value
-            let label = format!("≤{:10.0}", fee_rate);
-            self.vsize
-                .with_label_values(&[&label])
-                .set(f64::from(vsize));
-        }
-    }
-}
-
-pub struct Tracker {
-    items: HashMap<Txid, Item>,
-    index: MempoolStore,
-    histogram: Vec<(f32, u32)>,
-    stats: Stats,
-}
-
-impl Tracker {
-    pub fn new(metrics: &Metrics) -> Tracker {
-        Tracker {
-            items: HashMap::new(),
-            index: MempoolStore::new(),
-            histogram: vec![],
-            stats: Stats {
-                count: metrics.gauge(MetricOpts::new(
-                    "electrs_mempool_count",
-                    "# of mempool transactions",
-                )),
-                update: metrics.histogram_vec(
-                    HistogramOpts::new(
-                        "electrs_mempool_update",
-                        "Time to update mempool (in seconds)",
-                    ),
-                    &["step"],
-                ),
-                vsize: metrics.gauge_vec(
-                    MetricOpts::new(
-                        "electrs_mempool_vsize",
-                        "Total vsize of transactions paying at most given fee rate",
-                    ),
-                    &["fee_rate"],
-                ),
-                max_fee_rate: Mutex::new(1.0),
-            },
+            txid_min: Txid::from_inner([0x00; 32]),
+            txid_max: Txid::from_inner([0xFF; 32]),
         }
     }
 
-    pub fn has_txn(&self, txid: &Txid) -> bool {
-        self.items.contains_key(txid)
-    }
-
-    pub fn get_fee(&self, txid: &Txid) -> Option<u64> {
-        self.items.get(txid).map(|stats| stats.entry.fee())
-    }
-
-    /// Returns vector of (fee_rate, vsize) pairs, where fee_{n-1} > fee_n and vsize_n is the
-    /// total virtual size of mempool transactions with fee in the bin [fee_{n-1}, fee_n].
-    /// Note: fee_{-1} is implied to be infinite.
-    pub fn fee_histogram(&self) -> &Vec<(f32, u32)> {
+    pub(crate) fn fees_histogram(&self) -> &Histogram {
         &self.histogram
     }
 
-    pub fn index(&self) -> &dyn ReadStore {
-        &self.index
+    pub(crate) fn get(&self, txid: &Txid) -> Option<&Entry> {
+        self.entries.get(txid)
     }
 
-    pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
-        let timer = self.stats.start_timer("fetch");
-        let new_txids = daemon
-            .getmempooltxids()
-            .chain_err(|| "failed to update mempool from daemon")?;
-        let old_txids = HashSet::from_iter(self.items.keys().cloned());
-        timer.observe_duration();
+    pub(crate) fn filter_by_funding(&self, scripthash: &ScriptHash) -> Vec<&Entry> {
+        let range = (
+            Bound::Included((*scripthash, self.txid_min)),
+            Bound::Included((*scripthash, self.txid_max)),
+        );
+        self.by_funding
+            .range(range)
+            .map(|(_, txid)| self.get(txid).expect("missing funding mempool tx"))
+            .collect()
+    }
 
-        let timer = self.stats.start_timer("add");
-        let txids_iter = new_txids.difference(&old_txids);
-        let entries: Vec<(&Txid, MempoolEntry)> = txids_iter
+    pub(crate) fn filter_by_spending(&self, outpoint: &OutPoint) -> Vec<&Entry> {
+        let range = (
+            Bound::Included((*outpoint, self.txid_min)),
+            Bound::Included((*outpoint, self.txid_max)),
+        );
+        self.by_spending
+            .range(range)
+            .map(|(_, txid)| self.get(txid).expect("missing spending mempool tx"))
+            .collect()
+    }
+
+    pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
+        let txids = daemon.get_mempool_txids()?;
+        debug!("loading {} mempool transactions", txids.len());
+
+        let new_txids = HashSet::<Txid>::from_iter(txids);
+        let old_txids = HashSet::<Txid>::from_iter(self.entries.keys().copied());
+
+        let to_add = &new_txids - &old_txids;
+        let to_remove = &old_txids - &new_txids;
+
+        let removed = to_remove.len();
+        for txid in to_remove {
+            self.remove_entry(txid);
+        }
+        let entries: Vec<_> = to_add
+            .par_iter()
             .filter_map(|txid| {
-                match daemon.getmempoolentry(txid) {
-                    Ok(entry) => Some((txid, entry)),
-                    Err(err) => {
-                        debug!("no mempool entry {}: {}", txid, err); // e.g. new block or RBF
-                        None // ignore this transaction for now
-                    }
+                match (
+                    daemon.get_transaction(txid, None),
+                    daemon.get_mempool_entry(txid),
+                ) {
+                    (Ok(tx), Ok(entry)) => Some((txid, tx, entry)),
+                    _ => None,
                 }
             })
             .collect();
-        if !entries.is_empty() {
-            let txids: Vec<&Txid> = entries.iter().map(|(txid, _)| *txid).collect();
-            let txs = match daemon.gettransactions(&txids) {
-                Ok(txs) => txs,
-                Err(err) => {
-                    debug!("failed to get transactions {:?}: {}", txids, err); // e.g. new block or RBF
-                    return Ok(()); // keep the mempool until next update()
-                }
-            };
-            for ((txid, entry), tx) in entries.into_iter().zip(txs.into_iter()) {
-                assert_eq!(tx.txid(), *txid);
-                self.add(txid, tx, entry);
-            }
+        let added = entries.len();
+        for (txid, tx, entry) in entries {
+            self.add_entry(*txid, tx, entry);
         }
-        timer.observe_duration();
-
-        let timer = self.stats.start_timer("remove");
-        for txid in old_txids.difference(&new_txids) {
-            self.remove(txid);
-        }
-        timer.observe_duration();
-
-        let timer = self.stats.start_timer("fees");
-        self.update_fee_histogram();
-        timer.observe_duration();
-
-        self.stats.count.set(self.items.len() as i64);
+        self.histogram = Histogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
+        debug!(
+            "{} mempool txs: {} added, {} removed",
+            self.entries.len(),
+            added,
+            removed,
+        );
         Ok(())
     }
 
-    fn add(&mut self, txid: &Txid, tx: Transaction, entry: MempoolEntry) {
-        self.index.add(&tx);
-        self.items.insert(*txid, Item { tx, entry });
+    fn add_entry(&mut self, txid: Txid, tx: Transaction, entry: json::GetMempoolEntryResult) {
+        for txi in &tx.input {
+            self.by_spending.insert((txi.previous_output, txid));
+        }
+        for txo in &tx.output {
+            let scripthash = ScriptHash::new(&txo.script_pubkey);
+            self.by_funding.insert((scripthash, txid)); // may have duplicates
+        }
+        let entry = Entry {
+            txid,
+            tx,
+            vsize: entry.vsize,
+            fee: entry.fees.base,
+            has_unconfirmed_inputs: !entry.depends.is_empty(),
+        };
+        assert!(
+            self.entries.insert(txid, entry).is_none(),
+            "duplicate mempool txid"
+        );
     }
 
-    fn remove(&mut self, txid: &Txid) {
-        let stats = self
-            .items
-            .remove(txid)
-            .unwrap_or_else(|| panic!("missing mempool tx {}", txid));
-        self.index.remove(&stats.tx);
-    }
-
-    fn update_fee_histogram(&mut self) {
-        let mut entries: Vec<&MempoolEntry> = self.items.values().map(|stat| &stat.entry).collect();
-        entries.sort_unstable_by(|e1, e2| {
-            e1.fee_per_vbyte().partial_cmp(&e2.fee_per_vbyte()).unwrap()
-        });
-        self.histogram = electrum_fees(&entries);
-        self.stats.update(&entries);
+    fn remove_entry(&mut self, txid: Txid) {
+        let entry = self.entries.remove(&txid).expect("missing tx from mempool");
+        for txi in entry.tx.input {
+            self.by_spending.remove(&(txi.previous_output, txid));
+        }
+        for txo in entry.tx.output {
+            let scripthash = ScriptHash::new(&txo.script_pubkey);
+            self.by_funding.remove(&(scripthash, txid)); // may have misses
+        }
     }
 }
 
-fn electrum_fees(entries: &[&MempoolEntry]) -> Vec<(f32, u32)> {
-    let mut histogram = vec![];
-    let mut bin_size = 0;
-    let mut last_fee_rate = None;
-    for e in entries.iter().rev() {
-        last_fee_rate = Some(e.fee_per_vbyte());
-        bin_size += e.vsize();
-        if bin_size > VSIZE_BIN_WIDTH {
-            // vsize of transactions paying >= e.fee_per_vbyte()
-            histogram.push((e.fee_per_vbyte(), bin_size));
-            bin_size = 0;
+pub(crate) struct Histogram {
+    /// bins[64-i] contains the total vsize of transactions with fee rate [2**(i-1), 2**i).
+    /// bins[63] = [1, 2)
+    /// bins[62] = [2, 4)
+    /// bins[61] = [4, 8)
+    /// bins[60] = [8, 16)
+    /// ...
+    /// bins[1] = [2**62, 2**63)
+    /// bins[0] = [2**63, 2**64)
+    bins: [u64; Histogram::SIZE],
+}
+
+impl Histogram {
+    const SIZE: usize = 64;
+
+    fn empty() -> Self {
+        Self::new(std::iter::empty())
+    }
+
+    fn new(items: impl Iterator<Item = (Amount, u64)>) -> Self {
+        let mut bins = [0; Self::SIZE];
+        for (fee, vsize) in items {
+            let fee_rate = fee.as_sat() / vsize;
+            let index: usize = fee_rate.leading_zeros().try_into().unwrap();
+            // skip transactions with too low fee rate (<1 sat/vB)
+            if let Some(bin) = bins.get_mut(index) {
+                *bin += vsize
+            }
         }
+        Self { bins }
     }
-    if let Some(fee_rate) = last_fee_rate {
-        histogram.push((fee_rate, bin_size));
+}
+
+impl Serialize for Histogram {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.bins.len()))?;
+        // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
+        let mut fee_rate = std::u64::MAX;
+        for vsize in self.bins.iter() {
+            let element = (fee_rate, *vsize);
+            seq.serialize_element(&element)?;
+            fee_rate >>= 1;
+        }
+        seq.end()
     }
-    histogram
 }

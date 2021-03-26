@@ -37,7 +37,15 @@ doc = "Analogous to bitcoind's -blocksdir option, this specifies the directory c
 [[param]]
 name = "cookie"
 type = "String"
-doc = "JSONRPC authentication cookie ('USER:PASSWORD', default: read from cookie file)"
+doc = "DEPRECATED: use cookie_file or auth instead!"
+# Force the user to use config file in order to avoid password leaks
+argument = false
+env_var = false
+
+[[param]]
+name = "auth"
+type = "String"
+doc = "JSONRPC authentication ('USER:PASSWORD', default: use cookie file)"
 # Force the user to use config file in order to avoid password leaks
 argument = false
 env_var = false
@@ -52,23 +60,27 @@ doc = "JSONRPC authentication cookie file (default: ~/.bitcoin/.cookie)"
 name = "network"
 type = "crate::config::BitcoinNetwork"
 convert_into = "::bitcoin::network::constants::Network"
-doc = "Select Bitcoin network type ('bitcoin', 'testnet' or 'regtest')"
+doc = "Select Bitcoin network type ('bitcoin', 'testnet', 'regtest' or 'signet')"
 default = "Default::default()"
 
 [[param]]
 name = "electrum_rpc_addr"
 type = "crate::config::ResolvAddr"
-doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet and '127.0.0.1:60401' for regtest)"
+doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:50001' for mainnet, '127.0.0.1:60001' for testnet, '127.0.0.1:60401' for regtest and '127.0.0.1:60601' for signet)"
 
 [[param]]
 name = "daemon_rpc_addr"
 type = "crate::config::ResolvAddr"
-doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)"
+doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet, 127.0.0.1:18443 for regtest and 127.0.0.1:18554 for signet)"
+[[param]]
+name = "daemon_p2p_addr"
+type = "crate::config::ResolvAddr"
+doc = "Bitcoin daemon p2p 'addr:port' to connect (default: 127.0.0.1:8333 for mainnet, 127.0.0.1:18333 for testnet, 127.0.0.1:18444 for regtest and 127.0.0.1:38333 for signet)"
 
 [[param]]
 name = "monitoring_addr"
 type = "crate::config::ResolvAddr"
-doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet and 127.0.0.1:24224 for regtest)"
+doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet, 127.0.0.1:24224 for regtest and 127.0.0.1:34224 for regtest)"
 
 [[switch]]
 name = "jsonrpc_import"
@@ -78,19 +90,13 @@ doc = "Use JSONRPC instead of directly importing blk*.dat files. Useful for remo
 name = "wait_duration_secs"
 type = "u64"
 doc = "Duration to wait between bitcoind polling"
-default = "5"
+default = "10"
 
 [[param]]
 name = "index_batch_size"
 type = "usize"
 doc = "Number of blocks to get in one JSONRPC request from bitcoind"
-default = "100"
-
-[[param]]
-name = "bulk_index_threads"
-type = "usize"
-doc = "Number of threads used for bulk indexing (default: use the # of CPUs)"
-default = "0"
+default = "10"
 
 [[param]]
 name = "tx_cache_size_mb"
