@@ -368,7 +368,7 @@ impl Connection {
                     params,
                     e.display_chain()
                 );
-                json!({"jsonrpc": "2.0", "id": id, "error": format!("{}", e)})
+                json!({"jsonrpc": "2.0", "id": id, "error": {"code": 1, "message": format!("{}", e)}})
             }
         })
     }
