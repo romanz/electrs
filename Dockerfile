@@ -25,7 +25,8 @@ RUN apt-get update \
 RUN groupadd -r user \
     && adduser --disabled-login --system --shell /bin/false --uid 1000 --ingroup user user
 
-COPY --from=builder --chown=user:user /build/target/release .
+COPY --from=builder --chown=user:user \
+    /build/target/release/electrs .
 
 USER user
 
