@@ -1,3 +1,8 @@
 target/
 .git/
 _*/
+Dockerfile
+LICENSE
+README.md
+RELEASE-NOTES.md
+TODO.md
