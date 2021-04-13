@@ -22,11 +22,11 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/target/release .
-
 RUN groupadd -r user \
-    && adduser --disabled-login --system --shell /bin/false --uid 1000 --ingroup user user \
-    && chown -R user:user /app
+    && adduser --disabled-login --system --shell /bin/false --uid 1000 --ingroup user user
+
+COPY --from=builder --chown=user:user \
+    /build/target/release/electrs .
 
 USER user
 
