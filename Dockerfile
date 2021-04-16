@@ -1,5 +1,5 @@
 ### Electrum Rust Server ###
-FROM rust:1.48.0-slim as electrs-build
+FROM rust:1.41.1-slim as electrs-build
 RUN apt-get update
 RUN apt-get install -qq -y clang cmake
 RUN rustup component add rustfmt
