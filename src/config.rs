@@ -227,7 +227,7 @@ impl Config {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
-            Network::Signet => 18554,
+            Network::Signet => 38332,
         };
         let default_electrum_port = match config.network {
             Network::Bitcoin => 50001,
