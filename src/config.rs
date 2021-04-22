@@ -236,7 +236,8 @@ impl Config {
             .map(|s| s.parse().expect("invalid parent network"))
             .unwrap_or_else(|| match network_type {
                 Network::Liquid => BNetwork::Bitcoin,
-                Network::LiquidRegtest => BNetwork::Regtest,
+                // XXX liquid testnet/regtest don't have a parent chain
+                Network::LiquidTestnet | Network::LiquidRegtest => BNetwork::Regtest,
             });
 
         #[cfg(feature = "liquid")]
@@ -255,7 +256,7 @@ impl Config {
             #[cfg(feature = "liquid")]
             Network::Liquid => 7041,
             #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => 7041,
+            Network::LiquidTestnet | Network::LiquidRegtest => 7040,
         };
         let default_electrum_port = match network_type {
             #[cfg(not(feature = "liquid"))]
@@ -269,6 +270,8 @@ impl Config {
 
             #[cfg(feature = "liquid")]
             Network::Liquid => 51000,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 51301,
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 51401,
         };
@@ -285,6 +288,8 @@ impl Config {
             #[cfg(feature = "liquid")]
             Network::Liquid => 3000,
             #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 3001,
+            #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 3002,
         };
         let default_monitoring_port = match network_type {
@@ -299,6 +304,8 @@ impl Config {
 
             #[cfg(feature = "liquid")]
             Network::Liquid => 34224,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 44324,
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => 44224,
         };
@@ -346,6 +353,8 @@ impl Config {
 
             #[cfg(feature = "liquid")]
             Network::Liquid => daemon_dir.push("liquidv1"),
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => daemon_dir.push("liquidtestnetv1"),
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
         }

@@ -35,6 +35,8 @@ pub enum Network {
     #[cfg(feature = "liquid")]
     Liquid,
     #[cfg(feature = "liquid")]
+    LiquidTestnet,
+    #[cfg(feature = "liquid")]
     LiquidRegtest,
 }
 
@@ -47,8 +49,7 @@ impl Network {
     #[cfg(feature = "liquid")]
     pub fn magic(self) -> u32 {
         match self {
-            Network::Liquid => 0xDAB5_BFFA,
-            Network::LiquidRegtest => 0xDAB5_BFFA,
+            Network::Liquid | Network::LiquidRegtest | Network::LiquidTestnet => 0xDAB5_BFFA,
         }
     }
 
@@ -67,7 +68,7 @@ impl Network {
         // Liquid regtest uses elements's address params
         match self {
             Network::Liquid => &address::AddressParams::LIQUID,
-            Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
+            Network::LiquidTestnet | Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
         }
     }
 
@@ -76,7 +77,8 @@ impl Network {
         match self {
             Network::Liquid => &*asset::NATIVE_ASSET_ID,
             // same for testnet and regtest
-            Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_TESTNET,
+            Network::LiquidTestnet => &*asset::NATIVE_ASSET_ID_TESTNET,
+            Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_REGTEST,
         }
     }
 
@@ -90,7 +92,11 @@ impl Network {
         ];
 
         #[cfg(feature = "liquid")]
-        return vec!["liquid".to_string(), "liquidregtest".to_string()];
+        return vec![
+            "liquid".to_string(),
+            "liquidtestnet".to_string(),
+            "liquidregtest".to_string(),
+        ];
     }
 }
 
@@ -152,6 +158,8 @@ impl From<&str> for Network {
 
             #[cfg(feature = "liquid")]
             "liquid" => Network::Liquid,
+            #[cfg(feature = "liquid")]
+            "liquidtestnet" => Network::LiquidTestnet,
             #[cfg(feature = "liquid")]
             "liquidregtest" => Network::LiquidRegtest,
 

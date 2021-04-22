@@ -20,6 +20,9 @@ lazy_static! {
         AssetId::from_hex("6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d")
             .unwrap();
     pub static ref NATIVE_ASSET_ID_TESTNET: AssetId =
+        AssetId::from_hex("5d8629bf58c7f98e90e171a81058ce543418f0dc16e8459367773552b067f3f3")
+            .unwrap();
+    pub static ref NATIVE_ASSET_ID_REGTEST: AssetId =
         AssetId::from_hex("5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225")
             .unwrap();
 }

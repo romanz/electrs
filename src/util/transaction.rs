@@ -10,6 +10,8 @@ use bitcoin::hashes::hex::FromHex;
 lazy_static! {
     static ref REGTEST_INITIAL_ISSUANCE_PREVOUT: Txid =
         Txid::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5").unwrap();
+    static ref TESTNET_INITIAL_ISSUANCE_PREVOUT: Txid =
+        Txid::from_hex("401eee35634bcaae6325f367674f5369cd9c9a2a892b7b5e971ede0a0781870f").unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,7 +63,8 @@ pub fn has_prevout(txin: &TxIn) -> bool {
     #[cfg(feature = "liquid")]
     return !txin.is_coinbase()
         && !txin.is_pegin
-        && txin.previous_output.txid != *REGTEST_INITIAL_ISSUANCE_PREVOUT;
+        && txin.previous_output.txid != *REGTEST_INITIAL_ISSUANCE_PREVOUT
+        && txin.previous_output.txid != *TESTNET_INITIAL_ISSUANCE_PREVOUT;
 }
 
 pub fn is_spendable(txout: &TxOut) -> bool {
