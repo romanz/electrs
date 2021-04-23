@@ -250,8 +250,6 @@ impl Daemon {
         B: IntoIterator<Item = BlockHash>,
         F: FnMut(BlockHash, Block),
     {
-        let mut conn = self.p2p.lock().unwrap();
-
         let blockhashes = Vec::from_iter(blockhashes);
         if blockhashes.is_empty() {
             return Ok(());
@@ -261,6 +259,7 @@ impl Daemon {
             .map(|h| Inventory::WitnessBlock(*h))
             .collect();
         debug!("loading {} blocks", blockhashes.len());
+        let mut conn = self.p2p.lock().unwrap();
         conn.send(NetworkMessage::GetData(inv))?;
         for hash in blockhashes {
             match conn.recv()? {
