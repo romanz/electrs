@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use hyper::server::{Handler, Listening, Request, Response, Server};
-use prometheus::{
-    self, process_collector::ProcessCollector, Encoder, HistogramOpts, HistogramVec, Registry,
-};
+use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry};
+
+#[cfg(feature = "process_collector")]
+use prometheus::process_collector::ProcessCollector;
 
 use std::net::SocketAddr;
 
@@ -66,6 +67,7 @@ impl Metrics {
     pub fn new(addr: SocketAddr) -> Result<Self> {
         let reg = Registry::new();
 
+        #[cfg(feature = "prometheus/process")]
         reg.register(Box::new(ProcessCollector::for_self()))
             .expect("failed to register ProcessCollector");
 

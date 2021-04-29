@@ -13,7 +13,7 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["rocksdb/zstd"]
+default = ["rocksdb/zstd", "prometheus/process"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -28,7 +28,7 @@ dirs-next = "2.0"
 env_logger = "0.7"
 hyper = "0.10"
 log = "0.4"
-prometheus = { version = "0.12", features = ["process"] }
+prometheus = { version = "0.12", default-features = false }
 rayon = "1.5"
 rocksdb = { git = "https://github.com/romanz/rust-rocksdb", rev = "379c2d7f2a15fe31d2ec2726f4b6179de5c8c287", default-features = false }  # to support building with Rust 1.41.1
 rust-crypto = "0.2"
