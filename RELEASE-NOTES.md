@@ -1,4 +1,4 @@
-# 0.8.9 (19 Feb 2021)
+# 0.8.9 (19 Mar 2021)
 
 * Use non-batched RPC to reduce bitcoind memory usage (#373)
 * Fix inverted logic of deprecation (#379)
