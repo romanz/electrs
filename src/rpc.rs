@@ -19,6 +19,15 @@ use crate::util::{spawn_thread, Channel, HeaderEntry};
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
 
+// JSON-RPC spec errors
+const PARSE_ERROR: i16 = -32700;
+const METHOD_NOT_FOUND: i16 = -32601;
+const INVALID_REQUEST: i16 = -32600;
+
+// electrum-specific errors
+const BAD_REQUEST: i16 = 1;
+const DAEMON_ERROR: i16 = 2;
+
 // TODO: Sha256dHash should be a generic hash-container (since script hash is single SHA256)
 fn hash_from_value<T: Hash>(val: Option<&Value>) -> Result<T> {
     let script_hash = val.chain_err(|| "missing hash")?;
@@ -67,6 +76,33 @@ fn unspent_from_status(status: &Status) -> Value {
             .collect()
     ))
 }
+
+fn json_rpc_error_from_error(error: &Error) -> Value {
+    let code = {
+        let mut error: &dyn std::error::Error = error;
+        loop {
+            if let Some(e) = error.downcast_ref::<Error>() {
+                match e.kind() {
+                    ErrorKind::MethodNotFound(_) => break METHOD_NOT_FOUND,
+                    ErrorKind::InvalidRequest(_) => break INVALID_REQUEST,
+                    ErrorKind::ParseError => break PARSE_ERROR,
+                    ErrorKind::Daemon(_, _) => break DAEMON_ERROR,
+                    _ => (),
+                }
+            }
+            error = match error.source() {
+                Some(error) => error,
+                None => break BAD_REQUEST,
+            };
+        }
+    };
+    json!({
+        "code": code,
+        "message": error.to_string(),
+    })
+}
+
+type Map = serde_json::Map<String, Value>;
 
 struct Connection {
     query: Arc<Query>,
@@ -288,7 +324,8 @@ impl Connection {
 
     fn blockchain_transaction_get_confirmed_blockhash(&self, params: &[Value]) -> Result<Value> {
         let tx_hash = hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?;
-        self.query.get_confirmed_blockhash(&tx_hash)
+        let value = self.query.get_confirmed_blockhash(&tx_hash)?;
+        Ok(value)
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
@@ -354,23 +391,19 @@ impl Connection {
             "server.peers.subscribe" => self.server_peers_subscribe(),
             "server.ping" => Ok(Value::Null),
             "server.version" => self.server_version(params),
-            &_ => bail!("unknown method {} {:?}", method, params),
+            &_ => Err(ErrorKind::MethodNotFound(method.to_owned()).into()),
         };
         timer.observe_duration();
-        // TODO: return application errors should be sent to the client
-        Ok(match result {
-            Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
-            Err(e) => {
-                warn!(
-                    "rpc #{} {} {:?} failed: {}",
-                    id,
-                    method,
-                    params,
-                    e.display_chain()
-                );
-                json!({"jsonrpc": "2.0", "id": id, "error": {"code": 1, "message": format!("{}", e)}})
-            }
-        })
+        if let Err(e) = &result {
+            warn!(
+                "rpc #{} {} {:?} failed: {}",
+                id,
+                method,
+                params,
+                e.display_chain()
+            );
+        }
+        result
     }
 
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
@@ -419,24 +452,55 @@ impl Connection {
     }
 
     fn handle_replies(&mut self, receiver: Receiver<Message>) -> Result<()> {
-        let empty_params = json!([]);
+        fn parse_id_from_request(line: String) -> Result<(Value, Map)> {
+            let value: Value = from_str(&line).chain_err(|| ErrorKind::ParseError)?;
+            let mut cmd = match value {
+                Value::Object(cmd) => cmd,
+                _ => bail!(ErrorKind::ParseError),
+            };
+            let id = cmd
+                .remove("id")
+                .chain_err(|| ErrorKind::InvalidRequest("missing id"))?;
+            Ok((id, cmd))
+        }
+
+        fn parse_method_and_params_from_request(mut cmd: Map) -> Result<(String, Vec<Value>)> {
+            let method = match cmd
+                .remove("method")
+                .chain_err(|| ErrorKind::InvalidRequest("missing method"))?
+            {
+                Value::String(method) => method,
+                _ => bail!(ErrorKind::InvalidRequest("method must be a string")),
+            };
+            let params = match cmd.remove("params") {
+                None => Vec::new(),
+                Some(Value::Array(params)) => params,
+                Some(_) => bail!("params must be an array"),
+            };
+            Ok((method, params))
+        }
+
         loop {
             let msg = receiver.recv().chain_err(|| "channel closed")?;
             trace!("RPC {:?}", msg);
             match msg {
                 Message::Request(line) => {
-                    let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    let reply = match (
-                        cmd.get("method"),
-                        cmd.get("params").unwrap_or_else(|| &empty_params),
-                        cmd.get("id"),
-                    ) {
-                        (
-                            Some(&Value::String(ref method)),
-                            &Value::Array(ref params),
-                            Some(ref id),
-                        ) => self.handle_command(method, params, id)?,
-                        _ => bail!("invalid command: {}", cmd),
+                    let (id, result) = match parse_id_from_request(line) {
+                        Ok((id, cmd)) => match parse_method_and_params_from_request(cmd) {
+                            Ok((method, params)) => {
+                                let result = self.handle_command(&method, &params, &id);
+                                (id, result)
+                            }
+                            Err(e) => (id, Err(e)),
+                        },
+                        Err(e) => (Value::Null, Err(e)),
+                    };
+                    let reply = match result {
+                        Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
+                        Err(e) => {
+                            let error = json_rpc_error_from_error(&e);
+                            json!({"jsonrpc": "2.0", "id": id, "error": error})
+                        }
                     };
                     self.send_values(&[reply])?
                 }

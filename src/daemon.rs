@@ -60,13 +60,13 @@ fn parse_error_code(err: &Value) -> Option<i64> {
     err.as_object()?.get("code")?.as_i64()
 }
 
-fn check_error_code(reply_obj: &Map<String, Value>, method: &str) -> Result<()> {
-    if let Some(err) = reply_obj.get("error") {
+fn check_error_code(reply_obj: &mut Map<String, Value>, method: &str) -> Result<()> {
+    if let Some(err) = reply_obj.remove("error") {
         if let Some(code) = parse_error_code(&err) {
             match code {
                 // RPC_IN_WARMUP -> retry by later reconnection
                 -28 => bail!(ErrorKind::Connection(err.to_string())),
-                _ => bail!("{} RPC error: {}", method, err),
+                _ => bail!(ErrorKind::Daemon(method.to_owned(), err)),
             }
         }
     }
@@ -75,7 +75,6 @@ fn check_error_code(reply_obj: &Map<String, Value>, method: &str) -> Result<()> 
 
 fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
-        check_error_code(reply_obj, method)?;
         let id = reply_obj
             .get("id")
             .chain_err(|| format!("no id in reply: {:?}", reply_obj))?
@@ -88,6 +87,7 @@ fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Resu
                 expected_id
             );
         }
+        check_error_code(reply_obj, method)?;
         if let Some(result) = reply_obj.get_mut("result") {
             return Ok(result.take());
         }
