@@ -23,6 +23,7 @@ pub struct Tracker {
     mempool: Mempool,
     metrics: Metrics,
     index_batch_size: usize,
+    ignore_mempool: bool,
 }
 
 impl Tracker {
@@ -35,6 +36,7 @@ impl Tracker {
             mempool: Mempool::new(),
             metrics,
             index_batch_size: config.index_batch_size,
+            ignore_mempool: config.ignore_mempool,
         })
     }
 
@@ -64,7 +66,9 @@ impl Tracker {
 
     pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
         self.index.sync(daemon, self.index_batch_size)?;
-        self.mempool.sync(daemon)?;
+        if !self.ignore_mempool {
+            self.mempool.sync(daemon)?;
+        }
         // TODO: double check tip - and retry on diff
         Ok(())
     }

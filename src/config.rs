@@ -129,6 +129,7 @@ pub struct Config {
     pub monitoring_addr: SocketAddr,
     pub wait_duration: Duration,
     pub index_batch_size: usize,
+    pub ignore_mempool: bool,
     pub server_banner: String,
     pub args: Vec<String>,
 }
@@ -233,6 +234,7 @@ impl Config {
             monitoring_addr,
             wait_duration: Duration::from_secs(config.wait_duration_secs),
             index_batch_size: config.index_batch_size,
+            ignore_mempool: config.ignore_mempool,
             server_banner: config.server_banner,
             args: args.map(|a| a.into_string().unwrap()).collect(),
         };

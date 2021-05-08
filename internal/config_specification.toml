@@ -98,6 +98,10 @@ type = "usize"
 doc = "Number of blocks to get in one JSONRPC request from bitcoind"
 default = "10"
 
+[[switch]]
+name = "ignore_mempool"
+doc = "Don't sync mempool - queries will show only confirmed transactions."
+
 [[param]]
 name = "tx_cache_size_mb"
 type = "f32"
