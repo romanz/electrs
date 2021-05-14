@@ -1,3 +1,9 @@
+# 0.8.10 (14 May 2021)
+
+* Fix JSONRPC errors' handling (#398, #390)
+* Optimize Dockerfile (#387, #388, #392)
+* Fix signet default port (https://github.com/romanz/electrs/b53178c140e575b0527a70ead566d50c7fe6cb1f)
+
 # 0.8.9 (19 Mar 2021)
 
 * Use non-batched RPC to reduce bitcoind memory usage (#373)
