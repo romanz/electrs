@@ -44,7 +44,7 @@ impl Connection {
             network,
         };
         conn.send(build_version_message())?;
-        if let NetworkMessage::GetHeaders(_) = conn.recv()? {
+        if let NetworkMessage::GetHeaders(_) = conn.recv().context("failed to get headers")? {
             conn.send(NetworkMessage::Headers(vec![]))?;
         }
         Ok(conn)
@@ -69,7 +69,7 @@ impl Connection {
             trace!("recv: {:?}", raw_msg.payload);
             match raw_msg.payload {
                 NetworkMessage::Version(version) => {
-                    trace!("peer version: {:?}", version);
+                    debug!("peer version: {:?}", version);
                     self.send(NetworkMessage::Verack)?;
                 }
                 NetworkMessage::Ping(nonce) => {
@@ -224,7 +224,7 @@ impl Daemon {
 
         let msg = GetHeadersMessage::new(chain.locator(), BlockHash::default());
         conn.send(NetworkMessage::GetHeaders(msg))?;
-        let headers = match conn.recv()? {
+        let headers = match conn.recv().context("failed to get new headers")? {
             NetworkMessage::Headers(headers) => headers,
             msg => bail!("unexpected {:?}", msg),
         };
@@ -262,7 +262,10 @@ impl Daemon {
         let mut conn = self.p2p.lock().unwrap();
         conn.send(NetworkMessage::GetData(inv))?;
         for hash in blockhashes {
-            match conn.recv()? {
+            match conn
+                .recv()
+                .with_context(|| format!("failed to get block {}", hash))?
+            {
                 NetworkMessage::Block(block) => {
                     assert_eq!(block.block_hash(), hash, "got unexpected block");
                     func(hash, block);
