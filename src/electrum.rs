@@ -79,7 +79,7 @@ impl Rpc {
         );
         Ok(Self {
             tracker,
-            cache: Cache::new(),
+            cache: Cache::default(),
             rpc_duration,
             daemon: Daemon::connect(&config)?,
             banner: config.server_banner.clone(),

@@ -65,9 +65,10 @@ pub(crate) struct MempoolEntry {
 
 impl MempoolEntry {
     fn height(&self) -> isize {
-        match self.has_unconfirmed_inputs {
-            true => -1,
-            false => 0,
+        if self.has_unconfirmed_inputs {
+            -1
+        } else {
+            0
         }
     }
 

@@ -5,18 +5,13 @@ use std::sync::{Arc, RwLock};
 
 use crate::merkle::Proof;
 
+#[derive(Default)]
 pub struct Cache {
     txs: Arc<RwLock<HashMap<Txid, Transaction>>>,
     proofs: Arc<RwLock<HashMap<(BlockHash, Txid), Proof>>>,
 }
 
 impl Cache {
-    pub fn new() -> Self {
-        let txs = Arc::new(RwLock::new(HashMap::new()));
-        let proofs = Arc::new(RwLock::new(HashMap::new()));
-        Self { txs, proofs }
-    }
-
     pub(crate) fn add_tx(&self, txid: Txid, f: impl FnOnce() -> Transaction) {
         self.txs.write().unwrap().entry(txid).or_insert_with(f);
     }

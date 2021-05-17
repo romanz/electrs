@@ -16,7 +16,7 @@ fn main() -> Result<()> {
         .iter()
         .map(|a| Address::from_str(a).expect("invalid address"));
 
-    let cache = Cache::new();
+    let cache = Cache::default();
     let daemon = Daemon::connect(&config)?;
     let mut tracker = Tracker::new(&config)?;
     let mut map: BTreeMap<Address, Status> = addresses
