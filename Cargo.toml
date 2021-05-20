@@ -30,7 +30,7 @@ hyper = "0.10"
 log = "0.4"
 prometheus = { version = "0.12", default-features = false }
 rayon = "1.5"
-rocksdb = { git = "https://github.com/romanz/rust-rocksdb", rev = "379c2d7f2a15fe31d2ec2726f4b6179de5c8c287", default-features = false }  # to support building with Rust 1.41.1
+rocksdb = { git = "https://github.com/romanz/rust-rocksdb", rev = "4554d19b2ff2e34493564b4d868454097c74b693", default-features = false }  # to support building with Rust 1.41.1 and https://github.com/romanz/electrs/issues/403
 rust-crypto = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
