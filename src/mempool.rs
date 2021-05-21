@@ -188,12 +188,34 @@ impl Serialize for Histogram {
     {
         let mut seq = serializer.serialize_seq(Some(self.bins.len()))?;
         // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
-        let mut fee_rate = std::u64::MAX;
-        for vsize in self.bins.iter() {
-            let element = (fee_rate, *vsize);
-            seq.serialize_element(&element)?;
-            fee_rate >>= 1;
-        }
+        let fee_rates = (0..Histogram::SIZE).map(|i| std::u64::MAX >> i);
+        fee_rates
+            .zip(self.bins.iter().copied())
+            .skip_while(|(_fee_rate, vsize)| *vsize == 0)
+            .try_for_each(|element| seq.serialize_element(&element))?;
         seq.end()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Histogram;
+    use bitcoin::Amount;
+    use serde_json::json;
+
+    #[test]
+    fn test_histogram() {
+        let items = vec![
+            (Amount::from_sat(20), 10),
+            (Amount::from_sat(10), 10),
+            (Amount::from_sat(60), 10),
+            (Amount::from_sat(30), 10),
+            (Amount::from_sat(70), 10),
+            (Amount::from_sat(50), 10),
+            (Amount::from_sat(40), 10),
+            (Amount::from_sat(80), 10),
+        ];
+        let hist = json!(Histogram::new(items.into_iter()));
+        assert_eq!(hist, json!([[15, 10], [7, 40], [3, 20], [1, 10]]));
     }
 }
