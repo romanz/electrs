@@ -10,6 +10,6 @@ shift
 
 CMD="target/release/sync --network $NETWORK --db-dir ./db2 --daemon-dir $HOME/.bitcoin"
 export RUST_LOG=${RUST_LOG-info}
-$CMD $*
+$CMD --ignore-mempool $*
 
 # use SIGINT to quit
