@@ -38,6 +38,13 @@ struct Request {
     params: Value,
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Requests {
+    Single(Request),
+    Batch(Vec<Request>),
+}
+
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 enum Version {
@@ -127,12 +134,24 @@ impl Rpc {
     }
 
     pub fn handle_request(&self, client: &mut Client, value: Value) -> Result<Value> {
+        let requests: Requests = from_value(value).context("invalid request")?;
+        match requests {
+            Requests::Single(request) => self.handle_single_request(client, request),
+            Requests::Batch(requests) => requests
+                .into_iter()
+                .map(|request| self.handle_single_request(client, request))
+                .collect::<Result<Vec<_>>>()
+                .map(|results| json!(results)),
+        }
+    }
+
+    fn handle_single_request(&self, client: &mut Client, request: Request) -> Result<Value> {
         let Request {
             id,
             jsonrpc,
             method,
             params,
-        } = from_value(value).context("invalid request")?;
+        } = request;
         self.rpc_duration.observe_duration(&method, || {
             let result = match method.as_str() {
                 "blockchain.scripthash.get_history" => {
