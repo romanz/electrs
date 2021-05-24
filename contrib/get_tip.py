@@ -10,7 +10,7 @@ def main():
     args = parser.parse_args()
 
     conn = client.Client((args.host, args.port))
-    print(json.dumps(conn.call("blockchain.headers.subscribe")["result"]))
+    print(conn.call(conn.request("blockchain.headers.subscribe"))[0]["result"])
 
 if __name__ == '__main__':
 	main()
