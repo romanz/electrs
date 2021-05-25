@@ -35,16 +35,24 @@ where
 }
 
 struct Peer {
+    id: usize,
     client: Client,
     stream: TcpStream,
 }
 
 impl Peer {
-    fn new(stream: TcpStream) -> Self {
+    fn new(id: usize, stream: TcpStream) -> Self {
         Self {
+            id,
             client: Client::default(),
             stream,
         }
+    }
+}
+
+impl Drop for Peer {
+    fn drop(&mut self) {
+        let _ = self.stream.shutdown(Shutdown::Both);
     }
 }
 
@@ -92,21 +100,38 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
                 let event = event.context("server disconnected")?;
                 let buffered_events = server_rx.iter().take(server_rx.len());
                 for event in std::iter::once(event).chain(buffered_events) {
-                    handle(&rpc, &mut peers, event);
+                    handle_event(&rpc, &mut peers, event);
                 }
             },
         };
         rpc.sync().context("rpc sync failed")?;
-        peers
-            .par_iter_mut()
-            .map(|(peer_id, peer)| {
-                let notifications = rpc.update_client(&mut peer.client)?;
-                send(*peer_id, peer, &notifications)
-            })
-            .collect::<Result<_>>()?;
+        peers = notify_peers(&rpc, peers);
     }
     info!("stopping Electrum RPC server");
     Ok(())
+}
+
+fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
+    // peers are dropped and disconnected on error.
+    peers
+        .into_par_iter()
+        .filter_map(|(peer_id, peer)| match notify_peer(&rpc, peer) {
+            Ok(peer) => Some((peer.id, peer)),
+            Err(e) => {
+                error!("failed to notify peer {}: {}", peer_id, e);
+                None
+            }
+        })
+        .collect()
+}
+
+fn notify_peer(rpc: &Rpc, mut peer: Peer) -> Result<Peer> {
+    // peer is dropped and disconnected on error.
+    let notifications = rpc
+        .update_client(&mut peer.client)
+        .context("failed to generate notifications")?;
+    send_to_peer(&mut peer, &notifications).context("failed to send notifications")?;
+    Ok(peer)
 }
 
 struct Event {
@@ -120,25 +145,23 @@ enum Message {
     Done,
 }
 
-fn handle(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
+fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
     match event.msg {
         Message::New(stream) => {
             debug!("{}: connected", event.peer_id);
-            peers.insert(event.peer_id, Peer::new(stream));
+            peers.insert(event.peer_id, Peer::new(event.peer_id, stream));
         }
         Message::Request(line) => {
             let result = match peers.get_mut(&event.peer_id) {
-                Some(peer) => handle_request(rpc, event.peer_id, peer, line),
+                Some(peer) => handle_request(rpc, peer, line),
                 None => {
                     warn!("{}: unknown peer for {}", event.peer_id, line);
                     Ok(())
                 }
             };
             if let Err(e) = result {
-                error!("{}: {}", event.peer_id, e);
-                let _ = peers
-                    .remove(&event.peer_id)
-                    .map(|peer| peer.stream.shutdown(Shutdown::Both));
+                error!("{}: disconnecting due to {}", event.peer_id, e);
+                drop(peers.remove(&event.peer_id)); // disconnect peer due to error
             }
         }
         Message::Done => {
@@ -148,18 +171,18 @@ fn handle(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
     }
 }
 
-fn handle_request(rpc: &Rpc, peer_id: usize, peer: &mut Peer, line: String) -> Result<()> {
+fn handle_request(rpc: &Rpc, peer: &mut Peer, line: String) -> Result<()> {
     let request: Value = from_str(&line).with_context(|| format!("invalid request: {}", line))?;
     let response: Value = rpc
         .handle_request(&mut peer.client, request)
         .with_context(|| format!("failed to handle request: {}", line))?;
-    send(peer_id, peer, &[response])
+    send_to_peer(peer, &[response])
 }
 
-fn send(peer_id: usize, peer: &mut Peer, values: &[Value]) -> Result<()> {
+fn send_to_peer(peer: &mut Peer, values: &[Value]) -> Result<()> {
     for value in values {
         let mut response = value.to_string();
-        debug!("{}: send {}", peer_id, response);
+        debug!("{}: send {}", peer.id, response);
         response += "\n";
         peer.stream
             .write_all(response.as_bytes())
