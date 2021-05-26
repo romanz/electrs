@@ -309,7 +309,7 @@ impl Rpc {
         debug!("txids cache miss: {}", blockhash);
         let txids = self.daemon.get_block_txids(blockhash)?;
         match txids.iter().position(|current_txid| *current_txid == txid) {
-            None => bail!("missing tx {} for merkle proof", txid),
+            None => bail!("missing txid {} in block {}", txid, blockhash),
             Some(position) => Ok(proof_to_value(&Proof::create(&txids, position))),
         }
     }
