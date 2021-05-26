@@ -42,25 +42,19 @@ struct Peer {
 
 impl Peer {
     fn new(id: usize, stream: TcpStream) -> Self {
-        Self {
-            id,
-            client: Client::default(),
-            stream,
-        }
+        let client = Client::default();
+        Self { id, client, stream }
     }
-}
 
-impl Drop for Peer {
-    fn drop(&mut self) {
+    fn disconnect(self) {
         let _ = self.stream.shutdown(Shutdown::Both);
     }
 }
 
 fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
+    let duration = u64::try_from(config.wait_duration.as_millis()).unwrap();
     let (tip_tx, tip_rx) = bounded(0);
     let rpc = rpc_connect(&config)?;
-
-    let duration = u64::try_from(config.wait_duration.as_millis()).unwrap();
 
     use crossbeam_channel::TrySendError;
     spawn("tip_loop", move || loop {
@@ -105,33 +99,31 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
             },
         };
         rpc.sync().context("rpc sync failed")?;
-        peers = notify_peers(&rpc, peers);
+        peers = notify_peers(&rpc, peers); // peers are disconnected on error.
     }
     info!("stopping Electrum RPC server");
     Ok(())
 }
 
 fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
-    // peers are dropped and disconnected on error.
     peers
         .into_par_iter()
-        .filter_map(|(peer_id, peer)| match notify_peer(&rpc, peer) {
-            Ok(peer) => Some((peer.id, peer)),
+        .filter_map(|(_, mut peer)| match notify_peer(&rpc, &mut peer) {
+            Ok(()) => Some((peer.id, peer)),
             Err(e) => {
-                error!("failed to notify peer {}: {}", peer_id, e);
+                error!("failed to notify peer {}: {}", peer.id, e);
+                peer.disconnect();
                 None
             }
         })
         .collect()
 }
 
-fn notify_peer(rpc: &Rpc, mut peer: Peer) -> Result<Peer> {
-    // peer is dropped and disconnected on error.
+fn notify_peer(rpc: &Rpc, peer: &mut Peer) -> Result<()> {
     let notifications = rpc
         .update_client(&mut peer.client)
         .context("failed to generate notifications")?;
-    send_to_peer(&mut peer, &notifications).context("failed to send notifications")?;
-    Ok(peer)
+    send_to_peer(peer, &notifications).context("failed to send notifications")
 }
 
 struct Event {
@@ -146,27 +138,25 @@ enum Message {
 }
 
 fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
-    match event.msg {
+    let Event { msg, peer_id } = event;
+    match msg {
         Message::New(stream) => {
-            debug!("{}: connected", event.peer_id);
-            peers.insert(event.peer_id, Peer::new(event.peer_id, stream));
+            debug!("{}: connected", peer_id);
+            peers.insert(peer_id, Peer::new(peer_id, stream));
         }
         Message::Request(line) => {
-            let result = match peers.get_mut(&event.peer_id) {
+            let result = match peers.get_mut(&peer_id) {
                 Some(peer) => handle_request(rpc, peer, line),
-                None => {
-                    warn!("{}: unknown peer for {}", event.peer_id, line);
-                    Ok(())
-                }
+                None => return, // unknown peer
             };
             if let Err(e) = result {
-                error!("{}: disconnecting due to {}", event.peer_id, e);
-                drop(peers.remove(&event.peer_id)); // disconnect peer due to error
+                error!("{}: disconnecting due to {}", peer_id, e);
+                peers.remove(&peer_id).unwrap().disconnect();
             }
         }
         Message::Done => {
-            debug!("{}: disconnected", event.peer_id);
-            peers.remove(&event.peer_id);
+            // already disconnected, just remove from peers' map
+            peers.remove(&peer_id);
         }
     }
 }
@@ -205,20 +195,18 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
 }
 
 fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Result<()> {
-    server_tx.send(Event {
-        peer_id,
-        msg: Message::New(stream.try_clone()?),
-    })?;
-    let reader = BufReader::new(stream);
-    for line in reader.lines() {
+    let msg = Message::New(stream.try_clone()?);
+    server_tx.send(Event { peer_id, msg })?;
+
+    for line in BufReader::new(stream).lines() {
         let line = line.with_context(|| format!("{}: recv failed", peer_id))?;
         debug!("{}: recv {}", peer_id, line);
         let msg = Message::Request(line);
         server_tx.send(Event { peer_id, msg })?;
     }
-    server_tx.send(Event {
-        peer_id,
-        msg: Message::Done,
-    })?;
+
+    debug!("{}: disconnected", peer_id);
+    let msg = Message::Done;
+    server_tx.send(Event { peer_id, msg })?;
     Ok(())
 }
