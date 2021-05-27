@@ -79,11 +79,10 @@ pub struct Rpc {
 
 impl Rpc {
     pub fn new(config: &Config, tracker: Tracker) -> Result<Self> {
-        let rpc_duration = tracker.metrics().histogram_vec(
-            "rpc_duration",
-            "RPC duration (in seconds)",
-            &["method"],
-        );
+        let rpc_duration =
+            tracker
+                .metrics()
+                .histogram_vec("rpc_duration", "RPC duration (in seconds)", "method");
         Ok(Self {
             tracker,
             cache: Cache::default(),

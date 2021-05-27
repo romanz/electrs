@@ -208,6 +208,13 @@ impl Config {
             (DEFAULT_SERVER_ADDRESS, default_electrum_port).into(),
             ResolvAddr::resolve_or_exit,
         );
+        #[cfg(not(feature = "metrics"))]
+        {
+            assert!(
+                config.monitoring_addr.is_none(),
+                "Enable \"metrics\" feature to specify monitoring_addr"
+            );
+        }
         let monitoring_addr: SocketAddr = config.monitoring_addr.map_or(
             (DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(),
             ResolvAddr::resolve_or_exit,

@@ -25,30 +25,30 @@ impl Stats {
             update_duration: metrics.histogram_vec(
                 "index_update_duration",
                 "Index update duration (in seconds)",
-                &["step"],
+                "step",
             ),
             update_size: metrics.histogram_vec(
                 "index_update_size",
                 "Index update size (in bytes)",
-                &["step"],
+                "step",
             ),
             lookup_duration: metrics.histogram_vec(
                 "index_lookup_duration",
                 "Index lookup duration (in seconds)",
-                &["step"],
+                "step",
             ),
         }
     }
 
     fn report_stats(&self, batch: &db::WriteBatch) {
         self.update_size
-            .observe_size("write_funding_rows", db_rows_size(&batch.funding_rows));
+            .observe("write_funding_rows", db_rows_size(&batch.funding_rows));
         self.update_size
-            .observe_size("write_spending_rows", db_rows_size(&batch.spending_rows));
+            .observe("write_spending_rows", db_rows_size(&batch.spending_rows));
         self.update_size
-            .observe_size("write_txid_rows", db_rows_size(&batch.txid_rows));
+            .observe("write_txid_rows", db_rows_size(&batch.txid_rows));
         self.update_size
-            .observe_size("write_header_rows", db_rows_size(&batch.header_rows));
+            .observe("write_header_rows", db_rows_size(&batch.header_rows));
         debug!(
             "writing {} funding and {} spending rows from {} transactions, {} blocks",
             batch.funding_rows.len(),
