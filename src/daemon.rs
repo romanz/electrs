@@ -85,42 +85,57 @@ impl Connection {
     }
 }
 
+enum PollResult {
+    Done(Result<()>),
+    Retry,
+}
+
+fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
+    use bitcoincore_rpc::{
+        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
+    };
+
+    match client.get_blockchain_info() {
+        Ok(info) => {
+            let left_blocks = info.headers - info.blocks;
+            if info.initial_block_download {
+                info!("waiting for IBD to finish: {} blocks left", left_blocks);
+                return PollResult::Retry;
+            }
+            if left_blocks > 0 {
+                info!("waiting for {} blocks to download", left_blocks);
+                return PollResult::Retry;
+            }
+            return PollResult::Done(Ok(()));
+        }
+        Err(err) => {
+            if let JsonRpcError(ServerError(ref e)) = err {
+                if e.code == -28 {
+                    info!("waiting for RPC warmup: {}", e.message);
+                    return PollResult::Retry;
+                }
+            }
+            return PollResult::Done(Err(err).context("daemon not available"));
+        }
+    }
+}
+
 pub(crate) fn rpc_connect(config: &Config) -> Result<bitcoincore_rpc::Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
     if !config.daemon_cookie_file.exists() {
         bail!("{:?} is missing", config.daemon_cookie_file);
     }
     let rpc_auth = bitcoincore_rpc::Auth::CookieFile(config.daemon_cookie_file.clone());
-    let rpc = bitcoincore_rpc::Client::new(rpc_url, rpc_auth)
+    let mut client = bitcoincore_rpc::Client::new(rpc_url, rpc_auth)
         .with_context(|| format!("failed to connect to RPC: {}", config.daemon_rpc_addr))?;
 
-    use bitcoincore_rpc::{
-        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
-    };
     loop {
-        match rpc.get_blockchain_info() {
-            Ok(info) => {
-                if info.blocks < info.headers {
-                    info!(
-                        "waiting for {} blocks to download",
-                        info.headers - info.blocks
-                    );
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                    continue;
-                }
-            }
-            Err(err) => {
-                if let JsonRpcError(ServerError(ref e)) = err {
-                    if e.code == -28 {
-                        info!("waiting for RPC warmup: {}", e.message);
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                        continue;
-                    }
-                }
-                return Err(err).context("daemon not available");
+        match rpc_poll(&mut client) {
+            PollResult::Done(result) => return result.map(|()| client),
+            PollResult::Retry => {
+                std::thread::sleep(std::time::Duration::from_secs(1)); // wait a bit before polling
             }
         }
-        return Ok(rpc);
     }
 }
 
