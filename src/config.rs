@@ -210,10 +210,10 @@ impl Config {
         );
         #[cfg(not(feature = "metrics"))]
         {
-            assert!(
-                config.monitoring_addr.is_none(),
-                "Enable \"metrics\" feature to specify monitoring_addr"
-            );
+            if config.monitoring_addr.is_some() {
+                eprintln!("Error: enable \"metrics\" feature to specify monitoring_addr");
+                std::process::exit(1);
+            }
         }
         let monitoring_addr: SocketAddr = config.monitoring_addr.map_or(
             (DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(),
