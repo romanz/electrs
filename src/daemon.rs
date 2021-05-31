@@ -106,7 +106,7 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
                 info!("waiting for {} blocks to download", left_blocks);
                 return PollResult::Retry;
             }
-            return PollResult::Done(Ok(()));
+            PollResult::Done(Ok(()))
         }
         Err(err) => {
             if let JsonRpcError(ServerError(ref e)) = err {
@@ -115,7 +115,7 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
                     return PollResult::Retry;
                 }
             }
-            return PollResult::Done(Err(err).context("daemon not available"));
+            PollResult::Done(Err(err).context("daemon not available"))
         }
     }
 }

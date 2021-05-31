@@ -228,7 +228,9 @@ impl Config {
         }
 
         let daemon_dir = &config.daemon_dir;
-        let daemon_cookie_file = config.cookie_file.unwrap_or(daemon_dir.join(".cookie"));
+        let daemon_cookie_file = config
+            .cookie_file
+            .unwrap_or_else(|| daemon_dir.join(".cookie"));
 
         let config = Config {
             network: config.network,
