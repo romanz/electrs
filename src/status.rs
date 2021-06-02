@@ -106,32 +106,6 @@ impl Status {
         }
     }
 
-    fn filter_outputs(&self, tx: &Transaction) -> Vec<u32> {
-        let outputs = tx.output.iter().zip(0u32..);
-        outputs
-            .filter_map(move |(txo, vout)| {
-                if ScriptHash::new(&txo.script_pubkey) == self.scripthash {
-                    Some(vout)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    fn filter_inputs(&self, tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoint> {
-        tx.input
-            .iter()
-            .filter_map(|txi| {
-                if outpoints.contains(&txi.previous_output) {
-                    Some(txi.previous_output)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     fn funding_confirmed(&self, chain: &Chain) -> HashSet<OutPoint> {
         self.confirmed
             .iter()
@@ -230,7 +204,7 @@ impl Status {
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
             for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                let funding_outputs = self.filter_outputs(&tx);
+                let funding_outputs = filter_outputs(&tx, &self.scripthash);
                 if funding_outputs.is_empty() {
                     continue;
                 }
@@ -255,7 +229,7 @@ impl Status {
             |blockhash, block| {
                 let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
                 for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                    let spent_outpoints = self.filter_inputs(&tx, &outpoints);
+                    let spent_outpoints = filter_inputs(&tx, &outpoints);
                     if spent_outpoints.is_empty() {
                         continue;
                     }
@@ -293,7 +267,7 @@ impl Status {
     ) -> Vec<TxEntry> {
         let mut result = HashMap::<Txid, Entry>::new();
         for entry in mempool.filter_by_funding(&self.scripthash) {
-            let funding_outputs = self.filter_outputs(&entry.tx);
+            let funding_outputs = filter_outputs(&entry.tx, &self.scripthash);
             assert!(!funding_outputs.is_empty());
             outpoints.extend(make_outpoints(&entry.txid, &funding_outputs));
             result.entry(entry.txid).or_default().outputs = funding_outputs;
@@ -303,7 +277,7 @@ impl Status {
             .iter()
             .flat_map(|outpoint| mempool.filter_by_spending(outpoint))
         {
-            let spent_outpoints = self.filter_inputs(&entry.tx, &outpoints);
+            let spent_outpoints = filter_inputs(&entry.tx, &outpoints);
             assert!(!spent_outpoints.is_empty());
             result.entry(entry.txid).or_default().spent = spent_outpoints;
             cache.add_tx(entry.txid, || entry.tx.clone());
@@ -363,4 +337,30 @@ impl Status {
     pub fn statushash(&self) -> Option<StatusHash> {
         self.statushash
     }
+}
+
+fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<u32> {
+    let outputs = tx.output.iter().zip(0u32..);
+    outputs
+        .filter_map(move |(txo, vout)| {
+            if ScriptHash::new(&txo.script_pubkey) == *scripthash {
+                Some(vout)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn filter_inputs(tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoint> {
+    tx.input
+        .iter()
+        .filter_map(|txi| {
+            if outpoints.contains(&txi.previous_output) {
+                Some(txi.previous_output)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
