@@ -98,12 +98,16 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
     match client.get_blockchain_info() {
         Ok(info) => {
             let left_blocks = info.headers - info.blocks;
-            if info.initial_block_download {
-                info!("waiting for IBD to finish: {} blocks left", left_blocks);
-                return PollResult::Retry;
-            }
-            if left_blocks > 0 {
-                info!("waiting for {} blocks to download", left_blocks);
+            if info.initial_block_download || left_blocks > 0 {
+                info!(
+                    "waiting for {} blocks to download{}",
+                    left_blocks,
+                    if info.initial_block_download {
+                        " (IBD)"
+                    } else {
+                        ""
+                    }
+                );
                 return PollResult::Retry;
             }
             PollResult::Done(Ok(()))
