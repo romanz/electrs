@@ -67,7 +67,7 @@ impl Tracker {
     pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
         self.index.sync(daemon, self.index_batch_size)?;
         if !self.ignore_mempool {
-            self.mempool.sync(daemon)?;
+            self.mempool.sync(daemon);
         }
         // TODO: double check tip - and retry on diff
         Ok(())

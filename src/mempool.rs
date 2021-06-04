@@ -75,8 +75,14 @@ impl Mempool {
             .collect()
     }
 
-    pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
-        let txids = daemon.get_mempool_txids()?;
+    pub fn sync(&mut self, daemon: &Daemon) {
+        let txids = match daemon.get_mempool_txids() {
+            Ok(txids) => txids,
+            Err(e) => {
+                warn!("mempool sync failed: {}", e);
+                return;
+            }
+        };
         debug!("loading {} mempool transactions", txids.len());
 
         let new_txids = HashSet::<Txid>::from_iter(txids);
@@ -112,7 +118,6 @@ impl Mempool {
             added,
             removed,
         );
-        Ok(())
     }
 
     fn add_entry(&mut self, txid: Txid, tx: Transaction, entry: json::GetMempoolEntryResult) {
