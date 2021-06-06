@@ -14,7 +14,7 @@ build = "build.rs"
 
 [features]
 default = ["metrics"]
-metrics = ["prometheus"]
+metrics = ["prometheus", "hyper"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -27,7 +27,7 @@ configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
 env_logger = "0.7"
-hyper = "0.10"
+hyper = { version = "0.10", optional = true }
 log = "0.4"
 prometheus = { version = "0.12", features = ["process"], optional = true }
 rayon = "1.5"
