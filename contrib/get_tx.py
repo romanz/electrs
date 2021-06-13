@@ -9,7 +9,7 @@ def main():
     args = parser.parse_args()
 
     conn = client.Client(("localhost", 50001))
-    tx = conn.call("blockchain.transaction.get", args.txid, True)["result"]
+    tx, = conn.call([client.request("blockchain.transaction.get", args.txid, True)])
     print(json.dumps(tx))
 
 if __name__ == "__main__":

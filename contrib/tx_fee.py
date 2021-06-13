@@ -8,15 +8,14 @@ def main():
     args = parser.parse_args()
 
     conn = client.Client(("localhost", 50001))
-    tx = conn.call(conn.request("blockchain.transaction.get", args.txid, True))[0]["result"]
+    tx, = conn.call([client.request("blockchain.transaction.get", args.txid, True)])
     requests = []
     for vin in tx["vin"]:
         prev_txid = vin["txid"]
-        requests.append(conn.request("blockchain.transaction.get", prev_txid, True))
+        requests.append(client.request("blockchain.transaction.get", prev_txid, True))
 
     fee = 0
-    for vin, response in zip(tx["vin"], conn.call(*requests)):
-        prev_tx = response["result"]
+    for vin, prev_tx in zip(tx["vin"], conn.call(requests)):
         txo = prev_tx["vout"][vin["vout"]]
         fee += txo["value"]
 
