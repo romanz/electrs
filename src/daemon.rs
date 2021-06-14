@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use std::io::Write;
 use std::iter::FromIterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bitcoin::consensus::encode;
@@ -18,6 +17,7 @@ use bitcoin::secp256k1;
 use bitcoin::secp256k1::rand::Rng;
 use bitcoin::{Amount, Block, BlockHash, Network, Transaction, Txid};
 use bitcoincore_rpc::{self, json, RpcApi};
+use parking_lot::Mutex;
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -239,7 +239,7 @@ impl Daemon {
     }
 
     pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        let mut conn = self.p2p.lock().unwrap();
+        let mut conn = self.p2p.lock();
 
         let msg = GetHeadersMessage::new(chain.locator(), BlockHash::default());
         conn.send(NetworkMessage::GetHeaders(msg))?;
@@ -278,7 +278,7 @@ impl Daemon {
             .map(|h| Inventory::WitnessBlock(*h))
             .collect();
         debug!("loading {} blocks", blockhashes.len());
-        let mut conn = self.p2p.lock().unwrap();
+        let mut conn = self.p2p.lock();
         conn.send(NetworkMessage::GetData(inv))?;
         for hash in blockhashes {
             match conn

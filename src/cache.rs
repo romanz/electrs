@@ -1,7 +1,8 @@
 use bitcoin::{BlockHash, Transaction, Txid};
+use parking_lot::RwLock;
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::merkle::Proof;
 
@@ -13,14 +14,14 @@ pub struct Cache {
 
 impl Cache {
     pub(crate) fn add_tx(&self, txid: Txid, f: impl FnOnce() -> Transaction) {
-        self.txs.write().unwrap().entry(txid).or_insert_with(f);
+        self.txs.write().entry(txid).or_insert_with(f);
     }
 
     pub(crate) fn get_tx<F, T>(&self, txid: &Txid, f: F) -> Option<T>
     where
         F: FnOnce(&Transaction) -> T,
     {
-        self.txs.read().unwrap().get(txid).map(f)
+        self.txs.read().get(txid).map(f)
     }
 
     pub(crate) fn add_proof<F>(&self, blockhash: BlockHash, txid: Txid, f: F)
@@ -29,7 +30,6 @@ impl Cache {
     {
         self.proofs
             .write()
-            .unwrap()
             .entry((blockhash, txid))
             .or_insert_with(f);
     }
@@ -38,6 +38,6 @@ impl Cache {
     where
         F: FnOnce(&Proof) -> T,
     {
-        self.proofs.read().unwrap().get(&(blockhash, txid)).map(f)
+        self.proofs.read().get(&(blockhash, txid)).map(f)
     }
 }
