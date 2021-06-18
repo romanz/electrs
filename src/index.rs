@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::{
     chain::Chain,
     daemon::Daemon,
-    db,
+    db::{DBStore, Row, WriteBatch},
     metrics::{Histogram, Metrics},
     types::{HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
 };
@@ -40,15 +40,15 @@ impl Stats {
         }
     }
 
-    fn report_stats(&self, batch: &db::WriteBatch) {
-        self.update_size
-            .observe("write_funding_rows", db_rows_size(&batch.funding_rows));
-        self.update_size
-            .observe("write_spending_rows", db_rows_size(&batch.spending_rows));
-        self.update_size
-            .observe("write_txid_rows", db_rows_size(&batch.txid_rows));
-        self.update_size
-            .observe("write_header_rows", db_rows_size(&batch.header_rows));
+    fn observe_size(&self, label: &str, rows: &[Row]) {
+        self.update_size.observe(label, db_rows_size(rows));
+    }
+
+    fn report_stats(&self, batch: &WriteBatch) {
+        self.observe_size("write_funding_rows", &batch.funding_rows);
+        self.observe_size("write_spending_rows", &batch.spending_rows);
+        self.observe_size("write_txid_rows", &batch.txid_rows);
+        self.observe_size("write_header_rows", &batch.header_rows);
         debug!(
             "writing {} funding and {} spending rows from {} transactions, {} blocks",
             batch.funding_rows.len(),
@@ -67,14 +67,16 @@ struct IndexResult {
 }
 
 impl IndexResult {
-    fn extend(&self, batch: &mut db::WriteBatch) {
+    fn extend(&self, batch: &mut WriteBatch) {
         let funding_rows = self.funding_rows.iter().map(ScriptHashRow::to_db_row);
-        let spending_rows = self.spending_rows.iter().map(SpendingPrefixRow::to_db_row);
-        let txid_rows = self.txid_rows.iter().map(TxidRow::to_db_row);
-
         batch.funding_rows.extend(funding_rows);
+
+        let spending_rows = self.spending_rows.iter().map(SpendingPrefixRow::to_db_row);
         batch.spending_rows.extend(spending_rows);
+
+        let txid_rows = self.txid_rows.iter().map(TxidRow::to_db_row);
         batch.txid_rows.extend(txid_rows);
+
         batch.header_rows.push(self.header_row.to_db_row());
         batch.tip_row = serialize(&self.header_row.header.block_hash()).into_boxed_slice();
     }
@@ -82,13 +84,13 @@ impl IndexResult {
 
 /// Confirmed transactions' address index
 pub struct Index {
-    store: db::DBStore,
+    store: DBStore,
     chain: Chain,
     stats: Stats,
 }
 
 impl Index {
-    pub(crate) fn load(store: db::DBStore, mut chain: Chain, metrics: &Metrics) -> Result<Self> {
+    pub(crate) fn load(store: DBStore, mut chain: Chain, metrics: &Metrics) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
             let headers = store
@@ -154,7 +156,7 @@ impl Index {
                 let mut heights_map: HashMap<BlockHash, usize> =
                     chunk.iter().map(|h| (h.hash(), h.height())).collect();
 
-                let mut batch = db::WriteBatch::default();
+                let mut batch = WriteBatch::default();
 
                 daemon.for_blocks(blockhashes, |blockhash, block| {
                     let height = heights_map.remove(&blockhash).expect("unexpected block");
@@ -173,7 +175,7 @@ impl Index {
     }
 }
 
-fn db_rows_size(rows: &[db::Row]) -> usize {
+fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
