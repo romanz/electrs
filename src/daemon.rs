@@ -91,10 +91,6 @@ enum PollResult {
 }
 
 fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
-    use bitcoincore_rpc::{
-        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
-    };
-
     match client.get_blockchain_info() {
         Ok(info) => {
             let left_blocks = info.headers - info.blocks;
@@ -113,7 +109,7 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
             PollResult::Done(Ok(()))
         }
         Err(err) => {
-            if let JsonRpcError(ServerError(ref e)) = err {
+            if let Some(e) = extract_bitcoind_error(&err) {
                 if e.code == -28 {
                     info!("waiting for RPC warmup: {}", e.message);
                     return PollResult::Retry;
@@ -316,4 +312,16 @@ fn build_version_message() -> NetworkMessage {
         start_height: 0,
         relay: false,
     })
+}
+
+pub(crate) type RpcError = bitcoincore_rpc::jsonrpc::error::RpcError;
+
+pub(crate) fn extract_bitcoind_error(err: &bitcoincore_rpc::Error) -> Option<&RpcError> {
+    use bitcoincore_rpc::{
+        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
+    };
+    match err {
+        JsonRpcError(ServerError(e)) => Some(e),
+        _ => None,
+    }
 }

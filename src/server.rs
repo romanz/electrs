@@ -3,7 +3,6 @@ use bitcoin::BlockHash;
 use bitcoincore_rpc::RpcApi;
 use crossbeam_channel::{bounded, select, unbounded, Receiver, Sender};
 use rayon::prelude::*;
-use serde_json::{de::from_str, Value};
 
 use std::{
     collections::hash_map::HashMap,
@@ -44,6 +43,17 @@ impl Peer {
     fn new(id: usize, stream: TcpStream) -> Self {
         let client = Client::default();
         Self { id, client, stream }
+    }
+
+    fn send(&mut self, values: Vec<String>) -> Result<()> {
+        for mut value in values {
+            debug!("{}: send {}", self.id, value);
+            value += "\n";
+            self.stream
+                .write_all(value.as_bytes())
+                .with_context(|| format!("failed to send response: {:?}", value))?;
+        }
+        Ok(())
     }
 
     fn disconnect(self) {
@@ -123,7 +133,8 @@ fn notify_peer(rpc: &Rpc, peer: &mut Peer) -> Result<()> {
     let notifications = rpc
         .update_client(&mut peer.client)
         .context("failed to generate notifications")?;
-    send_to_peer(peer, &notifications).context("failed to send notifications")
+    peer.send(notifications)
+        .context("failed to send notifications")
 }
 
 struct Event {
@@ -146,7 +157,7 @@ fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
         }
         Message::Request(line) => {
             let result = match peers.get_mut(&peer_id) {
-                Some(peer) => handle_request(rpc, peer, line),
+                Some(peer) => handle_request(rpc, peer, &line),
                 None => return, // unknown peer
             };
             if let Err(e) = result {
@@ -161,24 +172,9 @@ fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
     }
 }
 
-fn handle_request(rpc: &Rpc, peer: &mut Peer, line: String) -> Result<()> {
-    let request: Value = from_str(&line).with_context(|| format!("invalid request: {}", line))?;
-    let response: Value = rpc
-        .handle_request(&mut peer.client, request)
-        .with_context(|| format!("failed to handle request: {}", line))?;
-    send_to_peer(peer, &[response])
-}
-
-fn send_to_peer(peer: &mut Peer, values: &[Value]) -> Result<()> {
-    for value in values {
-        let mut response = value.to_string();
-        debug!("{}: send {}", peer.id, response);
-        response += "\n";
-        peer.stream
-            .write_all(response.as_bytes())
-            .with_context(|| format!("failed to send response: {}", response))?;
-    }
-    Ok(())
+fn handle_request(rpc: &Rpc, peer: &mut Peer, line: &str) -> Result<()> {
+    let response = rpc.handle_request(&mut peer.client, &line);
+    peer.send(vec![response])
 }
 
 fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
