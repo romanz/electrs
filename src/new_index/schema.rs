@@ -24,7 +24,7 @@ use crate::chain::{BlockHeader, Network, OutPoint, Transaction, TxOut, Value};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
-use crate::metrics::{HistogramOpts, HistogramTimer, HistogramVec, Metrics};
+use crate::metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use crate::util::{
     full_hash, has_prevout, is_spendable, script_to_address, BlockHeaderMeta, BlockId, BlockMeta,
     BlockStatus, Bytes, HeaderEntry, HeaderList,
@@ -164,6 +164,7 @@ pub struct Indexer {
     from: FetchFrom,
     iconfig: IndexerConfig,
     duration: HistogramVec,
+    tip_metric: Gauge,
 }
 
 struct IndexerConfig {
@@ -208,6 +209,7 @@ impl Indexer {
                 HistogramOpts::new("index_duration", "Index update duration (in seconds)"),
                 &["step"],
             ),
+            tip_metric: metrics.gauge(MetricOpts::new("tip_height", "Current chain tip height")),
         }
     }
 
@@ -295,6 +297,8 @@ impl Indexer {
         if let FetchFrom::BlkFiles = self.from {
             self.from = FetchFrom::Bitcoind;
         }
+
+        self.tip_metric.set(headers.len() as i64 - 1);
 
         Ok(tip)
     }
