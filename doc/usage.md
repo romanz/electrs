@@ -449,6 +449,17 @@ You can invoke any supported RPC using `netcat`, for example:
 $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}' | netcat 127.0.0.1 50001
 {"id":0,"jsonrpc":"2.0","result":["electrs 0.8.6","1.4"]}
 ```
+Corresponding example in `Python`:
+
+```
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.connect(("127.0.0.1", 50001))
+    f = s.makefile()
+    s.sendall(b'{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}\n')
+    print(f.readline())
+```
 
 For more complex tasks, you may need to convert addresses to 
 [script hashes](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see 
