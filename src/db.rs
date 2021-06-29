@@ -140,7 +140,7 @@ impl DBStore {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
-    fn iter_prefix_cf<'a>(&'a self, cf: &rocksdb::ColumnFamily, prefix: Row) -> ScanIterator<'a> {
+    fn iter_prefix_cf(&self, cf: &rocksdb::ColumnFamily, prefix: Row) -> ScanIterator {
         let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
         let iter = self.db.iterator_cf(cf, mode);
         ScanIterator {
