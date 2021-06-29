@@ -29,7 +29,7 @@ impl NewHeader {
     }
 }
 
-/// Curent blockchain headers' list
+/// Current blockchain headers' list
 pub struct Chain {
     headers: Vec<(BlockHash, BlockHeader)>,
     heights: HashMap<BlockHash, usize>,
