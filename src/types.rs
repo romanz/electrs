@@ -51,17 +51,17 @@ impl ScriptHash {
     }
 
     fn prefix(&self) -> ScriptHashPrefix {
-        let mut prefix = [0u8; PREFIX_LEN];
-        prefix.copy_from_slice(&self.0[..PREFIX_LEN]);
+        let mut prefix = [0u8; HASH_PREFIX_LEN];
+        prefix.copy_from_slice(&self.0[..HASH_PREFIX_LEN]);
         ScriptHashPrefix { prefix }
     }
 }
 
-const PREFIX_LEN: usize = 8;
+const HASH_PREFIX_LEN: usize = 8;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct ScriptHashPrefix {
-    prefix: [u8; PREFIX_LEN],
+    prefix: [u8; HASH_PREFIX_LEN],
 }
 
 impl_consensus_encoding!(ScriptHashPrefix, prefix);
@@ -78,7 +78,7 @@ impl_consensus_encoding!(ScriptHashRow, prefix, height);
 
 impl ScriptHashRow {
     pub(crate) fn scan_prefix(scripthash: ScriptHash) -> Box<[u8]> {
-        scripthash.0[..PREFIX_LEN].to_vec().into_boxed_slice()
+        scripthash.0[..HASH_PREFIX_LEN].to_vec().into_boxed_slice()
     }
 
     pub(crate) fn new(scripthash: ScriptHash, height: usize) -> Self {
@@ -115,13 +115,13 @@ hash_newtype!(
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct SpendingPrefix {
-    prefix: [u8; PREFIX_LEN],
+    prefix: [u8; HASH_PREFIX_LEN],
 }
 
 impl_consensus_encoding!(SpendingPrefix, prefix);
 
 fn spending_prefix(prev: OutPoint) -> SpendingPrefix {
-    let txid_prefix = &prev.txid[..PREFIX_LEN];
+    let txid_prefix = &prev.txid[..HASH_PREFIX_LEN];
     let value = u64::from_be_bytes(txid_prefix.try_into().unwrap());
     let value = value.wrapping_add(prev.vout.into());
     SpendingPrefix {
@@ -166,14 +166,14 @@ impl SpendingPrefixRow {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct TxidPrefix {
-    prefix: [u8; PREFIX_LEN],
+    prefix: [u8; HASH_PREFIX_LEN],
 }
 
 impl_consensus_encoding!(TxidPrefix, prefix);
 
 fn txid_prefix(txid: &Txid) -> TxidPrefix {
-    let mut prefix = [0u8; PREFIX_LEN];
-    prefix.copy_from_slice(&txid[..PREFIX_LEN]);
+    let mut prefix = [0u8; HASH_PREFIX_LEN];
+    prefix.copy_from_slice(&txid[..HASH_PREFIX_LEN]);
     TxidPrefix { prefix }
 }
 
