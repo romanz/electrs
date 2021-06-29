@@ -11,3 +11,4 @@ electrs.toml
 data/
 tests/bitcoin-*
 tests/bin
+.idea/
