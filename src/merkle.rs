@@ -106,7 +106,6 @@ mod tests {
             .join("tests")
             .join("blocks")
             .join(block_hash_hex);
-        eprintln!("{:?}", path);
         let data = std::fs::read(path).unwrap();
         let block: Block = deserialize(&data).unwrap();
         block.txdata.iter().map(|tx| tx.txid()).collect()
