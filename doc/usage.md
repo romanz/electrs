@@ -458,7 +458,8 @@ import socket
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect(("127.0.0.1", 50001))
     f = s.makefile()
-    s.sendall(b'{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}\n')
+    message = json.dumps({"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": "0"})
+    s.sendall((message + '\n').encode())
     print(json.loads(f.readline()))
 ```
 
