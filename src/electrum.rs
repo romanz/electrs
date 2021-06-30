@@ -223,14 +223,17 @@ impl Rpc {
         client: &Client,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let status = client
-            .status
-            .get(&scripthash)
-            .context("no subscription for scripthash")?;
-        Ok(json!(self
-            .tracker
-            .get_history(status)
-            .collect::<Vec<Value>>()))
+        let history_entries = match client.status.get(&scripthash) {
+            Some(status) => self.tracker.get_history(status),
+            None => {
+                warn!(
+                    "blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
+                    scripthash
+                );
+                self.tracker.get_history(&self.new_status(scripthash)?)
+            }
+        };
+        Ok(json!(history_entries.collect::<Vec<Value>>()))
     }
 
     fn scripthash_subscribe(
@@ -238,12 +241,17 @@ impl Rpc {
         client: &mut Client,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let mut status = Status::new(scripthash);
-        self.tracker
-            .update_status(&mut status, &self.daemon, &self.cache)?;
+        let status = self.new_status(scripthash)?;
         let statushash = status.statushash();
         client.status.insert(scripthash, status); // skip if already exists
         Ok(json!(statushash))
+    }
+
+    fn new_status(&self, scripthash: ScriptHash) -> Result<Status> {
+        let mut status = Status::new(scripthash);
+        self.tracker
+            .update_status(&mut status, &self.daemon, &self.cache)?;
+        Ok(status)
     }
 
     fn transaction_broadcast(&self, (tx_hex,): (String,)) -> Result<Value> {
