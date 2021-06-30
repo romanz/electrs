@@ -31,7 +31,7 @@ pub use {
     config::Config,
     daemon::Daemon,
     electrum::{Client, Rpc},
-    status::Status,
+    status::{Balance, Status},
     tracker::Tracker,
     types::ScriptHash,
 };

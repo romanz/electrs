@@ -47,16 +47,27 @@ def main():
 
     tip, = conn.call([client.request('blockchain.headers.subscribe')])
 
-    script_hashes = set(
+    script_hashes = [
         _script_hash(network.parse.address(addr).script()) 
         for addr in args.address
-    )
+    ]
 
     conn.call(
         client.request('blockchain.scripthash.subscribe', script_hash)
         for script_hash in script_hashes
     )
     log.info('subscribed to {} scripthashes', len(script_hashes))
+
+    balances = conn.call(
+        client.request('blockchain.scripthash.get_balance', script_hash)
+        for script_hash in script_hashes
+    )
+    balances = [balance["confirmed"] for balance in balances]
+    total = sum(balances)
+    for balance, addr in sorted(zip(balances, args.address)):
+        if balance:
+            log.debug('{:15,.5f} mBTC at {}', balance / 1e5, addr)
+    log.debug('{:15,.5f} mBTC (total)', total / 1e5)
 
     histories = conn.call(
         client.request('blockchain.scripthash.get_history', script_hash)
@@ -106,6 +117,7 @@ def main():
     balance = 0
 
     rows = []
+    script_hashes = set(script_hashes)
     for block_height, block_pos, txid in sorted_txdata:
         tx_obj = txs_map[txid]
         for txi in tx_obj.txs_in:

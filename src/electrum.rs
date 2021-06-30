@@ -218,6 +218,27 @@ impl Rpc {
         Ok(json!(self.daemon.get_relay_fee()?.as_btc())) // [BTC/kB]
     }
 
+    fn scripthash_get_balance(
+        &self,
+        client: &Client,
+        (scripthash,): (ScriptHash,),
+    ) -> Result<Value> {
+        let balance = match client.status.get(&scripthash) {
+            Some(status) => self.tracker.get_balance(status, &self.cache),
+            None => {
+                warn!(
+                    "blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
+                    scripthash
+                );
+                self.tracker
+                    .get_balance(&self.new_status(scripthash)?, &self.cache)
+            }
+        };
+        Ok(
+            json!({"confirmed": balance.confirmed.as_sat(), "unconfirmed": balance.mempool_delta.as_sat()}),
+        )
+    }
+
     fn scripthash_get_history(
         &self,
         client: &Client,
@@ -367,6 +388,7 @@ impl Rpc {
                 Call::PeersSubscribe => Ok(json!([])),
                 Call::Ping => Ok(Value::Null),
                 Call::RelayFee => self.relayfee(),
+                Call::ScriptHashGetBalance(args) => self.scripthash_get_balance(client, args),
                 Call::ScriptHashGetHistory(args) => self.scripthash_get_history(client, args),
                 Call::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Call::TransactionBroadcast(args) => self.transaction_broadcast(args),
@@ -404,6 +426,7 @@ enum Call {
     PeersSubscribe,
     Ping,
     RelayFee,
+    ScriptHashGetBalance((ScriptHash,)),
     ScriptHashGetHistory((ScriptHash,)),
     ScriptHashSubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
@@ -419,6 +442,7 @@ impl Call {
             "blockchain.estimatefee" => Call::EstimateFee(convert(params)?),
             "blockchain.headers.subscribe" => Call::HeadersSubscribe,
             "blockchain.relayfee" => Call::RelayFee,
+            "blockchain.scripthash.get_balance" => Call::ScriptHashGetBalance(convert(params)?),
             "blockchain.scripthash.get_history" => Call::ScriptHashGetHistory(convert(params)?),
             "blockchain.scripthash.subscribe" => Call::ScriptHashSubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Call::TransactionBroadcast(convert(params)?),

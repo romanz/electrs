@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bitcoin::{BlockHash, Txid};
+use bitcoin::{BlockHash, OutPoint, Txid};
 use serde_json::Value;
 
 use std::convert::TryInto;
@@ -14,7 +14,7 @@ use crate::{
     index::Index,
     mempool::{Histogram, Mempool},
     metrics::Metrics,
-    status::Status,
+    status::{Balance, Status},
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -84,19 +84,17 @@ impl Tracker {
         Ok(prev_statushash != status.statushash())
     }
 
-    pub fn get_balance(&self, status: &Status, cache: &Cache) -> bitcoin::Amount {
-        let unspent = status.get_unspent(&self.index.chain());
-        let mut balance = bitcoin::Amount::ZERO;
-        for outpoint in &unspent {
-            let value = cache
+    pub fn get_balance(&self, status: &Status, cache: &Cache) -> Balance {
+        let get_amount_fn = |outpoint: OutPoint| {
+            cache
                 .get_tx(&outpoint.txid, |tx| {
                     let vout: usize = outpoint.vout.try_into().unwrap();
                     bitcoin::Amount::from_sat(tx.output[vout].value)
                 })
-                .expect("missing tx");
-            balance += value;
-        }
-        balance
+                .expect("missing tx")
+        };
+
+        status.get_balance(self.chain(), get_amount_fn)
     }
 
     pub fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {

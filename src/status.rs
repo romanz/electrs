@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bitcoin::{
     hashes::{sha256, Hash, HashEngine},
-    Amount, Block, BlockHash, OutPoint, Transaction, Txid,
+    Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use rayon::prelude::*;
 use serde_json::{json, Value};
@@ -38,6 +38,10 @@ impl TxEntry {
             outputs: entry.outputs,
             spent: entry.spent,
         }
+    }
+
+    fn funding<'a>(&'a self) -> impl Iterator<Item = OutPoint> + 'a {
+        make_outpoints(&self.txid, &self.outputs)
     }
 }
 
@@ -91,6 +95,48 @@ pub struct Status {
     mempool: Vec<TxEntry>,
 }
 
+enum BalanceEntry {
+    Funded(OutPoint),
+    Spent(OutPoint),
+}
+
+#[derive(Default, Eq, PartialEq)]
+pub struct Balance {
+    pub(crate) confirmed: Amount,
+    pub(crate) mempool_delta: SignedAmount,
+}
+
+impl Balance {
+    pub fn confirmed(&self) -> Amount {
+        self.confirmed
+    }
+}
+
+#[derive(Default)]
+struct Total {
+    funded: Amount,
+    spent: Amount,
+}
+
+impl Total {
+    fn balance(&self) -> Amount {
+        self.funded - self.spent
+    }
+
+    fn update(
+        &mut self,
+        entries: impl Iterator<Item = BalanceEntry>,
+        get_amount: impl Fn(OutPoint) -> Amount,
+    ) {
+        for entry in entries {
+            match entry {
+                BalanceEntry::Funded(outpoint) => self.funded += get_amount(outpoint),
+                BalanceEntry::Spent(outpoint) => self.spent += get_amount(outpoint),
+            }
+        }
+    }
+}
+
 fn make_outpoints<'a>(txid: &'a Txid, outputs: &'a [u32]) -> impl Iterator<Item = OutPoint> + 'a {
     outputs.iter().map(move |vout| OutPoint::new(*txid, *vout))
 }
@@ -106,42 +152,10 @@ impl Status {
         }
     }
 
-    fn funding_confirmed(&self, chain: &Chain) -> HashSet<OutPoint> {
-        self.confirmed
-            .iter()
-            .filter_map(|(blockhash, entries)| chain.get_block_height(blockhash).map(|_| entries))
-            .flat_map(|entries| {
-                entries
-                    .iter()
-                    .flat_map(|entry| make_outpoints(&entry.txid, &entry.outputs))
-            })
-            .collect()
-    }
-
-    pub(crate) fn get_unspent(&self, chain: &Chain) -> HashSet<OutPoint> {
-        let mut unspent: HashSet<OutPoint> = self.funding_confirmed(chain);
-        unspent.extend(
-            self.mempool
-                .iter()
-                .flat_map(|entry| make_outpoints(&entry.txid, &entry.outputs)),
-        );
-
-        let spent_outpoints = self
-            .confirmed
-            .iter()
-            .filter_map(|(blockhash, entries)| {
-                chain.get_block_height(blockhash).map(|_height| entries)
-            })
-            .flatten()
-            .chain(self.mempool.iter())
-            .flat_map(|entry| entry.spent.iter());
-        for outpoint in spent_outpoints {
-            assert!(unspent.remove(outpoint), "missing outpoint {}", outpoint);
-        }
-        unspent
-    }
-
-    pub(crate) fn get_confirmed(&self, chain: &Chain) -> Vec<ConfirmedEntry> {
+    fn confirmed_entries<'a>(
+        &'a self,
+        chain: &'a Chain,
+    ) -> impl Iterator<Item = (usize, &[TxEntry])> + 'a {
         self.confirmed
             .iter()
             .filter_map(move |(blockhash, entries)| {
@@ -149,6 +163,49 @@ impl Status {
                     .get_block_height(blockhash)
                     .map(|height| (height, &entries[..]))
             })
+    }
+
+    fn funding_confirmed(&self, chain: &Chain) -> HashSet<OutPoint> {
+        self.confirmed_entries(chain)
+            .flat_map(|(_height, entries)| entries.iter().flat_map(TxEntry::funding))
+            .collect()
+    }
+
+    pub(crate) fn get_balance<F>(&self, chain: &Chain, get_amount: F) -> Balance
+    where
+        F: Fn(OutPoint) -> Amount,
+    {
+        fn to_balance_entries<'a>(
+            entries: impl Iterator<Item = &'a TxEntry> + 'a,
+        ) -> impl Iterator<Item = BalanceEntry> + 'a {
+            entries.flat_map(|entry| {
+                let funded = entry.funding().map(BalanceEntry::Funded);
+                let spent = entry.spent.iter().copied().map(BalanceEntry::Spent);
+                funded.chain(spent)
+            })
+        }
+
+        let confirmed_entries = to_balance_entries(
+            self.confirmed_entries(chain)
+                .flat_map(|(_height, entries)| entries),
+        );
+        let mempool_entries = to_balance_entries(self.mempool.iter());
+
+        let mut total = Total::default();
+        total.update(confirmed_entries, &get_amount);
+        let confirmed = total.balance();
+
+        total.update(mempool_entries, &get_amount);
+        let with_mempool = total.balance();
+
+        Balance {
+            confirmed,
+            mempool_delta: with_mempool.to_signed().unwrap() - confirmed.to_signed().unwrap(),
+        }
+    }
+
+    pub(crate) fn get_confirmed(&self, chain: &Chain) -> Vec<ConfirmedEntry> {
+        self.confirmed_entries(chain)
             .collect::<BTreeMap<usize, &[TxEntry]>>()
             .into_iter()
             .flat_map(|(height, entries)| {
