@@ -280,27 +280,23 @@ impl Status {
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
-        self.for_new_blocks(
-            spending_blockhashes.into_iter(),
-            daemon,
-            |blockhash, block| {
-                let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
-                for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                    let spent_outpoints = filter_inputs(&tx, &outpoints);
-                    if spent_outpoints.is_empty() {
-                        continue;
-                    }
-                    cache.add_tx(*txid, move || tx);
-                    cache.add_proof(blockhash, *txid, || Proof::create(&txids, pos));
-                    result
-                        .entry(blockhash)
-                        .or_default()
-                        .entry((u32::try_from(pos).unwrap(), *txid))
-                        .or_default()
-                        .spent = spent_outpoints;
+        self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
+            let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
+            for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
+                let spent_outpoints = filter_inputs(&tx, &outpoints);
+                if spent_outpoints.is_empty() {
+                    continue;
                 }
-            },
-        )?;
+                cache.add_tx(*txid, move || tx);
+                cache.add_proof(blockhash, *txid, || Proof::create(&txids, pos));
+                result
+                    .entry(blockhash)
+                    .or_default()
+                    .entry((u32::try_from(pos).unwrap(), *txid))
+                    .or_default()
+                    .spent = spent_outpoints;
+            }
+        })?;
 
         Ok(result
             .into_iter()
