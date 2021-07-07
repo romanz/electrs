@@ -2,42 +2,23 @@
 # The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
 # If you are not familiar with Docker either it's probably be safer to NOT use it.
 
+FROM debian:bullseye-slim as base
+RUN apt-get update -qqy
+RUN apt-get install -qqy librocksdb-dev=6.11.4-3
+
 ### Electrum Rust Server ###
-FROM rust:1.41.1-slim as electrs-build
-RUN apt-get update
-RUN apt-get install -qq -y clang cmake
+FROM base as electrs-build
+RUN apt-get install -qqy cargo clang cmake build-essential
 
 # Install electrs
 WORKDIR /build/electrs
 COPY . .
+ENV ROCKSDB_INCLUDE_DIR=/usr/include
+ENV ROCKSDB_LIB_DIR=/usr/lib
 RUN cargo install --locked --path .
 
-FROM debian:buster-slim as updated
-RUN apt-get update -qqy
-
-### Bitcoin Core ###
-FROM updated as bitcoin-build
-# Download
-RUN apt-get install -qqy wget
-WORKDIR /build/bitcoin
-ARG BITCOIND_VERSION=22.0
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
-RUN tar xvf bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoin-cli .
-
-FROM updated as result
+FROM base as result
 # Copy the binaries
-COPY --from=electrs-build /usr/local/cargo/bin/electrs /usr/bin/electrs
-COPY --from=bitcoin-build /build/bitcoin/bitcoind /build/bitcoin/bitcoin-cli /usr/bin/
-RUN bitcoind -version && bitcoin-cli -version
+COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
 
-### Electrum ###
-# Clone latest Electrum wallet and a few test tools
-WORKDIR /build/
-RUN apt-get install -qqy git libsecp256k1-0 python3-cryptography python3-setuptools python3-pip jq curl
-RUN git clone --recurse-submodules https://github.com/spesmilo/electrum/ && cd electrum/ && git log -1
-RUN python3 -m pip install -e electrum/
-
-RUN electrum version --offline
 WORKDIR /

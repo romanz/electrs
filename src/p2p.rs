@@ -313,6 +313,7 @@ fn build_version_message() -> NetworkMessage {
 }
 
 fn is_block_inv(inv: &Inventory) -> bool {
+    #![allow(clippy::match_like_matches_macro)] // TODO: remove after dropping Rust 1.41.1 support
     if let Inventory::Block(_) = inv {
         true
     } else {
