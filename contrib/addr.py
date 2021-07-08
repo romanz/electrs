@@ -8,11 +8,19 @@ import client
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--testnet', action='store_true')
+    parser.add_argument('--regtest', action='store_true')
+    parser.add_argument('--signet', action='store_true')
     parser.add_argument('address', nargs='+')
     args = parser.parse_args()
 
     if args.testnet:
         port = 60001
+        from pycoin.symbols.xtn import network
+    if args.regtest:
+        port = 60401
+        from pycoin.symbols.xrt import network
+    if args.signet:
+        port = 60601
         from pycoin.symbols.xtn import network
     else:
         port = 50001
