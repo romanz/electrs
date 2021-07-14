@@ -24,7 +24,7 @@ default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "roc
 [dependencies]
 base64 = "0.10"
 bincode = "1.0"
-bitcoin = { version = "0.26.0", features = ["use-serde"] }
+bitcoin = { version = "0.26.2", features = ["use-serde"] }
 configure_me = "0.4.0"
 crossbeam-channel = "0.3"
 dirs-next = "2.0.0"
