@@ -75,7 +75,7 @@ impl ResolvAddr {
     /// Resolves the address.
     fn resolve(self) -> std::result::Result<SocketAddr, AddressError> {
         match self.0.to_socket_addrs() {
-            Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(self.0)),
+            Ok(mut iter) => iter.next().ok_or(AddressError::NoAddrError(self.0)),
             Err(err) => Err(AddressError::ResolvError { addr: self.0, err }),
         }
     }
