@@ -75,7 +75,7 @@ impl Metrics {
                 self.addr, e
             )
         });
-        start_process_exporter(&self);
+        start_process_exporter(self);
         let reg = self.reg.clone();
         spawn_thread("metrics", move || loop {
             if let Err(e) = handle_request(&reg, server.recv()) {

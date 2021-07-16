@@ -176,13 +176,13 @@ pub fn index_transaction<'a>(
         if input.previous_output.txid == null_hash {
             None
         } else {
-            Some(TxInRow::new(&txid, &input).to_row())
+            Some(TxInRow::new(&txid, input).to_row())
         }
     });
     let outputs = txn
         .output
         .iter()
-        .map(move |output| TxOutRow::new(&txid, &output).to_row());
+        .map(move |output| TxOutRow::new(&txid, output).to_row());
 
     // Persist transaction ID and confirmed height
     inputs
@@ -204,7 +204,7 @@ pub fn index_block<'a>(block: &'a Block, height: usize) -> impl 'a + Iterator<It
     block
         .txdata
         .iter()
-        .flat_map(move |txn| index_transaction(&txn, height))
+        .flat_map(move |txn| index_transaction(txn, height))
         .chain(std::iter::once(row))
 }
 

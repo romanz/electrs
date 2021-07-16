@@ -165,7 +165,7 @@ fn create_merkle_branch_and_root<T: Hash>(mut hashes: Vec<T>, mut index: usize) 
 
 // TODO: the functions below can be part of ReadStore.
 fn txrow_by_txid(store: &dyn ReadStore, txid: &Txid) -> Option<TxRow> {
-    let key = TxRow::filter_full(&txid);
+    let key = TxRow::filter_full(txid);
     let value = store.get(&key)?;
     Some(TxRow::from_row(&Row { key, value }))
 }
@@ -192,7 +192,7 @@ fn txids_by_funding_output(
     output_index: usize,
 ) -> Vec<HashPrefix> {
     store
-        .scan(&TxInRow::filter(&txn_id, output_index))
+        .scan(&TxInRow::filter(txn_id, output_index))
         .iter()
         .map(|row| TxInRow::from_row(row).txid_prefix)
         .collect()
@@ -311,7 +311,7 @@ impl Query {
             funding.extend(self.find_funding_outputs(&t, script_hash));
         }
         for funding_output in &funding {
-            if let Some(spent) = self.find_spending_input(read_store, &funding_output)? {
+            if let Some(spent) = self.find_spending_input(read_store, funding_output)? {
                 spending.push(spent);
             }
         }
@@ -332,7 +332,7 @@ impl Query {
         }
         // // TODO: dedup outputs (somehow) both confirmed and in mempool (e.g. reorg?)
         for funding_output in funding.iter().chain(confirmed_funding.iter()) {
-            if let Some(spent) = self.find_spending_input(tracker.index(), &funding_output)? {
+            if let Some(spent) = self.find_spending_input(tracker.index(), funding_output)? {
                 spending.push(spent);
             }
         }
@@ -380,14 +380,14 @@ impl Query {
         tx_hash: &Txid,
         block_height: Option<u32>,
     ) -> Result<Option<BlockHash>> {
-        let blockhash = if self.tracker.read().unwrap().has_txn(&tx_hash) {
+        let blockhash = if self.tracker.read().unwrap().has_txn(tx_hash) {
             None // found in mempool (as unconfirmed transaction)
         } else {
             // Lookup in confirmed transactions' index
             let height = match block_height {
                 Some(height) => height,
                 None => {
-                    txrow_by_txid(self.app.read_store(), &tx_hash)
+                    txrow_by_txid(self.app.read_store(), tx_hash)
                         .chain_err(|| format!("not indexed tx {}", tx_hash))?
                         .height
                 }
@@ -405,7 +405,7 @@ impl Query {
     // Internal API for transaction retrieval
     fn load_txn(&self, txid: &Txid, block_height: Option<u32>) -> Result<Transaction> {
         let _timer = self.duration.with_label_values(&["load_txn"]).start_timer();
-        self.tx_cache.get_or_else(&txid, || {
+        self.tx_cache.get_or_else(txid, || {
             let blockhash = self.lookup_confirmed_blockhash(txid, block_height)?;
             let value: Value = self
                 .app
@@ -460,7 +460,7 @@ impl Query {
             .index()
             .get_header(height)
             .chain_err(|| format!("missing block #{}", height))?;
-        let txids = self.app.daemon().getblocktxids(&header_entry.hash())?;
+        let txids = self.app.daemon().getblocktxids(header_entry.hash())?;
         let pos = txids
             .iter()
             .position(|txid| txid == tx_hash)
