@@ -319,7 +319,7 @@ impl Connection {
             Some(value) => value.as_bool().chain_err(|| "non-bool verbose value")?,
             None => false,
         };
-        Ok(self.query.get_transaction(&tx_hash, verbose)?)
+        self.query.get_transaction(&tx_hash, verbose)
     }
 
     fn blockchain_transaction_get_confirmed_blockhash(&self, params: &[Value]) -> Result<Value> {
