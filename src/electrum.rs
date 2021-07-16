@@ -286,7 +286,7 @@ impl Rpc {
         let (txid, verbose) = args.into();
         if verbose {
             let blockhash = self.tracker.get_blockhash_by_txid(txid);
-            return Ok(json!(self.daemon.get_transaction_info(&txid, blockhash)?));
+            return self.daemon.get_transaction_info(&txid, blockhash);
         }
         let cached = self.cache.get_tx(&txid, |tx| serialize(tx).to_hex());
         Ok(match cached {

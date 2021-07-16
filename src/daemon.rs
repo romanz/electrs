@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use bitcoin::{Amount, Block, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{self, json, RpcApi};
 use parking_lot::Mutex;
+use serde_json::{json, Value};
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -113,9 +114,13 @@ impl Daemon {
         &self,
         txid: &Txid,
         blockhash: Option<BlockHash>,
-    ) -> Result<json::GetRawTransactionResult> {
+    ) -> Result<Value> {
+        // No need to parse the resulting JSON, just return it as-is to the client.
         self.rpc
-            .get_raw_transaction_info(txid, blockhash.as_ref())
+            .call(
+                "getrawtransaction",
+                &[json!(txid), json!(true), json!(blockhash)],
+            )
             .context("failed to get transaction info")
     }
 
