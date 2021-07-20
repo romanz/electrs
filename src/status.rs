@@ -40,7 +40,7 @@ impl TxEntry {
         }
     }
 
-    fn funding<'a>(&'a self) -> impl Iterator<Item = OutPoint> + 'a {
+    fn funding(&self) -> impl Iterator<Item = OutPoint> + '_ {
         make_outpoints(&self.txid, &self.outputs)
     }
 }
@@ -267,7 +267,7 @@ impl Status {
                 }
                 cache.add_tx(*txid, move || tx);
                 cache.add_proof(blockhash, *txid, || Proof::create(&txids, pos));
-                outpoints.extend(make_outpoints(&txid, &funding_outputs));
+                outpoints.extend(make_outpoints(txid, &funding_outputs));
                 result
                     .entry(blockhash)
                     .or_default()
@@ -283,7 +283,7 @@ impl Status {
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
             for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                let spent_outpoints = filter_inputs(&tx, &outpoints);
+                let spent_outpoints = filter_inputs(&tx, outpoints);
                 if spent_outpoints.is_empty() {
                     continue;
                 }
@@ -330,7 +330,7 @@ impl Status {
             .iter()
             .flat_map(|outpoint| mempool.filter_by_spending(outpoint))
         {
-            let spent_outpoints = filter_inputs(&entry.tx, &outpoints);
+            let spent_outpoints = filter_inputs(&entry.tx, outpoints);
             assert!(!spent_outpoints.is_empty());
             result.entry(entry.txid).or_default().spent = spent_outpoints;
             cache.add_tx(entry.txid, || entry.tx.clone());

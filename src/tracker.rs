@@ -45,7 +45,7 @@ impl Tracker {
     }
 
     pub(crate) fn fees_histogram(&self) -> &Histogram {
-        &self.mempool.fees_histogram()
+        self.mempool.fees_histogram()
     }
 
     pub(crate) fn metrics(&self) -> &Metrics {
@@ -54,7 +54,7 @@ impl Tracker {
 
     pub fn get_history(&self, status: &Status) -> impl Iterator<Item = Value> {
         let confirmed = status
-            .get_confirmed(&self.index.chain())
+            .get_confirmed(self.index.chain())
             .into_iter()
             .map(|entry| entry.value());
         let mempool = status

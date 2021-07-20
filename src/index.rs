@@ -112,27 +112,27 @@ impl Index {
         &self.chain
     }
 
-    pub(crate) fn filter_by_txid<'a>(&'a self, txid: Txid) -> impl Iterator<Item = BlockHash> + 'a {
+    pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
             .map(|row| TxidRow::from_db_row(&row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    pub(crate) fn filter_by_funding<'a>(
-        &'a self,
+    pub(crate) fn filter_by_funding(
+        &self,
         scripthash: ScriptHash,
-    ) -> impl Iterator<Item = BlockHash> + 'a {
+    ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
             .map(|row| ScriptHashRow::from_db_row(&row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    pub(crate) fn filter_by_spending<'a>(
-        &'a self,
+    pub(crate) fn filter_by_spending(
+        &self,
         outpoint: OutPoint,
-    ) -> impl Iterator<Item = BlockHash> + 'a {
+    ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
             .map(|row| SpendingPrefixRow::from_db_row(&row).height())

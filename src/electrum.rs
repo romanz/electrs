@@ -128,7 +128,7 @@ impl Rpc {
             tracker,
             cache: Cache::default(),
             rpc_duration,
-            daemon: Daemon::connect(&config)?,
+            daemon: Daemon::connect(config)?,
             banner: config.server_banner.clone(),
         })
     }

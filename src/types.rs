@@ -93,7 +93,7 @@ impl ScriptHashRow {
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(&row).expect("bad ScriptHashRow")
+        deserialize(row).expect("bad ScriptHashRow")
     }
 
     pub(crate) fn height(&self) -> usize {
@@ -154,7 +154,7 @@ impl SpendingPrefixRow {
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(&row).expect("bad SpendingPrefixRow")
+        deserialize(row).expect("bad SpendingPrefixRow")
     }
 
     pub(crate) fn height(&self) -> usize {
@@ -202,7 +202,7 @@ impl TxidRow {
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(&row).expect("bad TxidRow")
+        deserialize(row).expect("bad TxidRow")
     }
 
     pub(crate) fn height(&self) -> usize {
@@ -229,7 +229,7 @@ impl HeaderRow {
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(&row).expect("bad HeaderRow")
+        deserialize(row).expect("bad HeaderRow")
     }
 }
 

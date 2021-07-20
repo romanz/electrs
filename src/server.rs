@@ -64,7 +64,7 @@ impl Peer {
 fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
     let duration = u64::try_from(config.wait_duration.as_millis()).unwrap();
     let (tip_tx, tip_rx) = bounded(0);
-    let rpc = rpc_connect(&config)?;
+    let rpc = rpc_connect(config)?;
 
     use crossbeam_channel::TrySendError;
     spawn("tip_loop", move || loop {
@@ -80,7 +80,7 @@ fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
 
 pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
     let listener = TcpListener::bind(config.electrum_rpc_addr)?;
-    let tip_rx = tip_receiver(&config)?;
+    let tip_rx = tip_receiver(config)?;
     info!("serving Electrum RPC on {}", listener.local_addr()?);
 
     let (server_tx, server_rx) = unbounded();
@@ -118,7 +118,7 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
 fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
     peers
         .into_par_iter()
-        .filter_map(|(_, mut peer)| match notify_peer(&rpc, &mut peer) {
+        .filter_map(|(_, mut peer)| match notify_peer(rpc, &mut peer) {
             Ok(()) => Some((peer.id, peer)),
             Err(e) => {
                 error!("failed to notify peer {}: {}", peer.id, e);
@@ -173,7 +173,7 @@ fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
 }
 
 fn handle_request(rpc: &Rpc, peer: &mut Peer, line: &str) -> Result<()> {
-    let response = rpc.handle_request(&mut peer.client, &line);
+    let response = rpc.handle_request(&mut peer.client, line);
     peer.send(vec![response])
 }
 
