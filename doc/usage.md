@@ -230,10 +230,10 @@ It is a good practice to use these special arguments at the beginning of the com
 
 **Naming convention**
 
-For each command line argument an **environment variable** of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists
+For each command line argument an **environment variable** of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hyphens exists
 (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`).
 
-Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`).
+Similarly, for each such argument an option in config file exists with underscores instead of hyphens (e.g. `electrum_rpc_addr`).
 
 You need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
 

@@ -75,7 +75,7 @@ impl Metrics {
                 self.addr, e
             )
         });
-        start_process_exporter(&self);
+        start_process_exporter(self);
         let reg = self.reg.clone();
         spawn_thread("metrics", move || loop {
             if let Err(e) = handle_request(&reg, server.recv()) {
@@ -113,11 +113,11 @@ fn parse_stats() -> Result<Stats> {
         .expect("failed to get _SC_CLK_TCK") as f64;
 
     let parse_part = |index: usize, name: &str| -> Result<u64> {
-        Ok(parts
+        parts
             .get(index)
             .chain_err(|| format!("missing {}: {:?}", name, parts))?
             .parse::<u64>()
-            .chain_err(|| format!("invalid {}: {:?}", name, parts))?)
+            .chain_err(|| format!("invalid {}: {:?}", name, parts))
     };
 
     // For details, see '/proc/[pid]/stat' section at `man 5 proc`:

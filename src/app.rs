@@ -45,7 +45,7 @@ impl App {
         let mut tip = self.tip.lock().expect("failed to lock tip");
         let new_block = *tip != self.daemon().getbestblockhash()?;
         if new_block {
-            *tip = self.index().update(self.write_store(), &signal)?;
+            *tip = self.index().update(self.write_store(), signal)?;
         }
         Ok(new_block)
     }

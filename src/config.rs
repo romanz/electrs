@@ -75,7 +75,7 @@ impl ResolvAddr {
     /// Resolves the address.
     fn resolve(self) -> std::result::Result<SocketAddr, AddressError> {
         match self.0.to_socket_addrs() {
-            Ok(mut iter) => iter.next().ok_or_else(|| AddressError::NoAddrError(self.0)),
+            Ok(mut iter) => iter.next().ok_or(AddressError::NoAddrError(self.0)),
             Err(err) => Err(AddressError::ResolvError { addr: self.0, err }),
         }
     }
@@ -113,9 +113,9 @@ impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
     }
 }
 
-impl Into<Network> for BitcoinNetwork {
-    fn into(self) -> Network {
-        self.0
+impl From<BitcoinNetwork> for Network {
+    fn from(network: BitcoinNetwork) -> Network {
+        network.0
     }
 }
 
