@@ -8,6 +8,7 @@ cache: cargo
 before_script:
   - rustup component add rustfmt-preview
   - rustup component add clippy
+  - rustup default 1.41.1
 
 script:
   - cargo fmt --all -- --check
