@@ -11,8 +11,8 @@ before_script:
   - rustup default 1.41.1
 
 script:
-  - cargo fmt --all -- --check
-  - cargo check --all
-  - cargo clippy --all
-  - cargo build --all
-  - cargo test --all
+  - cargo +1.41.1 fmt --all -- --check
+  - cargo +1.41.1 check --all
+  - cargo +1.41.1 clippy --all
+  - cargo +1.41.1 build --all
+  - cargo +1.41.1 test --all
