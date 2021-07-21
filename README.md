@@ -2,7 +2,7 @@
 
 [![workflows](https://github.com/romanz/electrs/workflows/Rust/badge.svg)](https://github.com/romanz/electrs/actions)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
-[![crates.io](http://meritbadge.herokuapp.com/electrs)](https://crates.io/crates/electrs)
+[![crates.io](https://img.shields.io/crates/v/electrs.svg)](https://crates.io/crates/electrs)
 [![gitter.im](https://badges.gitter.im/romanz/electrs.svg)](https://gitter.im/romanz/electrs)
 
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx), [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server) and [bitcoincore-indexd](https://github.com/jonasschnelli/bitcoincore-indexd).
