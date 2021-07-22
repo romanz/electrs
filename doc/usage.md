@@ -193,7 +193,8 @@ If you use automated systems, refer to their documentation first!
 
 Pruning must be turned **off** for `electrs` to work.
 `txindex` is allowed but unnecessary for `electrs`.
-However, you might still need it if you run other services (e.g.`eclair`)
+However, you might still need it if you run other services (e.g.`eclair`).
+The option `maxconnections` (if used) should be set to 12 or more for bitcoind to accept inbound p2p connections.
 
 The highly recommended way of authenticating `electrs` is using cookie file.
 It's the most [secure](https://github.com/Kixunil/security_writings/blob/master/cookie_files.md) and robust method.
