@@ -13,10 +13,8 @@ jobs:
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.41.1
           components: rustfmt
           profile: minimal
-          override: true
 
       - name: Format
         uses: actions-rs/cargo@v1
