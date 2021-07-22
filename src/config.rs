@@ -1,4 +1,5 @@
 use bitcoin::network::constants::Network;
+use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
 
 use std::ffi::{OsStr, OsString};
@@ -122,7 +123,7 @@ pub struct Config {
     pub network: Network,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
-    pub daemon_cookie_file: PathBuf,
+    pub daemon_auth: Auth,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_p2p_addr: SocketAddr,
     pub electrum_rpc_addr: SocketAddr,
@@ -228,15 +229,28 @@ impl Config {
         }
 
         let daemon_dir = &config.daemon_dir;
-        let daemon_cookie_file = config
-            .cookie_file
-            .unwrap_or_else(|| daemon_dir.join(".cookie"));
+        let daemon_auth = match (config.auth, config.cookie_file) {
+            (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
+            (None, Some(cookie_file)) => Auth::CookieFile(cookie_file),
+            (Some(auth), None) => {
+                let parts: Vec<&str> = auth.splitn(2, ":").collect();
+                if parts.len() != 2 {
+                    eprintln!("Error: auth cookie doesn't contain colon");
+                    std::process::exit(1);
+                }
+                Auth::UserPass(parts[0].to_owned(), parts[1].to_owned())
+            }
+            (Some(_), Some(_)) => {
+                eprintln!("Error: ambigous configuration - auth and cookie_file can't be specified at the same time");
+                std::process::exit(1);
+            }
+        };
 
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
             daemon_dir: config.daemon_dir,
-            daemon_cookie_file,
+            daemon_auth,
             daemon_rpc_addr,
             daemon_p2p_addr,
             electrum_rpc_addr,
