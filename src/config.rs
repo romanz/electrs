@@ -105,7 +105,7 @@ impl FromStr for BitcoinNetwork {
 }
 
 impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
-    fn describe_type<W: fmt::Write>(mut writer: W) -> std::fmt::Result {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
         write!(writer, "either 'bitcoin', 'testnet', 'regtest' or 'signet'")
     }
 }
@@ -123,7 +123,7 @@ pub struct Config {
     pub network: Network,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
-    pub daemon_auth: Auth,
+    pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_p2p_addr: SocketAddr,
     pub electrum_rpc_addr: SocketAddr,
@@ -133,6 +133,27 @@ pub struct Config {
     pub ignore_mempool: bool,
     pub server_banner: String,
     pub args: Vec<String>,
+}
+
+pub struct SensitiveAuth(pub Auth);
+
+impl SensitiveAuth {
+    pub(crate) fn get_auth(&self) -> Auth {
+        self.0.clone()
+    }
+}
+
+impl fmt::Debug for SensitiveAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Auth::UserPass(ref user, _) => f
+                .debug_tuple("UserPass")
+                .field(&user)
+                .field(&"<sensitive>")
+                .finish(),
+            _ => write!(f, "{:?}", self.0),
+        }
+    }
 }
 
 /// Returns default daemon directory
@@ -229,7 +250,7 @@ impl Config {
         }
 
         let daemon_dir = &config.daemon_dir;
-        let daemon_auth = match (config.auth, config.cookie_file) {
+        let daemon_auth = SensitiveAuth(match (config.auth, config.cookie_file) {
             (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
             (None, Some(cookie_file)) => Auth::CookieFile(cookie_file),
             (Some(auth), None) => {
@@ -244,7 +265,7 @@ impl Config {
                 eprintln!("Error: ambigous configuration - auth and cookie_file can't be specified at the same time");
                 std::process::exit(1);
             }
-        };
+        });
 
         let config = Config {
             network: config.network,
@@ -267,5 +288,29 @@ impl Config {
             .format_timestamp_millis()
             .init();
         config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Auth, SensitiveAuth};
+    use std::path::Path;
+
+    #[test]
+    fn test_auth_debug() {
+        let auth = Auth::None;
+        assert_eq!(format!("{:?}", SensitiveAuth(auth)), "None");
+
+        let auth = Auth::CookieFile(Path::new("/foo/bar/.cookie").to_path_buf());
+        assert_eq!(
+            format!("{:?}", SensitiveAuth(auth)),
+            "CookieFile(\"/foo/bar/.cookie\")"
+        );
+
+        let auth = Auth::UserPass("user".to_owned(), "pass".to_owned());
+        assert_eq!(
+            format!("{:?}", SensitiveAuth(auth)),
+            "UserPass(\"user\", \"<sensitive>\")"
+        );
     }
 }

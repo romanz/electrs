@@ -48,12 +48,13 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
 
 pub(crate) fn rpc_connect(config: &Config) -> Result<bitcoincore_rpc::Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
-    if let bitcoincore_rpc::Auth::CookieFile(ref path) = config.daemon_auth {
+    let auth = config.daemon_auth.get_auth();
+    if let bitcoincore_rpc::Auth::CookieFile(ref path) = auth {
         if !path.exists() {
             bail!("{:?} is missing - is bitcoind running?", path);
         }
     }
-    let mut client = bitcoincore_rpc::Client::new(rpc_url, config.daemon_auth.clone())
+    let mut client = bitcoincore_rpc::Client::new(rpc_url, auth)
         .with_context(|| format!("failed to connect to RPC: {}", config.daemon_rpc_addr))?;
 
     loop {
