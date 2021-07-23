@@ -116,6 +116,7 @@ pub struct Rpc {
     rpc_duration: Histogram,
     daemon: Daemon,
     banner: String,
+    port: u16,
 }
 
 impl Rpc {
@@ -130,6 +131,7 @@ impl Rpc {
             rpc_duration,
             daemon: Daemon::connect(config)?,
             banner: config.server_banner.clone(),
+            port: config.electrum_rpc_addr.port(),
         })
     }
 
@@ -327,11 +329,14 @@ impl Rpc {
         Ok(json!(self.tracker.fees_histogram()))
     }
 
+    fn server_id(&self) -> String {
+        format!("electrs/{}", ELECTRS_VERSION)
+    }
+
     fn version(&self, (client_id, client_version): (String, Version)) -> Result<Value> {
         match client_version {
             Version::Single(v) if v == PROTOCOL_VERSION => {
-                let server_id = format!("electrs/{}", ELECTRS_VERSION);
-                Ok(json!([server_id, PROTOCOL_VERSION]))
+                Ok(json!([self.server_id(), PROTOCOL_VERSION]))
             }
             _ => {
                 bail!(
@@ -342,6 +347,18 @@ impl Rpc {
                 );
             }
         }
+    }
+
+    fn features(&self) -> Result<Value> {
+        Ok(json!({
+            "genesis_hash": self.tracker.chain().get_block_hash(0),
+            "hosts": { "tcp_port": self.port },
+            "protocol_max": PROTOCOL_VERSION,
+            "protocol_min": PROTOCOL_VERSION,
+            "pruning": null,
+            "server_version": self.server_id(),
+            "hash_function": "sha256"
+        }))
     }
 
     pub fn handle_request(&self, client: &mut Client, line: &str) -> String {
@@ -383,6 +400,7 @@ impl Rpc {
                 Call::BlockHeaders(args) => self.block_headers(args),
                 Call::Donation => Ok(Value::Null),
                 Call::EstimateFee(args) => self.estimate_fee(args),
+                Call::Features => self.features(),
                 Call::HeadersSubscribe => self.headers_subscribe(client),
                 Call::MempoolFeeHistogram => self.get_fee_histogram(),
                 Call::PeersSubscribe => Ok(json!([])),
@@ -421,6 +439,7 @@ enum Call {
     TransactionBroadcast((String,)),
     Donation,
     EstimateFee((u16,)),
+    Features,
     HeadersSubscribe,
     MempoolFeeHistogram,
     PeersSubscribe,
@@ -451,6 +470,7 @@ impl Call {
             "mempool.get_fee_histogram" => Call::MempoolFeeHistogram,
             "server.banner" => Call::Banner,
             "server.donation_address" => Call::Donation,
+            "server.features" => Call::Features,
             "server.peers.subscribe" => Call::PeersSubscribe,
             "server.ping" => Call::Ping,
             "server.version" => Call::Version(convert(params)?),
