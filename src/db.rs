@@ -166,24 +166,19 @@ impl DBStore {
             .expect("get_tip failed")
     }
 
-    pub(crate) fn write(&self, batch: WriteBatch) -> usize {
+    pub(crate) fn write(&self, batch: WriteBatch) {
         let mut db_batch = rocksdb::WriteBatch::default();
-        let mut total_rows_count = 0;
         for key in batch.funding_rows {
             db_batch.put_cf(self.funding_cf(), key, b"");
-            total_rows_count += 1;
         }
         for key in batch.spending_rows {
             db_batch.put_cf(self.spending_cf(), key, b"");
-            total_rows_count += 1;
         }
         for key in batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
-            total_rows_count += 1;
         }
         for key in batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
-            total_rows_count += 1;
         }
         db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
 
@@ -192,7 +187,6 @@ impl DBStore {
         opts.set_sync(!bulk_import);
         opts.disable_wal(bulk_import);
         self.db.write_opt(db_batch, &opts).unwrap();
-        total_rows_count
     }
 
     pub(crate) fn flush(&self) {
