@@ -44,6 +44,10 @@ impl Tracker {
         self.index.chain()
     }
 
+    pub(crate) fn mempool(&self) -> &Mempool {
+        &self.mempool
+    }
+
     pub(crate) fn fees_histogram(&self) -> &Histogram {
         self.mempool.fees_histogram()
     }
@@ -100,5 +104,9 @@ impl Tracker {
     pub fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         self.index.filter_by_txid(txid).next()
+    }
+
+    pub fn get_blockhash_spending_by_outpoint(&self, funding: OutPoint) -> Option<BlockHash> {
+        self.index.filter_by_spending(funding).next()
     }
 }
