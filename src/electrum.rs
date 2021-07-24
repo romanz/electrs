@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use bitcoin::{
     consensus::{deserialize, serialize},
     hashes::hex::{FromHex, ToHex},
-    BlockHash, Txid,
+    BlockHash, OutPoint, Transaction, Txid,
 };
 use rayon::prelude::*;
 use serde_derive::Deserialize;
@@ -275,6 +275,78 @@ impl Rpc {
         Ok(status)
     }
 
+    fn outpoint_subscribe(&self, (txid, vout): (Txid, u32)) -> Result<Value> {
+        let funding = OutPoint { txid, vout };
+
+        let funding_blockhash = self.tracker.get_blockhash_by_txid(funding.txid);
+        let spending_blockhash = self.tracker.get_blockhash_spending_by_outpoint(funding);
+
+        let mut inputs_funding_confirmed = true;
+
+        let funding_tx = self.daemon.get_transaction(&funding.txid, funding_blockhash);
+        if funding_tx.is_err() {
+            return Ok(json!({}));
+        }
+
+        if funding_blockhash.is_none() && funding_tx.unwrap().input.iter().any(|txi| self.tracker.get_blockhash_by_txid(txi.previous_output.txid).is_none()) {
+            inputs_funding_confirmed = false;
+        }
+
+        let funding_height = self.tracker.chain().get_block_height(&funding_blockhash.unwrap()).unwrap();
+
+        if spending_blockhash.is_none() {
+            let txids: Vec<Txid> = self
+                .daemon
+                .get_mempool_txids()
+                .unwrap()
+                .iter()
+                .filter_map(|mempool_txid| {
+                    let mempool_tx = self.daemon.get_transaction(mempool_txid, None);
+                    if is_spending(&mempool_tx.unwrap(), funding) {
+                        Some(mempool_txid);
+                    }
+                    None
+                })
+                .collect();
+            if txids.len() > 1 {
+                return Ok(panic!("double spend of {}: {:?}", txid, txids));
+            }
+            if txids.is_empty() {
+                let spending_tx = self.daemon.get_transaction(&txids[0], spending_blockhash);
+                if spending_tx.unwrap().input.iter().any(|txi| self.tracker.get_blockhash_by_txid(txi.previous_output.txid).is_none()) {
+                    if inputs_funding_confirmed {
+                        return Ok(json!({"height": 0, "spender_txhash": txids[0], "spender_height": -1}));
+                    }
+                    return Ok(json!({"height": -1, "spender_txhash": txids[0], "spender_height": -1}));
+                }
+                return Ok(json!({"height": funding_height, "spender_txhash": txids[0], "spender_height": 0}));
+            }
+            return Ok(json!({"height": funding_height}));
+        }
+
+        let spending_height = self.tracker.chain().get_block_height(&spending_blockhash.unwrap()).unwrap();
+
+        let txids: Vec<Txid> = self
+            .daemon
+            .get_block_txids(spending_blockhash.unwrap())
+            .unwrap()
+            .iter()
+            .filter_map(|block_txid| {
+                let block_tx = self.daemon.get_transaction(&block_txid, spending_blockhash);
+                if is_spending(&block_tx.unwrap(), funding) {
+                    Some(block_txid);
+                }
+                None
+            })
+            .collect();
+
+        if txids.len() > 1 {
+            return Ok(panic!("double spend of {}: {:?}", txid, txids));
+        }
+        return Ok(json!({"height": funding_height, "spender_txhash": txids[0], "spender_height": spending_height}));
+
+    }
+
     fn transaction_broadcast(&self, (tx_hex,): (String,)) -> Result<Value> {
         let tx_bytes = Vec::from_hex(&tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
@@ -384,6 +456,7 @@ impl Rpc {
                 Call::Donation => Ok(Value::Null),
                 Call::EstimateFee(args) => self.estimate_fee(args),
                 Call::HeadersSubscribe => self.headers_subscribe(client),
+                Call::OutpointSubscribe(args) => self.outpoint_subscribe(args),
                 Call::MempoolFeeHistogram => self.get_fee_histogram(),
                 Call::PeersSubscribe => Ok(json!([])),
                 Call::Ping => Ok(Value::Null),
@@ -423,6 +496,7 @@ enum Call {
     EstimateFee((u16,)),
     HeadersSubscribe,
     MempoolFeeHistogram,
+    OutpointSubscribe((Txid, u32)),
     PeersSubscribe,
     Ping,
     RelayFee,
@@ -441,6 +515,7 @@ impl Call {
             "blockchain.block.headers" => Call::BlockHeaders(convert(params)?),
             "blockchain.estimatefee" => Call::EstimateFee(convert(params)?),
             "blockchain.headers.subscribe" => Call::HeadersSubscribe,
+            "blockchain.outpoint.subscribe" => Call::OutpointSubscribe(convert(params)?),
             "blockchain.relayfee" => Call::RelayFee,
             "blockchain.scripthash.get_balance" => Call::ScriptHashGetBalance(convert(params)?),
             "blockchain.scripthash.get_history" => Call::ScriptHashGetHistory(convert(params)?),
@@ -484,3 +559,8 @@ fn result_msg(id: Value, result: Value) -> Value {
 fn error_msg(id: Value, error: RpcError) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": error.to_value()})
 }
+
+fn is_spending(tx: &Transaction, funding: OutPoint) -> bool {
+    tx.input.iter().any(|txi| txi.previous_output == funding)
+}
+
