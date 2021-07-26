@@ -304,7 +304,7 @@ impl Rpc {
 
         if spending_blockhash.is_none() {
             let txids: Vec<Txid> = outpoint_scripthash_status.unwrap()
-                .get_mempool(&(self.tracker).mempool())
+                .get_mempool(&self.tracker.mempool())
                 .iter()
                 .filter_map(|tx_entry| {
                     let mempool_tx = self.daemon.get_transaction(&tx_entry.txid, None);
