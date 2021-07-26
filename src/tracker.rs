@@ -44,6 +44,10 @@ impl Tracker {
         self.index.chain()
     }
 
+    pub(crate) fn mempool(&self) -> &Mempool {
+        &self.mempool
+    }
+
     pub(crate) fn fees_histogram(&self) -> &Histogram {
         self.mempool.fees_histogram()
     }

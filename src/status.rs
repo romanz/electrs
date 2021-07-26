@@ -46,8 +46,8 @@ impl TxEntry {
 }
 
 pub(crate) struct ConfirmedEntry {
-    txid: Txid,
-    height: usize,
+    pub txid: Txid,
+    pub height: usize,
 }
 
 impl ConfirmedEntry {
@@ -62,8 +62,8 @@ impl ConfirmedEntry {
 }
 
 pub(crate) struct MempoolEntry {
-    txid: Txid,
-    has_unconfirmed_inputs: bool,
+    pub txid: Txid,
+    pub has_unconfirmed_inputs: bool,
     fee: Amount,
 }
 
