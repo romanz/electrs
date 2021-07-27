@@ -267,6 +267,12 @@ impl Config {
             }
         });
 
+        let level = match config.verbose {
+            0 => log::LevelFilter::Info,
+            1 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace,
+        };
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
@@ -286,6 +292,7 @@ impl Config {
         env_logger::Builder::from_default_env()
             .default_format()
             .format_timestamp_millis()
+            .filter_level(level)
             .init();
         config
     }
