@@ -105,4 +105,8 @@ impl Tracker {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         self.index.filter_by_txid(txid).next()
     }
+
+    pub fn get_blockhash_spending_by_outpoint(&self, funding: OutPoint) -> Option<BlockHash> {
+        self.index.filter_by_spending(funding).next()
+    }
 }
