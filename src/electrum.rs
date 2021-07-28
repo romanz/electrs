@@ -10,13 +10,12 @@ use serde_json::{self, json, Value};
 
 use std::collections::HashMap;
 use std::iter::FromIterator;
-
+ 
 use crate::{
     cache::Cache,
     config::Config,
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
-    mempool::Entry,
     metrics::Histogram,
     status::Status,
     tracker::Tracker,
@@ -282,14 +281,17 @@ impl Rpc {
         let funding_blockhash = self.tracker.get_blockhash_by_txid(funding.txid);
         let spending_blockhash = self.tracker.get_blockhash_spending_by_outpoint(funding);
 
-        let mut inputs_funding_confirmed = true;
+        let mut funding_inputs_confirmed = true;
 
-        let funding_tx = self.daemon.get_transaction(&funding.txid, funding_blockhash)?;
+        let funding_tx =  match self.daemon.get_transaction(&funding.txid, funding_blockhash) {
+            Ok(tx) => tx,
+            Err(_) => return Ok(json!({})),
+        };
 
         let funding_inputs = &funding_tx.input;
 
         if funding_blockhash.is_none() && funding_inputs.iter().any(|txi| self.tracker.get_blockhash_by_txid(txi.previous_output.txid).is_none()) {
-            inputs_funding_confirmed = false;
+            funding_inputs_confirmed = false;
         }
 
         let funding_height = match &funding_blockhash {
@@ -297,41 +299,45 @@ impl Rpc {
             None => 0,
         };
 
-        if spending_blockhash.is_none() {
-            let spending_entries: Vec<&Entry> = self.tracker.mempool().filter_by_spending(&funding);
-            if spending_entries.len() > 1 {
-                return Ok(panic!("double spend of {}", txid));
-            }
-            if !spending_entries.is_empty() {
-                let spending_tx = self.daemon.get_transaction(&spending_entries[0].txid, None)?;
-                if spending_tx.input.iter().any(|txi| self.tracker.get_blockhash_by_txid(txi.previous_output.txid).is_none()) {
-                    if inputs_funding_confirmed {
-                        return Ok(json!({"height": 0, "spender_txhash": spending_entries[0].txid, "spender_height": -1}));
+        let tx_candidates: Vec<Txid> = match spending_blockhash {
+            None => self.tracker.mempool().filter_by_spending(&funding).iter().map(|e| e.txid).collect(),
+            Some(spending_blockhash) => {
+                let mut txids: Vec<Txid> = Vec::new();
+                self.daemon.for_blocks(Some(spending_blockhash).into_iter(), |_, block| {
+                    for tx in block.txdata.into_iter() {
+                        if is_spending(&tx, funding) {
+                            txids.push(tx.txid())
+                        }
                     }
-                    return Ok(json!({"height": -1, "spender_txhash": spending_entries[0].txid, "spender_height": -1}));
+                })?;
+                txids
+            },
+        };
+        
+        let mut spender_txids = tx_candidates.iter();
+
+        match spender_txids.next() {
+            Some(spender_txid) => if let Some(double_spending_txid) = spender_txids.next() {
+                    return bail!("double spend of {}: {}", spender_txid, double_spending_txid)
+                } else {
+                    match spending_blockhash {
+                        Some(spending_blockhash) => {
+                            let spending_height = self.tracker.chain().get_block_height(&spending_blockhash).ok_or_else(|| anyhow::anyhow!("Blockhash not found"))?;
+                            return Ok(json!({"height": funding_height, "spender_txhash": spender_txid, "spender_height": spending_height}))
+                        }
+                        None => {
+                            let spending_tx = self.daemon.get_transaction(&spender_txid, None)?;
+                            if spending_tx.input.iter().any(|txi| self.tracker.get_blockhash_by_txid(txi.previous_output.txid).is_none()) {
+                                if funding_inputs_confirmed {
+                                    return Ok(json!({"height": funding_height, "spender_txhash": spender_txid, "spender_height": -1}));
+                                }
+                                return Ok(json!({"height": -1, "spender_txhash": spender_txid, "spender_height": -1}));
+                            } else {return Ok(json!({"height": funding_height, "spender_txhash": spender_txid, "spender_height": 0}));}
+                        }
                 }
-                return Ok(json!({"height": funding_height, "spender_txhash": spending_entries[0].txid, "spender_height": 0}));
-            }
-            return Ok(json!({"height": funding_height}));
-        }
-
-        let spending_height = self.tracker.chain().get_block_height(&spending_blockhash.unwrap()).unwrap();
-
-        let mut txids: Vec<Txid> = Vec::new();
-        self.daemon.for_blocks(spending_blockhash.into_iter(), |_, block| {
-            for tx in block.txdata.into_iter() {
-                if is_spending(&tx, funding) {
-                    txids.push(tx.txid())
-                }
-            }
-        })?;
-
-        if txids.len() > 1 {
-            return Ok(panic!("double spend of {}: {:?}", txid, txids));
-        }
-        if txids.is_empty() { return Ok(json!({"WTF": "spending tx not found but exist ?"})); }
-        return Ok(json!({"height": funding_height, "spender_txhash": txids[0], "spender_height": spending_height}));
-
+            },
+            None => return Ok(json!({"height": funding_height})),
+        };
     }
 
     fn transaction_broadcast(&self, (tx_hex,): (String,)) -> Result<Value> {
