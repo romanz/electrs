@@ -10,7 +10,7 @@ use serde_json::{self, json, Value};
 
 use std::collections::HashMap;
 use std::iter::FromIterator;
- 
+
 use crate::{
     cache::Cache,
     config::Config,
