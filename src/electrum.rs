@@ -4,6 +4,7 @@ use bitcoin::{
     hashes::hex::{FromHex, ToHex},
     BlockHash, OutPoint, Transaction, Txid,
 };
+use bitcoincore_rpc::jsonrpc;
 use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
@@ -283,7 +284,12 @@ impl Rpc {
 
         let funding_tx =  match self.daemon.get_transaction(&funding.txid, funding_blockhash) {
             Ok(tx) => tx,
-            Err(_) => return Ok(json!({})),
+            Err(error) => {
+                match error.downcast_ref::<bitcoincore_rpc::Error>() {
+                    Some(bitcoincore_rpc::Error::JsonRpc(jsonrpc::Error::Rpc(jsonrpc::error::RpcError { code: -5, .. }))) => return Ok(json!({})),
+                    _ => return Err(error),
+                }
+            },
         };
         let funding_inputs = &funding_tx.input;
         let funding_height = match &funding_blockhash {
