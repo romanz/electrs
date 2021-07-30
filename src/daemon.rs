@@ -17,7 +17,7 @@ enum PollResult {
 }
 
 fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
-    match client.get_blockchain_info() {
+    match client.call::<BlockchainInfo>("getblockchaininfo", &[]) {
         Ok(info) => {
             let left_blocks = info.headers - info.blocks;
             if info.initial_block_download || left_blocks > 0 {
@@ -72,6 +72,20 @@ pub struct Daemon {
     rpc: bitcoincore_rpc::Client,
 }
 
+// A workaround for https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/190.
+#[derive(Deserialize)]
+struct BlockchainInfo {
+    /// The current number of blocks processed in the server
+    pub blocks: u64,
+    /// The current number of headers we have validated
+    pub headers: u64,
+    /// Estimate of whether this node is in Initial Block Download mode
+    #[serde(rename = "initialblockdownload")]
+    pub initial_block_download: bool,
+    /// If the blocks are subject to pruning
+    pub pruned: bool,
+}
+
 impl Daemon {
     pub fn connect(config: &Config) -> Result<Self> {
         let rpc = rpc_connect(config)?;
@@ -82,7 +96,7 @@ impl Daemon {
         if !network_info.network_active {
             bail!("electrs requires active bitcoind p2p network");
         }
-        let blockchain_info = rpc.get_blockchain_info()?;
+        let blockchain_info: BlockchainInfo = rpc.call("getblockchaininfo", &[])?;
         if blockchain_info.pruned {
             bail!("electrs requires non-pruned bitcoind node");
         }
