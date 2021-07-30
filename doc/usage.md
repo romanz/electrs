@@ -447,7 +447,7 @@ You can invoke any supported RPC using `netcat`, for example:
 
 ```
 $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}' | netcat 127.0.0.1 50001
-{"id":0,"jsonrpc":"2.0","result":["electrs 0.8.6","1.4"]}
+{"id":0,"jsonrpc":"2.0","result":["electrs 0.8.10","1.4"]}
 ```
 Corresponding example in `Python`:
 
@@ -508,8 +508,8 @@ If a new version of `electrs` is not yet in the package system, try wait a few d
    If you've deleted it, you need to `git clone` again.
 2. `git checkout master`
 3. `git pull`
-4. Strongly recommended: `git verify-tag v0.8.6` (fix the version number if we've forgotten to update this docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
-5. `git checkout v0.8.6`
+4. Strongly recommended: `git verify-tag v0.8.10` (fix the version number if we've forgotten to update this docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
+5. `git checkout v0.8.10`
 6. If you used static linking: `cargo build --locked --release`.
    If you used dynamic linking `ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --no-default-features --release`.
    If you don't remember which linking you used, you probably used static.
