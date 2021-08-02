@@ -112,6 +112,13 @@ struct NetworkInfo {
     relayfee: f64, // in BTC
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct IndexInfo {
+    synced: bool,
+    best_block_height: usize,
+}
+
+
 pub struct MempoolEntry {
     fee: u64,   // in satoshis
     vsize: u32, // in virtual bytes (= weight/4)
@@ -457,6 +464,12 @@ impl Daemon {
         from_value(info).chain_err(|| "invalid network info")
     }
 
+    fn getindexinfo(&self, indexes: Vec<&str>) -> Result<Vec<IndexInfo>> {
+        let indexes: Vec<Value> = indexes.iter().map(|index| json!([index])).collect();
+        let info: Value = self.request("getindexinfo", json!(indexes))?;
+        from_value(info).chain_err(|| "invalid index info")
+    }
+
     pub fn get_subversion(&self) -> Result<String> {
         Ok(self.getnetworkinfo()?.subversion)
     }
@@ -514,13 +527,14 @@ impl Daemon {
             .get_or_else(blockhash, || self.load_blocktxids(blockhash))
     }
 
+
     pub fn gettransaction(
         &self,
         txhash: &Txid,
         blockhash: Option<BlockHash>,
     ) -> Result<Transaction> {
         let mut args = json!([txhash.to_hex(), /*verbose=*/ false]);
-        if let Some(blockhash) = blockhash {
+        if let (true, Some(blockhash)) = (self.getindexinfo(vec!["txindex"])?[0].synced, blockhash) {
             args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
         }
         tx_from_value(self.request("getrawtransaction", args)?)
@@ -533,7 +547,7 @@ impl Daemon {
         verbose: bool,
     ) -> Result<Value> {
         let mut args = json!([txhash.to_hex(), verbose]);
-        if let Some(blockhash) = blockhash {
+        if let (true, Some(blockhash)) = (self.getindexinfo(vec!["txindex"])?[0].synced, blockhash) {
             args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
         }
         self.request("getrawtransaction", args)
