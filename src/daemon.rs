@@ -6,13 +6,13 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use serde_json::{from_str, from_value, Map, Value};
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, time::Instant};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Instant, Duration};
 
 use crate::cache::BlockTxIDsCache;
 use crate::errors::*;
@@ -124,6 +124,7 @@ enum IndexInfo {
     TxIndex(TxIndexInfo),
 }
 
+#[derive(Copy, Clone)]
 enum TxIndexState {
     /// Didn't check yet, re-check next time
     Unknown,
@@ -315,6 +316,9 @@ pub struct Daemon {
     // monitoring
     latency: HistogramVec,
     size: HistogramVec,
+
+    // index available
+    txindex: TxIndexState,
 }
 
 impl Daemon {
@@ -349,6 +353,7 @@ impl Daemon {
                 HistogramOpts::new("electrs_daemon_bytes", "Bitcoind RPC size (in bytes)"),
                 &["method", "dir"],
             ),
+            txindex: TxIndexState::Unknown,
         };
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
@@ -391,6 +396,7 @@ impl Daemon {
             blocktxids_cache: Arc::clone(&self.blocktxids_cache),
             latency: self.latency.clone(),
             size: self.size.clone(),
+            txindex: TxIndexState::Unknown,
         })
     }
 
@@ -484,6 +490,23 @@ impl Daemon {
         from_value(self.request("getindexinfo", json!(indexes))?).chain_err(|| "invalid index info")
     }
 
+    fn update_txindex_state(&mut self) {
+        match getindexinfo(self, vec!["txindex"]).iter().next() {
+            Some(TxIndex(txindex)) => {
+                if txindex.synced {
+                    self.txindex = TxIndexState::Synced;
+                } else {
+                    self.txindex = TxIndexState::Syncing{ last_check: Instant::now() };
+                }
+
+            }
+            None => { self.txindex = TxIndexState::Unavailable; }
+            Some(_) => { self.txindex = TxIndexState::Unknown;
+                bail!("Unexpected return from getindexinfo")
+            }
+        }
+    }
+
     pub fn get_subversion(&self) -> Result<String> {
         Ok(self.getnetworkinfo()?.subversion)
     }
@@ -548,20 +571,22 @@ impl Daemon {
         blockhash: Option<BlockHash>,
     ) -> Result<Transaction> {
         let mut args = json!([txhash.to_hex(), /*verbose=*/ false]);
-        let txindex_available = self.getindexinfo(vec!["txindex"])
-            .unwrap_or_else(|error| {
-                error!("failed to get index info: {}, assuming txindex unavailable", error);
-                Vec::new()
-            })
-            .iter().find_map(|info| {
-                match info {
-                    IndexInfo::TxIndex(txindex) => Some(txindex),
+        match (self.txindex, blockhash) {
+            (TxIndexState::Synced, _) => {}
+            (_, None) => {}
+            (TxIndexState::Unavailable, Some(blockhash)) => {
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
+            }
+            (TxIndexState::Unknown, Some(blockhash)) => {
+                self.update_txindex_state(); 
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
+            }
+            (TxIndexState::Syncing(last_check), Some(blockhash)) => {
+                if last_check.elapsed() > Duration::from_secs(3600) {
+                    self.update_txindex_state(); 
                 }
-            })
-            .map(|txindex| txindex.synced)
-            .unwrap_or(false);
-        if let (false, Some(blockhash)) = (txindex_available, blockhash) {
-            args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
+            }
         }
         tx_from_value(self.request("getrawtransaction", args)?)
     }
@@ -573,20 +598,22 @@ impl Daemon {
         verbose: bool,
     ) -> Result<Value> {
         let mut args = json!([txhash.to_hex(), verbose]);
-        let txindex_available = self.getindexinfo(vec!["txindex"])
-            .unwrap_or_else(|error| {
-                error!("failed to get index info: {}, assuming txindex unavailable", error);
-                Vec::new()
-            })
-            .iter().find_map(|info| {
-                match info {
-                    IndexInfo::TxIndex(txindex) => Some(txindex),
+        match (self.txindex, blockhash) {
+            (TxIndexState::Synced, _) => {}
+            (_, None) => {}
+            (TxIndexState::Unavailable, Some(blockhash)) => {
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
+            }
+            (TxIndexState::Unknown, Some(blockhash)) => {
+                self.update_txindex_state(); 
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
+            }
+            (TxIndexState::Syncing(last_check), Some(blockhash)) => {
+                if last_check.elapsed() > Duration::from_secs(3600) {
+                    self.update_txindex_state(); 
                 }
-            })
-            .map(|txindex| txindex.synced)
-            .unwrap_or(false);
-        if let (false, Some(blockhash)) = (txindex_available, blockhash) {
-            args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
+                args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
+            }
         }
         self.request("getrawtransaction", args)
     }
