@@ -6,7 +6,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use serde_json::{from_str, from_value, Map, Value};
-use std::{collections::{HashMap, HashSet}, time::Instant};
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -174,6 +174,7 @@ struct Connection {
     cookie_getter: Arc<dyn CookieGetter>,
     addr: SocketAddr,
     signal: Waiter,
+    txindex: TxIndexState,
 }
 
 fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
@@ -206,6 +207,7 @@ impl Connection {
             cookie_getter,
             addr,
             signal,
+            txindex: TxIndexState::Unknown,
         })
     }
 
@@ -287,6 +289,24 @@ impl Connection {
             );
         })
     }
+
+    fn update_txindex_state(&mut self) -> Result<()> {
+        let request = json!({"method": "getindexinfo", "params": "txindex", "id": 0}).to_string();
+        self.send(&request)?;
+        let response = self.recv()?;
+        let result_vec = from_str::<Vec<TxIndexInfo>>(&response).chain_err(|| "invalid JSON")?;
+        match result_vec.get(0) {
+            Some(txindex) => {
+                if txindex.synced {
+                    self.txindex = TxIndexState::Synced;
+                } else {
+                    self.txindex = TxIndexState::Syncing{ last_check: Instant::now() };
+                }
+            }
+            None => { self.txindex = TxIndexState::Unavailable; }
+        }
+        Ok(())
+    }
 }
 
 struct Counter {
@@ -316,9 +336,6 @@ pub struct Daemon {
     // monitoring
     latency: HistogramVec,
     size: HistogramVec,
-
-    // index available
-    txindex: TxIndexState,
 }
 
 impl Daemon {
@@ -353,7 +370,6 @@ impl Daemon {
                 HistogramOpts::new("electrs_daemon_bytes", "Bitcoind RPC size (in bytes)"),
                 &["method", "dir"],
             ),
-            txindex: TxIndexState::Unknown,
         };
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
@@ -396,7 +412,6 @@ impl Daemon {
             blocktxids_cache: Arc::clone(&self.blocktxids_cache),
             latency: self.latency.clone(),
             size: self.size.clone(),
-            txindex: TxIndexState::Unknown,
         })
     }
 
@@ -490,23 +505,6 @@ impl Daemon {
         from_value(self.request("getindexinfo", json!(indexes))?).chain_err(|| "invalid index info")
     }
 
-    fn update_txindex_state(&mut self) {
-        match getindexinfo(self, vec!["txindex"]).iter().next() {
-            Some(TxIndex(txindex)) => {
-                if txindex.synced {
-                    self.txindex = TxIndexState::Synced;
-                } else {
-                    self.txindex = TxIndexState::Syncing{ last_check: Instant::now() };
-                }
-
-            }
-            None => { self.txindex = TxIndexState::Unavailable; }
-            Some(_) => { self.txindex = TxIndexState::Unknown;
-                bail!("Unexpected return from getindexinfo")
-            }
-        }
-    }
-
     pub fn get_subversion(&self) -> Result<String> {
         Ok(self.getnetworkinfo()?.subversion)
     }
@@ -571,19 +569,20 @@ impl Daemon {
         blockhash: Option<BlockHash>,
     ) -> Result<Transaction> {
         let mut args = json!([txhash.to_hex(), /*verbose=*/ false]);
-        match (self.txindex, blockhash) {
+        let mut conn = self.conn.lock().unwrap();
+        match (conn.txindex, blockhash) {
             (TxIndexState::Synced, _) => {}
             (_, None) => {}
             (TxIndexState::Unavailable, Some(blockhash)) => {
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
             }
             (TxIndexState::Unknown, Some(blockhash)) => {
-                self.update_txindex_state(); 
+                conn.update_txindex_state()?; 
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
             }
-            (TxIndexState::Syncing(last_check), Some(blockhash)) => {
+            (TxIndexState::Syncing{last_check}, Some(blockhash)) => {
                 if last_check.elapsed() > Duration::from_secs(3600) {
-                    self.update_txindex_state(); 
+                    conn.update_txindex_state()?; 
                 }
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
             }
@@ -598,19 +597,20 @@ impl Daemon {
         verbose: bool,
     ) -> Result<Value> {
         let mut args = json!([txhash.to_hex(), verbose]);
-        match (self.txindex, blockhash) {
+        let mut conn = self.conn.lock().unwrap();
+        match (conn.txindex, blockhash) {
             (TxIndexState::Synced, _) => {}
             (_, None) => {}
             (TxIndexState::Unavailable, Some(blockhash)) => {
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex()));
             }
             (TxIndexState::Unknown, Some(blockhash)) => {
-                self.update_txindex_state(); 
+                conn.update_txindex_state()?; 
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
             }
-            (TxIndexState::Syncing(last_check), Some(blockhash)) => {
+            (TxIndexState::Syncing{last_check}, Some(blockhash)) => {
                 if last_check.elapsed() > Duration::from_secs(3600) {
-                    self.update_txindex_state(); 
+                    conn.update_txindex_state()?; 
                 }
                 args.as_array_mut().unwrap().push(json!(blockhash.to_hex())); 
             }
