@@ -4,7 +4,7 @@ use bitcoin::{
     Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use rayon::prelude::*;
-use serde_json::{json, Value};
+use serde::ser::{Serialize, Serializer};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
@@ -45,44 +45,74 @@ impl TxEntry {
     }
 }
 
-pub(crate) struct ConfirmedEntry {
-    txid: Txid,
-    height: usize,
+enum Height {
+    Confirmed { height: usize },
+    Unconfirmed { has_unconfirmed_inputs: bool },
 }
 
-impl ConfirmedEntry {
-    pub fn hash(&self, engine: &mut sha256::HashEngine) {
+impl Height {
+    fn as_i64(&self) -> i64 {
+        match self {
+            Self::Confirmed { height } => i64::try_from(*height).unwrap(),
+            Self::Unconfirmed {
+                has_unconfirmed_inputs: true,
+            } => -1,
+            Self::Unconfirmed {
+                has_unconfirmed_inputs: false,
+            } => 0,
+        }
+    }
+}
+
+impl Serialize for Height {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_i64(self.as_i64())
+    }
+}
+
+impl std::fmt::Display for Height {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_i64().fmt(f)
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct HistoryEntry {
+    #[serde(rename = "tx_hash")]
+    txid: Txid,
+    height: Height,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "bitcoin::util::amount::serde::as_sat::opt"
+    )]
+    fee: Option<Amount>,
+}
+
+impl HistoryEntry {
+    fn hash(&self, engine: &mut sha256::HashEngine) {
         let s = format!("{}:{}:", self.txid, self.height);
         engine.input(s.as_bytes());
     }
 
-    pub fn value(&self) -> Value {
-        json!({"tx_hash": self.txid, "height": self.height})
-    }
-}
-
-pub(crate) struct MempoolEntry {
-    txid: Txid,
-    has_unconfirmed_inputs: bool,
-    fee: Amount,
-}
-
-impl MempoolEntry {
-    fn height(&self) -> isize {
-        if self.has_unconfirmed_inputs {
-            -1
-        } else {
-            0
+    fn confirmed(txid: Txid, height: usize) -> Self {
+        Self {
+            txid,
+            height: Height::Confirmed { height },
+            fee: None,
         }
     }
 
-    pub fn hash(&self, engine: &mut sha256::HashEngine) {
-        let s = format!("{}:{}:", self.txid, self.height());
-        engine.input(s.as_bytes());
-    }
-
-    pub fn value(&self) -> Value {
-        json!({"tx_hash": self.txid, "height": self.height(), "fee": self.fee.as_sat()})
+    fn unconfirmed(txid: Txid, has_unconfirmed_inputs: bool, fee: Amount) -> Self {
+        Self {
+            txid,
+            height: Height::Unconfirmed {
+                has_unconfirmed_inputs,
+            },
+            fee: Some(fee),
+        }
     }
 }
 
@@ -204,20 +234,25 @@ impl Status {
         }
     }
 
-    pub(crate) fn get_confirmed(&self, chain: &Chain) -> Vec<ConfirmedEntry> {
+    pub(crate) fn get_history(&self, chain: &Chain, mempool: &Mempool) -> Vec<HistoryEntry> {
+        let mut result = self.get_confirmed(chain);
+        result.extend(self.get_mempool(mempool));
+        result
+    }
+
+    fn get_confirmed(&self, chain: &Chain) -> Vec<HistoryEntry> {
         self.confirmed_entries(chain)
             .collect::<BTreeMap<usize, &[TxEntry]>>()
             .into_iter()
             .flat_map(|(height, entries)| {
-                entries.iter().map(move |e| ConfirmedEntry {
-                    txid: e.txid,
-                    height,
-                })
+                entries
+                    .iter()
+                    .map(move |e| HistoryEntry::confirmed(e.txid, height))
             })
             .collect()
     }
 
-    pub(crate) fn get_mempool(&self, mempool: &Mempool) -> Vec<MempoolEntry> {
+    fn get_mempool(&self, mempool: &Mempool) -> Vec<HistoryEntry> {
         let mut entries = self
             .mempool
             .iter()
@@ -226,11 +261,7 @@ impl Status {
         entries.sort_by_key(|e| (e.has_unconfirmed_inputs, e.txid));
         entries
             .into_iter()
-            .map(|e| MempoolEntry {
-                txid: e.txid,
-                has_unconfirmed_inputs: e.has_unconfirmed_inputs,
-                fee: e.fee,
-            })
+            .map(|e| HistoryEntry::unconfirmed(e.txid, e.has_unconfirmed_inputs, e.fee))
             .collect()
     }
 
@@ -416,4 +447,34 @@ fn filter_inputs(tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoin
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HistoryEntry;
+    use bitcoin::{hashes::hex::FromHex, Amount, Txid};
+    use serde_json::json;
+
+    #[test]
+    fn test_txinfo_json() {
+        let txid =
+            Txid::from_hex("5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b")
+                .unwrap();
+        assert_eq!(
+            json!(HistoryEntry::confirmed(txid, 123456)),
+            json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 123456})
+        );
+        assert_eq!(
+            json!(HistoryEntry::unconfirmed(txid, true, Amount::from_sat(123))),
+            json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": -1, "fee": 123})
+        );
+        assert_eq!(
+            json!(HistoryEntry::unconfirmed(
+                txid,
+                false,
+                Amount::from_sat(123)
+            )),
+            json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 0, "fee": 123})
+        );
+    }
 }

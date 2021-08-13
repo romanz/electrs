@@ -256,7 +256,7 @@ impl Rpc {
                 self.tracker.get_history(&self.new_status(scripthash)?)
             }
         };
-        Ok(json!(history_entries.collect::<Vec<Value>>()))
+        Ok(json!(history_entries))
     }
 
     fn scripthash_subscribe(

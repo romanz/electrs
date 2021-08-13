@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use bitcoin::{BlockHash, OutPoint, Txid};
-use serde_json::Value;
 
 use std::convert::TryInto;
 use std::path::Path;
@@ -14,7 +13,7 @@ use crate::{
     index::Index,
     mempool::{Histogram, Mempool},
     metrics::Metrics,
-    status::{Balance, Status},
+    status::{Balance, HistoryEntry, Status},
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -52,16 +51,8 @@ impl Tracker {
         &self.metrics
     }
 
-    pub fn get_history(&self, status: &Status) -> impl Iterator<Item = Value> {
-        let confirmed = status
-            .get_confirmed(self.index.chain())
-            .into_iter()
-            .map(|entry| entry.value());
-        let mempool = status
-            .get_mempool(&self.mempool)
-            .into_iter()
-            .map(|entry| entry.value());
-        confirmed.chain(mempool)
+    pub(crate) fn get_history(&self, status: &Status) -> Vec<HistoryEntry> {
+        status.get_history(self.index.chain(), &self.mempool)
     }
 
     pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
