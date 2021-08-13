@@ -117,7 +117,7 @@ impl HistoryEntry {
 }
 
 /// ScriptHash subscription status
-pub struct Status {
+pub struct ScriptHashStatus {
     scripthash: ScriptHash,
     tip: BlockHash,
     statushash: Option<StatusHash>,
@@ -171,7 +171,7 @@ fn make_outpoints<'a>(txid: &'a Txid, outputs: &'a [u32]) -> impl Iterator<Item 
     outputs.iter().map(move |vout| OutPoint::new(*txid, *vout))
 }
 
-impl Status {
+impl ScriptHashStatus {
     pub fn new(scripthash: ScriptHash) -> Self {
         Self {
             scripthash,

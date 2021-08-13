@@ -17,7 +17,7 @@ use crate::{
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
     metrics::Histogram,
-    status::Status,
+    status::ScriptHashStatus,
     tracker::Tracker,
     types::ScriptHash,
 };
@@ -31,7 +31,7 @@ const UNKNOWN_FEE: isize = -1; // (allowed by Electrum protocol)
 #[derive(Default)]
 pub struct Client {
     tip: Option<BlockHash>,
-    status: HashMap<ScriptHash, Status>,
+    scripthashes: HashMap<ScriptHash, ScriptHashStatus>,
 }
 
 #[derive(Deserialize)]
@@ -142,12 +142,12 @@ impl Rpc {
     pub fn update_client(&self, client: &mut Client) -> Result<Vec<String>> {
         let chain = self.tracker.chain();
         let mut notifications = client
-            .status
+            .scripthashes
             .par_iter_mut()
             .filter_map(|(scripthash, status)| -> Option<Result<Value>> {
                 match self
                     .tracker
-                    .update_status(status, &self.daemon, &self.cache)
+                    .update_scripthash_status(status, &self.daemon, &self.cache)
                 {
                     Ok(true) => Some(Ok(notification(
                         "blockchain.scripthash.subscribe",
@@ -225,7 +225,7 @@ impl Rpc {
         client: &Client,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let balance = match client.status.get(&scripthash) {
+        let balance = match client.scripthashes.get(&scripthash) {
             Some(status) => self.tracker.get_balance(status, &self.cache),
             None => {
                 warn!(
@@ -246,7 +246,7 @@ impl Rpc {
         client: &Client,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let history_entries = match client.status.get(&scripthash) {
+        let history_entries = match client.scripthashes.get(&scripthash) {
             Some(status) => self.tracker.get_history(status),
             None => {
                 warn!(
@@ -266,14 +266,14 @@ impl Rpc {
     ) -> Result<Value> {
         let status = self.new_status(scripthash)?;
         let statushash = status.statushash();
-        client.status.insert(scripthash, status); // skip if already exists
+        client.scripthashes.insert(scripthash, status); // skip if already exists
         Ok(json!(statushash))
     }
 
-    fn new_status(&self, scripthash: ScriptHash) -> Result<Status> {
-        let mut status = Status::new(scripthash);
+    fn new_status(&self, scripthash: ScriptHash) -> Result<ScriptHashStatus> {
+        let mut status = ScriptHashStatus::new(scripthash);
         self.tracker
-            .update_status(&mut status, &self.daemon, &self.cache)?;
+            .update_scripthash_status(&mut status, &self.daemon, &self.cache)?;
         Ok(status)
     }
 

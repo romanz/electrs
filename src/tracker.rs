@@ -13,7 +13,7 @@ use crate::{
     index::Index,
     mempool::{Histogram, Mempool},
     metrics::Metrics,
-    status::{Balance, HistoryEntry, Status},
+    status::{Balance, HistoryEntry, ScriptHashStatus},
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -51,7 +51,7 @@ impl Tracker {
         &self.metrics
     }
 
-    pub(crate) fn get_history(&self, status: &Status) -> Vec<HistoryEntry> {
+    pub(crate) fn get_history(&self, status: &ScriptHashStatus) -> Vec<HistoryEntry> {
         status.get_history(self.index.chain(), &self.mempool)
     }
 
@@ -64,9 +64,9 @@ impl Tracker {
         Ok(())
     }
 
-    pub fn update_status(
+    pub fn update_scripthash_status(
         &self,
-        status: &mut Status,
+        status: &mut ScriptHashStatus,
         daemon: &Daemon,
         cache: &Cache,
     ) -> Result<bool> {
@@ -75,7 +75,7 @@ impl Tracker {
         Ok(prev_statushash != status.statushash())
     }
 
-    pub fn get_balance(&self, status: &Status, cache: &Cache) -> Balance {
+    pub fn get_balance(&self, status: &ScriptHashStatus, cache: &Cache) -> Balance {
         let get_amount_fn = |outpoint: OutPoint| {
             cache
                 .get_tx(&outpoint.txid, |tx| {

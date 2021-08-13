@@ -7,7 +7,7 @@ use bitcoin::{Address, Amount};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use electrs::{Balance, Cache, Config, Daemon, ScriptHash, Status, Tracker};
+use electrs::{Balance, Cache, Config, Daemon, ScriptHash, ScriptHashStatus, Tracker};
 
 fn main() -> Result<()> {
     let config = Config::from_args();
@@ -19,9 +19,9 @@ fn main() -> Result<()> {
     let cache = Cache::default();
     let daemon = Daemon::connect(&config)?;
     let mut tracker = Tracker::new(&config)?;
-    let mut map: BTreeMap<Address, Status> = addresses
+    let mut map: BTreeMap<Address, ScriptHashStatus> = addresses
         .map(|addr| {
-            let status = Status::new(ScriptHash::new(&addr.script_pubkey()));
+            let status = ScriptHashStatus::new(ScriptHash::new(&addr.script_pubkey()));
             (addr, status)
         })
         .collect();
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
         tracker.sync(&daemon)?;
         let mut total = Amount::ZERO;
         for (addr, status) in map.iter_mut() {
-            tracker.update_status(status, &daemon, &cache)?;
+            tracker.update_scripthash_status(status, &daemon, &cache)?;
             let balance = tracker.get_balance(status, &cache);
             if balance != Balance::default() {
                 info!("{} has {}", addr, balance.confirmed());
