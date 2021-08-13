@@ -235,7 +235,7 @@ impl HeaderRow {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{spending_prefix, ScriptHash, ScriptHashRow, SpendingPrefix};
+    use crate::types::{spending_prefix, ScriptHash, ScriptHashRow, SpendingPrefix, TxidRow};
     use bitcoin::{hashes::hex::ToHex, Address, OutPoint, Txid};
     use serde_json::{from_str, json};
 
@@ -268,6 +268,33 @@ mod tests {
             scripthash.to_hex(),
             "00dfb264221d07712a144bda338e89237d1abd2db4086057573895ea2659766a"
         );
+    }
+
+    #[test]
+    fn test_txid1_prefix() {
+        // duplicate txids from BIP-30
+        let hex = "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599";
+        let txid = Txid::from_str(hex).unwrap();
+
+        let row1 = TxidRow::new(txid, 91812);
+        let row2 = TxidRow::new(txid, 91842);
+
+        assert_eq!(row1.to_db_row().to_hex(), "9985d82954e10f22a4660100");
+        assert_eq!(row2.to_db_row().to_hex(), "9985d82954e10f22c2660100");
+    }
+
+    #[test]
+    fn test_txid2_prefix() {
+        // duplicate txids from BIP-30
+        let hex = "e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468";
+        let txid = Txid::from_str(hex).unwrap();
+
+        let row1 = TxidRow::new(txid, 91722);
+        let row2 = TxidRow::new(txid, 91880);
+
+        // low-endian encoding => rows should be sorted according to block height
+        assert_eq!(row1.to_db_row().to_hex(), "68b45f58b674e94e4a660100");
+        assert_eq!(row2.to_db_row().to_hex(), "68b45f58b674e94ee8660100");
     }
 
     #[test]
