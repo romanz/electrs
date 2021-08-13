@@ -4,7 +4,7 @@ use bitcoin::{
     Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use rayon::prelude::*;
-use serde::ser::{Serialize, Serializer};
+use serde::ser::{Serialize, SerializeMap, Serializer};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
@@ -48,12 +48,26 @@ impl TxEntry {
 // Confirmation height of a transaction or its mempool state:
 // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
 // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum Height {
     Confirmed { height: usize },
     Unconfirmed { has_unconfirmed_inputs: bool },
 }
 
 impl Height {
+    fn from_blockhash(blockhash: BlockHash, chain: &Chain) -> Self {
+        let height = chain
+            .get_block_height(&blockhash)
+            .expect("missing block in chain");
+        Self::Confirmed { height }
+    }
+
+    fn unconfirmed(e: &crate::mempool::Entry) -> Self {
+        Self::Unconfirmed {
+            has_unconfirmed_inputs: e.has_unconfirmed_inputs,
+        }
+    }
+
     fn as_i64(&self) -> i64 {
         match self {
             Self::Confirmed { height } => i64::try_from(*height).unwrap(),
@@ -536,6 +550,127 @@ fn filter_block_txs<T: Send>(
         })
         .collect::<Vec<_>>()
         .into_iter()
+}
+
+pub(crate) struct OutPointStatus {
+    outpoint: OutPoint,
+    funding: Option<Height>,
+    spending: Option<(Txid, Height)>,
+    tip: BlockHash,
+}
+
+impl Serialize for OutPointStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(funding) = &self.funding {
+            map.serialize_entry("height", &funding)?;
+        }
+        if let Some((txid, height)) = &self.spending {
+            map.serialize_entry("spender_txhash", &txid)?;
+            map.serialize_entry("spender_height", &height)?;
+        }
+        map.end()
+    }
+}
+
+impl OutPointStatus {
+    pub(crate) fn new(outpoint: OutPoint) -> Self {
+        Self {
+            outpoint,
+            funding: None,
+            spending: None,
+            tip: BlockHash::all_zeros(),
+        }
+    }
+
+    pub(crate) fn sync(
+        &mut self,
+        index: &Index,
+        mempool: &Mempool,
+        daemon: &Daemon,
+    ) -> Result<bool> {
+        let funding = self.sync_funding(index, daemon, mempool)?;
+        let spending = self.sync_spending(index, daemon, mempool)?;
+        let same_status = (self.funding == funding) && (self.spending == spending);
+        self.funding = funding;
+        self.spending = spending;
+        self.tip = index.chain().tip();
+        Ok(!same_status)
+    }
+
+    /// Return true iff current tip became unconfirmed
+    fn is_reorg(&self, chain: &Chain) -> bool {
+        chain.get_block_height(&self.tip).is_none()
+    }
+
+    fn sync_funding(
+        &self,
+        index: &Index,
+        daemon: &Daemon,
+        mempool: &Mempool,
+    ) -> Result<Option<Height>> {
+        let chain = index.chain();
+        if !self.is_reorg(chain) {
+            if let Some(Height::Confirmed { .. }) = &self.funding {
+                return Ok(self.funding);
+            }
+        }
+        let mut confirmed = None;
+        daemon.for_blocks(
+            index.filter_by_txid(self.outpoint.txid),
+            |blockhash, block| {
+                if confirmed.is_none() {
+                    for tx in block.txdata {
+                        let txid = tx.txid();
+                        let output_len = u32::try_from(tx.output.len()).unwrap();
+                        if self.outpoint.txid == txid && self.outpoint.vout < output_len {
+                            confirmed = Some(Height::from_blockhash(blockhash, chain));
+                            return;
+                        }
+                    }
+                }
+            },
+        )?;
+        Ok(confirmed.or_else(|| mempool.get(&self.outpoint.txid).map(Height::unconfirmed)))
+    }
+
+    fn sync_spending(
+        &self,
+        index: &Index,
+        daemon: &Daemon,
+        mempool: &Mempool,
+    ) -> Result<Option<(Txid, Height)>> {
+        let chain = index.chain();
+        if !self.is_reorg(chain) {
+            if let Some((_, Height::Confirmed { .. })) = &self.spending {
+                return Ok(self.spending);
+            }
+        }
+        let spending_blockhashes = index.filter_by_spending(self.outpoint);
+        let mut confirmed = None;
+        daemon.for_blocks(spending_blockhashes, |blockhash, block| {
+            for tx in block.txdata {
+                for txi in &tx.input {
+                    if txi.previous_output == self.outpoint {
+                        // TODO: there should be only one spending input
+                        assert!(confirmed.is_none(), "double spend of {}", self.outpoint);
+                        confirmed = Some((tx.txid(), Height::from_blockhash(blockhash, chain)));
+                        return;
+                    }
+                }
+            }
+        })?;
+        Ok(confirmed.or_else(|| {
+            let entries = mempool.filter_by_spending(&self.outpoint);
+            assert!(entries.len() <= 1, "double spend of {}", self.outpoint);
+            entries
+                .first()
+                .map(|entry| (entry.txid, Height::unconfirmed(entry)))
+        }))
+    }
 }
 
 #[cfg(test)]

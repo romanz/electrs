@@ -11,7 +11,7 @@ use crate::{
     mempool::{FeeHistogram, Mempool},
     metrics::Metrics,
     signals::ExitFlag,
-    status::{Balance, ScriptHashStatus, UnspentEntry},
+    status::{Balance, OutPointStatus, ScriptHashStatus, UnspentEntry},
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -113,5 +113,13 @@ impl Tracker {
             }
         })?;
         Ok(result)
+    }
+
+    pub(crate) fn update_outpoint_status(
+        &self,
+        status: &mut OutPointStatus,
+        daemon: &Daemon,
+    ) -> Result<bool> {
+        status.sync(&self.index, &self.mempool, daemon)
     }
 }
