@@ -20,10 +20,11 @@ FROM updated as bitcoin-build
 # Download
 RUN apt-get install -qqy wget
 WORKDIR /build/bitcoin
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-0.21.0/bitcoin-0.21.0-x86_64-linux-gnu.tar.gz
-RUN tar xvf bitcoin-0.21.0-x86_64-linux-gnu.tar.gz
-RUN mv -v bitcoin-0.21.0/bin/bitcoind .
-RUN mv -v bitcoin-0.21.0/bin/bitcoin-cli .
+ARG BITCOIND_VERSION=0.21.1
+RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
+RUN tar xvf bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
+RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
+RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoin-cli .
 
 FROM updated as result
 # Copy the binaries
