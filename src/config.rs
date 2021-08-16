@@ -268,11 +268,11 @@ impl Config {
         });
 
         let level = match config.verbose {
-            0 => LevelFilter::Error,
-            1 => LevelFilter::Warn,
-            2 => LevelFilter::Info,
-            3 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
+            0 => log::LevelFilter::Error,
+            1 => log::LevelFilter::Warn,
+            2 => log::LevelFilter::Info,
+            3 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace,
         };
 
         let config = Config {
