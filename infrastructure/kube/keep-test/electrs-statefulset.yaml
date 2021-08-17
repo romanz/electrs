@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: electrs
+  namespace: default
+  labels:
+    app: electrs
+    type: electrs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: electrs
+      type: electrs
+  serviceName: electrs
+  volumeClaimTemplates:
+    - metadata:
+        name: electrs-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi
+    - metadata:
+        name: electrs-config
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Mi
+  template:
+    metadata:
+      labels:
+        app: electrs
+        type: electrs
+    spec:
+      initContainers:
+        - name: initcontainer-provision-electrs
+          image: # TODO: add a name like gcr.io/keep-prd-210b/initcontainer-provision-electrs:1.0.0
+          imagePullPolicy: Always
+          env:
+            - name: JSON_RPC_IMPORT
+              value: true
+            - name: AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: electrs
+                  key: bitcoin-user-pass
+            - name: DAEMON_RPC_ADDRESS
+              value: bcoin.default.svc.cluster.local # TODO: Use configMapKeyRef
+            - name: DB_DIR
+              value: /mnt/electrs/data
+            - name: NETWORK
+              value: testnet
+            - name: ELECTRUM_RPC_ADDRESS
+              value: 0.0.0.0:50001
+            - name: MONITORING_ADDRESS
+              value: 0.0.0.0:4224
+            - name: VERBOSE
+              value: 3
+          volumeMounts:
+            - name: electrs-config
+              mountPath: /mnt/electrs/config
+          command: ['node', '/tmp/provision-electrs.js']
+      containers:
+        - name: electrs
+          image: # TODO: fill like this: gcr.io/keep-test-f3e0/bcoin
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 50001
+            - containerPort: 4224
+          volumeMounts:
+            - name: electrs-config
+              mountPath: /mnt/electrs/config
+            - name: electrs-data
+              mountPath: /mnt/electrs/data
+          command:
+            [
+              'electrs',
+              '--conf=/mnt/electrs/config/electrs-config.toml',
+            ]
+      volumes:
+        - name: electrs-config
+          persistentVolumeClaim:
+            claimName: electrs-config
+        - name: electrs-data
+          persistentVolumeClaim:
+            claimName: electrs-data
+

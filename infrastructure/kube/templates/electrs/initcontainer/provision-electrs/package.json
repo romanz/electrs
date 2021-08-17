@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "toml": "^3.0.0",
+    "tomlify-j0.4": "^3.0.0"
+  }
+}

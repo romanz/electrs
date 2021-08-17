@@ -1,0 +1,26 @@
+# This is a TOML configuration file.
+
+# Use JSONRPC instead of directly importing blk*.dat files. Useful for remote
+# full node or low memory system.
+jsonrpc_import = ""
+
+# JSONRPC authentication ('USER:PASSWORD', default: use cookie file).
+auth = ""
+
+# The listening address of bitcoind, port is usually 8332.
+daemon_rpc_addr = ""
+
+# Directory to store index database (default: ./db/)
+db_dir = ""
+
+# Select Bitcoin network type ('bitcoin', 'testnet', 'regtest' or 'signet').
+network = ""
+
+# The address on which electrs should listen.
+electrum_rpc_addr = ""
+
+# Address of Prometheus monitoring
+monitoring_addr = ""
+
+# How much information about internal workings should electrs print.
+verbose = ""

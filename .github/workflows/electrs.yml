@@ -1,0 +1,101 @@
+name: Electrs
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  electrs-detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      path-filter: ${{ steps.filter.outputs.path-filter }}
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event_name == 'pull_request'
+    - uses: dorny/paths-filter@v2
+      if: github.event_name == 'pull_request'
+      id: filter
+      with:
+        filters: |
+            path-filter:
+              - './!((doc|infrastructure|)/**)'
+
+  electrs-build-test-publish:
+    needs: electrs-detect-changes
+    if: |
+      github.event_name != 'pull_request'
+        || needs.electrs-detect-changes.outputs.path-filter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Load environment variables
+        uses: keep-network/load-env-variables@v1
+        with:
+          environment: 'ropsten'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      # TODO: Verify if caching works
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-electrs-cache
+          key: ${{ runner.os }}-buildx-electrs-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-electrs-
+
+      - name: Build Docker Build Image
+        uses: docker/build-push-action@v2
+        with:
+          target: builder
+          tags: electrs-build-env
+          load: true # load image to local registry to use it in next steps
+          cache-from: type=local,src=/tmp/.buildx-electrs-cache
+          cache-to: type=local,dest=/tmp/.buildx-electrs-cache-new
+
+      # TODO: consider adding tests here
+      # - name: Run tests
+      #     docker run \
+      #       electrs-build-env \
+      #       test --locked --release --all
+
+      - name: Login to Google Container Registry
+        if: |
+          github.ref == 'refs/heads/master'
+            && github.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.GCR_REGISTRY_URL }}
+          username: _json_key
+          password: ${{ secrets.KEEP_TEST_GCR_JSON_KEY }}
+
+      - name: Build and publish Docker Runtime Image
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: 'electrs'
+        with:
+          # GCR image should be named according to following convention:
+          # HOSTNAME/PROJECT-ID/IMAGE:TAG
+          # We don't use TAG yet.
+          tags: ${{ env.GCR_REGISTRY_URL }}/${{ env.GOOGLE_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+          labels: revision=${{ github.sha }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          push: |
+            ${{ github.ref == 'refs/heads/master'
+              && github.event_name != 'pull_request' }}
+
+      - # Temp fix - move cache instead of copying (added below step and
+        # modified value of `cache-to`).
+        # https://github.com/docker/build-push-action/issues/252
+        # https://github.com/moby/buildkit/issues/1896
+        # Without the change some jobs were failing with `no space left on device`
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-electrs-cache
+          mv /tmp/.buildx-electrs-cache-new /tmp/.buildx-electrs-cache

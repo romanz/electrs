@@ -8,3 +8,4 @@ _*/
 .env
 *.dat
 electrs.toml
+node_modules/

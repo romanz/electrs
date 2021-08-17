@@ -1,0 +1,86 @@
+version: 2.1
+
+orbs:
+  gcp-gcr: circleci/gcp-gcr@0.0.4
+
+executors:
+  docker-node:
+    docker:
+      - image: circleci/node:12
+
+jobs:
+  build_electrs_initcontainer:
+    executor: docker-node
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - checkout
+      - run:
+          name: Run Docker build
+          command: |
+            mkdir -p /tmp/electrs/docker-images
+            cd infrastructure/kube/templates/electrs/initcontainer
+            docker build \
+              -t $GCR_REGISTRY_URL/$GOOGLE_PROJECT_ID/initcontainer-provision-electrs .
+      - run:
+          name: Save initcontainer-provision-electrs image
+          command: |
+            docker save -o /tmp/electrs/docker-images/initcontainer-provision-electrs.tar $GCR_REGISTRY_URL/$GOOGLE_PROJECT_ID/initcontainer-provision-electrs
+      - persist_to_workspace:
+          root: /tmp/electrs
+          paths:
+            - docker-images
+  publish_electrs_initcontainer:
+    executor: gcp-gcr/default
+    steps:
+      - attach_workspace:
+          at: /tmp/electrs
+      - run:
+          name: Load Docker images
+          command: |
+            docker load -i /tmp/electrs/docker-images/initcontainer-provision-electrs.tar
+      - gcp-gcr/gcr-auth:
+          google-project-id: GOOGLE_PROJECT_ID
+          google-compute-zone: GOOGLE_COMPUTE_ZONE_A
+          # This param doesn't actually set anything, leaving here as a reminder to check when they fix it.
+          gcloud-service-key: GCLOUD_SERVICE_KEY
+      - gcp-gcr/push-image:
+          google-project-id: GOOGLE_PROJECT_ID
+          registry-url: $GCR_REGISTRY_URL
+          image: initcontainer-provision-electrs
+          tag: latest
+
+workflows:
+  version: 2
+  build_publish_keep_dev:
+    jobs:
+      - build_electrs_initcontainer:
+          filters:
+            branches:
+              only: master
+          context: keep-dev
+      - publish_electrs_initcontainer:
+          filters:
+            branches:
+              only: master
+          context: keep-dev
+          requires:
+            - build_electrs_initcontainer
+  build_publish_keep_test:
+    jobs:
+      - build_electrs_initcontainer:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: /releases\/.*/
+          context: keep-test
+      - publish_electrs_initcontainer:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: /releases\/.*/
+          context: keep-test
+          requires:
+            - build_electrs_initcontainer
