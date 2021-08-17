@@ -85,12 +85,18 @@ impl IndexResult {
 /// Confirmed transactions' address index
 pub struct Index {
     store: DBStore,
+    lookup_limit: Option<usize>,
     chain: Chain,
     stats: Stats,
 }
 
 impl Index {
-    pub(crate) fn load(store: DBStore, mut chain: Chain, metrics: &Metrics) -> Result<Self> {
+    pub(crate) fn load(
+        store: DBStore,
+        mut chain: Chain,
+        metrics: &Metrics,
+        lookup_limit: Option<usize>,
+    ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
             let headers = store
@@ -103,6 +109,7 @@ impl Index {
 
         Ok(Index {
             store,
+            lookup_limit,
             chain,
             stats: Stats::new(metrics),
         })
@@ -110,6 +117,18 @@ impl Index {
 
     pub(crate) fn chain(&self) -> &Chain {
         &self.chain
+    }
+
+    pub(crate) fn limit_result<T>(&self, entries: impl Iterator<Item = T>) -> Result<Vec<T>> {
+        let mut entries = entries.fuse();
+        let result: Vec<T> = match self.lookup_limit {
+            Some(lookup_limit) => entries.by_ref().take(lookup_limit).collect(),
+            None => entries.by_ref().collect(),
+        };
+        if entries.next().is_some() {
+            bail!(">{} index entries, query may take too long", result.len())
+        }
+        Ok(result)
     }
 
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {

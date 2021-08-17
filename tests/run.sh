@@ -40,7 +40,12 @@ echo `$BTC getblockchaininfo | jq -r '"Generated \(.blocks) regtest blocks (\(.s
 TIP=`$BTC getbestblockhash`
 
 export RUST_LOG=electrs=debug
-electrs --db-dir=data/electrs --daemon-dir=data/bitcoin --network=regtest 2> data/electrs/regtest-debug.log &
+electrs \
+  --index-lookup-limit 200 \
+  --db-dir=data/electrs \
+  --daemon-dir=data/bitcoin \
+  --network=regtest \
+  2> data/electrs/regtest-debug.log &
 ELECTRS_PID=$!
 tail_log data/electrs/regtest-debug.log | grep -m1 "serving Electrum RPC"
 

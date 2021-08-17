@@ -288,7 +288,7 @@ impl ScriptHashStatus {
         type PosTxid = (u32, Txid);
         let mut result = HashMap::<BlockHash, HashMap<PosTxid, Entry>>::new();
 
-        let funding_blockhashes = index.filter_by_funding(self.scripthash);
+        let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
             for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {

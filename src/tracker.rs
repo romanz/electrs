@@ -31,7 +31,8 @@ impl Tracker {
         let store = DBStore::open(Path::new(&config.db_path))?;
         let chain = Chain::new(config.network);
         Ok(Self {
-            index: Index::load(store, chain, &metrics).context("failed to open index")?,
+            index: Index::load(store, chain, &metrics, config.index_lookup_limit)
+                .context("failed to open index")?,
             mempool: Mempool::new(),
             metrics,
             index_batch_size: config.index_batch_size,
