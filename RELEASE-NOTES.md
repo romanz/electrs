@@ -1,3 +1,13 @@
+# 0.9.0 (TBD)
+
+* Fix incorrect ordering of same-block transactions (#297)
+* Change DB index format and use Zstd compression (instead of Snappy)
+* Don't use bitcoind JSON RPC for fetching blocks (#373)
+* Use p2p for block fetching (instead of reading `blk*.dat` files)
+* Support Electrum JSON RPC batching and errors
+* Use `rust-bitcoincore-rpc` crate
+* Increase default `index_lookup_limit` to 200
+
 # 0.8.5 (1 July 2020)
 
 * Add a 'blocks_dir' option (@darosior)

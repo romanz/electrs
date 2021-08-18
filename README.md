@@ -14,20 +14,27 @@ allowing the user to keep real-time track of his balances and his transaction hi
 Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
 thus preserving the privacy of the user's addresses and balances.
 
+
+## Usage
+
+**Please prefer to use OUR usage guide!**
+
+External guides such as RaspiBolt can be out-of-date and have various problems.
+At least double-check that the guide you're using is actively maintained.
+If you can't use our guide ask about what you don't understand or consider using automated deployments.
+
+See [here](doc/usage.md) for installation, build and usage instructions.
+
 ## Features
 
  * Supports Electrum protocol [v1.4](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html)
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
- * Fast synchronization of the Bitcoin blockchain (~2 hours for ~187GB @ July 2018) on [modest hardware](https://gist.github.com/romanz/cd9324474de0c2f121198afe3d063548)
- * Low index storage overhead (~20%), relying on a local full node for transaction retrieval
+ * Fast synchronization of the Bitcoin blockchain (~4 hours for ~336GB @ August 2021) using HDD storage.
+ * Low index storage overhead (~10%), relying on a local full node for transaction retrieval
  * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
  * Low CPU & memory usage (after initial indexing)
  * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
  * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
-
-## Usage
-
-See [here](doc/usage.md) for installation, build and usage instructions.
 
 ## Index database
 
