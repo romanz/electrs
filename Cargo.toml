@@ -19,7 +19,7 @@ spec = "internal/config_specification.toml"
 lto = true
 
 [features]
-default = ["rocksdb/snappy", "rocksdb/lz4", "rocksdb/zstd", "rocksdb/zlib", "rocksdb/bzip2"]
+default = ["rocksdb/snappy"]
 
 [dependencies]
 base64 = "0.10"
