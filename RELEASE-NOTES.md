@@ -1,3 +1,13 @@
+# 0.8.11 (18 Aug 2021)
+
+* Update dependencies (#401, #402)
+* Add python example in RPC examples (#415, #417)
+* Add regtest and signet networks in examples (#425)
+* Clippy fixes (#430)
+* CI fixes (#437, #438, #441)
+* Update relevant versions (#450)
+* Drop unused compression algorithms for RocksDB
+
 # 0.8.10 (14 May 2021)
 
 * Fix JSONRPC errors' handling (#398, #390)
