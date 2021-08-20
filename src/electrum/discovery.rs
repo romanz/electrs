@@ -1,11 +1,14 @@
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, BinaryHeap, HashMap, HashSet};
+use std::convert::TryInto;
 use std::fmt;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use electrum_client::ElectrumApi;
 
 use crate::chain::Network;
 use crate::electrum::{Client, Hostname, Port, ProtocolVersion, ServerFeatures};
@@ -316,19 +319,29 @@ impl DiscoveryManager {
     ) -> Result<ServerFeatures> {
         debug!("checking service {:?} {:?}", addr, service);
 
-        let mut client: Client = match (addr, service) {
-            (ServerAddr::Clearnet(ip), Service::Tcp(port)) => Client::new((*ip, port))?,
-            (ServerAddr::Clearnet(_), Service::Ssl(port)) => Client::new_ssl((hostname, port))?,
-            (ServerAddr::Onion(hostname), Service::Tcp(port)) => {
-                let tor_proxy = self
-                    .tor_proxy
-                    .chain_err(|| "no tor proxy configured, onion hosts are unsupported")?;
-                Client::new_proxy((hostname, port), tor_proxy)?
+        let server_url = match (addr, service) {
+            (ServerAddr::Clearnet(ip), Service::Tcp(port)) => format!("tcp://{}:{}", ip, port),
+            (ServerAddr::Clearnet(_), Service::Ssl(port)) => format!("ssl://{}:{}", hostname, port),
+            (ServerAddr::Onion(onion_host), Service::Tcp(port)) => {
+                format!("tcp://{}:{}", onion_host, port)
             }
-            (ServerAddr::Onion(_), Service::Ssl(_)) => bail!("ssl over onion is unsupported"),
+            (ServerAddr::Onion(onion_host), Service::Ssl(port)) => {
+                format!("ssl://{}:{}", onion_host, port)
+            }
         };
 
-        let features = client.server_features()?;
+        let mut config = electrum_client::ConfigBuilder::new();
+        if let ServerAddr::Onion(_) = addr {
+            let socks = electrum_client::Socks5Config::new(
+                self.tor_proxy
+                    .chain_err(|| "no tor proxy configured, onion hosts are unsupported")?,
+            );
+            config = config.socks5(Some(socks)).unwrap()
+        }
+
+        let client = Client::from_config(&server_url, config.build()).unwrap();
+
+        let features = client.server_features()?.try_into()?;
         self.verify_compatibility(&features)?;
 
         if self.announce {
