@@ -915,12 +915,11 @@ impl ChainQuery {
         let blockid = self.tx_confirming_block(txid)?;
         let headerentry = self.header_by_hash(&blockid.hash)?;
         let block_txids = self.get_block_txids(&blockid.hash)?;
-        let match_txids = vec![*txid].into_iter().collect();
 
-        Some(MerkleBlock::from_header_txids(
+        Some(MerkleBlock::from_header_txids_with_predicate(
             headerentry.header(),
             &block_txids,
-            &match_txids,
+            |t| t == txid,
         ))
     }
 
