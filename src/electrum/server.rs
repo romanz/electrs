@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -653,7 +653,7 @@ impl RPC {
             socket
                 .set_nonblocking(false)
                 .expect("cannot set nonblocking to false");
-            let listener = socket.into_tcp_listener();
+            let listener = TcpListener::from(socket);
 
             info!("Electrum RPC server running on {}", addr);
             loop {

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::slice;
+use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime as DateTime;
 
 const MTP_SPAN: usize = 11;
@@ -50,13 +51,13 @@ impl HeaderEntry {
 
 impl fmt::Debug for HeaderEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_block_time = DateTime::from_unix_timestamp(self.header().time as i64);
+        let last_block_time = DateTime::from_unix_timestamp(self.header().time as i64).unwrap();
         write!(
             f,
             "hash={} height={} @ {}",
             self.hash(),
             self.height(),
-            last_block_time.format(time::Format::Rfc3339),
+            last_block_time.format(&Rfc3339).unwrap(),
         )
     }
 }

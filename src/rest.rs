@@ -545,7 +545,7 @@ async fn run_server(config: Arc<Config>, query: Arc<Query>, rx: oneshot::Receive
             let socket = create_socket(&addr);
             socket.listen(511).expect("setting backlog failed");
 
-            Server::from_tcp(socket.into_tcp_listener())
+            Server::from_tcp(socket.into())
                 .expect("Server::from_tcp failed")
                 .serve(make_service_fn(move |_| make_service_fn_inn()))
                 .with_graceful_shutdown(async {
