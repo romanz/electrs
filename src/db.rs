@@ -206,6 +206,16 @@ impl DBStore {
             info!("finished full compaction");
             self.start_compactions();
         }
+        if log_enabled!(log::Level::Trace) {
+            for property in &["rocksdb.dbstats"] {
+                let stats = self
+                    .db
+                    .property_value(property)
+                    .expect("failed to get property")
+                    .expect("missing property");
+                trace!("{}: {}", property, stats);
+            }
+        }
     }
 
     fn start_compactions(&self) {
