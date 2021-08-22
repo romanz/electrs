@@ -8,9 +8,8 @@ cargo build --all --release
 NETWORK=$1
 shift
 
-DB=./db2  # $HOME/tmp/electrs_db/mainnet_zstd
-CMD="target/release/electrs --network $NETWORK --db-dir $DB --daemon-dir $HOME/.bitcoin"
-# export RUST_LOG=${RUST_LOG-info}
-$CMD $*
+DB=./db2
+export RUST_LOG=${RUST_LOG-INFO}
+target/release/electrs --network $NETWORK --db-dir $DB --daemon-dir $HOME/.bitcoin $*
 
 # use SIGINT to quit
