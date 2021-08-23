@@ -9,7 +9,7 @@ assignees: Kixunil
 
 <!--
         IMPORTANT: IF YOU DON'T FILL THIS TEMPLATE COMPLETELY IT WILL TAKE MORE TIME FOR US TO HELP YOU!
-        SOME EXTERNAL ELECTRS GUIDES SUCH AS RASPIBOLT ARE OUTDATED AND DO NOT WORK SO SHULD NOT BE FOLLOWED!
+        SOME EXTERNAL ELECTRS GUIDES SUCH AS RASPIBOLT ARE OUTDATED AND DO NOT WORK SO SHOULD NOT BE FOLLOWED!
         Please try with OUR usage instructions first.
 
         If you're inexperienced with service configuration consider using automated options such as https://deb.ln-ask.me
