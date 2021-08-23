@@ -20,6 +20,10 @@ assignees: ''
 **Describe the bug**
 A clear and concise description of what the bug is.
 
+**Electrs version**
+Which version of `electrs` do you use? Please try to use newest version if possible.
+If it's not the newest version why you can't try the newest one?
+
 **To Reproduce**
 Steps to reproduce the behavior:
 1. Configure and start electrs
@@ -46,7 +50,7 @@ Environment variables: `ELECTRS_X=Y;...`
 Arguments: `--foo`
 
 **System running electrs**
- - Deployment method: manual/native OS package/Docker
+ - Deployment method: manual (which guide did you follow?)/native OS package/Docker
  - OS name and version (name of distribution and version in case of Linux)
 
 **Electrum client**
