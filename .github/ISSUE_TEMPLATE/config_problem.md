@@ -7,7 +7,13 @@ assignees: Kixunil
 
 ---
 
-<!-- If you're inexperienced with service configuration consider using automated options such as https://deb.ln-ask.me -->
+<!--
+        IMPORTANT: IF YOU DON'T FILL THIS TEMPLATE COMPLETELY IT WILL TAKE MORE TIME FOR US TO HELP YOU!
+        SOME EXTERNAL ELECTRS GUIDES SUCH AS RASPIBOLT ARE OUTDATED AND DO NOT WORK SO SHULD NOT BE FOLLOWED!
+        Please try with OUR usage instructions first.
+
+        If you're inexperienced with service configuration consider using automated options such as https://deb.ln-ask.me
+-->
 
 **Have you read the documentation?**
 Yes. (Please, read usage.md first if you did not.)
@@ -35,3 +41,6 @@ Enter the debug output of configuration shown at start of electrs
 
 **Expected behavior**
 How did you expect `electrs` to be configured
+
+**Actual behavior**
+How does `electrs` behave?
