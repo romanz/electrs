@@ -7,8 +7,14 @@ assignees: Kixunil
 
 ---
 
-<!-- If your build died with SIGKILL, try clearing up some RAM.
-If you have a low-memory device (such as RPi) try cross-compilation first. -->
+<!--
+        IMPORTANT: IF YOU DON'T FILL THIS TEMPLATE COMPLETELY IT WILL TAKE MORE TIME FOR US TO HELP YOU!
+        SOME EXTERNAL ELECTRS GUIDES SUCH AS RASPIBOLT ARE OUTDATED AND DO NOT WORK SO SHULD NOT BE FOLLOWED!
+        Please try with OUR usage instructions first.
+
+       If your build died with SIGKILL, try clearing up some RAM.
+       If you have a low-memory device (such as RPi) try cross-compilation first.
+-->
 
 **Have you read the documentation?**
 Yes. (Please, read usage.md first if you did not.)
