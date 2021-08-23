@@ -8,6 +8,10 @@ assignees: ''
 ---
 
 <!--
+        IMPORTANT: IF YOU DON'T FILL THIS TEMPLATE COMPLETELY IT WILL TAKE MORE TIME FOR US TO HELP YOU!
+        SOME EXTERNAL ELECTRS GUIDES SUCH AS RASPIBOLT ARE OUTDATED AND DO NOT WORK SO SHULD NOT BE FOLLOWED!
+        Please try with OUR usage instructions first.
+
 	If you use electrs integrated into other project report the bug to their project
 	(unless you are the project author who found the bug is in electrs itself)!
 	If electrs is crashing due to low memory try with jsonrpc-import first!
