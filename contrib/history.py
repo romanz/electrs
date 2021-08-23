@@ -30,16 +30,21 @@ def show_rows(rows, field_names):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--testnet', action='store_true')
+    parser.add_argument('--network', default='mainnet')
     parser.add_argument('address', nargs='+')
     args = parser.parse_args()
 
-    if args.testnet:
+    if args.network == 'regtest':
+        port = 60401
+        from pycoin.symbols.xrt import network
+    elif args.network == 'testnet':
         port = 60001
         from pycoin.symbols.xtn import network
-    else:
+    elif args.network == 'mainnet':
         port = 50001
         from pycoin.symbols.btc import network
+    else:
+        raise ValueError(f"unknown network: {args.network}")
 
     hostport = ('localhost', port)
     log.info('connecting to {}:{}', *hostport)
