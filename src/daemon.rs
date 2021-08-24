@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 
-use bitcoin::{Amount, Block, BlockHash, Transaction, Txid};
+use bitcoin::{
+    consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
+};
 use bitcoincore_rpc::{self, json, RpcApi};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -144,10 +146,9 @@ impl Daemon {
         &self,
         txid: &Txid,
         blockhash: Option<BlockHash>,
-    ) -> Result<json::GetRawTransactionResult> {
-        self.rpc
-            .get_raw_transaction_info(txid, blockhash.as_ref())
-            .context("failed to get transaction info")
+    ) -> Result<Value> {
+        let tx = self.get_transaction(txid, blockhash)?;
+        Ok(json!(serialize(&tx).to_hex()))
     }
 
     pub(crate) fn get_transaction(
