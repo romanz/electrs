@@ -306,7 +306,7 @@ Read below otherwise.
 There's a prepared script for launching `electrum` in such way to connect only to the local `electrs` instance to protect your privacy.
 
 ```bash
-$ ./scripts/local-electrum.bash
+$ ./contrib/local-electrum.bash
 + ADDR=127.0.0.1
 + PORT=50001
 + PROTOCOL=t
