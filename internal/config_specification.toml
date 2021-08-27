@@ -89,7 +89,7 @@ doc = "Don't sync mempool - queries will show only confirmed transactions."
 name = "index_lookup_limit"
 type = "usize"
 doc = "Number of transactions to lookup before returning an error, to prevent 'too popular' addresses from causing the RPC server to get stuck (0 - disable the limit)"
-default = "100"
+default = "200"
 
 [[param]]
 name = "server_banner"
