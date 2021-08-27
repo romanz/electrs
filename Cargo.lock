@@ -55,10 +55,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "bech32"
-version = "0.7.3"
+name = "base64-compat"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dabbe35f96fb9507f7330793dc490461b2962659ac5d427181e451a623751d1"
+checksum = "5a8d4d2746f89841e49230dd26917df1876050f95abafafbe34f47cb534b88d7"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "bech32"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b"
 
 [[package]]
 name = "bindgen"
@@ -82,9 +91,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.26.2"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6742ec672d3f12506f4ac5c0d853926ff1f94e675f60ffd3224039972bf663f1"
+checksum = "8a427b27dae305157520d86673f2393b3eb08d880609abfcffc6e3c3c820e764"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
@@ -94,9 +103,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_hashes"
-version = "0.9.7"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ce18265ec2324ad075345d5814fbeed4f41f0a660055dc78840b74d19b874b1"
+checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
 dependencies = [
  "serde",
 ]
@@ -104,8 +113,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d708433972bf78bd5f909d1d288f9ac1cceeab1460edb954e962f83e1f440a3"
+source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=06ac9fa3e834413f7afeaed322cf8098d876e4a0#06ac9fa3e834413f7afeaed322cf8098d876e4a0"
 dependencies = [
  "bitcoincore-rpc-json",
  "jsonrpc",
@@ -117,11 +125,9 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "977e55a945ab1e3c446dea93267876703c15e07c7d6eeb1dfa1766b3190c560f"
+source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=06ac9fa3e834413f7afeaed322cf8098d876e4a0#06ac9fa3e834413f7afeaed322cf8098d876e4a0"
 dependencies = [
  "bitcoin",
- "hex 0.3.2",
  "serde",
  "serde_json",
 ]
@@ -402,12 +408,6 @@ dependencies = [
 
 [[package]]
 name = "hex"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "805026a5d0141ffc30abb3be3173848ad46a1b1664fe632428479619a3644d77"
-
-[[package]]
-name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
@@ -483,11 +483,11 @@ dependencies = [
 
 [[package]]
 name = "jsonrpc"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436f3455a8a4e9c7b14de9f1206198ee5d0bdc2db1b560339d2141093d7dd389"
+checksum = "ad24d69a8a0698db8ffb9048e937e8ae3ee3bc45772a5d7b6979b1d2d5b6a9f7"
 dependencies = [
- "hyper",
+ "base64-compat",
  "serde",
  "serde_derive",
  "serde_json",
@@ -695,7 +695,7 @@ dependencies = [
  "bitflags",
  "byteorder",
  "flate2",
- "hex 0.4.3",
+ "hex",
  "lazy_static",
  "libc",
 ]

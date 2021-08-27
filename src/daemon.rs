@@ -56,7 +56,7 @@ pub(crate) fn rpc_connect(config: &Config) -> Result<bitcoincore_rpc::Client> {
             bail!("{:?} is missing - is bitcoind running?", path);
         }
     }
-    let mut client = bitcoincore_rpc::Client::new(rpc_url, auth)
+    let mut client = bitcoincore_rpc::Client::new(&rpc_url, auth)
         .with_context(|| format!("failed to connect to RPC: {}", config.daemon_rpc_addr))?;
 
     loop {
