@@ -23,6 +23,7 @@ mod p2p;
 pub mod server;
 mod signals;
 mod status;
+mod thread;
 mod tracker;
 mod types;
 

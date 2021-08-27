@@ -1,8 +1,9 @@
+use anyhow::Context;
 use crossbeam_channel::{unbounded, Receiver};
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 
-use std::thread;
+use crate::thread::spawn;
 
 pub(crate) enum Signal {
     Exit,
@@ -16,15 +17,16 @@ pub(crate) fn register() -> Receiver<Signal> {
     ];
     let (tx, rx) = unbounded();
     let mut signals = Signals::new(&ids).expect("failed to register signal hook");
-    thread::spawn(move || {
+    spawn("signal", move || {
         for id in &mut signals {
             info!("notified via SIG{}", id);
             let signal = match id {
                 SIGUSR1 => Signal::Trigger,
                 _ => Signal::Exit,
             };
-            tx.send(signal).expect("failed to send signal");
+            tx.send(signal).context("failed to send signal")?;
         }
+        Ok(())
     });
     rx
 }
