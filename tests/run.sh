@@ -47,6 +47,7 @@ electrs \
   2> data/electrs/regtest-debug.log &
 ELECTRS_PID=$!
 tail_log data/electrs/regtest-debug.log | grep -m1 "serving Electrum RPC"
+curl localhost:24224 -o metrics.txt
 
 $ELECTRUM daemon --server localhost:60401:t -1 -vDEBUG 2> data/electrum/regtest-debug.log &
 ELECTRUM_PID=$!
