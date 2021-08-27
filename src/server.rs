@@ -9,7 +9,6 @@ use std::{
     convert::TryFrom,
     io::{BufRead, BufReader, Write},
     net::{Shutdown, TcpListener, TcpStream},
-    thread,
 };
 
 use crate::{
@@ -17,21 +16,8 @@ use crate::{
     daemon::rpc_connect,
     electrum::{Client, Rpc},
     signals,
+    thread::spawn,
 };
-
-fn spawn<F>(name: &'static str, f: F) -> thread::JoinHandle<()>
-where
-    F: 'static + Send + FnOnce() -> Result<()>,
-{
-    thread::Builder::new()
-        .name(name.to_owned())
-        .spawn(move || {
-            if let Err(e) = f() {
-                warn!("{} thread failed: {}", name, e);
-            }
-        })
-        .expect("failed to spawn a thread")
-}
 
 struct Peer {
     id: usize,

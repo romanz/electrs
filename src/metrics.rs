@@ -1,15 +1,16 @@
 #[cfg(feature = "metrics")]
 mod metrics_impl {
     use anyhow::{Context, Result};
-    use hyper::server::{Handler, Listening, Request, Response, Server};
     use prometheus::process_collector::ProcessCollector;
     use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry};
+    use tiny_http::{Response, Server};
 
     use std::net::SocketAddr;
 
+    use crate::thread::spawn;
+
     pub struct Metrics {
         reg: Registry,
-        listen: Listening,
     }
 
     impl Metrics {
@@ -19,11 +20,24 @@ mod metrics_impl {
             reg.register(Box::new(ProcessCollector::for_self()))
                 .expect("failed to register ProcessCollector");
 
-            let listen = Server::http(addr)?
-                .handle(RegistryHandler { reg: reg.clone() })
-                .with_context(|| format!("failed to serve on {}", addr))?;
+            let result = Self { reg };
+            let reg = result.reg.clone();
+            spawn("metrics", move || {
+                let server = Server::http(addr).unwrap();
+                for request in server.incoming_requests() {
+                    let mut buffer = vec![];
+                    prometheus::TextEncoder::new()
+                        .encode(&reg.gather(), &mut buffer)
+                        .context("failed to encode metrics")?;
+                    request
+                        .respond(Response::from_data(buffer))
+                        .context("failed to send HTTP response")?;
+                }
+                Ok(())
+            });
+
             info!("serving Prometheus metrics on {}", addr);
-            Ok(Self { reg, listen })
+            Ok(result)
         }
 
         pub fn histogram_vec(&self, name: &str, desc: &str, label: &str) -> Histogram {
@@ -33,15 +47,6 @@ mod metrics_impl {
                 .register(Box::new(hist.clone()))
                 .expect("failed to register Histogram");
             Histogram { hist }
-        }
-    }
-
-    impl Drop for Metrics {
-        fn drop(&mut self) {
-            debug!("closing Prometheus server");
-            if let Err(e) = self.listen.close() {
-                warn!("failed to stop Prometheus server: {}", e);
-            }
         }
     }
 
@@ -62,28 +67,6 @@ mod metrics_impl {
             self.hist
                 .with_label_values(&[label])
                 .observe_closure_duration(func)
-        }
-    }
-
-    struct RegistryHandler {
-        reg: Registry,
-    }
-
-    impl RegistryHandler {
-        fn gather(&self) -> Result<Vec<u8>> {
-            let mut buffer = vec![];
-            prometheus::TextEncoder::new()
-                .encode(&self.reg.gather(), &mut buffer)
-                .context("failed to encode metrics")?;
-            Ok(buffer)
-        }
-    }
-
-    impl Handler for RegistryHandler {
-        fn handle(&self, req: Request, res: Response) {
-            trace!("{} {}", req.method, req.uri);
-            let buffer = self.gather().expect("failed to gather metrics");
-            res.send(&buffer).expect("failed to send metrics");
         }
     }
 }
