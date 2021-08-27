@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
 
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::iter::FromIterator;
 
 use crate::{
@@ -264,10 +264,11 @@ impl Rpc {
         client: &mut Client,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let status = self.new_status(scripthash)?;
-        let statushash = status.statushash();
-        client.scripthashes.insert(scripthash, status); // skip if already exists
-        Ok(json!(statushash))
+        let result = match client.scripthashes.entry(scripthash) {
+            Entry::Occupied(e) => e.get().statushash(),
+            Entry::Vacant(e) => e.insert(self.new_status(scripthash)?).statushash(),
+        };
+        Ok(json!(result))
     }
 
     fn new_status(&self, scripthash: ScriptHash) -> Result<ScriptHashStatus> {
