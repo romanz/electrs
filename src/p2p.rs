@@ -81,7 +81,7 @@ impl Connection {
     pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, Block) + Send,
     {
         let blockhashes = Vec::from_iter(blockhashes);
         if blockhashes.is_empty() {
@@ -93,19 +93,31 @@ impl Connection {
             .collect();
         debug!("loading {} blocks", blockhashes.len());
         self.send(NetworkMessage::GetData(inv))?;
-        for hash in blockhashes {
-            match self
-                .recv()
-                .with_context(|| format!("failed to get block {}", hash))?
-            {
-                NetworkMessage::Block(block) => {
-                    assert_eq!(block.block_hash(), hash, "got unexpected block");
+
+        rayon::scope(|s| {
+            let (tx, rx) = crossbeam_channel::bounded(10);
+            s.spawn(|_| {
+                // the loop will exit when the sender is dropped
+                for (hash, block) in rx {
                     func(hash, block);
                 }
-                msg => bail!("unexpected {:?}", msg),
-            };
-        }
-        Ok(())
+            });
+
+            for hash in blockhashes {
+                match self
+                    .recv()
+                    .with_context(|| format!("failed to get block {}", hash))?
+                {
+                    NetworkMessage::Block(block) => {
+                        ensure!(block.block_hash() == hash, "got unexpected block");
+                        tx.send((hash, block))
+                            .context("disconnected from block processor")?;
+                    }
+                    msg => bail!("unexpected {:?}", msg),
+                };
+            }
+            Ok(())
+        })
     }
 
     pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {

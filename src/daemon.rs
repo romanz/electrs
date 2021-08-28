@@ -188,7 +188,7 @@ impl Daemon {
     pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, Block) + Send,
     {
         self.p2p.lock().for_blocks(blockhashes, func)
     }
