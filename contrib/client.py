@@ -17,7 +17,10 @@ class Client:
         msg = json.dumps(requests) + '\n'
         self.s.sendall(msg.encode('ascii'))
         response = json.loads(self.f.readline())
-        return [r['result'] for r in response]
+        try:
+            return [r['result'] for r in response]
+        except KeyError:
+            raise ValueError(response)
 
 
 def request(method, *args):
