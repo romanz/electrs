@@ -8,7 +8,7 @@ metadata:
     app: electrs
     type: electrs
 spec:
-# TODO: Do we need a load balancer like in case of ElectrumX?
+  type: LoadBalancer
   ports:
   - port: 50001
     targetPort: 50001

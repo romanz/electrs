@@ -37,18 +37,18 @@ spec:
     spec:
       initContainers:
         - name: initcontainer-provision-electrs
-          image: # TODO: add a name like gcr.io/keep-prd-210b/initcontainer-provision-electrs:1.0.0
+          image: gcr.io/keep-test-f3e0/initcontainer-provision-electrs:latest
           imagePullPolicy: Always
           env:
             - name: JSON_RPC_IMPORT
-              value: true
+              value: "True"
             - name: AUTH
               valueFrom:
                 secretKeyRef:
                   name: electrs
-                  key: bitcoin-user-pass
+                  key: auth
             - name: DAEMON_RPC_ADDRESS
-              value: bcoin.default.svc.cluster.local # TODO: Use configMapKeyRef
+              value: bcoin.default.svc.cluster.local:18332 # TODO: Use configMapKeyRef
             - name: DB_DIR
               value: /mnt/electrs/data
             - name: NETWORK
@@ -58,14 +58,14 @@ spec:
             - name: MONITORING_ADDRESS
               value: 0.0.0.0:4224
             - name: VERBOSE
-              value: 3
+              value: "3"
           volumeMounts:
             - name: electrs-config
-              mountPath: /mnt/electrs/config
+              mountPath: '/mnt/electrs/config'
           command: ['node', '/tmp/provision-electrs.js']
       containers:
         - name: electrs
-          image: # TODO: fill like this: gcr.io/keep-test-f3e0/bcoin
+          image: gcr.io/keep-test-f3e0/electrs
           imagePullPolicy: Always
           ports:
             - containerPort: 50001

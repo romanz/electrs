@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  electrs-detect-changes:
+  detect-changes:
     runs-on: ubuntu-latest
     outputs:
       path-filter: ${{ steps.filter.outputs.path-filter }}
@@ -23,11 +23,11 @@ jobs:
             path-filter:
               - './!((doc|infrastructure|)/**)'
 
-  electrs-build-test-publish:
-    needs: electrs-detect-changes
+  build-test-publish:
+    needs: detect-changes
     if: |
       github.event_name != 'pull_request'
-        || needs.electrs-detect-changes.outputs.path-filter == 'true'
+        || needs.detect-changes.outputs.path-filter == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
