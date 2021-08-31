@@ -41,14 +41,20 @@ spec:
           imagePullPolicy: Always
           env:
             - name: JSON_RPC_IMPORT
-              value: "True"
-            - name: AUTH
+              value: 'true'
+            - name: BITCOIN_USERNAME
+              value: x
+            - name: BITCOIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: electrs
-                  key: auth
-            - name: DAEMON_RPC_ADDRESS
-              value: bcoin.default.svc.cluster.local:18332 # TODO: Use configMapKeyRef
+                  name: bcoin
+                  key: http-api-key
+            - name: BITCOIN_ADDRESS
+              value: bcoin.default.svc.cluster.local:18332
+              # valueFrom:
+              #   secretKeyRef:
+              #     name: bcoin
+              #     key: bcoin-url
             - name: DB_DIR
               value: /mnt/electrs/data
             - name: NETWORK
@@ -58,14 +64,14 @@ spec:
             - name: MONITORING_ADDRESS
               value: 0.0.0.0:4224
             - name: VERBOSE
-              value: "3"
+              value: "4"
           volumeMounts:
             - name: electrs-config
               mountPath: '/mnt/electrs/config'
           command: ['node', '/tmp/provision-electrs.js']
       containers:
         - name: electrs
-          image: gcr.io/keep-test-f3e0/electrs
+          image: gcr.io/keep-test-f3e0/electrs:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 50001
@@ -77,7 +83,7 @@ spec:
               mountPath: /mnt/electrs/data
           command:
             [
-              'electrs',
+              '/app/electrs',
               '--conf=/mnt/electrs/config/electrs-config.toml',
             ]
       volumes:

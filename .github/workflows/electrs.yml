@@ -13,17 +13,78 @@ jobs:
     outputs:
       path-filter: ${{ steps.filter.outputs.path-filter }}
     steps:
-    - uses: actions/checkout@v2
-      if: github.event_name == 'pull_request'
-    - uses: dorny/paths-filter@v2
-      if: github.event_name == 'pull_request'
-      id: filter
-      with:
-        filters: |
+      - uses: actions/checkout@v2
+        if: github.event_name == 'pull_request'
+
+      - uses: dorny/paths-filter@v2
+        if: github.event_name == 'pull_request'
+        id: filter
+        with:
+          filters: |
             path-filter:
               - './!((doc|infrastructure|)/**)'
 
-  build-test-publish:
+  build-publish-electrs-initcontainer:
+    needs: detect-changes
+    if: |
+      github.event_name != 'pull_request'
+        || needs.detect-changes.outputs.path-filter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Load environment variables
+        uses: keep-network/load-env-variables@v1
+        with:
+          environment: 'ropsten'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      # TODO: Verify if caching works
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-initcontainer-electrs-cache
+          key: ${{ runner.os }}-buildx-initcontainer-electrs-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-initcontainer-electrs-
+
+      - name: Login to Google Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.GCR_REGISTRY_URL }}
+          username: _json_key
+          password: ${{ secrets.KEEP_TEST_GCR_JSON_KEY }}
+
+      - name: Build and publish initcontainer
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: initcontainer-provision-electrs
+        with:
+          context: ./infrastructure/kube/templates/electrs/initcontainer/provision-electrs
+          tags: ${{ env.GCR_REGISTRY_URL }}/${{ env.GOOGLE_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+          labels: |
+            revision=${{ github.sha }}
+          push: true
+          # TODO: Use this `push` value to only push to master
+          # push: |
+          #   ${{ github.ref == 'refs/heads/master'
+          #     && github.event_name != 'pull_request' }}
+          cache-from: type=local,src=/tmp/.buildx-initcontainer-electrs-cache
+          cache-to: type=local,dest=/tmp/.buildx-initcontainer-electrs-cache-new
+
+        # Temp fix - move cache instead of copying (added below step and
+        # modified value of `cache-to`).
+        # https://github.com/docker/build-push-action/issues/252
+        # https://github.com/moby/buildkit/issues/1896
+        # Without the change some jobs were failing with `no space left on device`
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-initcontainer-electrs-cache
+          mv /tmp/.buildx-initcontainer-electrs-cache-new /tmp/.buildx-initcontainer-electrs-cache
+
+  build-publish-electrs:
     needs: detect-changes
     if: |
       github.event_name != 'pull_request'
@@ -58,16 +119,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-electrs-cache
           cache-to: type=local,dest=/tmp/.buildx-electrs-cache-new
 
-      # TODO: consider adding tests here
-      # - name: Run tests
-      #     docker run \
-      #       electrs-build-env \
-      #       test --locked --release --all
-
       - name: Login to Google Container Registry
-        if: |
-          github.ref == 'refs/heads/master'
-            && github.event_name != 'pull_request'
         uses: docker/login-action@v1
         with:
           registry: ${{ env.GCR_REGISTRY_URL }}
@@ -86,9 +138,11 @@ jobs:
           labels: revision=${{ github.sha }}
           build-args: |
             REVISION=${{ github.sha }}
-          push: |
-            ${{ github.ref == 'refs/heads/master'
-              && github.event_name != 'pull_request' }}
+          push: true
+          # TODO: Use this `push` value to only push to master
+          # push: |
+          #   ${{ github.ref == 'refs/heads/master'
+          #     && github.event_name != 'pull_request' }}
 
       - # Temp fix - move cache instead of copying (added below step and
         # modified value of `cache-to`).
