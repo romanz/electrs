@@ -339,7 +339,7 @@ impl DiscoveryManager {
             config = config.socks5(Some(socks)).unwrap()
         }
 
-        let client = Client::from_config(&server_url, config.build()).unwrap();
+        let client = Client::from_config(&server_url, config.build())?;
 
         let features = client.server_features()?.try_into()?;
         self.verify_compatibility(&features)?;
@@ -521,36 +521,49 @@ fn is_remote_addr(addr: &ServerAddr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chain::genesis_hash;
     use crate::chain::Network;
     use std::time;
+
+    const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::new(1, 4);
 
     #[test]
     fn test() -> Result<()> {
         stderrlog::new().verbosity(4).init().unwrap();
 
-        let discovery = DiscoveryManager::new(
+        let features = ServerFeatures {
+            hosts: serde_json::from_str("{\"test.foobar.example\":{\"tcp_port\":60002}}").unwrap(),
+            server_version: format!("electrs-esplora 9"),
+            genesis_hash: genesis_hash(Network::Testnet),
+            protocol_min: PROTOCOL_VERSION,
+            protocol_max: PROTOCOL_VERSION,
+            hash_function: "sha256".into(),
+            pruning: None,
+        };
+        let discovery = Arc::new(DiscoveryManager::new(
             Network::Testnet,
-            "1.4".parse().unwrap(),
-            Some("127.0.0.1:9150".parse().unwrap()),
-        );
-
+            features,
+            PROTOCOL_VERSION,
+            false,
+            None,
+        ));
         discovery.add_default_server(
             "electrum.blockstream.info".into(),
             vec![Service::Tcp(60001)],
-        );
-        discovery.add_default_server("testnet.hsmiths.com".into(), vec![Service::Ssl(53012)]);
+        ).unwrap();
+        discovery.add_default_server("testnet.hsmiths.com".into(), vec![Service::Ssl(53012)]).unwrap();
         discovery.add_default_server(
             "tn.not.fyi".into(),
             vec![Service::Tcp(55001), Service::Ssl(55002)],
-        );
+        ).unwrap();
         discovery.add_default_server(
             "electrum.blockstream.info".into(),
             vec![Service::Tcp(60001), Service::Ssl(60002)],
-        );
+        ).unwrap();
         discovery.add_default_server(
             "explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion".into(),
             vec![Service::Tcp(143)],
-        );
+        ).unwrap();
 
         debug!("{:#?}", discovery);
 
