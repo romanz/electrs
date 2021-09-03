@@ -397,6 +397,7 @@ impl Index {
                 .send(Ok(vec![]))
                 .expect("failed sending explicit end of stream");
         });
+        let mut counter: u32 = 0;
         loop {
             waiter.poll()?;
             let timer = self.stats.start_timer("fetch");
@@ -408,6 +409,20 @@ impl Index {
             if batch.is_empty() {
                 break;
             }
+
+            if counter % 1000 == 0 {
+                let last_header = batch[0].header;
+                let last_hash = last_header.block_hash();
+                let last_height = height_map[&last_hash];
+                let spec = time::Timespec::new(i64::from(last_header.time), 0);
+                let last_time = time::at_utc(spec).rfc3339().to_string();
+                debug!("Block download progress: hash {}, height {} @ {}",
+                    last_hash,
+                    last_height,
+                    last_time,
+                );
+            }
+            counter += 1;
 
             let rows_iter = batch.iter().flat_map(|block| {
                 let blockhash = block.block_hash();

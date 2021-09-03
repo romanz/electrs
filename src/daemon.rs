@@ -115,8 +115,6 @@ struct BlockchainInfo {
     verificationprogress: f64,
     bestblockhash: String,
     pruned: bool,
-    // TODO: replace with something else - `bcoin` does not provide this field
-    //initialblockdownload: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -375,22 +373,23 @@ impl Daemon {
         if blockchain_info.pruned {
             bail!("pruned node is not supported (use '-prune=0' bitcoind flag)".to_owned())
         }
-        //TODO: Find another way to check if the node we are connecting to is
-        // synchronized - `bcoin` does not provide `initialblockdownload`
-        // loop {
-        //     let info = daemon.getblockchaininfo()?;
-        //     if !info.initialblockdownload {
-        //         break;
-        //     }
-        //     if network == Network::Regtest && info.headers == info.blocks {
-        //         break;
-        //     }
-        //     warn!(
-        //         "wait until IBD is over: headers={} blocks={} progress={}",
-        //         info.headers, info.blocks, info.verificationprogress
-        //     );
-        //     signal.wait(Duration::from_secs(3))?;
-        // }
+        loop {
+            let info = daemon.getblockchaininfo()?;
+            // `bcoin` does not provide the `initialblockdownload` field
+            // Comparing the number of headers and blocks should be good enough
+            // to check if the node is synchronized
+            if info.headers != 0 && info.headers == info.blocks {
+                break;
+            }
+            if network == Network::Regtest && info.headers == info.blocks {
+                break;
+            }
+            warn!(
+                "wait until IBD is over: headers={} blocks={} progress={}",
+                info.headers, info.blocks, info.verificationprogress
+            );
+            signal.wait(Duration::from_secs(3))?;
+        }
         Ok(daemon)
     }
 
