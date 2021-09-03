@@ -22,13 +22,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r user \
-    && adduser --disabled-login --system --shell /bin/false --uid 1000 --ingroup user user
-
-COPY --from=builder --chown=user:user \
-    /build/target/release/electrs .
-
-USER user
+COPY --from=builder /build/target/release/electrs .
 
 # Electrum RPC
 EXPOSE 50001

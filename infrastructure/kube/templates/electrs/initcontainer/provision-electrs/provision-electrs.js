@@ -49,7 +49,7 @@ async function createElectrsConfig() {
         },
     })
 
-    const configWritePath = "/mnt/electrs/config/electrs-config.toml"
+    const configWritePath = "/home/user/electrs/config/electrs-config.toml"
     fs.writeFileSync(configWritePath, formattedConfigFile)
     console.log(`electrs config written to ${configWritePath}`)
 }

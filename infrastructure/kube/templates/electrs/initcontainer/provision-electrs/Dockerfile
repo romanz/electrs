@@ -19,6 +19,6 @@ COPY ./electrs-config.toml /tmp/electrs-config.toml
 
 COPY ./provision-electrs.js /tmp/provision-electrs.js
 
-RUN mkdir -p /mnt/electrs
+RUN mkdir -p /home/user/electrs
 
 ENTRYPOINT ["node", "./provision-electrs.js"]

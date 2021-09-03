@@ -50,13 +50,10 @@ spec:
                   name: bcoin
                   key: http-api-key
             - name: BITCOIN_ADDRESS
-              value: bcoin.default.svc.cluster.local:18332
-              # valueFrom:
-              #   secretKeyRef:
-              #     name: bcoin
-              #     key: bcoin-url
+              #TODO: Read from config map, bcoin-url is not good
+              value: bcoin.default.svc.cluster.local:18332 #TODO: Read from config map, bcoin-url is not good
             - name: DB_DIR
-              value: /mnt/electrs/data
+              value: /home/user/electrs/data
             - name: NETWORK
               value: testnet
             - name: ELECTRUM_RPC_ADDRESS
@@ -67,7 +64,7 @@ spec:
               value: "4"
           volumeMounts:
             - name: electrs-config
-              mountPath: '/mnt/electrs/config'
+              mountPath: '/home/user/electrs/config'
           command: ['node', '/tmp/provision-electrs.js']
       containers:
         - name: electrs
@@ -78,13 +75,13 @@ spec:
             - containerPort: 4224
           volumeMounts:
             - name: electrs-config
-              mountPath: /mnt/electrs/config
+              mountPath: /home/user/electrs/config
             - name: electrs-data
-              mountPath: /mnt/electrs/data
+              mountPath: /home/user/electrs/data
           command:
             [
               '/app/electrs',
-              '--conf=/mnt/electrs/config/electrs-config.toml',
+              '--conf=/home/user/electrs/config/electrs-config.toml',
             ]
       volumes:
         - name: electrs-config
