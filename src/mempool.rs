@@ -27,9 +27,16 @@ pub(crate) struct Mempool {
     by_funding: BTreeSet<(ScriptHash, Txid)>,
     by_spending: BTreeSet<(OutPoint, Txid)>,
     histogram: Histogram,
+}
 
-    txid_min: Txid,
-    txid_max: Txid,
+// Smallest possible txid
+fn txid_min() -> Txid {
+    Txid::from_inner([0x00; 32])
+}
+
+// Largest possible txid
+fn txid_max() -> Txid {
+    Txid::from_inner([0xFF; 32])
 }
 
 impl Mempool {
@@ -39,9 +46,6 @@ impl Mempool {
             by_funding: Default::default(),
             by_spending: Default::default(),
             histogram: Histogram::empty(),
-
-            txid_min: Txid::from_inner([0x00; 32]),
-            txid_max: Txid::from_inner([0xFF; 32]),
         }
     }
 
@@ -55,8 +59,8 @@ impl Mempool {
 
     pub(crate) fn filter_by_funding(&self, scripthash: &ScriptHash) -> Vec<&Entry> {
         let range = (
-            Bound::Included((*scripthash, self.txid_min)),
-            Bound::Included((*scripthash, self.txid_max)),
+            Bound::Included((*scripthash, txid_min())),
+            Bound::Included((*scripthash, txid_max())),
         );
         self.by_funding
             .range(range)
@@ -66,8 +70,8 @@ impl Mempool {
 
     pub(crate) fn filter_by_spending(&self, outpoint: &OutPoint) -> Vec<&Entry> {
         let range = (
-            Bound::Included((*outpoint, self.txid_min)),
-            Bound::Included((*outpoint, self.txid_max)),
+            Bound::Included((*outpoint, txid_min())),
+            Bound::Included((*outpoint, txid_max())),
         );
         self.by_spending
             .range(range)
