@@ -5,6 +5,7 @@ use bitcoin::hashes::hex::FromHex;
 use bitcoin::network::constants;
 use bitcoin::{BlockHash, BlockHeader};
 
+/// A new header found, to be added to the chain at specific height
 pub(crate) struct NewHeader {
     header: BlockHeader,
     hash: BlockHash,
@@ -36,6 +37,7 @@ pub struct Chain {
 }
 
 impl Chain {
+    // create an empty chain
     pub fn new(network: constants::Network) -> Self {
         let genesis_header_hex = match network {
             constants::Network::Bitcoin => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
@@ -48,10 +50,11 @@ impl Chain {
         assert_eq!(genesis.prev_blockhash, BlockHash::default());
         Self {
             headers: vec![(genesis.block_hash(), genesis)],
-            heights: std::iter::once((genesis.block_hash(), 0)).collect(),
+            heights: std::iter::once((genesis.block_hash(), 0)).collect(), // genesis header @ zero height
         }
     }
 
+    /// Load the chain from a collecion of headers, up to the given tip
     pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
         let genesis_hash = self.headers[0].0;
 
@@ -72,18 +75,23 @@ impl Chain {
         self.update(new_headers.zip(1..).map(NewHeader::from).collect())
     }
 
+    /// Get the block hash at specified height (if exists)
     pub(crate) fn get_block_hash(&self, height: usize) -> Option<BlockHash> {
         self.headers.get(height).map(|(hash, _header)| *hash)
     }
 
+    /// Get the block header at specified height (if exists)
     pub(crate) fn get_block_header(&self, height: usize) -> Option<&BlockHeader> {
         self.headers.get(height).map(|(_hash, header)| header)
     }
 
+    /// Get the block height given the specified hash (if exists)
     pub(crate) fn get_block_height(&self, blockhash: &BlockHash) -> Option<usize> {
         self.heights.get(blockhash).copied()
     }
 
+    /// Update the chain with a list of new headers (possibly a reorg)
+    /// Note that we cannot shorten a chain (e.g. by dropping )
     pub(crate) fn update(&mut self, headers: Vec<NewHeader>) {
         if let Some(first_height) = headers.first().map(|h| h.height) {
             for (hash, _header) in self.headers.drain(first_height..) {
@@ -103,14 +111,18 @@ impl Chain {
         }
     }
 
+    /// Best block hash
     pub(crate) fn tip(&self) -> BlockHash {
         self.headers.last().expect("empty chain").0
     }
 
+    /// Number of blocks (excluding genesis block)
     pub(crate) fn height(&self) -> usize {
         self.headers.len() - 1
     }
 
+    /// List of block hashes for efficient fork detection and block/header sync
+    /// see https://en.bitcoin.it/wiki/Protocol_documentation#getblocks
     pub(crate) fn locator(&self) -> Vec<BlockHash> {
         let mut result = vec![];
         let mut index = self.headers.len() - 1;
