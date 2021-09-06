@@ -1,0 +1,8 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: electrs-btc-connectivity
+  namespace: default
+data:
+  btc-address: bcoin.default.svc.cluster.local:18332
+  btc-user: x

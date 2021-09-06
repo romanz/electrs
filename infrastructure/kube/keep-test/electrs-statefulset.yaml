@@ -42,16 +42,21 @@ spec:
           env:
             - name: JSON_RPC_IMPORT
               value: 'true'
+            - name: BITCOIN_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: electrs-btc-connectivity
+                  key: btc-address
             - name: BITCOIN_USERNAME
-              value: x
+              valueFrom:
+                configMapKeyRef:
+                  name: electrs-btc-connectivity
+                  key: btc-user
             - name: BITCOIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: bcoin
                   key: http-api-key
-            - name: BITCOIN_ADDRESS
-              #TODO: Read from config map, bcoin-url is not good
-              value: bcoin.default.svc.cluster.local:18332 #TODO: Read from config map, bcoin-url is not good
             - name: DB_DIR
               value: /home/user/electrs/data
             - name: NETWORK
