@@ -354,8 +354,6 @@ impl Daemon {
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
         if network_info.subversion.contains("bcoin") {
-            // If we are dealing with `bcoin`, make sure we are dealing with
-            // recent version
             if network_info.version < 2_00_00 {
                 bail!(
                     "{} is not supported - please use bcoin 2.0.0+",
@@ -498,8 +496,8 @@ impl Daemon {
             Err(e) => return Err(e).chain_err(|| "invalid network info"),
         };
 
-        // If we are dealing with `bcoin` node, unwrap json into `BcoinNetworkInfo`
-        // and convert it to `NetworkInfo`.
+        // If connected to a bcoin node, unwrap json into BcoinNetworkInfo and
+        // convert it to NetworkInfo.
         if sub_info.subversion.contains("bcoin") {
             let bcoin_info: BcoinNetworkInfo = match from_value(info.clone()) {
                 Ok(bcoin_info) => bcoin_info,
@@ -515,7 +513,7 @@ impl Daemon {
             return Ok(result);
         }
 
-        // If we are dealing with a bitcoind node, unwrap into `NetworkInfo`
+        // If connected to a bitcoind node, unwrap into NetworkInfo
         from_value(info).chain_err(|| "invalid network info")
     }
 
