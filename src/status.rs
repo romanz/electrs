@@ -19,32 +19,36 @@ use crate::{
     types::{ScriptHash, StatusHash},
 };
 
-#[derive(Default)]
-struct Entry {
-    outputs: Vec<u32>,
-    spent: Vec<OutPoint>,
-}
-
+/// Given a scripthash, store relevant inputs and outputs of a specific transaction
 struct TxEntry {
     txid: Txid,
-    outputs: Vec<u32>,
-    spent: Vec<OutPoint>,
+    outputs: Vec<u32>,    // relevant funded output indices
+    spent: Vec<OutPoint>, // relevant spent outpoints
 }
 
 impl TxEntry {
-    fn new(txid: Txid, entry: Entry) -> Self {
+    fn new(txid: Txid) -> Self {
         Self {
             txid,
-            outputs: entry.outputs,
-            spent: entry.spent,
+            outputs: Vec::new(),
+            spent: Vec::new(),
         }
     }
 
+    /// Relevant (scripthash-wise) funded outpoints
     fn funding(&self) -> impl Iterator<Item = OutPoint> + '_ {
         make_outpoints(&self.txid, &self.outputs)
     }
+
+    /// Relevant (scripthash-wise) spent outpoints
+    fn spending(&self) -> impl Iterator<Item = OutPoint> + '_ {
+        self.spent.iter().copied()
+    }
 }
 
+// Confirmation height of a transaction or its mempool state:
+// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 enum Height {
     Confirmed { height: usize },
     Unconfirmed { has_unconfirmed_inputs: bool },
@@ -79,6 +83,9 @@ impl std::fmt::Display for Height {
     }
 }
 
+// A single history entry:
+// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 #[derive(Serialize)]
 pub(crate) struct HistoryEntry {
     #[serde(rename = "tx_hash")]
@@ -118,11 +125,12 @@ impl HistoryEntry {
 
 /// ScriptHash subscription status
 pub struct ScriptHashStatus {
-    scripthash: ScriptHash,
-    tip: BlockHash,
-    statushash: Option<StatusHash>,
-    confirmed: HashMap<BlockHash, Vec<TxEntry>>,
-    mempool: Vec<TxEntry>,
+    scripthash: ScriptHash, // specfic scripthash to be queried
+    tip: BlockHash,         // used for skipping confirmed entries' sync
+    confirmed: HashMap<BlockHash, Vec<TxEntry>>, // confirmed entries, partitioned per block (may contain stale blocks)
+    mempool: Vec<TxEntry>,                       // unconfirmed entries
+    history: Vec<HistoryEntry>,                  // computed from confirmed and mempool entries
+    statushash: Option<StatusHash>,              // computed from history
 }
 
 enum BalanceEntry {
@@ -130,6 +138,7 @@ enum BalanceEntry {
     Spent(OutPoint),
 }
 
+/// Specific scripthash balance
 #[derive(Default, Eq, PartialEq)]
 pub(crate) struct Balance {
     pub(crate) confirmed: Amount,
@@ -161,21 +170,21 @@ impl Total {
     }
 }
 
-fn make_outpoints<'a>(txid: &'a Txid, outputs: &'a [u32]) -> impl Iterator<Item = OutPoint> + 'a {
-    outputs.iter().map(move |vout| OutPoint::new(*txid, *vout))
-}
-
 impl ScriptHashStatus {
+    /// Return non-synced (empty) status for a given script hash.
     pub fn new(scripthash: ScriptHash) -> Self {
         Self {
             scripthash,
             tip: BlockHash::default(),
-            statushash: None,
             confirmed: HashMap::new(),
             mempool: Vec::new(),
+            history: Vec::new(),
+            statushash: None,
         }
     }
 
+    /// Iterate through confirmed TxEntries with their corresponding block heights.
+    /// Skip entries from stale blocks.
     fn confirmed_entries<'a>(
         &'a self,
         chain: &'a Chain,
@@ -189,7 +198,8 @@ impl ScriptHashStatus {
             })
     }
 
-    fn funding_confirmed(&self, chain: &Chain) -> HashSet<OutPoint> {
+    /// Collect all funded and confirmed outpoints (as a set).
+    fn confirmed_outpoints(&self, chain: &Chain) -> HashSet<OutPoint> {
         self.confirmed_entries(chain)
             .flat_map(|(_height, entries)| entries.iter().flat_map(TxEntry::funding))
             .collect()
@@ -202,9 +212,9 @@ impl ScriptHashStatus {
         fn to_balance_entries<'a>(
             entries: impl Iterator<Item = &'a TxEntry> + 'a,
         ) -> impl Iterator<Item = BalanceEntry> + 'a {
-            entries.flat_map(|entry| {
-                let funded = entry.funding().map(BalanceEntry::Funded);
-                let spent = entry.spent.iter().copied().map(BalanceEntry::Spent);
+            entries.flat_map(|e| {
+                let funded = e.funding().map(BalanceEntry::Funded);
+                let spent = e.spending().map(BalanceEntry::Spent);
                 funded.chain(spent)
             })
         }
@@ -229,12 +239,13 @@ impl ScriptHashStatus {
     }
 
     pub(crate) fn get_history(&self, chain: &Chain, mempool: &Mempool) -> Vec<HistoryEntry> {
-        let mut result = self.get_confirmed(chain);
-        result.extend(self.get_mempool(mempool));
+        let mut result = self.get_confirmed_history(chain);
+        result.extend(self.get_mempool_history(mempool));
         result
     }
 
-    fn get_confirmed(&self, chain: &Chain) -> Vec<HistoryEntry> {
+    /// Collect all confirmed history entries (in block order).
+    fn get_confirmed_history(&self, chain: &Chain) -> Vec<HistoryEntry> {
         self.confirmed_entries(chain)
             .collect::<BTreeMap<usize, &[TxEntry]>>()
             .into_iter()
@@ -246,7 +257,8 @@ impl ScriptHashStatus {
             .collect()
     }
 
-    fn get_mempool(&self, mempool: &Mempool) -> Vec<HistoryEntry> {
+    /// Collect all mempool history entries (keeping transactions with unconfirmed parents last).
+    fn get_mempool_history(&self, mempool: &Mempool) -> Vec<HistoryEntry> {
         let mut entries = self
             .mempool
             .iter()
@@ -259,6 +271,7 @@ impl ScriptHashStatus {
             .collect()
     }
 
+    /// Apply func only on the new blocks (fetched from daemon).
     fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
@@ -272,6 +285,8 @@ impl ScriptHashStatus {
         )
     }
 
+    /// Get funding and spending entries from new blocks.
+    /// Also cache relevant transactions and their merkle proofs.
     fn sync_confirmed(
         &self,
         index: &Index,
@@ -279,8 +294,8 @@ impl ScriptHashStatus {
         cache: &Cache,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
-        type PosTxid = (u32, Txid);
-        let mut result = HashMap::<BlockHash, HashMap<PosTxid, Entry>>::new();
+        type TxPosition = usize; // transaction position within a block
+        let mut result = HashMap::<BlockHash, HashMap<TxPosition, TxEntry>>::new();
 
         let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
@@ -296,8 +311,8 @@ impl ScriptHashStatus {
                 result
                     .entry(blockhash)
                     .or_default()
-                    .entry((u32::try_from(pos).unwrap(), *txid))
-                    .or_default()
+                    .entry(pos)
+                    .or_insert_with(|| TxEntry::new(*txid))
                     .outputs = funding_outputs;
             }
         })?;
@@ -317,8 +332,8 @@ impl ScriptHashStatus {
                 result
                     .entry(blockhash)
                     .or_default()
-                    .entry((u32::try_from(pos).unwrap(), *txid))
-                    .or_default()
+                    .entry(pos)
+                    .or_insert_with(|| TxEntry::new(*txid))
                     .spent = spent_outpoints;
             }
         })?;
@@ -326,29 +341,35 @@ impl ScriptHashStatus {
         Ok(result
             .into_iter()
             .map(|(blockhash, entries_map)| {
+                // sort transactions by their position in a block
                 let sorted_entries = entries_map
                     .into_iter()
-                    .collect::<BTreeMap<PosTxid, Entry>>()
+                    .collect::<BTreeMap<TxPosition, TxEntry>>()
                     .into_iter()
-                    .map(|((_pos, txid), entry)| TxEntry::new(txid, entry))
+                    .map(|(_pos, entry)| entry)
                     .collect::<Vec<TxEntry>>();
                 (blockhash, sorted_entries)
             })
             .collect())
     }
 
+    /// Get funding and spending entries from current mempool.
+    /// Also cache relevant transactions.
     fn sync_mempool(
         &self,
         mempool: &Mempool,
         cache: &Cache,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Vec<TxEntry> {
-        let mut result = HashMap::<Txid, Entry>::new();
+        let mut result = HashMap::<Txid, TxEntry>::new();
         for entry in mempool.filter_by_funding(&self.scripthash) {
             let funding_outputs = filter_outputs(&entry.tx, &self.scripthash);
             assert!(!funding_outputs.is_empty());
             outpoints.extend(make_outpoints(&entry.txid, &funding_outputs));
-            result.entry(entry.txid).or_default().outputs = funding_outputs;
+            result
+                .entry(entry.txid)
+                .or_insert_with(|| TxEntry::new(entry.txid))
+                .outputs = funding_outputs;
             cache.add_tx(entry.txid, || entry.tx.clone());
         }
         for entry in outpoints
@@ -357,31 +378,17 @@ impl ScriptHashStatus {
         {
             let spent_outpoints = filter_inputs(&entry.tx, outpoints);
             assert!(!spent_outpoints.is_empty());
-            result.entry(entry.txid).or_default().spent = spent_outpoints;
+            result
+                .entry(entry.txid)
+                .or_insert_with(|| TxEntry::new(entry.txid))
+                .spent = spent_outpoints;
             cache.add_tx(entry.txid, || entry.tx.clone());
         }
-        result
-            .into_iter()
-            .map(|(txid, entry)| TxEntry::new(txid, entry))
-            .collect()
+        result.into_iter().map(|(_txid, entry)| entry).collect()
     }
 
-    fn compute_status_hash(&self, chain: &Chain, mempool: &Mempool) -> Option<StatusHash> {
-        let confirmed = self.get_confirmed(chain);
-        let mempool = self.get_mempool(mempool);
-        if confirmed.is_empty() && mempool.is_empty() {
-            return None;
-        }
-        let mut engine = StatusHash::engine();
-        for entry in confirmed {
-            entry.hash(&mut engine);
-        }
-        for entry in mempool {
-            entry.hash(&mut engine);
-        }
-        Some(StatusHash::from_engine(engine))
-    }
-
+    /// Sync with currently confirmed txs and mempool, downloading non-cached transactions via p2p protocol.
+    /// After a successful sync, scripthash status is updated.
     pub(crate) fn sync(
         &mut self,
         index: &Index,
@@ -389,7 +396,7 @@ impl ScriptHashStatus {
         daemon: &Daemon,
         cache: &Cache,
     ) -> Result<()> {
-        let mut outpoints: HashSet<OutPoint> = self.funding_confirmed(index.chain());
+        let mut outpoints: HashSet<OutPoint> = self.confirmed_outpoints(index.chain());
 
         let new_tip = index.chain().tip();
         if self.tip != new_tip {
@@ -408,13 +415,19 @@ impl ScriptHashStatus {
         if !self.mempool.is_empty() {
             debug!("{} mempool transactions", self.mempool.len());
         }
-        self.statushash = self.compute_status_hash(index.chain(), mempool);
+        self.history = self.get_history(index.chain(), mempool);
+        self.statushash = compute_status_hash(&self.history);
         Ok(())
     }
 
+    /// Get current status hash.
     pub fn statushash(&self) -> Option<StatusHash> {
         self.statushash
     }
+}
+
+fn make_outpoints<'a>(txid: &'a Txid, outputs: &'a [u32]) -> impl Iterator<Item = OutPoint> + 'a {
+    outputs.iter().map(move |vout| OutPoint::new(*txid, *vout))
 }
 
 fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<u32> {
@@ -441,6 +454,17 @@ fn filter_inputs(tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoin
             }
         })
         .collect()
+}
+
+fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
+    if history.is_empty() {
+        return None;
+    }
+    let mut engine = StatusHash::engine();
+    for entry in history {
+        entry.hash(&mut engine);
+    }
+    Some(StatusHash::from_engine(engine))
 }
 
 #[cfg(test)]
