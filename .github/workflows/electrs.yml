@@ -36,6 +36,9 @@ jobs:
       - name: Load environment variables
         if: github.event_name == 'workflow_dispatch'
         uses: keep-network/load-env-variables@v1
+        # TODO: Consider passing of `environment` input instead of using
+        # hardcoded value. Would require some rework in action's code or
+        # in config files.
         with:
           environment: 'ropsten'
 
@@ -107,6 +110,9 @@ jobs:
       - name: Load environment variables
         if: github.event_name == 'workflow_dispatch'
         uses: keep-network/load-env-variables@v1
+        # TODO: Consider passing of `environment` input instead of using
+        # hardcoded value. Would require some rework in action's code or
+        # in config files.
         with:
           environment: 'ropsten'
 
