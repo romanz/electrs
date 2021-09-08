@@ -65,7 +65,7 @@ impl Tracker {
         Ok(())
     }
 
-    pub fn update_scripthash_status(
+    pub(crate) fn update_scripthash_status(
         &self,
         status: &mut ScriptHashStatus,
         daemon: &Daemon,
@@ -76,7 +76,7 @@ impl Tracker {
         Ok(prev_statushash != status.statushash())
     }
 
-    pub fn get_balance(&self, status: &ScriptHashStatus, cache: &Cache) -> Balance {
+    pub(crate) fn get_balance(&self, status: &ScriptHashStatus, cache: &Cache) -> Balance {
         let get_amount_fn = |outpoint: OutPoint| {
             cache
                 .get_tx(&outpoint.txid, |tx| {

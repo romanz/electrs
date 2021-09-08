@@ -131,15 +131,9 @@ enum BalanceEntry {
 }
 
 #[derive(Default, Eq, PartialEq)]
-pub struct Balance {
+pub(crate) struct Balance {
     pub(crate) confirmed: Amount,
     pub(crate) mempool_delta: SignedAmount,
-}
-
-impl Balance {
-    pub fn confirmed(&self) -> Amount {
-        self.confirmed
-    }
 }
 
 #[derive(Default)]
