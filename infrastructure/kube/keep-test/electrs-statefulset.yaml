@@ -40,23 +40,13 @@ spec:
           image: gcr.io/keep-test-f3e0/initcontainer-provision-electrs:latest
           imagePullPolicy: Always
           env:
-            - name: JSON_RPC_IMPORT
-              value: 'true'
-            - name: BITCOIN_ADDRESS
-              valueFrom:
-                configMapKeyRef:
-                  name: electrs-btc-connectivity
-                  key: btc-address
-            - name: BITCOIN_USERNAME
-              valueFrom:
-                configMapKeyRef:
-                  name: electrs-btc-connectivity
-                  key: btc-user
-            - name: BITCOIN_PASSWORD
+            - name: BITCOIN_URL
               valueFrom:
                 secretKeyRef:
                   name: bcoin
-                  key: http-api-key
+                  key: bcoin-url
+            - name: JSON_RPC_IMPORT
+              value: 'true'
             - name: DB_DIR
               value: /mnt/electrs/data
             - name: NETWORK
