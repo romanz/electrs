@@ -44,7 +44,7 @@ rev = "06ac9fa3e834413f7afeaed322cf8098d876e4a0"
 [dependencies.rocksdb]
 # support building with Rust 1.41.1 and workaround https://github.com/romanz/electrs/issues/403
 git = "https://github.com/romanz/rust-rocksdb"
-rev = "4554d19b2ff2e34493564b4d868454097c74b693"
+rev = "2023b18a7b83fc47b5bc950b5322a2284b771162"
 default-features = false
 features = ["zstd"]
 
