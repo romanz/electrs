@@ -133,6 +133,7 @@ pub struct Config {
     pub index_batch_size: usize,
     pub index_lookup_limit: Option<usize>,
     pub ignore_mempool: bool,
+    pub sync_once: bool,
     pub server_banner: String,
     pub args: Vec<String>,
 }
@@ -294,6 +295,7 @@ impl Config {
             index_batch_size: config.index_batch_size,
             index_lookup_limit,
             ignore_mempool: config.ignore_mempool,
+            sync_once: config.sync_once,
             server_banner: config.server_banner,
             args: args.map(|a| a.into_string().unwrap()).collect(),
         };

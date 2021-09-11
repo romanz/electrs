@@ -9,7 +9,9 @@ fn main() -> Result<()> {
     tracker
         .sync(&Daemon::connect(&config)?)
         .context("initial sync failed")?;
-
+    if config.sync_once {
+        return Ok(());
+    }
     // re-connect after initial sync (due to possible timeout during compaction)
     server::run(&config, Rpc::new(&config, tracker)?).context("server failed")
 }

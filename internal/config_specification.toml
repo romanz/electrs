@@ -85,6 +85,10 @@ default = "10"
 name = "ignore_mempool"
 doc = "Don't sync mempool - queries will show only confirmed transactions."
 
+[[switch]]
+name = "sync_once"
+doc = "Exit after the initial sync is over (don't start Electrum server)."
+
 [[param]]
 name = "index_lookup_limit"
 type = "usize"
