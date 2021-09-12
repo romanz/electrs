@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use std::convert::TryInto;
+use std::convert::TryFrom;
 
 use bitcoin::{
     consensus::encode::{deserialize, serialize, Decodable, Encodable},
@@ -84,7 +84,7 @@ impl ScriptHashRow {
     pub(crate) fn new(scripthash: ScriptHash, height: usize) -> Self {
         Self {
             prefix: scripthash.prefix(),
-            height: height.try_into().expect("invalid height"),
+            height: Height::try_from(height).expect("invalid height"),
         }
     }
 
@@ -97,7 +97,7 @@ impl ScriptHashRow {
     }
 
     pub(crate) fn height(&self) -> usize {
-        self.height.try_into().expect("invalid height")
+        usize::try_from(self.height).expect("invalid height")
     }
 }
 
@@ -121,8 +121,8 @@ struct SpendingPrefix {
 impl_consensus_encoding!(SpendingPrefix, prefix);
 
 fn spending_prefix(prev: OutPoint) -> SpendingPrefix {
-    let txid_prefix = &prev.txid[..HASH_PREFIX_LEN];
-    let value = u64::from_be_bytes(txid_prefix.try_into().unwrap());
+    let txid_prefix = <[u8; HASH_PREFIX_LEN]>::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
+    let value = u64::from_be_bytes(txid_prefix);
     let value = value.wrapping_add(prev.vout.into());
     SpendingPrefix {
         prefix: value.to_be_bytes(),
@@ -145,7 +145,7 @@ impl SpendingPrefixRow {
     pub(crate) fn new(outpoint: OutPoint, height: usize) -> Self {
         Self {
             prefix: spending_prefix(outpoint),
-            height: height.try_into().expect("invalid height"),
+            height: Height::try_from(height).expect("invalid height"),
         }
     }
 
@@ -158,7 +158,7 @@ impl SpendingPrefixRow {
     }
 
     pub(crate) fn height(&self) -> usize {
-        self.height.try_into().expect("invalid height")
+        usize::try_from(self.height).expect("invalid height")
     }
 }
 
@@ -193,7 +193,7 @@ impl TxidRow {
     pub(crate) fn new(txid: Txid, height: usize) -> Self {
         Self {
             prefix: txid_prefix(&txid),
-            height: height.try_into().expect("invalid height"),
+            height: Height::try_from(height).expect("invalid height"),
         }
     }
 
@@ -206,7 +206,7 @@ impl TxidRow {
     }
 
     pub(crate) fn height(&self) -> usize {
-        self.height.try_into().expect("invalid height")
+        usize::try_from(self.height).expect("invalid height")
     }
 }
 

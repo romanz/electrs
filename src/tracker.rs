@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use bitcoin::{BlockHash, OutPoint, Txid};
 
-use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::path::Path;
 
 use crate::{
@@ -80,7 +80,7 @@ impl Tracker {
         let get_amount_fn = |outpoint: OutPoint| {
             cache
                 .get_tx(&outpoint.txid, |tx| {
-                    let vout: usize = outpoint.vout.try_into().unwrap();
+                    let vout = usize::try_from(outpoint.vout).unwrap();
                     bitcoin::Amount::from_sat(tx.output[vout].value)
                 })
                 .expect("missing tx")

@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::iter::FromIterator;
 use std::ops::Bound;
 
@@ -180,7 +180,7 @@ impl Histogram {
         let mut bins = [0; Self::SIZE];
         for (fee, vsize) in items {
             let fee_rate = fee.as_sat() / vsize;
-            let index: usize = fee_rate.leading_zeros().try_into().unwrap();
+            let index = usize::try_from(fee_rate.leading_zeros()).unwrap();
             // skip transactions with too low fee rate (<1 sat/vB)
             if let Some(bin) = bins.get_mut(index) {
                 *bin += vsize
