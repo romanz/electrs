@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: electrs
+  namespace: default
+  labels:
+    app: electrs
+    type: electrs
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 50001
+    targetPort: 50001
+    name: electrum-rpc
+  - port: 4224
+    targetPort: 4224
+    name: monitoring
+  selector:
+    app: electrs
+    type: electrs

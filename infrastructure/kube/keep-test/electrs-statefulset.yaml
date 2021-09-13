@@ -1,0 +1,88 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: electrs
+  namespace: default
+  labels:
+    app: electrs
+    type: electrs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: electrs
+      type: electrs
+  serviceName: electrs
+  volumeClaimTemplates:
+    - metadata:
+        name: electrs-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi
+    - metadata:
+        name: electrs-config
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Mi
+  template:
+    metadata:
+      labels:
+        app: electrs
+        type: electrs
+    spec:
+      initContainers:
+        - name: initcontainer-provision-electrs
+          image: gcr.io/keep-test-f3e0/initcontainer-provision-electrs:latest
+          imagePullPolicy: Always
+          env:
+            - name: BITCOIN_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bcoin
+                  key: bcoin-url
+            - name: JSON_RPC_IMPORT
+              value: 'true'
+            - name: DB_DIR
+              value: /mnt/electrs/data
+            - name: NETWORK
+              value: testnet
+            - name: ELECTRUM_RPC_ADDRESS
+              value: 0.0.0.0:50001
+            - name: MONITORING_ADDRESS
+              value: 0.0.0.0:4224
+            - name: VERBOSE
+              value: "4"
+          volumeMounts:
+            - name: electrs-config
+              mountPath: '/mnt/electrs/config'
+          command: ['node', '/tmp/provision-electrs.js']
+      containers:
+        - name: electrs
+          image: gcr.io/keep-test-f3e0/electrs:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 50001
+            - containerPort: 4224
+          volumeMounts:
+            - name: electrs-config
+              mountPath: /mnt/electrs/config
+            - name: electrs-data
+              mountPath: /mnt/electrs/data
+          command:
+            [
+              '/app/electrs',
+              '--conf=/mnt/electrs/config/electrs-config.toml',
+            ]
+      volumes:
+        - name: electrs-config
+          persistentVolumeClaim:
+            claimName: electrs-config
+        - name: electrs-data
+          persistentVolumeClaim:
+            claimName: electrs-data
+

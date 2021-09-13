@@ -1,0 +1,181 @@
+name: Electrs
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      path-filter: ${{ steps.filter.outputs.path-filter }}
+    steps:
+      - uses: actions/checkout@v2
+        if: github.event_name == 'pull_request'
+
+      - uses: dorny/paths-filter@v2
+        if: github.event_name == 'pull_request'
+        id: filter
+        with:
+          filters: |
+            path-filter:
+              - './!((doc|infrastructure|)/**)'
+
+  build-publish-electrs-initcontainer:
+    needs: detect-changes
+    if: |
+      github.event_name != 'pull_request'
+        || needs.detect-changes.outputs.path-filter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Load environment variables
+        if: github.event_name == 'workflow_dispatch'
+        uses: keep-network/load-env-variables@v1
+        # TODO: Consider passing of `environment` input instead of using
+        # hardcoded value. Would require some rework in action's code or
+        # in config files.
+        with:
+          environment: 'ropsten'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-initcontainer-electrs-cache
+          key: ${{ runner.os }}-buildx-initcontainer-electrs-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-initcontainer-electrs-
+
+      - name: Build initcontainer
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: initcontainer-provision-electrs
+        with:
+          context: ./infrastructure/kube/templates/electrs/initcontainer/provision-electrs
+          labels: |
+            revision=${{ github.sha }}
+          push: false
+          cache-from: type=local,src=/tmp/.buildx-initcontainer-electrs-cache
+          cache-to: type=local,dest=/tmp/.buildx-initcontainer-electrs-cache-new
+
+      - name: Login to Google Container Registry
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.GCR_REGISTRY_URL }}
+          username: _json_key
+          password: ${{ secrets.KEEP_TEST_GCR_JSON_KEY }}
+
+      - name: Build and publish initcontainer
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: initcontainer-provision-electrs
+        with:
+          context: ./infrastructure/kube/templates/electrs/initcontainer/provision-electrs
+          tags: ${{ env.GCR_REGISTRY_URL }}/${{ env.GOOGLE_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+          labels: |
+            revision=${{ github.sha }}
+          push: true
+          cache-from: type=local,src=/tmp/.buildx-initcontainer-electrs-cache
+          cache-to: type=local,dest=/tmp/.buildx-initcontainer-electrs-cache-new
+
+        # Temp fix - move cache instead of copying (added below step and
+        # modified value of `cache-to`).
+        # https://github.com/docker/build-push-action/issues/252
+        # https://github.com/moby/buildkit/issues/1896
+        # Without the change some jobs were failing with `no space left on device`
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-initcontainer-electrs-cache
+          mv /tmp/.buildx-initcontainer-electrs-cache-new /tmp/.buildx-initcontainer-electrs-cache
+
+  build-publish-electrs:
+    needs: detect-changes
+    if: |
+      github.event_name != 'pull_request'
+        || needs.detect-changes.outputs.path-filter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Load environment variables
+        if: github.event_name == 'workflow_dispatch'
+        uses: keep-network/load-env-variables@v1
+        # TODO: Consider passing of `environment` input instead of using
+        # hardcoded value. Would require some rework in action's code or
+        # in config files.
+        with:
+          environment: 'ropsten'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-electrs-cache
+          key: ${{ runner.os }}-buildx-electrs-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-electrs-
+
+      - name: Build Docker Build Image
+        uses: docker/build-push-action@v2
+        with:
+          target: builder
+          tags: electrs-build-env
+          load: true # load image to local registry to use it in next steps
+          cache-from: type=local,src=/tmp/.buildx-electrs-cache
+          cache-to: type=local,dest=/tmp/.buildx-electrs-cache-new
+
+      - name: Build Docker Runtime Image
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: 'electrs'
+        with:
+          labels: revision=${{ github.sha }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          push: false
+
+      - name: Login to Google Container Registry
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.GCR_REGISTRY_URL }}
+          username: _json_key
+          password: ${{ secrets.KEEP_TEST_GCR_JSON_KEY }}
+
+      - name: Build and publish Docker Runtime Image
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v2
+        env:
+          IMAGE_NAME: 'electrs'
+        with:
+          # GCR image should be named according to following convention:
+          # HOSTNAME/PROJECT-ID/IMAGE:TAG
+          # We don't use TAG yet.
+          tags: ${{ env.GCR_REGISTRY_URL }}/${{ env.GOOGLE_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+          labels: revision=${{ github.sha }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          push: true
+
+      - # Temp fix - move cache instead of copying (added below step and
+        # modified value of `cache-to`).
+        # https://github.com/docker/build-push-action/issues/252
+        # https://github.com/moby/buildkit/issues/1896
+        # Without the change some jobs were failing with `no space left on device`
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-electrs-cache
+          mv /tmp/.buildx-electrs-cache-new /tmp/.buildx-electrs-cache
