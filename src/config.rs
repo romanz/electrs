@@ -173,26 +173,16 @@ fn create_cookie_getter(
 
 /// Processes deprecation of cookie in favor of auth
 fn select_auth(auth: Option<String>, cookie: Option<String>) -> Option<String> {
-    match (cookie, auth) {
-        (None, None) => None,
-        (Some(value), None) => {
-            eprintln!("WARNING: cookie option is deprecated and will be removed in the future!");
-            eprintln!();
-            eprintln!("You most likely want to use cookie_file instead.");
-            eprintln!("If you really don't want to use cookie_file for a good reason and knowing the consequences use the auth option");
-            eprintln!(
-                "See authentication section in electrs usage documentation for more details."
-            );
-            eprintln!("https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities");
-            Some(value)
-        }
-        (None, Some(value)) => Some(value),
-        (Some(_), Some(_)) => {
-            eprintln!("Error: cookie and auth can't be specified at the same time");
-            eprintln!("It looks like you made a mistake during migrating cookie option, please check your config.");
-            std::process::exit(1);
-        }
+    if cookie.is_some() {
+        eprintln!("ERROR: cookie option is not supported!");
+        eprintln!();
+        eprintln!("You most likely want to use cookie_file instead.");
+        eprintln!("If you really don't want to use cookie_file for a good reason and knowing the consequences use the auth option");
+        eprintln!("See authentication section in electrs usage documentation for more details.");
+        eprintln!("https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities");
+        std::process::exit(1);
     }
+    auth
 }
 
 impl Config {
