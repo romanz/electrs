@@ -31,9 +31,7 @@ struct Options {
 /// RocksDB wrapper for index storage
 pub struct DBStore {
     db: rocksdb::DB,
-    path: PathBuf,
     bulk_import: AtomicBool,
-    cfs: Vec<&'static str>,
 }
 
 const CONFIG_CF: &str = "config";
@@ -41,6 +39,8 @@ const HEADERS_CF: &str = "headers";
 const TXID_CF: &str = "txid";
 const FUNDING_CF: &str = "funding";
 const SPENDING_CF: &str = "spending";
+
+const COLUMN_FAMILIES: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
 
 const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
@@ -52,6 +52,15 @@ struct Config {
 }
 
 const CURRENT_FORMAT: u64 = 0;
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            compacted: false,
+            format: CURRENT_FORMAT,
+        }
+    }
+}
 
 fn default_opts() -> rocksdb::Options {
     let mut opts = rocksdb::Options::default();
@@ -68,19 +77,20 @@ fn default_opts() -> rocksdb::Options {
 }
 
 impl DBStore {
-    /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path) -> Result<Self> {
-        let cfs = vec![CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
-        let cf_descriptors: Vec<rocksdb::ColumnFamilyDescriptor> = cfs
+    fn create_cf_descriptors() -> Vec<rocksdb::ColumnFamilyDescriptor> {
+        COLUMN_FAMILIES
             .iter()
             .map(|&name| rocksdb::ColumnFamilyDescriptor::new(name, default_opts()))
-            .collect();
+            .collect()
+    }
 
+    fn open_internal(path: &Path) -> Result<Self> {
         let mut db_opts = default_opts();
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
-        let db = rocksdb::DB::open_cf_descriptors(&db_opts, path, cf_descriptors)
-            .with_context(|| format!("failed to open DB: {:?}", path))?;
+
+        let db = rocksdb::DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())
+            .with_context(|| format!("failed to open DB: {}", path.display()))?;
         let live_files = db.live_files()?;
         info!(
             "{:?}: {} SST files, {} GB, {} Grows",
@@ -91,15 +101,55 @@ impl DBStore {
         );
         let store = DBStore {
             db,
-            path: path.to_path_buf(),
-            cfs,
             bulk_import: AtomicBool::new(true),
         };
+        Ok(store)
+    }
 
+    fn is_legacy_format(&self) -> bool {
+        // In legacy DB format, all data was stored in a single (default) column family.
+        self.db
+            .iterator(rocksdb::IteratorMode::Start)
+            .next()
+            .is_some()
+    }
+
+    /// Opens a new RocksDB at the specified location.
+    pub fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
+        let mut store = Self::open_internal(path)?;
         let config = store.get_config();
         debug!("DB {:?}", config);
-        if config.format != CURRENT_FORMAT {
-            bail!("unsupported DB format {}, re-index required", config.format);
+        let mut config = config.unwrap_or_default(); // use default config when DB is empty
+
+        let reindex_cause = if store.is_legacy_format() {
+            Some("legacy format".to_owned())
+        } else if config.format != CURRENT_FORMAT {
+            Some(format!(
+                "unsupported format {} != {}",
+                config.format, CURRENT_FORMAT
+            ))
+        } else {
+            None
+        };
+        if let Some(cause) = reindex_cause {
+            if !auto_reindex {
+                bail!("re-index required due to {}", cause);
+            }
+            warn!(
+                "Database needs to be re-indexed due to {}, going to delete {}",
+                cause,
+                path.display()
+            );
+            // close DB before deletion
+            drop(store);
+            rocksdb::DB::destroy(&default_opts(), &path).with_context(|| {
+                format!(
+                    "re-index required but the old database ({}) can not be deleted",
+                    path.display()
+                )
+            })?;
+            store = Self::open_internal(path)?;
+            config = Config::default(); // re-init config after dropping DB
         }
         if config.compacted {
             store.start_compactions();
@@ -190,13 +240,13 @@ impl DBStore {
     }
 
     pub(crate) fn flush(&self) {
-        let mut config = self.get_config();
-        for name in &self.cfs {
+        let mut config = self.get_config().unwrap_or_default();
+        for name in COLUMN_FAMILIES {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db.flush_cf(cf).expect("CF flush failed");
         }
         if !config.compacted {
-            for name in &self.cfs {
+            for name in COLUMN_FAMILIES {
                 info!("starting {} compaction", name);
                 let cf = self.db.cf_handle(name).expect("missing CF");
                 self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
@@ -220,7 +270,7 @@ impl DBStore {
 
     fn start_compactions(&self) {
         self.bulk_import.store(false, Ordering::Relaxed);
-        for name in &self.cfs {
+        for name in COLUMN_FAMILIES {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db
                 .set_options_cf(cf, &[("disable_auto_compactions", "false")])
@@ -239,15 +289,11 @@ impl DBStore {
             .expect("DB::put failed");
     }
 
-    fn get_config(&self) -> Config {
+    fn get_config(&self) -> Option<Config> {
         self.db
             .get_cf(self.config_cf(), CONFIG_KEY)
             .expect("DB::get failed")
             .map(|value| serde_json::from_slice(&value).expect("failed to deserialize Config"))
-            .unwrap_or_else(|| Config {
-                compacted: false,
-                format: CURRENT_FORMAT,
-            })
     }
 }
 
@@ -275,6 +321,58 @@ impl<'a> Iterator for ScanIterator<'a> {
 
 impl Drop for DBStore {
     fn drop(&mut self) {
-        info!("closing DB at {:?}", self.path);
+        info!("closing DB at {}", self.db.path().display());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DBStore, CURRENT_FORMAT};
+
+    #[test]
+    fn test_reindex_new_format() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let store = DBStore::open(dir.path(), false).unwrap();
+            let mut config = store.get_config().unwrap();
+            config.format += 1;
+            store.set_config(config);
+        };
+        assert_eq!(
+            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            format!(
+                "re-index required due to unsupported format {} != {}",
+                CURRENT_FORMAT + 1,
+                CURRENT_FORMAT
+            )
+        );
+        {
+            let store = DBStore::open(dir.path(), true).unwrap();
+            store.flush();
+            let config = store.get_config().unwrap();
+            assert_eq!(config.format, CURRENT_FORMAT);
+            assert_eq!(store.is_legacy_format(), false);
+        }
+    }
+
+    #[test]
+    fn test_reindex_legacy_format() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let mut db_opts = rocksdb::Options::default();
+            db_opts.create_if_missing(true);
+            let db = rocksdb::DB::open(&db_opts, dir.path()).unwrap();
+            db.put(b"F", b"").unwrap(); // insert legacy DB compaction marker (in 'default' column family)
+        };
+        assert_eq!(
+            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            format!("re-index required due to legacy format",)
+        );
+        {
+            let store = DBStore::open(dir.path(), true).unwrap();
+            store.flush();
+            let config = store.get_config().unwrap();
+            assert_eq!(config.format, CURRENT_FORMAT);
+        }
     }
 }
