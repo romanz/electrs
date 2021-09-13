@@ -33,7 +33,6 @@ pub struct DBStore {
     db: rocksdb::DB,
     path: PathBuf,
     bulk_import: AtomicBool,
-    cfs: Vec<&'static str>,
 }
 
 const CONFIG_CF: &str = "config";
@@ -41,6 +40,8 @@ const HEADERS_CF: &str = "headers";
 const TXID_CF: &str = "txid";
 const FUNDING_CF: &str = "funding";
 const SPENDING_CF: &str = "spending";
+
+const CFS: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
 
 const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
@@ -52,6 +53,15 @@ struct Config {
 }
 
 const CURRENT_FORMAT: u64 = 0;
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            compacted: false,
+            format: CURRENT_FORMAT,
+        }
+    }
+}
 
 fn default_opts() -> rocksdb::Options {
     let mut opts = rocksdb::Options::default();
@@ -68,19 +78,20 @@ fn default_opts() -> rocksdb::Options {
 }
 
 impl DBStore {
-    /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path) -> Result<Self> {
-        let cfs = vec![CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
-        let cf_descriptors: Vec<rocksdb::ColumnFamilyDescriptor> = cfs
-            .iter()
+    fn create_cf_descriptors() -> Vec<rocksdb::ColumnFamilyDescriptor> {
+        CFS.iter()
             .map(|&name| rocksdb::ColumnFamilyDescriptor::new(name, default_opts()))
-            .collect();
+            .collect()
+    }
 
+    /// Opens a new RocksDB at the specified location.
+    pub fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
         let mut db_opts = default_opts();
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
-        let db = rocksdb::DB::open_cf_descriptors(&db_opts, path, cf_descriptors)
-            .with_context(|| format!("failed to open DB: {:?}", path))?;
+        let mut db =
+            rocksdb::DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())
+                .with_context(|| format!("failed to open DB: {:?}", path))?;
         let live_files = db.live_files()?;
         info!(
             "{:?}: {} SST files, {} GB, {} Grows",
@@ -89,18 +100,37 @@ impl DBStore {
             live_files.iter().map(|f| f.size).sum::<usize>() as f64 / 1e9,
             live_files.iter().map(|f| f.num_entries).sum::<u64>() as f64 / 1e9
         );
+        let mut config = Self::get_config(&db);
+        debug!("DB {:?}", config);
+        if config.format != CURRENT_FORMAT {
+            if auto_reindex {
+                info!("Database needs to be reindexed due to being in old format, going to delete the old one.");
+                // close DB before deletion
+                drop(db);
+                rocksdb::DB::destroy(&db_opts, path).with_context(|| {
+                    format!(
+                        "re-index required but the old database ({}) can not be deleted",
+                        path.display()
+                    )
+                })?;
+                db =
+                    rocksdb::DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())
+                        .with_context(|| {
+                            format!("failed to re-open DB after deletion: {}", path.display())
+                        })?;
+                // clear config after deletion
+                config = Default::default();
+            } else {
+                bail!("unsupported DB format {}, re-index required", config.format);
+            }
+        }
+
         let store = DBStore {
             db,
             path: path.to_path_buf(),
-            cfs,
             bulk_import: AtomicBool::new(true),
         };
 
-        let config = store.get_config();
-        debug!("DB {:?}", config);
-        if config.format != CURRENT_FORMAT {
-            bail!("unsupported DB format {}, re-index required", config.format);
-        }
         if config.compacted {
             store.start_compactions();
         }
@@ -108,8 +138,8 @@ impl DBStore {
         Ok(store)
     }
 
-    fn config_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(CONFIG_CF).expect("missing CONFIG_CF")
+    fn config_cf(db: &rocksdb::DB) -> &rocksdb::ColumnFamily {
+        db.cf_handle(CONFIG_CF).expect("missing CONFIG_CF")
     }
 
     fn funding_cf(&self) -> &rocksdb::ColumnFamily {
@@ -190,13 +220,13 @@ impl DBStore {
     }
 
     pub(crate) fn flush(&self) {
-        let mut config = self.get_config();
-        for name in &self.cfs {
+        let mut config = Self::get_config(&self.db);
+        for name in CFS {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db.flush_cf(cf).expect("CF flush failed");
         }
         if !config.compacted {
-            for name in &self.cfs {
+            for name in CFS {
                 info!("starting {} compaction", name);
                 let cf = self.db.cf_handle(name).expect("missing CF");
                 self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
@@ -220,7 +250,7 @@ impl DBStore {
 
     fn start_compactions(&self) {
         self.bulk_import.store(false, Ordering::Relaxed);
-        for name in &self.cfs {
+        for name in CFS {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db
                 .set_options_cf(cf, &[("disable_auto_compactions", "false")])
@@ -235,19 +265,15 @@ impl DBStore {
         opts.disable_wal(false);
         let value = serde_json::to_vec(&config).expect("failed to serialize config");
         self.db
-            .put_cf_opt(self.config_cf(), CONFIG_KEY, value, &opts)
+            .put_cf_opt(Self::config_cf(&self.db), CONFIG_KEY, value, &opts)
             .expect("DB::put failed");
     }
 
-    fn get_config(&self) -> Config {
-        self.db
-            .get_cf(self.config_cf(), CONFIG_KEY)
+    fn get_config(db: &rocksdb::DB) -> Config {
+        db.get_cf(Self::config_cf(db), CONFIG_KEY)
             .expect("DB::get failed")
             .map(|value| serde_json::from_slice(&value).expect("failed to deserialize Config"))
-            .unwrap_or_else(|| Config {
-                compacted: false,
-                format: CURRENT_FORMAT,
-            })
+            .unwrap_or_default()
     }
 }
 

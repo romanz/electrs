@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use bitcoin::{BlockHash, OutPoint, Txid};
 
 use std::convert::TryFrom;
-use std::path::Path;
 
 use crate::{
     cache::Cache,
@@ -28,7 +27,7 @@ pub struct Tracker {
 impl Tracker {
     pub fn new(config: &Config) -> Result<Self> {
         let metrics = Metrics::new(config.monitoring_addr)?;
-        let store = DBStore::open(Path::new(&config.db_path))?;
+        let store = DBStore::open(&config.db_path, config.auto_reindex)?;
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(store, chain, &metrics, config.index_lookup_limit)

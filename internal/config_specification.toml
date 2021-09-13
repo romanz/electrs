@@ -17,6 +17,11 @@ count = true
 name = "timestamp"
 doc = "Prepend log lines with a timestamp"
 
+[[switch]]
+name = "auto_reindex"
+doc = "Automatically reindex the database if it's inconsistent or in old format"
+default = true
+
 [[param]]
 name = "db_dir"
 type = "std::path::PathBuf"
