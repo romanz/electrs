@@ -1,3 +1,9 @@
+# 0.8.12 (14 Sep 2021)
+
+* Fail if `cookie` is specified (#478)
+* Move usage in README up and recommend our guide (#463)
+* A bunch of improvements to issue templates (#462)
+
 # 0.8.11 (18 Aug 2021)
 
 * Update dependencies (#401, #402)
