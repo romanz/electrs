@@ -41,7 +41,7 @@ const TXID_CF: &str = "txid";
 const FUNDING_CF: &str = "funding";
 const SPENDING_CF: &str = "spending";
 
-const CFS: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
+const COLUMN_FAMILIES: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
 
 const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
@@ -79,7 +79,8 @@ fn default_opts() -> rocksdb::Options {
 
 impl DBStore {
     fn create_cf_descriptors() -> Vec<rocksdb::ColumnFamilyDescriptor> {
-        CFS.iter()
+        COLUMN_FAMILIES
+            .iter()
             .map(|&name| rocksdb::ColumnFamilyDescriptor::new(name, default_opts()))
             .collect()
     }
@@ -221,12 +222,12 @@ impl DBStore {
 
     pub(crate) fn flush(&self) {
         let mut config = Self::get_config(&self.db);
-        for name in CFS {
+        for name in COLUMN_FAMILIES {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db.flush_cf(cf).expect("CF flush failed");
         }
         if !config.compacted {
-            for name in CFS {
+            for name in COLUMN_FAMILIES {
                 info!("starting {} compaction", name);
                 let cf = self.db.cf_handle(name).expect("missing CF");
                 self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
@@ -250,7 +251,7 @@ impl DBStore {
 
     fn start_compactions(&self) {
         self.bulk_import.store(false, Ordering::Relaxed);
-        for name in CFS {
+        for name in COLUMN_FAMILIES {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db
                 .set_options_cf(cf, &[("disable_auto_compactions", "false")])
