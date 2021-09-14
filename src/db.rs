@@ -105,7 +105,7 @@ impl DBStore {
         debug!("DB {:?}", config);
         if config.format != CURRENT_FORMAT {
             if auto_reindex {
-                info!("Database needs to be reindexed due to being in old format, going to delete the old one.");
+                info!("Database needs to be reindexed due to being in unsupported format ({} != {}), going to delete {}", config.format, CURRENT_FORMAT, path.display());
                 // close DB before deletion
                 drop(db);
                 rocksdb::DB::destroy(&db_opts, path).with_context(|| {
