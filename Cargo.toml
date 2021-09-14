@@ -46,7 +46,9 @@ rev = "06ac9fa3e834413f7afeaed322cf8098d876e4a0"
 git = "https://github.com/romanz/rust-rocksdb"
 rev = "2023b18a7b83fc47b5bc950b5322a2284b771162"
 default-features = false
-features = ["zstd"]
+# ZSTD is used for data compression
+# Snappy is only for checking old DB
+features = ["zstd", "snappy"]
 
 [build-dependencies]
 configure_me_codegen = "0.4"
