@@ -41,13 +41,8 @@ impl TxEntry {
     }
 
     /// Relevant (scripthash-wise) funded outpoints
-    fn funding(&self) -> impl Iterator<Item = OutPoint> + '_ {
+    fn funding_outpoints(&self) -> impl Iterator<Item = OutPoint> + '_ {
         make_outpoints(&self.txid, &self.outputs)
-    }
-
-    /// Relevant (scripthash-wise) spent outpoints
-    fn spending(&self) -> impl Iterator<Item = OutPoint> + '_ {
-        self.spent.iter().copied()
     }
 }
 
@@ -138,39 +133,38 @@ pub struct ScriptHashStatus {
     statushash: Option<StatusHash>,              // computed from history
 }
 
-enum BalanceEntry {
-    Funded(OutPoint),
-    Spent(OutPoint),
-}
-
 /// Specific scripthash balance
-#[derive(Default, Eq, PartialEq)]
+#[derive(Default, Eq, PartialEq, Serialize)]
 pub(crate) struct Balance {
-    pub(crate) confirmed: Amount,
-    pub(crate) mempool_delta: SignedAmount,
+    #[serde(with = "bitcoin::util::amount::serde::as_sat")]
+    confirmed: Amount,
+    #[serde(with = "bitcoin::util::amount::serde::as_sat", rename = "unconfirmed")]
+    mempool_delta: SignedAmount,
 }
 
 #[derive(Default)]
-struct Total {
-    funded: Amount,
-    spent: Amount,
+struct Unspent {
+    map: HashMap<OutPoint, Amount>,
 }
 
-impl Total {
+impl Unspent {
     fn balance(&self) -> Amount {
-        self.funded - self.spent
+        self.map.values().fold(Amount::default(), |acc, v| acc + *v)
     }
 
-    fn update(
-        &mut self,
-        entries: impl Iterator<Item = BalanceEntry>,
-        get_amount: impl Fn(OutPoint) -> Amount,
-    ) {
-        for entry in entries {
-            match entry {
-                BalanceEntry::Funded(outpoint) => self.funded += get_amount(outpoint),
-                BalanceEntry::Spent(outpoint) => self.spent += get_amount(outpoint),
-            }
+    fn insert(&mut self, entry: &TxEntry) {
+        for output in &entry.outputs {
+            let outpoint = OutPoint {
+                txid: entry.txid,
+                vout: output.index,
+            };
+            self.map.insert(outpoint, output.value);
+        }
+    }
+
+    fn remove(&mut self, entry: &TxEntry) {
+        for spent in &entry.spent {
+            self.map.remove(spent);
         }
     }
 }
@@ -190,7 +184,7 @@ impl ScriptHashStatus {
 
     /// Iterate through confirmed TxEntries with their corresponding block heights.
     /// Skip entries from stale blocks.
-    fn confirmed_entries<'a>(
+    fn confirmed_height_entries<'a>(
         &'a self,
         chain: &'a Chain,
     ) -> impl Iterator<Item = (usize, &[TxEntry])> + 'a {
@@ -203,43 +197,36 @@ impl ScriptHashStatus {
             })
     }
 
+    /// Iterate through confirmed TxEntries.
+    /// Skip entries from stale blocks.
+    fn confirmed_entries<'a>(&'a self, chain: &'a Chain) -> impl Iterator<Item = &TxEntry> + 'a {
+        self.confirmed_height_entries(chain)
+            .flat_map(|(_height, entries)| entries)
+    }
+
     /// Collect all funded and confirmed outpoints (as a set).
     fn confirmed_outpoints(&self, chain: &Chain) -> HashSet<OutPoint> {
         self.confirmed_entries(chain)
-            .flat_map(|(_height, entries)| entries.iter().flat_map(TxEntry::funding))
+            .flat_map(TxEntry::funding_outpoints)
             .collect()
     }
 
-    pub(crate) fn get_balance<F>(&self, chain: &Chain, get_amount: F) -> Balance
-    where
-        F: Fn(OutPoint) -> Amount,
-    {
-        fn to_balance_entries<'a>(
-            entries: impl Iterator<Item = &'a TxEntry> + 'a,
-        ) -> impl Iterator<Item = BalanceEntry> + 'a {
-            entries.flat_map(|e| {
-                let funded = e.funding().map(BalanceEntry::Funded);
-                let spent = e.spending().map(BalanceEntry::Spent);
-                funded.chain(spent)
-            })
-        }
+    pub(crate) fn get_balance(&self, chain: &Chain) -> Balance {
+        let mut unspent = Unspent::default();
 
-        let confirmed_entries = to_balance_entries(
-            self.confirmed_entries(chain)
-                .flat_map(|(_height, entries)| entries),
-        );
-        let mempool_entries = to_balance_entries(self.mempool.iter());
+        self.confirmed_entries(chain)
+            .for_each(|e| unspent.insert(e));
+        self.confirmed_entries(chain)
+            .for_each(|e| unspent.remove(e));
+        let confirmed_balance = unspent.balance();
 
-        let mut total = Total::default();
-        total.update(confirmed_entries, &get_amount);
-        let confirmed = total.balance();
-
-        total.update(mempool_entries, &get_amount);
-        let with_mempool = total.balance();
+        self.mempool.iter().for_each(|e| unspent.insert(e));
+        self.mempool.iter().for_each(|e| unspent.remove(e));
 
         Balance {
-            confirmed,
-            mempool_delta: with_mempool.to_signed().unwrap() - confirmed.to_signed().unwrap(),
+            confirmed: confirmed_balance,
+            mempool_delta: unspent.balance().to_signed().unwrap()
+                - confirmed_balance.to_signed().unwrap(),
         }
     }
 
@@ -251,7 +238,7 @@ impl ScriptHashStatus {
 
     /// Collect all confirmed history entries (in block order).
     fn get_confirmed_history(&self, chain: &Chain) -> Vec<HistoryEntry> {
-        self.confirmed_entries(chain)
+        self.confirmed_height_entries(chain)
             .collect::<BTreeMap<usize, &[TxEntry]>>()
             .into_iter()
             .flat_map(|(height, entries)| {

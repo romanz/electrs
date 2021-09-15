@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use bitcoin::{BlockHash, OutPoint, Txid};
+use bitcoin::{BlockHash, Txid};
 
-use std::convert::TryFrom;
 use std::path::Path;
 
 use crate::{
@@ -76,17 +75,8 @@ impl Tracker {
         Ok(prev_statushash != status.statushash())
     }
 
-    pub(crate) fn get_balance(&self, status: &ScriptHashStatus, cache: &Cache) -> Balance {
-        let get_amount_fn = |outpoint: OutPoint| {
-            cache
-                .get_tx(&outpoint.txid, |tx| {
-                    let vout = usize::try_from(outpoint.vout).unwrap();
-                    bitcoin::Amount::from_sat(tx.output[vout].value)
-                })
-                .expect("missing tx")
-        };
-
-        status.get_balance(self.chain(), get_amount_fn)
+    pub(crate) fn get_balance(&self, status: &ScriptHashStatus) -> Balance {
+        status.get_balance(self.chain())
     }
 
     pub fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {
