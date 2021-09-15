@@ -136,35 +136,61 @@ pub struct ScriptHashStatus {
 /// Specific scripthash balance
 #[derive(Default, Eq, PartialEq, Serialize)]
 pub(crate) struct Balance {
-    #[serde(with = "bitcoin::util::amount::serde::as_sat")]
-    confirmed: Amount,
+    #[serde(with = "bitcoin::util::amount::serde::as_sat", rename = "confirmed")]
+    confirmed_balance: Amount,
     #[serde(with = "bitcoin::util::amount::serde::as_sat", rename = "unconfirmed")]
     mempool_delta: SignedAmount,
 }
 
 #[derive(Default)]
 struct Unspent {
-    map: HashMap<OutPoint, Amount>,
+    // mapping an outpoint to its value & confirmation height
+    outpoints: HashMap<OutPoint, (Amount, usize)>,
+    confirmed_balance: Amount,
+    mempool_delta: SignedAmount,
 }
 
 impl Unspent {
-    fn balance(&self) -> Amount {
-        self.map.values().fold(Amount::default(), |acc, v| acc + *v)
+    fn build(status: &ScriptHashStatus, chain: &Chain) -> Self {
+        let mut unspent = Unspent::default();
+
+        status
+            .confirmed_height_entries(chain)
+            .for_each(|(height, entries)| entries.iter().for_each(|e| unspent.insert(e, height)));
+        status
+            .confirmed_entries(chain)
+            .for_each(|e| unspent.remove(e));
+
+        unspent.confirmed_balance = unspent.balance();
+
+        status.mempool.iter().for_each(|e| unspent.insert(e, 0)); // mempool height = 0
+        status.mempool.iter().for_each(|e| unspent.remove(e));
+
+        unspent.mempool_delta =
+            unspent.balance().to_signed().unwrap() - unspent.confirmed_balance.to_signed().unwrap();
+
+        unspent
     }
 
-    fn insert(&mut self, entry: &TxEntry) {
+    fn balance(&self) -> Amount {
+        self.outpoints
+            .values()
+            .fold(Amount::default(), |acc, v| acc + v.0)
+    }
+
+    fn insert(&mut self, entry: &TxEntry, height: usize) {
         for output in &entry.outputs {
             let outpoint = OutPoint {
                 txid: entry.txid,
                 vout: output.index,
             };
-            self.map.insert(outpoint, output.value);
+            self.outpoints.insert(outpoint, (output.value, height));
         }
     }
 
     fn remove(&mut self, entry: &TxEntry) {
         for spent in &entry.spent {
-            self.map.remove(spent);
+            self.outpoints.remove(spent);
         }
     }
 }
@@ -212,21 +238,10 @@ impl ScriptHashStatus {
     }
 
     pub(crate) fn get_balance(&self, chain: &Chain) -> Balance {
-        let mut unspent = Unspent::default();
-
-        self.confirmed_entries(chain)
-            .for_each(|e| unspent.insert(e));
-        self.confirmed_entries(chain)
-            .for_each(|e| unspent.remove(e));
-        let confirmed_balance = unspent.balance();
-
-        self.mempool.iter().for_each(|e| unspent.insert(e));
-        self.mempool.iter().for_each(|e| unspent.remove(e));
-
+        let unspent = Unspent::build(self, chain);
         Balance {
-            confirmed: confirmed_balance,
-            mempool_delta: unspent.balance().to_signed().unwrap()
-                - confirmed_balance.to_signed().unwrap(),
+            confirmed_balance: unspent.confirmed_balance,
+            mempool_delta: unspent.mempool_delta,
         }
     }
 
