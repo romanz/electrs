@@ -2,15 +2,10 @@
 FROM rust:1.41.1-slim as electrs-build
 RUN apt-get update
 RUN apt-get install -qq -y clang cmake
-RUN rustup component add rustfmt clippy
 
-# Build, test and install electrs
+# Install electrs
 WORKDIR /build/electrs
 COPY . .
-RUN cargo fmt -- --check
-RUN cargo clippy
-RUN cargo build --locked --release --all
-RUN cargo test --locked --release --all
 RUN cargo install --locked --path .
 
 FROM debian:buster-slim as updated
