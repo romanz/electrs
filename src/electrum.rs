@@ -226,19 +226,16 @@ impl Rpc {
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
         let balance = match client.scripthashes.get(&scripthash) {
-            Some(status) => self.tracker.get_balance(status, &self.cache),
+            Some(status) => self.tracker.get_balance(&status),
             None => {
                 warn!(
                     "blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
                     scripthash
                 );
-                self.tracker
-                    .get_balance(&self.new_status(scripthash)?, &self.cache)
+                self.tracker.get_balance(&self.new_status(scripthash)?)
             }
         };
-        Ok(
-            json!({"confirmed": balance.confirmed.as_sat(), "unconfirmed": balance.mempool_delta.as_sat()}),
-        )
+        Ok(json!(balance))
     }
 
     fn scripthash_get_history(
