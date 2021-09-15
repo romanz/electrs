@@ -67,12 +67,11 @@ def main():
         client.request('blockchain.scripthash.get_balance', script_hash)
         for script_hash in script_hashes
     )
-    balances = [balance["confirmed"] for balance in balances]
-    total = sum(balances)
     for balance, addr in sorted(zip(balances, args.address)):
-        if balance:
-            log.debug('{:15,.5f} mBTC at {}', balance / 1e5, addr)
-    log.debug('{:15,.5f} mBTC (total)', total / 1e5)
+        if balance["confirmed"]:
+            log.info("{}: confirmed {:,.5f} mBTC", addr, balance["confirmed"] / 1e5)
+        if balance["unconfirmed"]:
+            log.info("{}: unconfirmed {:,.5f} mBTC", addr, balance["unconfirmed"] / 1e5)
 
     histories = conn.call(
         client.request('blockchain.scripthash.get_history', script_hash)
