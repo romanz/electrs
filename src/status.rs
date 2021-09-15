@@ -22,8 +22,13 @@ use crate::{
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
 struct TxEntry {
     txid: Txid,
-    outputs: Vec<u32>,    // relevant funded output indices
-    spent: Vec<OutPoint>, // relevant spent outpoints
+    outputs: Vec<TxOutput>, // relevant funded outputs and their amounts
+    spent: Vec<OutPoint>,   // relevant spent outpoints
+}
+
+struct TxOutput {
+    index: u32,
+    value: Amount,
 }
 
 impl TxEntry {
@@ -426,16 +431,24 @@ impl ScriptHashStatus {
     }
 }
 
-fn make_outpoints<'a>(txid: &'a Txid, outputs: &'a [u32]) -> impl Iterator<Item = OutPoint> + 'a {
-    outputs.iter().map(move |vout| OutPoint::new(*txid, *vout))
+fn make_outpoints<'a>(
+    txid: &'a Txid,
+    outputs: &'a [TxOutput],
+) -> impl Iterator<Item = OutPoint> + 'a {
+    outputs
+        .iter()
+        .map(move |out| OutPoint::new(*txid, out.index))
 }
 
-fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<u32> {
+fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<TxOutput> {
     let outputs = tx.output.iter().zip(0u32..);
     outputs
         .filter_map(move |(txo, vout)| {
             if ScriptHash::new(&txo.script_pubkey) == *scripthash {
-                Some(vout)
+                Some(TxOutput {
+                    index: vout,
+                    value: Amount::from_sat(txo.value),
+                })
             } else {
                 None
             }
