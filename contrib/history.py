@@ -67,11 +67,19 @@ def main():
         client.request('blockchain.scripthash.get_balance', script_hash)
         for script_hash in script_hashes
     )
-    for addr, balance in sorted(zip(args.address, balances), key=lambda v: v[0]):
-        if balance["confirmed"]:
-            log.info("{}: confirmed {:,.5f} mBTC", addr, balance["confirmed"] / 1e5)
-        if balance["unconfirmed"]:
-            log.info("{}: unconfirmed {:,.5f} mBTC", addr, balance["unconfirmed"] / 1e5)
+
+    unspents = conn.call(
+        client.request('blockchain.scripthash.listunspent', script_hash)
+        for script_hash in script_hashes
+    )
+    for addr, balance, unspent in sorted(zip(args.address, balances, unspents), key=lambda v: v[0]):
+        if unspent:
+            log.debug("{}: confirmed={:,.5f} mBTC, unconfirmed={:,.5f} mBTC",
+                addr, balance["confirmed"] / 1e5, balance["unconfirmed"] / 1e5)
+            for u in unspent:
+                log.debug("\t{}:{} = {:,.5f} mBTC {}",
+                    u["tx_hash"], u["tx_pos"], u["value"] / 1e5,
+                    f'@ {u["height"]}' if u["height"] else "")
 
     histories = conn.call(
         client.request('blockchain.scripthash.get_history', script_hash)

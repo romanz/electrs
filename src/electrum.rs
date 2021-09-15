@@ -256,6 +256,24 @@ impl Rpc {
         Ok(json!(history_entries))
     }
 
+    fn scripthash_list_unspent(
+        &self,
+        client: &Client,
+        (scripthash,): (ScriptHash,),
+    ) -> Result<Value> {
+        let unspent_entries = match client.scripthashes.get(&scripthash) {
+            Some(status) => self.tracker.get_unspent(status),
+            None => {
+                warn!(
+                    "blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
+                    scripthash
+                );
+                self.tracker.get_unspent(&self.new_status(scripthash)?)
+            }
+        };
+        Ok(json!(unspent_entries))
+    }
+
     fn scripthash_subscribe(
         &self,
         client: &mut Client,
@@ -406,6 +424,7 @@ impl Rpc {
                 Call::RelayFee => self.relayfee(),
                 Call::ScriptHashGetBalance(args) => self.scripthash_get_balance(client, args),
                 Call::ScriptHashGetHistory(args) => self.scripthash_get_history(client, args),
+                Call::ScriptHashListUnspent(args) => self.scripthash_list_unspent(client, args),
                 Call::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Call::TransactionBroadcast(args) => self.transaction_broadcast(args),
                 Call::TransactionGet(args) => self.transaction_get(args),
@@ -445,6 +464,7 @@ enum Call {
     RelayFee,
     ScriptHashGetBalance((ScriptHash,)),
     ScriptHashGetHistory((ScriptHash,)),
+    ScriptHashListUnspent((ScriptHash,)),
     ScriptHashSubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
@@ -461,6 +481,7 @@ impl Call {
             "blockchain.relayfee" => Call::RelayFee,
             "blockchain.scripthash.get_balance" => Call::ScriptHashGetBalance(convert(params)?),
             "blockchain.scripthash.get_history" => Call::ScriptHashGetHistory(convert(params)?),
+            "blockchain.scripthash.listunspent" => Call::ScriptHashListUnspent(convert(params)?),
             "blockchain.scripthash.subscribe" => Call::ScriptHashSubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Call::TransactionBroadcast(convert(params)?),
             "blockchain.transaction.get" => Call::TransactionGet(convert(params)?),

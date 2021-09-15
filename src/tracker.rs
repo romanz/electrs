@@ -12,7 +12,7 @@ use crate::{
     index::Index,
     mempool::{Histogram, Mempool},
     metrics::Metrics,
-    status::{Balance, HistoryEntry, ScriptHashStatus},
+    status::{Balance, HistoryEntry, ScriptHashStatus, UnspentEntry},
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -53,6 +53,10 @@ impl Tracker {
 
     pub(crate) fn get_history(&self, status: &ScriptHashStatus) -> Vec<HistoryEntry> {
         status.get_history(self.index.chain(), &self.mempool)
+    }
+
+    pub(crate) fn get_unspent(&self, status: &ScriptHashStatus) -> Vec<UnspentEntry> {
+        status.get_unspent(self.index.chain())
     }
 
     pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {

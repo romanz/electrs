@@ -142,6 +142,17 @@ pub(crate) struct Balance {
     mempool_delta: SignedAmount,
 }
 
+// A single unspent transaction output entry:
+// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-listunspent
+#[derive(Serialize)]
+pub(crate) struct UnspentEntry {
+    height: usize, // 0 = mempool entry
+    tx_hash: Txid,
+    tx_pos: u32,
+    #[serde(with = "bitcoin::util::amount::serde::as_sat")]
+    value: Amount,
+}
+
 #[derive(Default)]
 struct Unspent {
     // mapping an outpoint to its value & confirmation height
@@ -170,6 +181,18 @@ impl Unspent {
             unspent.balance().to_signed().unwrap() - unspent.confirmed_balance.to_signed().unwrap();
 
         unspent
+    }
+
+    fn into_entries(self) -> Vec<UnspentEntry> {
+        self.outpoints
+            .into_iter()
+            .map(|(outpoint, (value, height))| UnspentEntry {
+                height,
+                tx_hash: outpoint.txid,
+                tx_pos: outpoint.vout,
+                value,
+            })
+            .collect()
     }
 
     fn balance(&self) -> Amount {
@@ -235,6 +258,10 @@ impl ScriptHashStatus {
         self.confirmed_entries(chain)
             .flat_map(TxEntry::funding_outpoints)
             .collect()
+    }
+
+    pub(crate) fn get_unspent(&self, chain: &Chain) -> Vec<UnspentEntry> {
+        Unspent::build(self, chain).into_entries()
     }
 
     pub(crate) fn get_balance(&self, chain: &Chain) -> Balance {
