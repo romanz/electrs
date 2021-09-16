@@ -53,6 +53,10 @@ struct Config {
 }
 
 const CURRENT_FORMAT: u64 = 0;
+// If the database doesn't contain cormat information we assume it's legacy and we use this value
+// as a marker. We don't use 0 because some people already started using unreleased version of p2p
+// when this change was introduced and we want to be nice to them by not requiring them to reindex.
+const MISSING_FORMAT: u64 = 0xFFFFFFFFFFFFFFFF;
 
 impl Default for Config {
     fn default() -> Self {
@@ -274,7 +278,18 @@ impl DBStore {
         db.get_cf(Self::config_cf(db), CONFIG_KEY)
             .expect("DB::get failed")
             .map(|value| serde_json::from_slice(&value).expect("failed to deserialize Config"))
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                if db.iterator(rocksdb::IteratorMode::Start).next().is_some() {
+                    // The database is not empty but doesn't contain config.
+                    Config {
+                        compacted: false,
+                        format: MISSING_FORMAT,
+                    }
+                } else {
+                    info!("The database is empty");
+                    Default::default()
+                }
+            })
     }
 }
 
