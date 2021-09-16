@@ -29,19 +29,6 @@ fn parse_hash<T: Hash>(value: &Value) -> Result<T> {
     .chain_err(|| format!("non-hex value: {}", value))
 }
 
-fn to_int_version(str_version: &str) -> u64 {
-    let parts: Vec<&str> = str_version.split(".").collect();
-    if parts.len() != 3 {
-        panic!("Wrong string verson");
-    }
-
-    let mut result: u64 = 0;
-    result += parts[2].parse::<u64>().unwrap();
-    result += parts[1].parse::<u64>().unwrap() * 100;
-    result += parts[0].parse::<u64>().unwrap() * 10000;
-    return result;
-}
-
 fn header_from_value(value: Value) -> Result<BlockHeader> {
     let header_hex = value
         .as_str()
@@ -115,6 +102,7 @@ struct BlockchainInfo {
     verificationprogress: f64,
     bestblockhash: String,
     pruned: bool,
+    initialblockdownload: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -122,18 +110,6 @@ struct NetworkInfo {
     version: u64,
     subversion: String,
     relayfee: f64, // in BTC
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct BcoinNetworkInfo {
-    version: String,
-    subversion: String,
-    relayfee: f64, // in BTC
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct SubversionInfo {
-    subversion: String,
 }
 
 pub struct MempoolEntry {
@@ -353,14 +329,7 @@ impl Daemon {
         };
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
-        if network_info.subversion.contains("bcoin") {
-            if network_info.version < 2_00_00 {
-                bail!(
-                    "{} is not supported - please use bcoin 2.0.0+",
-                    network_info.subversion,
-                )
-            }
-        } else if network_info.version < 16_00_00 {
+        if network_info.version < 16_00_00 {
             bail!(
                 "{} is not supported - please use bitcoind 0.16+",
                 network_info.subversion,
@@ -373,10 +342,7 @@ impl Daemon {
         }
         loop {
             let info = daemon.getblockchaininfo()?;
-            // `bcoin` does not provide the `initialblockdownload` field
-            // Comparing the number of headers and blocks should be good enough
-            // to check if the node is synchronized
-            if info.headers != 0 && info.headers == info.blocks {
+            if !info.initialblockdownload {
                 break;
             }
             if network == Network::Regtest && info.headers == info.blocks {
@@ -487,33 +453,7 @@ impl Daemon {
     }
 
     fn getnetworkinfo(&self) -> Result<NetworkInfo> {
-        // `bitcoind` returns `version` as a string value from `getnetworkinfo`,
-        // while `bcoin` returns an int value.
         let info: Value = self.request("getnetworkinfo", json!([]))?;
-
-        let sub_info: SubversionInfo = match from_value(info.clone()) {
-            Ok(sub_info) => sub_info,
-            Err(e) => return Err(e).chain_err(|| "invalid network info"),
-        };
-
-        // If connected to a bcoin node, unwrap json into BcoinNetworkInfo and
-        // convert it to NetworkInfo.
-        if sub_info.subversion.contains("bcoin") {
-            let bcoin_info: BcoinNetworkInfo = match from_value(info.clone()) {
-                Ok(bcoin_info) => bcoin_info,
-                Err(e) => return Err(e).chain_err(|| "invalid network info"),
-            };
-
-            let result = NetworkInfo {
-                version: to_int_version(&bcoin_info.version),
-                subversion: bcoin_info.subversion,
-                relayfee: bcoin_info.relayfee,
-            };
-
-            return Ok(result);
-        }
-
-        // If connected to a bitcoind node, unwrap into NetworkInfo
         from_value(info).chain_err(|| "invalid network info")
     }
 
