@@ -487,16 +487,33 @@ $ ./contrib/history.sh 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR
 
 ## Upgrading
 
-> Note that in 0.9.0 we have changed the RocksDB index format, so you may get an error when reading an older DB.
-> In this case, consider moving the old DB directory and perform a re-sync of the blockchain.
+### Important changes from versions older than 0.9.0
 
-> **If you're upgrading from version 0.8.7 to a higher version and used `cookie` option you should change your configuration!**
-> The `cookie` option was deprecated and **will be removed eventually**!
-> If you had actual cookie (from `~/bitcoin/.cookie` file) specified in `cookie` option, this was wrong as it wouldn't get updated when needed.
-> It's strongly recommended to use proper cookie authentication using `cookie_file`.
-> If you really have to use fixed username and password, explicitly specified in `bitcoind` config, use `auth` option instead.
-> Users of `btc-rpc-proxy` using `public:public` need to use `auth` too.
-> You can read [a detailed explanation of cookie deprecation with motivation explained](cookie_deprecation.md).
+In 0.9.0 we have changed the RocksDB index format to optimize electrs performance.
+We also use Bitcoin P2P protocol instead of reading blocks from disk or JSON RPC.
+ 
+Upgrading checklist:
+
+* Make sure you upgrade at time when you don't need to use electrs for a while.
+  Because of reindex electrs will be unable to serve your requests for a few hours.
+  (The exact time depends on your hardware.)
+  If you wish to check the database without reindexing run electrs with `--no-auto-reindex`.
+* Make sure to allow accesses to bitcoind from local address, ideally whitelist it using `whitelist=download@127.0.0.1` bitcoind option.
+  Either don't use `maxconnections` bitcoind option or set it to 12 or more.
+* If you use non-default P2P port for bitcoind adjust `electrs` configuration.
+* If you still didn't migrate `cookie` electrs option you have to now - see below.
+
+### Important changes from version older than 0.8.8
+
+**If you're upgrading from version 0.8.7 to a higher version and used `cookie` option you should change your configuration!**
+The `cookie` option was deprecated and **will be removed eventually**!
+If you had actual cookie (from `~/bitcoin/.cookie` file) specified in `cookie` option, this was wrong as it wouldn't get updated when needed.
+It's strongly recommended to use proper cookie authentication using `cookie_file`.
+If you really have to use fixed username and password, explicitly specified in `bitcoind` config, use `auth` option instead.
+Users of `btc-rpc-proxy` using `public:public` need to use `auth` too.
+You can read [a detailed explanation of cookie deprecation with motivation explained](cookie_deprecation.md).
+
+### General upgrading guide
 
 As with any other application, you need to remember how you installed `electrs` to upgrade it.
 If you don't then here's a little help: run `which electrs` and compare the output

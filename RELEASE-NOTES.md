@@ -1,9 +1,22 @@
 # 0.9.0 (TBD)
 
+**IMPORTANT: This release contains major changes, please read carefully!**
+
+The two main things to watch out for:
+
+* Database schema changed - this will cause **reindex after upgrade**.
+* We now use **bitcoin p2p protocol** to fetch blocks - some configurations may not work.
+
+See [upgrading](doc/usage.md#upgrading) section of our docs to learn more.
+
+Full list of changes:
+
 * Fix incorrect ordering of same-block transactions (#297)
 * Change DB index format and use Zstd compression (instead of Snappy)
+* The database will be reindexed automatically when it encounters old version
 * Don't use bitcoind JSON RPC for fetching blocks (#373)
-* Use p2p for block fetching (instead of reading `blk*.dat` files)
+* Use p2p for block fetching only.
+  This is safer than reading `blk*dat` files and faster than Json RPC.
 * Support Electrum JSON RPC batching and errors
 * Use `rust-bitcoincore-rpc` crate
 * Increase default `index_lookup_limit` to 200
