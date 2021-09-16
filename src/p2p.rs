@@ -25,6 +25,8 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
+    /// Connect to a Bitcoin node via p2p protocol.
+    /// See https://en.bitcoin.it/wiki/Protocol_documentation for details.
     pub fn connect(network: Network, address: SocketAddr) -> Result<Self> {
         let stream = TcpStream::connect(address)
             .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
@@ -78,6 +80,8 @@ impl Connection {
         }
     }
 
+    /// Request and process the specified blocks.
+    /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
@@ -94,6 +98,7 @@ impl Connection {
         debug!("loading {} blocks", blockhashes.len());
         self.send(NetworkMessage::GetData(inv))?;
 
+        // receive, parse and process the blocks concurrently
         rayon::scope(|s| {
             let (tx, rx) = crossbeam_channel::bounded(10);
             s.spawn(|_| {
@@ -120,6 +125,8 @@ impl Connection {
         })
     }
 
+    /// Get new block headers (supporting reorgs).
+    /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
         let msg = GetHeadersMessage::new(chain.locator(), BlockHash::default());
         self.send(NetworkMessage::GetHeaders(msg))?;
