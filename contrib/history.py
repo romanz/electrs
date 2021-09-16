@@ -67,7 +67,7 @@ def main():
         client.request('blockchain.scripthash.get_balance', script_hash)
         for script_hash in script_hashes
     )
-    for balance, addr in sorted(zip(balances, args.address)):
+    for addr, balance in sorted(zip(args.address, balances), key=lambda v: v[0]):
         if balance["confirmed"]:
             log.info("{}: confirmed {:,.5f} mBTC", addr, balance["confirmed"] / 1e5)
         if balance["unconfirmed"]:
