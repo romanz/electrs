@@ -13,7 +13,7 @@ Full list of changes:
 
 * Fix incorrect ordering of same-block transactions (#297)
 * Change DB index format and use Zstd compression (instead of Snappy)
-* The database will be reindexed automatically when it encounters old version
+* The database will be reindexed automatically when it encounters old version (#477)
 * Don't use bitcoind JSON RPC for fetching blocks (#373)
 * Use p2p for block fetching only.
   This is safer than reading `blk*dat` files and faster than JSON RPC.
