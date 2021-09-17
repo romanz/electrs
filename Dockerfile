@@ -1,43 +1,39 @@
-FROM rust:1.44.1-slim-buster as builder
+### Electrum Rust Server ###
+FROM rust:1.41.1-slim as electrs-build
+RUN apt-get update
+RUN apt-get install -qq -y clang cmake
 
-WORKDIR /build
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends clang=1:7.* cmake=3.* \
-    libsnappy-dev=1.* \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
+# Install electrs
+WORKDIR /build/electrs
 COPY . .
-
 RUN cargo install --locked --path .
 
-# Create runtime image
-FROM debian:buster-slim
+FROM debian:buster-slim as updated
+RUN apt-get update -qqy
 
-WORKDIR /app
+### Bitcoin Core ###
+FROM updated as bitcoin-build
+# Download
+RUN apt-get install -qqy wget
+WORKDIR /build/bitcoin
+ARG BITCOIND_VERSION=22.0
+RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
+RUN tar xvf bitcoin-$BITCOIND_VERSION-x86_64-linux-gnu.tar.gz
+RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
+RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoin-cli .
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+FROM updated as result
+# Copy the binaries
+COPY --from=electrs-build /usr/local/cargo/bin/electrs /usr/bin/electrs
+COPY --from=bitcoin-build /build/bitcoin/bitcoind /build/bitcoin/bitcoin-cli /usr/bin/
+RUN bitcoind -version && bitcoin-cli -version
 
-RUN groupadd -r user \
-    && adduser --disabled-login --system --shell /bin/false --uid 1000 --ingroup user user
+### Electrum ###
+# Clone latest Electrum wallet and a few test tools
+WORKDIR /build/
+RUN apt-get install -qqy git libsecp256k1-0 python3-cryptography python3-setuptools python3-pip jq curl
+RUN git clone --recurse-submodules https://github.com/spesmilo/electrum/ && cd electrum/ && git log -1
+RUN python3 -m pip install -e electrum/
 
-COPY --from=builder --chown=user:user \
-    /build/target/release/electrs .
-
-USER user
-
-# Electrum RPC
-EXPOSE 50001
-
-# Prometheus monitoring
-EXPOSE 4224
-
-STOPSIGNAL SIGINT
-
-HEALTHCHECK CMD curl -fSs http://localhost:4224/ || exit 1
-
-ENTRYPOINT ["./electrs"]
+RUN electrum version --offline
+WORKDIR /

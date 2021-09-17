@@ -1,23 +1,21 @@
 use bitcoin::network::constants::Network;
+use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
-use std::convert::TryInto;
+
 use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::fs;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
 
-use crate::daemon::CookieGetter;
-use crate::errors::*;
+use std::time::Duration;
 
 const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on IPv4 localhost
 
 mod internal {
     #![allow(unused)]
+    #![allow(clippy::identity_conversion)]
 
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
@@ -108,7 +106,7 @@ impl FromStr for BitcoinNetwork {
 }
 
 impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
-    fn describe_type<W: fmt::Write>(mut writer: W) -> std::fmt::Result {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
         write!(writer, "either 'bitcoin', 'testnet', 'regtest' or 'signet'")
     }
 }
@@ -120,25 +118,46 @@ impl From<BitcoinNetwork> for Network {
 }
 
 /// Parsed and post-processed configuration
+#[derive(Debug)]
 pub struct Config {
     // See below for the documentation of each field:
-    pub log: stderrlog::StdErrLog,
-    pub network_type: Network,
+    pub network: Network,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
-    pub blocks_dir: PathBuf,
+    pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,
+    pub daemon_p2p_addr: SocketAddr,
     pub electrum_rpc_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
-    pub jsonrpc_import: bool,
     pub wait_duration: Duration,
     pub index_batch_size: usize,
-    pub bulk_index_threads: usize,
-    pub tx_cache_size: usize,
-    pub txid_limit: usize,
+    pub index_lookup_limit: Option<usize>,
+    pub auto_reindex: bool,
+    pub ignore_mempool: bool,
+    pub sync_once: bool,
     pub server_banner: String,
-    pub blocktxids_cache_size: usize,
-    pub cookie_getter: Arc<dyn CookieGetter>,
+    pub args: Vec<String>,
+}
+
+pub struct SensitiveAuth(pub Auth);
+
+impl SensitiveAuth {
+    pub(crate) fn get_auth(&self) -> Auth {
+        self.0.clone()
+    }
+}
+
+impl fmt::Debug for SensitiveAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Auth::UserPass(ref user, _) => f
+                .debug_tuple("UserPass")
+                .field(&user)
+                .field(&"<sensitive>")
+                .finish(),
+            _ => write!(f, "{:?}", self.0),
+        }
+    }
 }
 
 /// Returns default daemon directory
@@ -149,40 +168,6 @@ fn default_daemon_dir() -> PathBuf {
     });
     home.push(".bitcoin");
     home
-}
-
-fn default_blocks_dir(daemon_dir: &Path) -> PathBuf {
-    daemon_dir.join("blocks")
-}
-
-fn create_cookie_getter(
-    cookie: Option<String>,
-    cookie_file: Option<PathBuf>,
-    daemon_dir: &Path,
-) -> Arc<dyn CookieGetter> {
-    match (cookie, cookie_file) {
-        (None, None) => Arc::new(CookieFile::from_daemon_dir(daemon_dir)),
-        (None, Some(file)) => Arc::new(CookieFile::from_file(file)),
-        (Some(cookie), None) => Arc::new(StaticCookie::from_string(cookie)),
-        (Some(_), Some(_)) => {
-            eprintln!("Error: ambigous configuration - cookie and cookie_file can't be specified at the same time");
-            std::process::exit(1);
-        }
-    }
-}
-
-/// Processes deprecation of cookie in favor of auth
-fn select_auth(auth: Option<String>, cookie: Option<String>) -> Option<String> {
-    if cookie.is_some() {
-        eprintln!("ERROR: cookie option is not supported!");
-        eprintln!();
-        eprintln!("You most likely want to use cookie_file instead.");
-        eprintln!("If you really don't want to use cookie_file for a good reason and knowing the consequences use the auth option");
-        eprintln!("See authentication section in electrs usage documentation for more details.");
-        eprintln!("https://github.com/romanz/electrs/blob/master/doc/usage.md#configuration-files-and-priorities");
-        std::process::exit(1);
-    }
-    auth
 }
 
 impl Config {
@@ -200,12 +185,11 @@ impl Config {
             .chain(home_config.as_ref().map(AsRef::as_ref))
             .chain(std::iter::once(system_config));
 
-        let (mut config, _) =
+        let (mut config, args) =
             internal::Config::including_optional_config_files(configs).unwrap_or_exit();
 
         let db_subdir = match config.network {
-            // We must keep the name "mainnet" due to backwards compatibility
-            Network::Bitcoin => "mainnet",
+            Network::Bitcoin => "bitcoin",
             Network::Testnet => "testnet",
             Network::Regtest => "regtest",
             Network::Signet => "signet",
@@ -213,11 +197,17 @@ impl Config {
 
         config.db_dir.push(db_subdir);
 
-        let default_daemon_port = match config.network {
+        let default_daemon_rpc_port = match config.network {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
             Network::Regtest => 18443,
             Network::Signet => 38332,
+        };
+        let default_daemon_p2p_port = match config.network {
+            Network::Bitcoin => 8333,
+            Network::Testnet => 18333,
+            Network::Regtest => 18444,
+            Network::Signet => 38333,
         };
         let default_electrum_port = match config.network {
             Network::Bitcoin => 50001,
@@ -233,13 +223,24 @@ impl Config {
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
-            (DEFAULT_SERVER_ADDRESS, default_daemon_port).into(),
+            (DEFAULT_SERVER_ADDRESS, default_daemon_rpc_port).into(),
+            ResolvAddr::resolve_or_exit,
+        );
+        let daemon_p2p_addr: SocketAddr = config.daemon_p2p_addr.map_or(
+            (DEFAULT_SERVER_ADDRESS, default_daemon_p2p_port).into(),
             ResolvAddr::resolve_or_exit,
         );
         let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.map_or(
             (DEFAULT_SERVER_ADDRESS, default_electrum_port).into(),
             ResolvAddr::resolve_or_exit,
         );
+        #[cfg(not(feature = "metrics"))]
+        {
+            if config.monitoring_addr.is_some() {
+                eprintln!("Error: enable \"metrics\" feature to specify monitoring_addr");
+                std::process::exit(1);
+            }
+        }
         let monitoring_addr: SocketAddr = config.monitoring_addr.map_or(
             (DEFAULT_SERVER_ADDRESS, default_monitoring_port).into(),
             ResolvAddr::resolve_or_exit,
@@ -253,138 +254,83 @@ impl Config {
         }
 
         let daemon_dir = &config.daemon_dir;
-        let blocks_dir = config
-            .blocks_dir
-            .unwrap_or_else(|| default_blocks_dir(daemon_dir));
-
-        let auth = select_auth(config.auth, config.cookie);
-        let cookie_getter = create_cookie_getter(auth, config.cookie_file, daemon_dir);
-
-        let mut log = stderrlog::new();
-        log.verbosity(
-            config
-                .verbose
-                .try_into()
-                .expect("Overflow: Running electrs on less than 32 bit devices is unsupported"),
-        );
-        log.timestamp(if config.timestamp {
-            stderrlog::Timestamp::Millisecond
-        } else {
-            stderrlog::Timestamp::Off
+        let daemon_auth = SensitiveAuth(match (config.auth, config.cookie_file) {
+            (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
+            (None, Some(cookie_file)) => Auth::CookieFile(cookie_file),
+            (Some(auth), None) => {
+                let parts: Vec<&str> = auth.splitn(2, ':').collect();
+                if parts.len() != 2 {
+                    eprintln!("Error: auth cookie doesn't contain colon");
+                    std::process::exit(1);
+                }
+                Auth::UserPass(parts[0].to_owned(), parts[1].to_owned())
+            }
+            (Some(_), Some(_)) => {
+                eprintln!("Error: ambigous configuration - auth and cookie_file can't be specified at the same time");
+                std::process::exit(1);
+            }
         });
-        log.init().unwrap_or_else(|err| {
-            eprintln!("Error: logging initialization failed: {}", err);
-            std::process::exit(1)
-        });
-        // Could have been default, but it's useful to allow the user to specify 0 when overriding
-        // configs.
-        if config.bulk_index_threads == 0 {
-            config.bulk_index_threads = num_cpus::get();
-        }
-        const MB: f32 = (1 << 20) as f32;
+
+        let level = match config.verbose {
+            0 => log::LevelFilter::Error,
+            1 => log::LevelFilter::Warn,
+            2 => log::LevelFilter::Info,
+            3 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace,
+        };
+
+        let index_lookup_limit = match config.index_lookup_limit {
+            0 => None,
+            _ => Some(config.index_lookup_limit),
+        };
         let config = Config {
-            log,
-            network_type: config.network,
+            network: config.network,
             db_path: config.db_dir,
             daemon_dir: config.daemon_dir,
-            blocks_dir,
+            daemon_auth,
             daemon_rpc_addr,
+            daemon_p2p_addr,
             electrum_rpc_addr,
             monitoring_addr,
-            jsonrpc_import: config.jsonrpc_import,
             wait_duration: Duration::from_secs(config.wait_duration_secs),
             index_batch_size: config.index_batch_size,
-            bulk_index_threads: config.bulk_index_threads,
-            tx_cache_size: (config.tx_cache_size_mb * MB) as usize,
-            blocktxids_cache_size: (config.blocktxids_cache_size_mb * MB) as usize,
-            txid_limit: config.txid_limit,
+            index_lookup_limit,
+            auto_reindex: config.auto_reindex,
+            ignore_mempool: config.ignore_mempool,
+            sync_once: config.sync_once,
             server_banner: config.server_banner,
-            cookie_getter,
+            args: args.map(|a| a.into_string().unwrap()).collect(),
         };
         eprintln!("{:?}", config);
+        env_logger::Builder::from_default_env()
+            .default_format()
+            .format_timestamp_millis()
+            .filter_level(level)
+            .init();
         config
     }
-
-    pub fn cookie_getter(&self) -> Arc<dyn CookieGetter> {
-        Arc::clone(&self.cookie_getter)
-    }
 }
 
-// CookieGetter + Debug isn't implemented in Rust, so we have to skip cookie_getter
-macro_rules! debug_struct {
-    ($name:ty, $($field:ident,)*) => {
-        impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.debug_struct(stringify!($name))
-                    $(
-                        .field(stringify!($field), &self.$field)
-                    )*
-                    .finish()
-            }
-        }
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::{Auth, SensitiveAuth};
+    use std::path::Path;
 
-debug_struct! { Config,
-    log,
-    network_type,
-    db_path,
-    daemon_dir,
-    blocks_dir,
-    daemon_rpc_addr,
-    electrum_rpc_addr,
-    monitoring_addr,
-    jsonrpc_import,
-    index_batch_size,
-    bulk_index_threads,
-    tx_cache_size,
-    txid_limit,
-    server_banner,
-    blocktxids_cache_size,
-}
+    #[test]
+    fn test_auth_debug() {
+        let auth = Auth::None;
+        assert_eq!(format!("{:?}", SensitiveAuth(auth)), "None");
 
-struct StaticCookie {
-    value: Vec<u8>,
-}
+        let auth = Auth::CookieFile(Path::new("/foo/bar/.cookie").to_path_buf());
+        assert_eq!(
+            format!("{:?}", SensitiveAuth(auth)),
+            "CookieFile(\"/foo/bar/.cookie\")"
+        );
 
-impl StaticCookie {
-    fn from_string(value: String) -> Self {
-        StaticCookie {
-            value: value.into(),
-        }
-    }
-}
-
-impl CookieGetter for StaticCookie {
-    fn get(&self) -> Result<Vec<u8>> {
-        Ok(self.value.clone())
-    }
-}
-
-struct CookieFile {
-    cookie_file: PathBuf,
-}
-
-impl CookieFile {
-    fn from_daemon_dir(daemon_dir: &Path) -> Self {
-        CookieFile {
-            cookie_file: daemon_dir.join(".cookie"),
-        }
-    }
-
-    fn from_file(cookie_file: PathBuf) -> Self {
-        CookieFile { cookie_file }
-    }
-}
-
-impl CookieGetter for CookieFile {
-    fn get(&self) -> Result<Vec<u8>> {
-        let contents = fs::read(&self.cookie_file).chain_err(|| {
-            ErrorKind::Connection(format!(
-                "failed to read cookie from {}",
-                self.cookie_file.display()
-            ))
-        })?;
-        Ok(contents)
+        let auth = Auth::UserPass("user".to_owned(), "pass".to_owned());
+        assert_eq!(
+            format!("{:?}", SensitiveAuth(auth)),
+            "UserPass(\"user\", \"<sensitive>\")"
+        );
     }
 }

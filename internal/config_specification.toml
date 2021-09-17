@@ -17,6 +17,11 @@ count = true
 name = "timestamp"
 doc = "Prepend log lines with a timestamp"
 
+[[switch]]
+name = "auto_reindex"
+doc = "Automatically reindex the database if it's inconsistent or in old format"
+default = true
+
 [[param]]
 name = "db_dir"
 type = "std::path::PathBuf"
@@ -28,19 +33,6 @@ name = "daemon_dir"
 type = "std::path::PathBuf"
 doc = "Data directory of Bitcoind (default: ~/.bitcoin/)"
 default = "crate::config::default_daemon_dir()"
-
-[[param]]
-name = "blocks_dir"
-type = "std::path::PathBuf"
-doc = "Analogous to bitcoind's -blocksdir option, this specifies the directory containing the raw blocks files (blk*.dat)"
-
-[[param]]
-name = "cookie"
-type = "String"
-doc = "DEPRECATED: use cookie_file or auth instead!"
-# Force the user to use config file in order to avoid password leaks
-argument = false
-env_var = false
 
 [[param]]
 name = "auth"
@@ -72,15 +64,15 @@ doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:500
 name = "daemon_rpc_addr"
 type = "crate::config::ResolvAddr"
 doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet, 127.0.0.1:18443 for regtest and 127.0.0.1:18554 for signet)"
+[[param]]
+name = "daemon_p2p_addr"
+type = "crate::config::ResolvAddr"
+doc = "Bitcoin daemon p2p 'addr:port' to connect (default: 127.0.0.1:8333 for mainnet, 127.0.0.1:18333 for testnet, 127.0.0.1:18444 for regtest and 127.0.0.1:38333 for signet)"
 
 [[param]]
 name = "monitoring_addr"
 type = "crate::config::ResolvAddr"
 doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet, 127.0.0.1:24224 for regtest and 127.0.0.1:34224 for regtest)"
-
-[[switch]]
-name = "jsonrpc_import"
-doc = "Use JSONRPC instead of directly importing blk*.dat files. Useful for remote full node or low memory system"
 
 [[param]]
 name = "wait_duration_secs"
@@ -94,29 +86,19 @@ type = "usize"
 doc = "Number of blocks to get in one JSONRPC request from bitcoind"
 default = "10"
 
-[[param]]
-name = "bulk_index_threads"
-type = "usize"
-doc = "Number of threads used for bulk indexing (default: use the # of CPUs)"
-default = "0"
+[[switch]]
+name = "ignore_mempool"
+doc = "Don't sync mempool - queries will show only confirmed transactions."
+
+[[switch]]
+name = "sync_once"
+doc = "Exit after the initial sync is over (don't start Electrum server)."
 
 [[param]]
-name = "tx_cache_size_mb"
-type = "f32"
-doc = "Total size of transactions to cache (MB)"
-default = "10.0"
-
-[[param]]
-name = "blocktxids_cache_size_mb"
-type = "f32"
-doc = "Total size of block transactions IDs to cache (in MB)"
-default = "10.0"
-
-[[param]]
-name = "txid_limit"
+name = "index_lookup_limit"
 type = "usize"
 doc = "Number of transactions to lookup before returning an error, to prevent 'too popular' addresses from causing the RPC server to get stuck (0 - disable the limit)"
-default = "100"
+default = "200"
 
 [[param]]
 name = "server_banner"

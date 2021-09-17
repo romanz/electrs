@@ -8,15 +8,8 @@
 # This example contains only the most important settings.
 # See docs or electrs man page for advanced settings.
 
-# Set if you have low-memory device (such as RPi) or you run electrs under a different user than bitcoind and do NOT have sysperms in bitcoind.
-jsonrpc_import = true
-
 # File where bitcoind stores the cookie, usually file .cookie in its datadir
 cookie_file = "/var/run/bitcoin-mainnet/cookie"
-
-# Prefer cookie file unless you have btc-rpc-proxy or a good reason to use username:password
-# cookie and cookie_file can NOT be specified at the same tie.
-# cookie = "username:password"
 
 # The listening address of bitcoind, port is usually 8332
 daemon_rpc_addr = "127.0.0.1:8332"
@@ -32,5 +25,5 @@ network = "bitcoin"
 electrum_rpc_addr = "127.0.0.1:50001"
 
 # How much information about internal workings should electrs print. Increase before reporting a bug.
-verbose = 3
+verbose = 2
 

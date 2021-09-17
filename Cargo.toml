@@ -1,6 +1,6 @@
 [package]
 name = "electrs"
-version = "0.8.12"
+version = "0.9.0-rc1"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 description = "An efficient re-implementation of Electrum Server in Rust"
 license = "MIT"
@@ -12,42 +12,46 @@ readme = "README.md"
 edition = "2018"
 build = "build.rs"
 
+[features]
+default = ["metrics"]
+metrics = ["prometheus", "tiny_http"]
+
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
 
-[profile.release]
-lto = true
-
-[features]
-default = ["rocksdb/snappy"]
-
 [dependencies]
-base64 = "0.10"
-bincode = "1.0"
-bitcoin = { version = "0.26.2", features = ["use-serde"] }
-configure_me = "0.4.0"
-crossbeam-channel = "0.3"
-dirs-next = "2.0.0"
-error-chain = "0.12"
-glob = "0.3"
-hex = "0.3"
-libc = "0.2"
+anyhow = "1.0"
+bitcoin = { version = "0.27", features = ["use-serde", "rand"] }
+configure_me = "0.4"
+crossbeam-channel = "0.5"
+dirs-next = "2.0"
+env_logger = "0.7"
 log = "0.4"
-lru = "0.6.1"
-num_cpus = "1.0"
-page_size = "0.4"
-prometheus = "0.10"
-protobuf = "= 2.14.0"   # https://github.com/stepancheg/rust-protobuf/blob/master/CHANGELOG.md#2150---2020-06-21
-rocksdb = { version = "0.12.2", default-features = false } # due to https://github.com/romanz/electrs/issues/193
+parking_lot = "0.11"
+prometheus = { version = "0.12", features = ["process"], optional = true }
+rayon = "1.5"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-sha2 = "0.9.2"
-signal-hook = "0.1"
-stderrlog = "0.5.1"
-sysconf = ">=0.3.4"
-time = "0.1"
-tiny_http = "0.6"
+signal-hook = "0.3"
+tiny_http = { version = "0.8", optional = true }
+
+[dependencies.bitcoincore-rpc]
+# use bitcoin 0.27 (until https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/196 is merged)
+git = "https://github.com/romanz/rust-bitcoincore-rpc"
+rev = "06ac9fa3e834413f7afeaed322cf8098d876e4a0"
+
+[dependencies.rocksdb]
+# support building with Rust 1.41.1 and workaround https://github.com/romanz/electrs/issues/403
+git = "https://github.com/romanz/rust-rocksdb"
+rev = "2023b18a7b83fc47b5bc950b5322a2284b771162"
+default-features = false
+# ZSTD is used for data compression
+# Snappy is only for checking old DB
+features = ["zstd", "snappy"]
 
 [build-dependencies]
-configure_me_codegen = "0.4.0"
+configure_me_codegen = "0.4"
+
+[dev-dependencies]
+tempfile = "3.2"
