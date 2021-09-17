@@ -7,12 +7,21 @@ class Client:
         self.f = self.s.makefile('r')
         self.id = 0
 
-    def call(self, method, *args):
-        req = {
-            'id': self.id,
-            'method': method,
-            'params': list(args),
-        }
-        msg = json.dumps(req) + '\n'
+    def call(self, requests):
+        requests = list(requests)
+        for request in requests:
+            request['id'] = self.id
+            request['jsonrpc'] = '2.0'
+            self.id += 1
+
+        msg = json.dumps(requests) + '\n'
         self.s.sendall(msg.encode('ascii'))
-        return json.loads(self.f.readline())
+        response = json.loads(self.f.readline())
+        try:
+            return [r['result'] for r in response]
+        except KeyError:
+            raise ValueError(response)
+
+
+def request(method, *args):
+    return {'method': method, 'params': list(args)}

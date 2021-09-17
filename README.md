@@ -27,10 +27,10 @@ See [here](doc/usage.md) for installation, build and usage instructions.
 
 ## Features
 
- * Supports Electrum protocol [v1.4](https://electrumx.readthedocs.io/en/latest/protocol.html)
+ * Supports Electrum protocol [v1.4](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html)
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
- * Fast synchronization of the Bitcoin blockchain (~2 hours for ~187GB @ July 2018) on [modest hardware](https://gist.github.com/romanz/cd9324474de0c2f121198afe3d063548)
- * Low index storage overhead (~20%), relying on a local full node for transaction retrieval
+ * Fast synchronization of the Bitcoin blockchain (~4 hours for ~336GB @ August 2021) using HDD storage.
+ * Low index storage overhead (~10%), relying on a local full node for transaction retrieval
  * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
  * Low CPU & memory usage (after initial indexing)
  * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
