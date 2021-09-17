@@ -7,7 +7,7 @@ use std::ops::Bound;
 
 use bitcoin::hashes::Hash;
 use bitcoin::{Amount, OutPoint, Transaction, Txid};
-use bitcoincore_rpc::json;
+use core_rpc::json;
 use rayon::prelude::*;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 

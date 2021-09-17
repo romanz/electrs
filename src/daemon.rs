@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use bitcoin::{
     consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
 };
-use bitcoincore_rpc::{self, json, RpcApi};
+use core_rpc::{json, Auth, Client, RpcApi};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
@@ -18,7 +18,7 @@ enum PollResult {
     Retry,
 }
 
-fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
+fn rpc_poll(client: &mut Client) -> PollResult {
     match client.call::<BlockchainInfo>("getblockchaininfo", &[]) {
         Ok(info) => {
             let left_blocks = info.headers - info.blocks;
@@ -48,15 +48,15 @@ fn rpc_poll(client: &mut bitcoincore_rpc::Client) -> PollResult {
     }
 }
 
-pub(crate) fn rpc_connect(config: &Config) -> Result<bitcoincore_rpc::Client> {
+pub(crate) fn rpc_connect(config: &Config) -> Result<Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
     let auth = config.daemon_auth.get_auth();
-    if let bitcoincore_rpc::Auth::CookieFile(ref path) = auth {
+    if let Auth::CookieFile(ref path) = auth {
         if !path.exists() {
             bail!("{:?} is missing - is bitcoind running?", path);
         }
     }
-    let mut client = bitcoincore_rpc::Client::new(&rpc_url, auth)
+    let mut client = Client::new(&rpc_url, auth)
         .with_context(|| format!("failed to connect to RPC: {}", config.daemon_rpc_addr))?;
 
     loop {
@@ -71,7 +71,7 @@ pub(crate) fn rpc_connect(config: &Config) -> Result<bitcoincore_rpc::Client> {
 
 pub struct Daemon {
     p2p: Mutex<Connection>,
-    rpc: bitcoincore_rpc::Client,
+    rpc: Client,
 }
 
 // A workaround for https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/190.
@@ -194,12 +194,10 @@ impl Daemon {
     }
 }
 
-pub(crate) type RpcError = bitcoincore_rpc::jsonrpc::error::RpcError;
+pub(crate) type RpcError = core_rpc::jsonrpc::error::RpcError;
 
-pub(crate) fn extract_bitcoind_error(err: &bitcoincore_rpc::Error) -> Option<&RpcError> {
-    use bitcoincore_rpc::{
-        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
-    };
+pub(crate) fn extract_bitcoind_error(err: &core_rpc::Error) -> Option<&RpcError> {
+    use core_rpc::{jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError};
     match err {
         JsonRpcError(ServerError(e)) => Some(e),
         _ => None,

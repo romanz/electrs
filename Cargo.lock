@@ -107,28 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitcoincore-rpc"
-version = "0.13.0"
-source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=06ac9fa3e834413f7afeaed322cf8098d876e4a0#06ac9fa3e834413f7afeaed322cf8098d876e4a0"
-dependencies = [
- "bitcoincore-rpc-json",
- "jsonrpc",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bitcoincore-rpc-json"
-version = "0.13.0"
-source = "git+https://github.com/romanz/rust-bitcoincore-rpc?rev=06ac9fa3e834413f7afeaed322cf8098d876e4a0#06ac9fa3e834413f7afeaed322cf8098d876e4a0"
-dependencies = [
- "bitcoin",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -248,6 +226,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-rpc"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68fce2983316049bfa3d12a2a55ffe39a786f712c1f36a924bf1abc55db85c57"
+dependencies = [
+ "core-rpc-json",
+ "jsonrpc",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "core-rpc-json"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae96a4e39cd114fed258c9e303014d311312d6ab46565c97104bd9c151ed167d"
+dependencies = [
+ "bitcoin",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -333,9 +335,9 @@ version = "0.9.0-rc1"
 dependencies = [
  "anyhow",
  "bitcoin",
- "bitcoincore-rpc",
  "configure_me",
  "configure_me_codegen",
+ "core-rpc",
  "crossbeam-channel",
  "dirs-next",
  "env_logger",
