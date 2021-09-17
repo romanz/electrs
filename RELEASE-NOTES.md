@@ -16,7 +16,7 @@ Full list of changes:
 * The database will be reindexed automatically when it encounters old version
 * Don't use bitcoind JSON RPC for fetching blocks (#373)
 * Use p2p for block fetching only.
-  This is safer than reading `blk*dat` files and faster than Json RPC.
+  This is safer than reading `blk*dat` files and faster than JSON RPC.
 * Support Electrum JSON RPC batching and errors
 * Use `rust-bitcoincore-rpc` crate
 * Increase default `index_lookup_limit` to 200
