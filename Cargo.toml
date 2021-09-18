@@ -40,7 +40,9 @@ tiny_http = { version = "0.8", optional = true }
 version = "0.15.0"  # Use bitcoincore-rpc fork for now
 
 [dependencies.electrs-rocksdb]
-# support building with Rust 1.41.1 and workaround https://github.com/romanz/electrs/issues/403
+# support building with Rust 1.41.1 and workaround the following issues:
+# https://github.com/romanz/electrs/issues/403 (support building on ARM 32-bit)
+# https://github.com/romanz/electrs/issues/469 (dynamic linking on Debian 11)
 version = "0.15.0-e1"
 default-features = false
 # ZSTD is used for data compression
