@@ -41,13 +41,13 @@ For faster loading, we store all block headers in RocksDB:
 
 In addition, we also store the chain tip:
 
-| Key ||           Value          |
-| --- || ------------------------ |
-| `T` || `blockhash as BlockHash` |
+| Key |   |           Value          |
+| --- | - | ------------------------ |
+| `T` |   | `blockhash as BlockHash` |
 
 ## Configuration (`config`)
 
-| Key ||            Value            |
-| --- || --------------------------- |
-| `C` || `serialized config as JSON` |
+| Key |   |            Value            |
+| --- | - | --------------------------- |
+| `C` |   | `serialized config as JSON` |
 
