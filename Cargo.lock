@@ -340,18 +340,40 @@ dependencies = [
  "core-rpc",
  "crossbeam-channel",
  "dirs-next",
+ "electrs-rocksdb",
  "env_logger",
  "log",
  "parking_lot",
  "prometheus",
  "rayon",
- "rocksdb",
  "serde",
  "serde_derive",
  "serde_json",
  "signal-hook",
  "tempfile",
  "tiny_http",
+]
+
+[[package]]
+name = "electrs-librocksdb-sys"
+version = "6.11.4-e1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ea83087d8b40a3f0ef9ad4028eac4e797d2e2ab611c610f28cfcff85bdb8f49"
+dependencies = [
+ "bindgen",
+ "cc",
+ "glob",
+ "libc",
+]
+
+[[package]]
+name = "electrs-rocksdb"
+version = "0.15.0-e1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "935b0fc9c6f7aabd1d0059e349157af90206ac2b0888aeacf23661f817928557"
+dependencies = [
+ "electrs-librocksdb-sys",
+ "libc",
 ]
 
 [[package]]
@@ -521,17 +543,6 @@ checksum = "6f84d96438c15fcd6c3f244c8fce01d1e2b9c6b5623e9c711dc9286d8fc92d6a"
 dependencies = [
  "cfg-if 1.0.0",
  "winapi",
-]
-
-[[package]]
-name = "librocksdb-sys"
-version = "6.11.4"
-source = "git+https://github.com/romanz/rust-rocksdb?rev=2023b18a7b83fc47b5bc950b5322a2284b771162#2023b18a7b83fc47b5bc950b5322a2284b771162"
-dependencies = [
- "bindgen",
- "cc",
- "glob",
- "libc",
 ]
 
 [[package]]
@@ -964,15 +975,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "rocksdb"
-version = "0.15.0"
-source = "git+https://github.com/romanz/rust-rocksdb?rev=2023b18a7b83fc47b5bc950b5322a2284b771162#2023b18a7b83fc47b5bc950b5322a2284b771162"
-dependencies = [
- "libc",
- "librocksdb-sys",
 ]
 
 [[package]]

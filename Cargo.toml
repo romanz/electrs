@@ -39,10 +39,9 @@ tiny_http = { version = "0.8", optional = true }
 [dependencies.core-rpc]
 version = "0.15.0"  # Use bitcoincore-rpc fork for now
 
-[dependencies.rocksdb]
+[dependencies.electrs-rocksdb]
 # support building with Rust 1.41.1 and workaround https://github.com/romanz/electrs/issues/403
-git = "https://github.com/romanz/rust-rocksdb"
-rev = "2023b18a7b83fc47b5bc950b5322a2284b771162"
+version = "0.15.0-e1"
 default-features = false
 # ZSTD is used for data compression
 # Snappy is only for checking old DB

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use electrs_rocksdb as rocksdb;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -327,7 +328,7 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{DBStore, CURRENT_FORMAT};
+    use super::{rocksdb, DBStore, CURRENT_FORMAT};
 
     #[test]
     fn test_reindex_new_format() {
