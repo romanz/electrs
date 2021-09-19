@@ -3,7 +3,7 @@ Description=Electrum Rust Server
 
 [Service]
 Type=simple
-ExecStart=/path/to/electrs/target/release/electrs -vvvv --db-dir /path/to/electrs/db/
+ExecStart=/path/to/electrs/target/release/electrs -vv --db-dir /path/to/electrs/db/
 Restart=on-failure
 RestartSec=60
 Environment="RUST_BACKTRACE=1"
