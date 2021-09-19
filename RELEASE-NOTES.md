@@ -1,3 +1,7 @@
+# 0.9.0 (TBD)
+
+* Don't collect process' Prometheus metrics by default (#492)
+
 # 0.9.0-rc1 (Sep 17 2021)
 
 **IMPORTANT: This release contains major changes, please read carefully!**

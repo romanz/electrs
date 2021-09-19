@@ -1,7 +1,10 @@
 #[cfg(feature = "metrics")]
 mod metrics_impl {
     use anyhow::{Context, Result};
+
+    #[cfg(feature = "prometheus/process")]
     use prometheus::process_collector::ProcessCollector;
+
     use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry};
     use tiny_http::{Response, Server};
 
@@ -17,6 +20,7 @@ mod metrics_impl {
         pub fn new(addr: SocketAddr) -> Result<Self> {
             let reg = Registry::new();
 
+            #[cfg(feature = "prometheus/process")]
             reg.register(Box::new(ProcessCollector::for_self()))
                 .expect("failed to register ProcessCollector");
 
