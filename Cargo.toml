@@ -21,7 +21,7 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.27", features = ["use-serde", "rand"] }
+bitcoin = { version = "0.27.1", features = ["use-serde", "rand"] }
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
