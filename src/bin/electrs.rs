@@ -1,17 +1,13 @@
 #![recursion_limit = "256"]
 
 use anyhow::{Context, Result};
-use electrs::{server, Config, Daemon, Rpc, Tracker};
+use electrs::{server, Config, Rpc, Tracker};
 
 fn main() -> Result<()> {
     let config = Config::from_args();
-    let mut tracker = Tracker::new(&config)?;
-    tracker
-        .sync(&Daemon::connect(&config)?)
-        .context("initial sync failed")?;
+    let rpc = Rpc::new(&config, Tracker::new(&config)?)?;
     if config.sync_once {
         return Ok(());
     }
-    // re-connect after initial sync (due to possible timeout during compaction)
-    server::run(&config, Rpc::new(&config, tracker)?).context("server failed")
+    server::run(&config, rpc).context("server failed")
 }

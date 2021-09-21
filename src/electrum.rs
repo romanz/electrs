@@ -17,6 +17,7 @@ use crate::{
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
     metrics::Histogram,
+    signals::Signal,
     status::ScriptHashStatus,
     tracker::Tracker,
     types::ScriptHash,
@@ -115,28 +116,37 @@ pub struct Rpc {
     cache: Cache,
     rpc_duration: Histogram,
     daemon: Daemon,
+    signal: Signal,
     banner: String,
     port: u16,
 }
 
 impl Rpc {
-    pub fn new(config: &Config, tracker: Tracker) -> Result<Self> {
+    /// Perform initial index sync (may take a while on first run).
+    pub fn new(config: &Config, mut tracker: Tracker) -> Result<Self> {
         let rpc_duration =
             tracker
                 .metrics()
                 .histogram_vec("rpc_duration", "RPC duration (in seconds)", "method");
+
+        let signal = Signal::new();
+        tracker
+            .sync(&Daemon::connect(&config)?, signal.exit_flag())
+            .context("initial sync failed")?;
+
         Ok(Self {
             tracker,
             cache: Cache::default(),
             rpc_duration,
             daemon: Daemon::connect(config)?,
+            signal,
             banner: config.server_banner.clone(),
             port: config.electrum_rpc_addr.port(),
         })
     }
 
     pub fn sync(&mut self) -> Result<()> {
-        self.tracker.sync(&self.daemon)
+        self.tracker.sync(&self.daemon, self.signal.exit_flag())
     }
 
     pub fn update_client(&self, client: &mut Client) -> Result<Vec<String>> {

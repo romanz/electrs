@@ -9,6 +9,7 @@ use crate::{
     daemon::Daemon,
     db::{DBStore, Row, WriteBatch},
     metrics::{Histogram, Metrics},
+    signals::ExitFlag,
     types::{HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
 };
 
@@ -161,8 +162,8 @@ impl Index {
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    pub(crate) fn sync(&mut self, daemon: &Daemon) -> Result<()> {
-        loop {
+    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
+        while !exit_flag.is_set() {
             let new_headers = daemon.get_new_headers(&self.chain)?;
             if new_headers.is_empty() {
                 break;
@@ -174,6 +175,12 @@ impl Index {
                 new_headers.last().unwrap().height()
             );
             for chunk in new_headers.chunks(self.batch_size) {
+                if exit_flag.is_set() {
+                    bail!(
+                        "indexing interrupted at height: {}",
+                        chunk.first().unwrap().height()
+                    )
+                }
                 let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
                 let mut heights_map: HashMap<BlockHash, usize> =
                     chunk.iter().map(|h| (h.hash(), h.height())).collect();

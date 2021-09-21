@@ -15,7 +15,7 @@ use crate::{
     config::Config,
     daemon::rpc_connect,
     electrum::{Client, Rpc},
-    signals,
+    signals::Signal,
     thread::spawn,
 };
 
@@ -77,15 +77,15 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
 
     let (server_tx, server_rx) = unbounded();
     spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
-    let signal_rx = signals::register();
+    let signal = Signal::new();
 
     let mut peers = HashMap::<usize, Peer>::new();
     loop {
         select! {
-            recv(signal_rx) -> sig => {
-                match sig.context("signal channel disconnected")? {
-                    signals::Signal::Exit => break,
-                    signals::Signal::Trigger => (),
+            recv(signal.receiver()) -> result => {
+                result.context("signal channel disconnected")?;
+                if signal.exit_flag().is_set() {
+                    break;
                 }
             },
             recv(tip_rx) -> tip => match tip {

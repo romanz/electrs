@@ -27,12 +27,4 @@ mod thread;
 mod tracker;
 mod types;
 
-pub use {
-    cache::Cache,
-    config::Config,
-    daemon::Daemon,
-    electrum::{Client, Rpc},
-    status::ScriptHashStatus,
-    tracker::Tracker,
-    types::ScriptHash,
-};
+pub use {config::Config, electrum::Rpc, tracker::Tracker};

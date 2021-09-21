@@ -2,6 +2,7 @@
 
 * Prevent panic during logging of p2p messages (#490)
 * Don't collect process' Prometheus metrics by default (#492)
+* Support initial sync resume (#494)
 
 # 0.9.0-rc1 (Sep 17 2021)
 

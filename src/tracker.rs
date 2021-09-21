@@ -10,6 +10,7 @@ use crate::{
     index::Index,
     mempool::{Histogram, Mempool},
     metrics::Metrics,
+    signals::ExitFlag,
     status::{Balance, HistoryEntry, ScriptHashStatus, UnspentEntry},
 };
 
@@ -61,8 +62,8 @@ impl Tracker {
         status.get_unspent(self.index.chain())
     }
 
-    pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
-        self.index.sync(daemon)?;
+    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
+        self.index.sync(daemon, exit_flag)?;
         if !self.ignore_mempool {
             self.mempool.sync(daemon);
         }
@@ -85,7 +86,7 @@ impl Tracker {
         status.get_balance(self.chain())
     }
 
-    pub fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {
+    pub(crate) fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         self.index.filter_by_txid(txid).next()
     }
