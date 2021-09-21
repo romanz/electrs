@@ -59,7 +59,13 @@ fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
             Ok(_) | Err(TrySendError::Full(_)) => (),
             Err(TrySendError::Disconnected(_)) => bail!("tip receiver disconnected"),
         }
-        rpc.wait_for_new_block(duration)?;
+        if let Err(err) = rpc.wait_for_new_block(duration) {
+            warn!(
+                "waiting {:.1}s for new block failed: {}",
+                duration as f64 / 1e3,
+                err
+            );
+        }
     });
     Ok(tip_rx)
 }
