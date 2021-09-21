@@ -354,7 +354,7 @@ impl Config {
             #[cfg(feature = "liquid")]
             Network::Liquid => daemon_dir.push("liquidv1"),
             #[cfg(feature = "liquid")]
-            Network::LiquidTestnet => daemon_dir.push("liquidtestnetv1"),
+            Network::LiquidTestnet => daemon_dir.push("liquidtestnet"),
             #[cfg(feature = "liquid")]
             Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
         }

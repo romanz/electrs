@@ -40,6 +40,15 @@ pub enum Network {
     LiquidRegtest,
 }
 
+#[cfg(feature = "liquid")]
+pub const LIQUID_TESTNET_PARAMS: address::AddressParams = address::AddressParams {
+    p2pkh_prefix: 36,
+    p2sh_prefix: 19,
+    blinded_prefix: 23,
+    bech_hrp: "tex",
+    blech_hrp: "tlq",
+};
+
 impl Network {
     #[cfg(not(feature = "liquid"))]
     pub fn magic(self) -> u32 {
@@ -49,7 +58,8 @@ impl Network {
     #[cfg(feature = "liquid")]
     pub fn magic(self) -> u32 {
         match self {
-            Network::Liquid | Network::LiquidRegtest | Network::LiquidTestnet => 0xDAB5_BFFA,
+            Network::Liquid | Network::LiquidRegtest => 0xDAB5_BFFA,
+            Network::LiquidTestnet => 0x62DD_0E41,
         }
     }
 
@@ -68,7 +78,8 @@ impl Network {
         // Liquid regtest uses elements's address params
         match self {
             Network::Liquid => &address::AddressParams::LIQUID,
-            Network::LiquidTestnet | Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
+            Network::LiquidRegtest => &address::AddressParams::ELEMENTS,
+            Network::LiquidTestnet => &LIQUID_TESTNET_PARAMS,
         }
     }
 
