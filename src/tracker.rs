@@ -18,7 +18,6 @@ pub struct Tracker {
     index: Index,
     mempool: Mempool,
     metrics: Metrics,
-    index_batch_size: usize,
     ignore_mempool: bool,
 }
 
@@ -28,11 +27,16 @@ impl Tracker {
         let store = DBStore::open(&config.db_path, config.auto_reindex)?;
         let chain = Chain::new(config.network);
         Ok(Self {
-            index: Index::load(store, chain, &metrics, config.index_lookup_limit)
-                .context("failed to open index")?,
+            index: Index::load(
+                store,
+                chain,
+                &metrics,
+                config.index_batch_size,
+                config.index_lookup_limit,
+            )
+            .context("failed to open index")?,
             mempool: Mempool::new(),
             metrics,
-            index_batch_size: config.index_batch_size,
             ignore_mempool: config.ignore_mempool,
         })
     }
@@ -58,7 +62,7 @@ impl Tracker {
     }
 
     pub fn sync(&mut self, daemon: &Daemon) -> Result<()> {
-        self.index.sync(daemon, self.index_batch_size)?;
+        self.index.sync(daemon)?;
         if !self.ignore_mempool {
             self.mempool.sync(daemon);
         }

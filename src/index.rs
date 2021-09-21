@@ -85,6 +85,7 @@ impl IndexResult {
 /// Confirmed transactions' address index
 pub struct Index {
     store: DBStore,
+    batch_size: usize,
     lookup_limit: Option<usize>,
     chain: Chain,
     stats: Stats,
@@ -95,6 +96,7 @@ impl Index {
         store: DBStore,
         mut chain: Chain,
         metrics: &Metrics,
+        batch_size: usize,
         lookup_limit: Option<usize>,
     ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
@@ -109,6 +111,7 @@ impl Index {
 
         Ok(Index {
             store,
+            batch_size,
             lookup_limit,
             chain,
             stats: Stats::new(metrics),
@@ -158,7 +161,7 @@ impl Index {
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    pub(crate) fn sync(&mut self, daemon: &Daemon, chunk_size: usize) -> Result<()> {
+    pub(crate) fn sync(&mut self, daemon: &Daemon) -> Result<()> {
         loop {
             let new_headers = daemon.get_new_headers(&self.chain)?;
             if new_headers.is_empty() {
@@ -170,7 +173,7 @@ impl Index {
                 new_headers.first().unwrap().height(),
                 new_headers.last().unwrap().height()
             );
-            for chunk in new_headers.chunks(chunk_size) {
+            for chunk in new_headers.chunks(self.batch_size) {
                 let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
                 let mut heights_map: HashMap<BlockHash, usize> =
                     chunk.iter().map(|h| (h.hash(), h.height())).collect();
