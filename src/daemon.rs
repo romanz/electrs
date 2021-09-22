@@ -3,9 +3,13 @@ use anyhow::{Context, Result};
 use bitcoin::{
     consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
 };
-use core_rpc::{json, Auth, Client, RpcApi};
+use core_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
+
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -48,16 +52,42 @@ fn rpc_poll(client: &mut Client) -> PollResult {
     }
 }
 
+fn read_cookie(path: &Path) -> Result<(String, String)> {
+    // Load username and password from bitcoind cookie file:
+    // * https://github.com/bitcoin/bitcoin/pull/6388/commits/71cbeaad9a929ba6a7b62d9b37a09b214ae00c1a
+    // * https://bitcoin.stackexchange.com/questions/46782/rpc-cookie-authentication
+    let mut file = File::open(path)
+        .with_context(|| format!("failed to open bitcoind cookie file: {}", path.display()))?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .with_context(|| format!("failed to read bitcoind cookie from {}", path.display()))?;
+
+    let parts: Vec<&str> = contents.splitn(2, ':').collect();
+    ensure!(
+        parts.len() == 2,
+        "failed to parse bitcoind cookie - missing ':' separator"
+    );
+    Ok((parts[0].to_owned(), parts[1].to_owned()))
+}
+
 pub(crate) fn rpc_connect(config: &Config) -> Result<Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
-    let auth = config.daemon_auth.get_auth();
-    if let Auth::CookieFile(ref path) = auth {
-        if !path.exists() {
-            bail!("{:?} is missing - is bitcoind running?", path);
-        }
-    }
-    let mut client = Client::new(&rpc_url, auth)
-        .with_context(|| format!("failed to connect to RPC: {}", config.daemon_rpc_addr))?;
+    let mut client = {
+        // Allow `wait_for_new_block` to take a bit longer before timing out.
+        // See https://github.com/romanz/electrs/issues/495 for more details.
+        let builder = jsonrpc::simple_http::SimpleHttpTransport::builder()
+            .url(&rpc_url)?
+            .timeout(config.jsonrpc_timeout);
+        let builder = match config.daemon_auth.get_auth() {
+            Auth::None => builder,
+            Auth::UserPass(user, pass) => builder.auth(user, Some(pass)),
+            Auth::CookieFile(path) => {
+                let (user, pass) = read_cookie(&path)?;
+                builder.auth(user, Some(pass))
+            }
+        };
+        Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+    };
 
     loop {
         match rpc_poll(&mut client) {

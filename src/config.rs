@@ -130,6 +130,7 @@ pub struct Config {
     pub electrum_rpc_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub wait_duration: Duration,
+    pub jsonrpc_timeout: Duration,
     pub index_batch_size: usize,
     pub index_lookup_limit: Option<usize>,
     pub auto_reindex: bool,
@@ -283,6 +284,15 @@ impl Config {
             0 => None,
             _ => Some(config.index_lookup_limit),
         };
+
+        if config.jsonrpc_timeout_secs <= config.wait_duration_secs {
+            eprintln!(
+                "Error: jsonrpc_timeout_secs ({}) must be higher than wait_duration_secs ({})",
+                config.jsonrpc_timeout_secs, config.wait_duration_secs
+            );
+            std::process::exit(1);
+        }
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
@@ -293,6 +303,7 @@ impl Config {
             electrum_rpc_addr,
             monitoring_addr,
             wait_duration: Duration::from_secs(config.wait_duration_secs),
+            jsonrpc_timeout: Duration::from_secs(config.jsonrpc_timeout_secs),
             index_batch_size: config.index_batch_size,
             index_lookup_limit,
             auto_reindex: config.auto_reindex,
