@@ -1,11 +1,5 @@
 # 0.9.0 (TBD)
 
-* Prevent panic during logging of p2p messages (#490)
-* Don't collect process' Prometheus metrics by default (#492)
-* Support initial sync resume (#494)
-
-# 0.9.0-rc1 (Sep 17 2021)
-
 **IMPORTANT: This release contains major changes, please read carefully!**
 
 The two main things to watch out for:
@@ -16,6 +10,14 @@ The two main things to watch out for:
 See [upgrading](doc/usage.md#upgrading) section of our docs to learn more.
 
 Full list of changes:
+
+## 0.9.0-rc2 (Sep 23 2021)
+
+* Prevent panic during logging of p2p messages (#490)
+* Don't collect process' Prometheus metrics by default (#492)
+* Support initial sync resume (#494)
+
+## 0.9.0-rc1 (Sep 17 2021)
 
 * Fix incorrect ordering of same-block transactions (#297)
 * Change DB index format and use Zstd compression (instead of Snappy)
