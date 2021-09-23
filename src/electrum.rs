@@ -446,7 +446,7 @@ impl Rpc {
                 Err(err) => {
                     warn!("RPC {} failed: {:#}", method, err);
                     match err
-                        .downcast_ref::<core_rpc::Error>()
+                        .downcast_ref::<bitcoincore_rpc::Error>()
                         .and_then(extract_bitcoind_error)
                     {
                         Some(e) => error_msg(id, RpcError::DaemonError(e.clone())),

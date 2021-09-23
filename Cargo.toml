@@ -22,6 +22,7 @@ spec = "internal/config_specification.toml"
 [dependencies]
 anyhow = "1.0"
 bitcoin = { version = "0.27.1", features = ["use-serde", "rand"] }
+bitcoincore-rpc = "0.14.0"
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
@@ -35,9 +36,6 @@ serde_derive = "1.0"
 serde_json = "1.0"
 signal-hook = "0.3"
 tiny_http = { version = "0.8", optional = true }
-
-[dependencies.core-rpc]
-version = "0.15.0"  # Use bitcoincore-rpc fork for now
 
 [dependencies.electrs-rocksdb]
 # support building with Rust 1.41.1 and workaround the following issues:

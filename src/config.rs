@@ -1,5 +1,5 @@
 use bitcoin::network::constants::Network;
-use core_rpc::Auth;
+use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
 
 use std::ffi::{OsStr, OsString};

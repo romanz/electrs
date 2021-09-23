@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use bitcoin::{
     consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
 };
-use core_rpc::{json, jsonrpc, Auth, Client, RpcApi};
+use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
@@ -224,10 +224,12 @@ impl Daemon {
     }
 }
 
-pub(crate) type RpcError = core_rpc::jsonrpc::error::RpcError;
+pub(crate) type RpcError = bitcoincore_rpc::jsonrpc::error::RpcError;
 
-pub(crate) fn extract_bitcoind_error(err: &core_rpc::Error) -> Option<&RpcError> {
-    use core_rpc::{jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError};
+pub(crate) fn extract_bitcoind_error(err: &bitcoincore_rpc::Error) -> Option<&RpcError> {
+    use bitcoincore_rpc::{
+        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
+    };
     match err {
         JsonRpcError(ServerError(e)) => Some(e),
         _ => None,

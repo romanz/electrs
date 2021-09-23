@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use bitcoin::BlockHash;
-use core_rpc::RpcApi;
+use bitcoincore_rpc::RpcApi;
 use crossbeam_channel::{bounded, select, unbounded, Receiver, Sender};
 use rayon::prelude::*;
 
