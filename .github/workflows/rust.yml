@@ -15,7 +15,6 @@ jobs:
       - uses: actions-rs/install@v0.1
         with:
           crate: cargo-audit
-          version: 0.14.1
           use-tool-cache: true
       - uses: actions-rs/audit-check@v1
         with:
