@@ -131,7 +131,7 @@ impl Rpc {
 
         let signal = Signal::new();
         tracker
-            .sync(&Daemon::connect(&config)?, signal.exit_flag())
+            .sync(&Daemon::connect(config)?, signal.exit_flag())
             .context("initial sync failed")?;
 
         Ok(Self {
@@ -236,7 +236,7 @@ impl Rpc {
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
         let balance = match client.scripthashes.get(&scripthash) {
-            Some(status) => self.tracker.get_balance(&status),
+            Some(status) => self.tracker.get_balance(status),
             None => {
                 warn!(
                     "blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
