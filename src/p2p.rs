@@ -80,7 +80,7 @@ impl Connection {
         }
     }
 
-    /// Request and process the specified blocks.
+    /// Request and process the specified blocks (in the specified order).
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
     where

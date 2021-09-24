@@ -2,8 +2,6 @@ use anyhow::Result;
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::{Block, BlockHash, OutPoint, Txid};
 
-use std::collections::HashMap;
-
 use crate::{
     chain::Chain,
     daemon::Daemon,
@@ -182,17 +180,20 @@ impl Index {
                     )
                 }
                 let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
-                let mut heights_map: HashMap<BlockHash, usize> =
-                    chunk.iter().map(|h| (h.hash(), h.height())).collect();
+                let mut heights = chunk.iter().map(|h| h.height());
 
                 let mut batch = WriteBatch::default();
-
-                daemon.for_blocks(blockhashes, |blockhash, block| {
-                    let height = heights_map.remove(&blockhash).expect("unexpected block");
+                daemon.for_blocks(blockhashes, |_blockhash, block| {
+                    let height = heights.next().expect("unexpected block");
                     let result = index_single_block(block, height);
                     result.extend(&mut batch);
                 })?;
-                assert!(heights_map.is_empty(), "some blocks were not indexed");
+                let heights: Vec<_> = heights.collect();
+                assert!(
+                    heights.is_empty(),
+                    "some blocks were not indexed: {:?}",
+                    heights
+                );
                 batch.sort();
                 self.stats.report_stats(&batch);
                 self.store.write(batch);
