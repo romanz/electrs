@@ -52,6 +52,25 @@ mod metrics_impl {
                 .expect("failed to register Histogram");
             Histogram { hist }
         }
+
+        pub fn gauge(&self, name: &str, desc: &str) -> Gauge {
+            let gauge = prometheus::Gauge::new(name, desc).unwrap();
+            self.reg
+                .register(Box::new(gauge.clone()))
+                .expect("failed to register Gauge");
+            Gauge { gauge }
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct Gauge {
+        gauge: prometheus::Gauge,
+    }
+
+    impl Gauge {
+        pub fn set(&self, value: usize) {
+            self.gauge.set(value as f64)
+        }
     }
 
     #[derive(Clone)]
@@ -76,7 +95,7 @@ mod metrics_impl {
 }
 
 #[cfg(feature = "metrics")]
-pub use metrics_impl::{Histogram, Metrics};
+pub use metrics_impl::{Gauge, Histogram, Metrics};
 
 #[cfg(not(feature = "metrics"))]
 mod metrics_fake {
@@ -95,6 +114,17 @@ mod metrics_fake {
         pub fn histogram_vec(&self, _name: &str, _desc: &str, _label: &str) -> Histogram {
             Histogram {}
         }
+
+        pub fn gauge(&self, _name: &str, _desc: &str) -> Gauge {
+            Gauge {}
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct Gauge {}
+
+    impl Gauge {
+        pub fn set(&self, _value: usize) {}
     }
 
     #[derive(Clone)]
@@ -113,4 +143,4 @@ mod metrics_fake {
 }
 
 #[cfg(not(feature = "metrics"))]
-pub use metrics_fake::{Histogram, Metrics};
+pub use metrics_fake::{Gauge, Histogram, Metrics};

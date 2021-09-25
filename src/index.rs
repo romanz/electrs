@@ -6,7 +6,7 @@ use crate::{
     chain::Chain,
     daemon::Daemon,
     db::{DBStore, Row, WriteBatch},
-    metrics::{Histogram, Metrics},
+    metrics::{Gauge, Histogram, Metrics},
     signals::ExitFlag,
     types::{HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
 };
@@ -15,6 +15,7 @@ use crate::{
 struct Stats {
     update_duration: Histogram,
     update_size: Histogram,
+    height: Gauge,
 }
 
 impl Stats {
@@ -30,6 +31,7 @@ impl Stats {
                 "Index update size (in bytes)",
                 "step",
             ),
+            height: metrics.gauge("index_height", "Latest indexed block height"),
         }
     }
 }
@@ -187,6 +189,7 @@ impl Index {
                     self.observe_duration("block", || {
                         index_single_block(block, height).extend(&mut batch)
                     });
+                    self.stats.height.set(height);
                 })?;
                 let heights: Vec<_> = heights.collect();
                 assert!(
