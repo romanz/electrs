@@ -15,7 +15,6 @@ use crate::{
 struct Stats {
     update_duration: Histogram,
     update_size: Histogram,
-    lookup_duration: Histogram,
 }
 
 impl Stats {
@@ -29,11 +28,6 @@ impl Stats {
             update_size: metrics.histogram_vec(
                 "index_update_size",
                 "Index update size (in bytes)",
-                "step",
-            ),
-            lookup_duration: metrics.histogram_vec(
-                "index_lookup_duration",
-                "Index lookup duration (in seconds)",
                 "step",
             ),
         }
