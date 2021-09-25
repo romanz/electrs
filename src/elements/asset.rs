@@ -248,7 +248,7 @@ fn index_tx_assets(
                     value: pegout.value,
                 }),
             ));
-        } else if txo.script_pubkey.is_provably_unspendable() {
+        } else if txo.script_pubkey.is_provably_unspendable() && !txo.is_fee() {
             if let (Asset::Explicit(asset_id), Value::Explicit(value)) = (txo.asset, txo.value) {
                 if value > 0 {
                     history.push((
