@@ -2,10 +2,11 @@
 
 **IMPORTANT: This release contains major changes, please read carefully!**
 
-The two main things to watch out for:
+The three main things to watch out for:
 
 * Database schema changed - this will cause **reindex after upgrade**.
 * We now use **bitcoin p2p protocol** to fetch blocks - some configurations may not work.
+* Trace log level now logs much more information - make sure it's not used in production.
 
 See [upgrading](doc/usage.md#upgrading) section of our docs to learn more.
 
