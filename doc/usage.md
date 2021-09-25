@@ -491,7 +491,8 @@ $ ./contrib/history.sh 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR
 
 In 0.9.0 we have changed the RocksDB index format to optimize electrs performance.
 We also use Bitcoin P2P protocol instead of reading blocks from disk or JSON RPC.
- 
+Some guides were suggesting trace log level and we started to trace much more information.
+
 Upgrading checklist:
 
 * Make sure you upgrade at time when you don't need to use electrs for a while.
@@ -503,6 +504,8 @@ Upgrading checklist:
   Either don't use `maxconnections` bitcoind option or set it to 12 or more.
 * If you use non-default P2P port for bitcoind adjust `electrs` configuration.
 * If you still didn't migrate `cookie` electrs option you have to now - see below.
+* If you use `verbose = 4` (or `-vvvv` argument) lower it down to `2` (`-vv`) for production use.
+  Keeping it would waste resources because we utilize it more now.
 
 ### Important changes from version older than 0.8.8
 
