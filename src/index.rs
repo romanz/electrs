@@ -32,24 +32,6 @@ impl Stats {
             ),
         }
     }
-
-    fn observe_size(&self, label: &str, rows: &[Row]) {
-        self.update_size.observe(label, db_rows_size(rows));
-    }
-
-    fn report_stats(&self, batch: &WriteBatch) {
-        self.observe_size("write_funding_rows", &batch.funding_rows);
-        self.observe_size("write_spending_rows", &batch.spending_rows);
-        self.observe_size("write_txid_rows", &batch.txid_rows);
-        self.observe_size("write_header_rows", &batch.header_rows);
-        debug!(
-            "writing {} funding and {} spending rows from {} transactions, {} blocks",
-            batch.funding_rows.len(),
-            batch.spending_rows.len(),
-            batch.txid_rows.len(),
-            batch.header_rows.len()
-        );
-    }
 }
 
 struct IndexResult {
@@ -154,9 +136,32 @@ impl Index {
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
+    fn observe_duration<T>(&self, label: &str, f: impl FnOnce() -> T) -> T {
+        self.stats.update_duration.observe_duration(label, f)
+    }
+
+    fn observe_size(&self, label: &str, rows: &[Row]) {
+        self.stats.update_size.observe(label, db_rows_size(rows));
+    }
+
+    fn report_stats(&self, batch: &WriteBatch) {
+        self.observe_size("write_funding_rows", &batch.funding_rows);
+        self.observe_size("write_spending_rows", &batch.spending_rows);
+        self.observe_size("write_txid_rows", &batch.txid_rows);
+        self.observe_size("write_header_rows", &batch.header_rows);
+        debug!(
+            "writing {} funding and {} spending rows from {} transactions, {} blocks",
+            batch.funding_rows.len(),
+            batch.spending_rows.len(),
+            batch.txid_rows.len(),
+            batch.header_rows.len()
+        );
+    }
+
     pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
         while !exit_flag.is_set() {
-            let new_headers = daemon.get_new_headers(&self.chain)?;
+            let new_headers =
+                self.observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
             if new_headers.is_empty() {
                 break;
             }
@@ -179,8 +184,9 @@ impl Index {
                 let mut batch = WriteBatch::default();
                 daemon.for_blocks(blockhashes, |_blockhash, block| {
                     let height = heights.next().expect("unexpected block");
-                    let result = index_single_block(block, height);
-                    result.extend(&mut batch);
+                    self.observe_duration("block", || {
+                        index_single_block(block, height).extend(&mut batch)
+                    });
                 })?;
                 let heights: Vec<_> = heights.collect();
                 assert!(
@@ -189,8 +195,8 @@ impl Index {
                     heights
                 );
                 batch.sort();
-                self.stats.report_stats(&batch);
-                self.store.write(batch);
+                self.report_stats(&batch);
+                self.observe_duration("write", || self.store.write(batch));
             }
             self.chain.update(new_headers);
         }
