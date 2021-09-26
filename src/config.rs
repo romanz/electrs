@@ -276,8 +276,7 @@ impl Config {
             0 => log::LevelFilter::Error,
             1 => log::LevelFilter::Warn,
             2 => log::LevelFilter::Info,
-            3 => log::LevelFilter::Debug,
-            _ => log::LevelFilter::Trace,
+            _ => log::LevelFilter::Debug,
         };
 
         let index_lookup_limit = match config.index_lookup_limit {

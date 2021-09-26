@@ -31,6 +31,7 @@ Full list of changes:
 * Increase default `index_lookup_limit` to 200
 * Implement 'blockchain.scripthash.listunspent' RPC (#475)
 * Update RocksDB to 6.11.4 (#473)
+* Allow logging configuration via `RUST_LOG` environment variable (using `env_logger`)
 
 # 0.8.12 (14 Sep 2021)
 
