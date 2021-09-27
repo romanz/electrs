@@ -47,6 +47,21 @@ impl Peer {
     }
 }
 
+fn handle_rpc_error(name: &str, err: bitcoincore_rpc::Error) -> Result<()> {
+    use bitcoincore_rpc::{
+        jsonrpc::{error::Error::Transport as TransportError, simple_http::Error as HttpError},
+        Error::JsonRpc as JsonRpcError,
+    };
+    if let JsonRpcError(TransportError(ref e)) = err {
+        if let Some(HttpError::Timeout) = e.downcast_ref::<HttpError>() {
+            // Following https://github.com/romanz/electrs/issues/495
+            warn!("ignoring bitcoind HTTP timeout error");
+            return Ok(());
+        }
+    }
+    bail!("RPC '{}' failed: {}", name, err); // fail on all other RPC errors
+}
+
 fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
     let duration = u64::try_from(config.wait_duration.as_millis()).unwrap();
     let (tip_tx, tip_rx) = bounded(0);
@@ -54,7 +69,13 @@ fn tip_receiver(config: &Config) -> Result<Receiver<BlockHash>> {
 
     use crossbeam_channel::TrySendError;
     spawn("tip_loop", move || loop {
-        let tip = rpc.get_best_block_hash()?;
+        let tip = match rpc.get_best_block_hash() {
+            Ok(tip) => tip,
+            Err(err) => {
+                handle_rpc_error("getbestblockhash", err)?;
+                continue;
+            }
+        };
         match tip_tx.try_send(tip) {
             Ok(_) | Err(TrySendError::Full(_)) => (),
             Err(TrySendError::Disconnected(_)) => bail!("tip receiver disconnected"),
