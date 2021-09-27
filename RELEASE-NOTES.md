@@ -1,4 +1,4 @@
-# 0.9.0 (TBD)
+# 0.9.0 (Sep 30 2021)
 
 **IMPORTANT: This release contains major changes, please read carefully!**
 
