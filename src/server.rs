@@ -55,7 +55,7 @@ fn handle_rpc_error(name: &str, err: bitcoincore_rpc::Error) -> Result<()> {
     if let JsonRpcError(TransportError(ref e)) = err {
         if let Some(HttpError::Timeout) = e.downcast_ref::<HttpError>() {
             // Following https://github.com/romanz/electrs/issues/495
-            warn!("ignoring bitcoind HTTP timeout error");
+            warn!("ignoring HTTP timeout from RPC '{}'", name);
             return Ok(());
         }
     }
