@@ -1,3 +1,5 @@
+![Logo](logo/logo.svg)
+
 # Electrum Server in Rust
 
 [![workflows](https://github.com/romanz/electrs/workflows/Rust/badge.svg)](https://github.com/romanz/electrs/actions)
@@ -39,3 +41,10 @@ See [here](doc/usage.md) for installation, build and usage instructions.
 ## Index database
 
 The database schema is described [here](doc/schema.md).
+
+
+## Logo
+
+[Our logo](logo/) is generously provided by Dominik Průša (@DominoPrusa) under the MIT license.
+Based on the [Electrum logo](https://github.com/spesmilo/electrum/blob/master/LICENCE)
+and the [Rust language logo](https://www.rust-lang.org/policies/media-guide).

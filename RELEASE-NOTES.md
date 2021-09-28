@@ -12,6 +12,8 @@ See [upgrading](doc/usage.md#upgrading) section of our docs to learn more.
 
 Full list of changes:
 
+* Add electrs logo (#510)
+
 ## 0.9.0-rc2 (Sep 23 2021)
 
 * Prevent panic during logging of p2p messages (#490)
