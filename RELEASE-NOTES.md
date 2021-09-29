@@ -2,9 +2,10 @@
 
 **IMPORTANT: This release contains major changes, please read carefully!**
 
-The three main things to watch out for:
+The four main things to watch out for:
 
 * Database schema changed - this will cause **reindex after upgrade**.
+* `mainnet` subdirectory was renamed to `bitcoin`, you should delete `mainnet` after successful reindex.
 * We now use **bitcoin p2p protocol** to fetch blocks - some configurations may not work.
 * Trace log level now logs much more information - make sure it's not used in production.
 
