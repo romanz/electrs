@@ -196,7 +196,7 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
         let tx = server_tx.clone();
         spawn("recv_loop", move || {
             let result = recv_loop(peer_id, &stream, tx);
-            let _ = stream.shutdown(Shutdown::Both);
+            let _ = stream.shutdown(Shutdown::Read);
             result
         });
     }
