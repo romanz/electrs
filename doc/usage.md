@@ -96,6 +96,12 @@ Note: you need to have enough free RAM to build `electrs`.
 The build will fail otherwise.
 Close those 100 old tabs in the browser. ;)
 
+#### Cargo features
+
+By default `electrs` builds with Prometheus support.
+However this causes problems on some platforms.
+If you don't need Prometheus you may disable it using `--no-default-features` argument to `cargo build`/`cargo install`.
+
 #### Static linking
 
 First build should take ~20 minutes:
@@ -106,10 +112,8 @@ $ cargo build --locked --release
 #### Dynamic linking
 
 ```
-$ ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --no-default-features --release
+$ ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --release
 ```
-
-(Don't worry about `--no-default-features`, it's only related to rocksdb linking.)
 
 #### Cross compilation
 
@@ -555,7 +559,7 @@ If a new version of `electrs` is not yet in the package system, try wait a few d
 4. Strongly recommended: `git verify-tag v0.9.0` (fix the version number if we've forgotten to update the docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
 5. `git checkout v0.9.0`
 6. If you used static linking: `cargo build --locked --release`.
-   If you used dynamic linking `ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --no-default-features --release`.
+   If you used dynamic linking `ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --release`.
    If you don't remember which linking you used, you probably used static.
    This step will take a few tens of minutes (but dynamic linking is a bit faster), go grab a coffee.
    Also remember that you need enough free RAM, the build will die otherwise
