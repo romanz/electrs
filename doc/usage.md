@@ -215,7 +215,11 @@ Electrs can be configured using command line, environment variables and configur
 It is highly recommended to use configuration files for any non-trivial setups since it's easier to manage.
 If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
 
-### Configuration files and priorities
+**Important:** you must configure `db_dir` to be either an empty directory or previously used by `electrs`!
+The contents of this directory is considered **internal to `electrs`** and any tampering that is **not** explicitly allowed by documentation
+can lead to serious problems! Currently the *only* permitted operation is *deleting whole `mainnet` subdirectory when upgrading to version 0.9.0* - see the upgrading section.
+
+#### Configuration files and priorities
 
 The Toml-formatted config files ([an example here](config_example.toml)) are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
 
@@ -499,13 +503,16 @@ Upgrading checklist:
   Because of reindex electrs will be unable to serve your requests for a few hours.
   (The exact time depends on your hardware.)
   If you wish to check the database without reindexing run electrs with `--no-auto-reindex`.
-* The default DB path for the mainnet index was changed to `./db/bitcoin` (from `./db/mainnet`).
+* If you have less than 40 GB of free space delete `mainnet` subdirectory inside your `db_dir` *before* running the new version.
+  Note however if you have less than 40 GB of free space you should consider extending your storage soon
+  since in the worst case scenario you will run out of space in ~69 days.
 * Make sure to allow accesses to bitcoind from local address, ideally whitelist it using `whitelist=download@127.0.0.1` bitcoind option.
   Either don't use `maxconnections` bitcoind option or set it to 12 or more.
 * If you use non-default P2P port for bitcoind adjust `electrs` configuration.
 * If you still didn't migrate `cookie` electrs option you have to now - see below.
 * If you use `verbose = 4` (or `-vvvv` argument) lower it down to `2` (`-vv`) for production use.
   Keeping it would waste resources because we utilize it more now.
+* **After reindexing**, if you did **not** delete `mainnet` subdirectory within `db_dir` check that `electrs` works as expected and then *delete whole `mainnet` subdirectory*.
 
 ### Important changes from version older than 0.8.8
 
