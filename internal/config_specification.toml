@@ -89,7 +89,7 @@ default = "15"
 [[param]]
 name = "index_batch_size"
 type = "usize"
-doc = "Number of blocks to get in one JSONRPC request from bitcoind"
+doc = "Number of blocks to get in a single p2p protocol request from bitcoind"
 default = "10"
 
 [[switch]]
