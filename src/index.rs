@@ -86,12 +86,15 @@ impl Index {
             chain.load(headers, tip);
         };
 
+        let stats = Stats::new(metrics);
+        stats.height.set(chain.height());
+
         Ok(Index {
             store,
             batch_size,
             lookup_limit,
             chain,
-            stats: Stats::new(metrics),
+            stats,
         })
     }
 
