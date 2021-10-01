@@ -4,6 +4,7 @@ use bitcoin::{
     hashes::hex::{FromHex, ToHex},
     BlockHash, Txid,
 };
+use crossbeam_channel::Receiver;
 use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
@@ -150,6 +151,10 @@ impl Rpc {
 
     pub(crate) fn signal(&self) -> &Signal {
         &self.signal
+    }
+
+    pub fn new_block_notification(&self) -> Receiver<()> {
+        self.daemon.new_block_notification()
     }
 
     pub fn sync(&mut self) -> Result<()> {

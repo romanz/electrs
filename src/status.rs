@@ -307,7 +307,7 @@ impl ScriptHashStatus {
     fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block) + Send,
+        F: FnMut(BlockHash, Block),
     {
         daemon.for_blocks(
             blockhashes

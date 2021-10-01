@@ -4,6 +4,7 @@ use bitcoin::{
     consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
 };
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
+use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
@@ -70,7 +71,7 @@ fn read_cookie(path: &Path) -> Result<(String, String)> {
     Ok((parts[0].to_owned(), parts[1].to_owned()))
 }
 
-pub(crate) fn rpc_connect(config: &Config) -> Result<Client> {
+fn rpc_connect(config: &Config) -> Result<Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
     let mut client = {
         // Allow `wait_for_new_block` to take a bit longer before timing out.
@@ -218,9 +219,13 @@ impl Daemon {
     pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block) + Send,
+        F: FnMut(BlockHash, Block),
     {
         self.p2p.lock().for_blocks(blockhashes, func)
+    }
+
+    pub(crate) fn new_block_notification(&self) -> Receiver<()> {
+        self.p2p.lock().new_block_notification()
     }
 }
 

@@ -1,9 +1,3 @@
-use std::io::Write;
-use std::iter::FromIterator;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::chain::{Chain, NewHeader};
 use anyhow::{Context, Result};
 use bitcoin::{
     consensus::encode,
@@ -15,125 +9,56 @@ use bitcoin::{
         stream_reader::StreamReader,
     },
     secp256k1::{self, rand::Rng},
-    Block, BlockHash, Network,
+    Block, BlockHash, BlockHeader, Network,
 };
+use crossbeam_channel::{bounded, select, Receiver, Sender};
+
+use std::io::Write;
+use std::iter::FromIterator;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::chain::{Chain, NewHeader};
+
+enum Request {
+    GetNewHeaders(GetHeadersMessage),
+    GetBlocks(Vec<Inventory>),
+}
+
+impl Request {
+    fn get_new_headers(chain: &Chain) -> Request {
+        Request::GetNewHeaders(GetHeadersMessage::new(
+            chain.locator(),
+            BlockHash::default(),
+        ))
+    }
+
+    fn get_blocks(blockhashes: &[BlockHash]) -> Request {
+        Request::GetBlocks(
+            blockhashes
+                .iter()
+                .map(|blockhash| Inventory::WitnessBlock(*blockhash))
+                .collect(),
+        )
+    }
+}
 
 pub(crate) struct Connection {
-    stream: TcpStream,
-    reader: StreamReader<TcpStream>,
-    network: Network,
+    req_send: Sender<Request>,
+    blocks_recv: Receiver<Block>,
+    headers_recv: Receiver<Vec<BlockHeader>>,
+    new_block_recv: Receiver<()>,
 }
 
 impl Connection {
-    /// Connect to a Bitcoin node via p2p protocol.
-    /// See https://en.bitcoin.it/wiki/Protocol_documentation for details.
-    pub fn connect(network: Network, address: SocketAddr) -> Result<Self> {
-        let stream = TcpStream::connect(address)
-            .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
-        let reader = StreamReader::new(
-            stream.try_clone().context("stream failed to clone")?,
-            /*buffer_size*/ Some(1 << 20),
-        );
-        let mut conn = Self {
-            stream,
-            reader,
-            network,
-        };
-        conn.send(build_version_message())?;
-        if let NetworkMessage::GetHeaders(_) = conn.recv().context("failed to get headers")? {
-            conn.send(NetworkMessage::Headers(vec![]))?;
-        }
-        Ok(conn)
-    }
-
-    fn send(&mut self, msg: NetworkMessage) -> Result<()> {
-        trace!("send: {:?}", msg);
-        let raw_msg = message::RawNetworkMessage {
-            magic: self.network.magic(),
-            payload: msg,
-        };
-        self.stream
-            .write_all(encode::serialize(&raw_msg).as_slice())
-            .context("p2p failed to send")
-    }
-
-    fn recv(&mut self) -> Result<NetworkMessage> {
-        loop {
-            let raw_msg: message::RawNetworkMessage =
-                self.reader.read_next().context("p2p failed to recv")?;
-
-            trace!("recv: {:?}", raw_msg.payload);
-            match raw_msg.payload {
-                NetworkMessage::Version(version) => {
-                    debug!("peer version: {:?}", version);
-                    self.send(NetworkMessage::Verack)?;
-                }
-                NetworkMessage::Ping(nonce) => {
-                    self.send(NetworkMessage::Pong(nonce))?;
-                }
-                NetworkMessage::Verack
-                | NetworkMessage::Alert(_)
-                | NetworkMessage::Addr(_)
-                | NetworkMessage::Inv(_) => {}
-                payload => return Ok(payload),
-            };
-        }
-    }
-
-    /// Request and process the specified blocks (in the specified order).
-    /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
-    where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block) + Send,
-    {
-        let blockhashes = Vec::from_iter(blockhashes);
-        if blockhashes.is_empty() {
-            return Ok(());
-        }
-        let inv = blockhashes
-            .iter()
-            .map(|h| Inventory::WitnessBlock(*h))
-            .collect();
-        debug!("loading {} blocks", blockhashes.len());
-        self.send(NetworkMessage::GetData(inv))?;
-
-        // receive, parse and process the blocks concurrently
-        rayon::scope(|s| {
-            let (tx, rx) = crossbeam_channel::bounded(10);
-            s.spawn(|_| {
-                // the loop will exit when the sender is dropped
-                for (hash, block) in rx {
-                    func(hash, block);
-                }
-            });
-
-            for hash in blockhashes {
-                match self
-                    .recv()
-                    .with_context(|| format!("failed to get block {}", hash))?
-                {
-                    NetworkMessage::Block(block) => {
-                        ensure!(block.block_hash() == hash, "got unexpected block");
-                        tx.send((hash, block))
-                            .context("disconnected from block processor")?;
-                    }
-                    msg => bail!("unexpected {:?}", msg),
-                };
-            }
-            Ok(())
-        })
-    }
-
     /// Get new block headers (supporting reorgs).
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        let msg = GetHeadersMessage::new(chain.locator(), BlockHash::default());
-        self.send(NetworkMessage::GetHeaders(msg))?;
-        let headers = match self.recv().context("failed to get new headers")? {
-            NetworkMessage::Headers(headers) => headers,
-            msg => bail!("unexpected {:?}", msg),
-        };
+        self.req_send.send(Request::get_new_headers(chain))?;
+        let headers = self
+            .headers_recv
+            .recv()
+            .context("failed to get new headers")?;
 
         debug!("got {} new headers", headers.len());
         let prev_blockhash = match headers.first().map(|h| h.prev_blockhash) {
@@ -149,6 +74,160 @@ impl Connection {
             .zip(new_heights)
             .map(NewHeader::from)
             .collect())
+    }
+
+    /// Request and process the specified blocks (in the specified order).
+    /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
+    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    where
+        B: IntoIterator<Item = BlockHash>,
+        F: FnMut(BlockHash, Block),
+    {
+        let blockhashes = Vec::from_iter(blockhashes);
+        if blockhashes.is_empty() {
+            return Ok(());
+        }
+        debug!("loading {} blocks", blockhashes.len());
+        self.req_send.send(Request::get_blocks(&blockhashes))?;
+
+        for hash in blockhashes {
+            let block = self
+                .blocks_recv
+                .recv()
+                .with_context(|| format!("failed to get block {}", hash))?;
+            ensure!(block.block_hash() == hash, "got unexpected block");
+            func(hash, block);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn new_block_notification(&self) -> Receiver<()> {
+        self.new_block_recv.clone()
+    }
+
+    pub(crate) fn connect(network: Network, address: SocketAddr) -> Result<Self> {
+        let mut stream = TcpStream::connect(address)
+            .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
+        let mut reader = StreamReader::new(
+            stream.try_clone().context("stream failed to clone")?,
+            /*buffer_size*/ Some(1 << 20),
+        );
+        let (tx_send, tx_recv) = bounded::<NetworkMessage>(1);
+        let (rx_send, rx_recv) = bounded::<NetworkMessage>(1);
+
+        crate::thread::spawn("p2p_send", move || loop {
+            use std::net::Shutdown;
+
+            let msg = match tx_recv.recv() {
+                Ok(msg) => msg,
+                Err(_) => {
+                    // p2p_loop is closed, so tx_send is disconnected
+                    debug!("closing p2p_send thread: no more messages to send");
+                    // close the stream reader (p2p_recv thread may block on it)
+                    if let Err(e) = stream.shutdown(Shutdown::Read) {
+                        warn!("failed to shutdown p2p connection: {}", e)
+                    }
+                    return Ok(());
+                }
+            };
+
+            trace!("send: {:?}", msg);
+            let raw_msg = message::RawNetworkMessage {
+                magic: network.magic(),
+                payload: msg,
+            };
+            stream
+                .write_all(encode::serialize(&raw_msg).as_slice())
+                .context("p2p failed to send")?;
+        });
+
+        crate::thread::spawn("p2p_recv", move || loop {
+            use bitcoin::consensus::encode::Error;
+            use std::io::ErrorKind;
+
+            let raw_msg: message::RawNetworkMessage = match reader.read_next() {
+                Ok(raw_msg) => raw_msg,
+                Err(Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
+                    debug!("closing p2p_recv thread: connection closed");
+                    return Ok(());
+                }
+                Err(e) => bail!("failed to recv a message from peer: {}", e),
+            };
+
+            trace!("recv: {:?}", raw_msg.payload);
+            rx_send.send(raw_msg.payload)?;
+        });
+
+        let (req_send, req_recv) = bounded::<Request>(1);
+        let (blocks_send, blocks_recv) = bounded::<Block>(10);
+        let (headers_send, headers_recv) = bounded::<Vec<BlockHeader>>(1);
+        let (new_block_send, new_block_recv) = bounded::<()>(0);
+        let (init_send, init_recv) = bounded::<()>(0);
+
+        tx_send.send(build_version_message())?;
+
+        crate::thread::spawn("p2p_loop", move || loop {
+            select! {
+                recv(rx_recv) -> result => {
+                    let msg = match result {
+                        Ok(msg) => msg,
+                        Err(_) => {  // p2p_recv is closed, so rx_send is disconnected
+                            debug!("closing p2p_loop thread: peer has disconnected");
+                            return Ok(());
+                        }
+                    };
+                    match msg {
+                        NetworkMessage::GetHeaders(_) => {
+                            tx_send.send(NetworkMessage::Headers(vec![]))?;
+                        }
+                        NetworkMessage::Version(version) => {
+                            debug!("peer version: {:?}", version);
+                            tx_send.send(NetworkMessage::Verack)?;
+                        }
+                        NetworkMessage::Inv(inventory) => {
+                            debug!("peer inventory: {:?}", inventory);
+                            if inventory.iter().any(is_block_inv) {
+                                let _ = new_block_send.try_send(()); // best-effort notification
+                            }
+
+                        },
+                        NetworkMessage::Ping(nonce) => {
+                            tx_send.send(NetworkMessage::Pong(nonce))?; // connection keep-alive
+                        }
+                        NetworkMessage::Verack => {
+                            init_send.send(())?; // peer acknowledged our version
+                        }
+                        NetworkMessage::Alert(_) | NetworkMessage::Addr(_) => {}
+                        NetworkMessage::Block(block) => blocks_send.send(block)?,
+                        NetworkMessage::Headers(headers) => headers_send.send(headers)?,
+                        msg => warn!("unexpected message: {:?}", msg),
+                    }
+                }
+                recv(req_recv) -> result => {
+                    let req = match result {
+                        Ok(req) => req,
+                        Err(_) => {  // self is dropped, so req_send is disconnected
+                            debug!("closing p2p_loop thread: no more requests to handle");
+                            return Ok(());
+                        }
+                    };
+                    let msg = match req {
+                        Request::GetNewHeaders(msg) => NetworkMessage::GetHeaders(msg),
+                        Request::GetBlocks(inv) => NetworkMessage::GetData(inv),
+                    };
+                    tx_send.send(msg)?;
+                }
+            }
+        });
+
+        init_recv.recv()?; // wait until `verack` is received
+
+        Ok(Connection {
+            req_send,
+            blocks_recv,
+            headers_recv,
+            new_block_recv,
+        })
     }
 }
 
@@ -172,4 +251,12 @@ fn build_version_message() -> NetworkMessage {
         start_height: 0,
         relay: false,
     })
+}
+
+fn is_block_inv(inv: &Inventory) -> bool {
+    if let Inventory::Block(_) = inv {
+        true
+    } else {
+        false
+    }
 }
