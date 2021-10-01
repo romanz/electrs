@@ -94,3 +94,14 @@ pub fn extract_tx_prevouts<'a>(
         })
         .collect()
 }
+
+pub fn serialize_outpoint<S>(outpoint: &OutPoint, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::ser::Serializer,
+{
+    use serde::ser::SerializeStruct;
+    let mut s = serializer.serialize_struct("OutPoint", 2)?;
+    s.serialize_field("txid", &outpoint.txid)?;
+    s.serialize_field("vout", &outpoint.vout)?;
+    s.end()
+}

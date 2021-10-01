@@ -49,6 +49,7 @@ pub struct NativeAsset {
 pub struct IssuedAsset {
     pub asset_id: AssetId,
     pub issuance_txin: TxInput,
+    #[serde(serialize_with = "crate::util::serialize_outpoint")]
     pub issuance_prevout: OutPoint,
     pub reissuance_token: AssetId,
 
