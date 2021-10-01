@@ -9,7 +9,8 @@ use crate::util::{
 };
 
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode;
+use {bitcoin::consensus::encode, std::str::FromStr};
+
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Error as HashError;
 use hex::{self, FromHexError};
@@ -33,7 +34,6 @@ use serde_json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::os::unix::fs::FileTypeExt;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
 use url::form_urlencoded;
@@ -1232,7 +1232,10 @@ fn to_scripthash(
 }
 
 fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpError> {
+    #[cfg(not(feature = "liquid"))]
     let addr = address::Address::from_str(addr)?;
+    #[cfg(feature = "liquid")]
+    let addr = address::Address::parse_with_params(addr, network.address_params())?;
 
     #[cfg(not(feature = "liquid"))]
     let is_expected_net = {
