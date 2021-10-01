@@ -43,7 +43,9 @@ impl Peer {
     }
 
     fn disconnect(self) {
-        let _ = self.stream.shutdown(Shutdown::Both);
+        if let Err(e) = self.stream.shutdown(Shutdown::Both) {
+            warn!("{}: failed to shutdown TCP connection {}", self.id, e)
+        }
     }
 }
 
@@ -196,7 +198,9 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
         let tx = server_tx.clone();
         spawn("recv_loop", move || {
             let result = recv_loop(peer_id, &stream, tx);
-            let _ = stream.shutdown(Shutdown::Read);
+            if let Err(e) = stream.shutdown(Shutdown::Read) {
+                warn!("{}: failed to shutdown TCP receiving {}", peer_id, e)
+            }
             result
         });
     }
