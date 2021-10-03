@@ -145,6 +145,10 @@ impl Rpc {
         })
     }
 
+    pub(crate) fn signal(&self) -> &Signal {
+        &self.signal
+    }
+
     pub fn sync(&mut self) -> Result<()> {
         self.tracker.sync(&self.daemon, self.signal.exit_flag())
     }
