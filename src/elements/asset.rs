@@ -35,14 +35,14 @@ fn parse_asset_id(sl: &[u8]) -> AssetId {
 #[serde(untagged)]
 pub enum LiquidAsset {
     Issued(IssuedAsset),
-    Native(NativeAsset),
+    Native(PeggedAsset),
 }
 
 #[derive(Serialize)]
-pub struct NativeAsset {
+pub struct PeggedAsset {
     pub asset_id: AssetId,
-    pub chain_stats: NativeAssetStats,
-    pub mempool_stats: NativeAssetStats,
+    pub chain_stats: PeggedAssetStats,
+    pub mempool_stats: PeggedAssetStats,
 }
 
 #[derive(Serialize)]
@@ -352,10 +352,10 @@ pub fn lookup_asset(
     asset_id: &AssetId,
     meta: Option<&AssetMeta>, // may optionally be provided if already known
 ) -> Result<Option<LiquidAsset>> {
-    if asset_id == query.network().native_asset() {
-        let (chain_stats, mempool_stats) = native_asset_stats(query);
+    if query.network().pegged_asset() == Some(asset_id) {
+        let (chain_stats, mempool_stats) = pegged_asset_stats(query, asset_id);
 
-        return Ok(Some(LiquidAsset::Native(NativeAsset {
+        return Ok(Some(LiquidAsset::Native(PeggedAsset {
             asset_id: *asset_id,
             chain_stats: chain_stats,
             mempool_stats: mempool_stats,
@@ -424,7 +424,7 @@ pub struct IssuedAssetStats {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct NativeAssetStats {
+pub struct PeggedAssetStats {
     pub tx_count: usize,
     pub peg_in_count: usize,
     pub peg_in_amount: u64,
@@ -450,17 +450,15 @@ where
     }
 }
 
-// Get stats for the network's native asset
-fn native_asset_stats(query: &Query) -> (NativeAssetStats, NativeAssetStats) {
-    let asset_id = query.network().native_asset();
-
+// Get stats for the network's pegged asset
+fn pegged_asset_stats(query: &Query, asset_id: &AssetId) -> (PeggedAssetStats, PeggedAssetStats) {
     (
-        chain_asset_stats(query.chain(), asset_id, apply_native_asset_stats),
-        mempool_asset_stats(&query.mempool(), asset_id, apply_native_asset_stats),
+        chain_asset_stats(query.chain(), asset_id, apply_pegged_asset_stats),
+        mempool_asset_stats(&query.mempool(), asset_id, apply_pegged_asset_stats),
     )
 }
 
-// Get stats for user-issued assets
+// Get stats for issued assets
 fn issued_asset_stats(
     query: &Query,
     asset_id: &AssetId,
@@ -481,7 +479,7 @@ fn issued_asset_stats(
     (chain_stats, mempool_stats)
 }
 
-// Get on-chain confirmed asset stats (user-issued or the native asset)
+// Get on-chain confirmed asset stats (issued or the pegged asset)
 fn chain_asset_stats<T>(chain: &ChainQuery, asset_id: &AssetId, apply_fn: AssetStatApplyFn<T>) -> T
 where
     T: Default + serde::Serialize + serde::de::DeserializeOwned,
@@ -550,7 +548,7 @@ fn chain_asset_stats_delta<T>(
     (stats, lastblock)
 }
 
-// Get mempool asset stats (user-issued or the native asset)
+// Get mempool asset stats (issued or the pegged asset)
 pub fn mempool_asset_stats<T>(
     mempool: &Mempool,
     asset_id: &AssetId,
@@ -610,9 +608,9 @@ fn apply_issued_asset_stats(
     }
 }
 
-fn apply_native_asset_stats(
+fn apply_pegged_asset_stats(
     info: &TxHistoryInfo,
-    stats: &mut NativeAssetStats,
+    stats: &mut PeggedAssetStats,
     seen_txids: &mut HashSet<Txid>,
 ) {
     if seen_txids.insert(info.get_txid()) {

@@ -5,9 +5,10 @@ use crate::chain::{bitcoin_genesis_hash, BNetwork, Network};
 use crate::util::{FullHash, ScriptToAsm};
 
 pub fn get_pegin_data(txout: &TxIn, network: Network) -> Option<PeginData> {
+    let pegged_asset_id = network.pegged_asset()?;
     txout
         .pegin_data()
-        .filter(|pegin| pegin.asset == Asset::Explicit(*network.native_asset()))
+        .filter(|pegin| pegin.asset == Asset::Explicit(*pegged_asset_id))
 }
 
 pub fn get_pegout_data(
@@ -15,8 +16,9 @@ pub fn get_pegout_data(
     network: Network,
     parent_network: BNetwork,
 ) -> Option<PegoutData> {
+    let pegged_asset_id = network.pegged_asset()?;
     txout.pegout_data().filter(|pegout| {
-        pegout.asset == Asset::Explicit(*network.native_asset())
+        pegout.asset == Asset::Explicit(*pegged_asset_id)
             && pegout.genesis_hash == bitcoin_genesis_hash(parent_network)
     })
 }

@@ -87,9 +87,16 @@ impl Network {
     pub fn native_asset(self) -> &'static AssetId {
         match self {
             Network::Liquid => &*asset::NATIVE_ASSET_ID,
-            // same for testnet and regtest
             Network::LiquidTestnet => &*asset::NATIVE_ASSET_ID_TESTNET,
             Network::LiquidRegtest => &*asset::NATIVE_ASSET_ID_REGTEST,
+        }
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn pegged_asset(self) -> Option<&'static AssetId> {
+        match self {
+            Network::Liquid => Some(&*asset::NATIVE_ASSET_ID),
+            Network::LiquidTestnet | Network::LiquidRegtest => None,
         }
     }
 
