@@ -117,12 +117,12 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
             },
             recv(server_rx) -> event => {
                 let event = event.context("server disconnected")?;
-                let buffered_events = server_rx.iter().take(server_rx.len());
-                for event in std::iter::once(event).chain(buffered_events) {
-                    handle_event(&rpc, &mut peers, event);
-                }
+                handle_event(&rpc, &mut peers, event);
             },
         };
+        if !server_rx.is_empty() {
+            continue; // continue RPC processing (if not done)
+        }
         rpc.sync().context("rpc sync failed")?;
         peers = notify_peers(&rpc, peers); // peers are disconnected on error.
     }
