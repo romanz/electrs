@@ -44,8 +44,14 @@ mod metrics_impl {
             Ok(result)
         }
 
-        pub fn histogram_vec(&self, name: &str, desc: &str, label: &str) -> Histogram {
-            let opts = HistogramOpts::new(name, desc);
+        pub fn histogram_vec(
+            &self,
+            name: &str,
+            desc: &str,
+            label: &str,
+            buckets: Vec<f64>,
+        ) -> Histogram {
+            let opts = HistogramOpts::new(name, desc).buckets(buckets);
             let hist = HistogramVec::new(opts, &[label]).unwrap();
             self.reg
                 .register(Box::new(hist.clone()))
@@ -111,7 +117,13 @@ mod metrics_fake {
             Ok(Self {})
         }
 
-        pub fn histogram_vec(&self, _name: &str, _desc: &str, _label: &str) -> Histogram {
+        pub fn histogram_vec(
+            &self,
+            _name: &str,
+            _desc: &str,
+            _label: &str,
+            _buckets: Vec<f64>,
+        ) -> Histogram {
             Histogram {}
         }
 

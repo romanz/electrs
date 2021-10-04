@@ -124,10 +124,15 @@ pub struct Rpc {
 impl Rpc {
     /// Perform initial index sync (may take a while on first run).
     pub fn new(config: &Config, mut tracker: Tracker) -> Result<Self> {
-        let rpc_duration =
-            tracker
-                .metrics()
-                .histogram_vec("rpc_duration", "RPC duration (in seconds)", "method");
+        let rpc_duration = tracker.metrics().histogram_vec(
+            "rpc_duration",
+            "RPC duration (in seconds)",
+            "method",
+            vec![
+                1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2,
+                5e-2, 1e-1, 2e-1, 5e-1, 1.0, 2.0, 5.0, 10.0,
+            ],
+        );
 
         let signal = Signal::new();
         tracker
