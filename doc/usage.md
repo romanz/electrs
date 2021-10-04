@@ -109,6 +109,13 @@ First build should take ~20 minutes:
 $ cargo build --locked --release
 ```
 
+If RocksDB build fails with "`undefined reference to __atomic_*`" linker errors
+(usually happens on a 32-bit OS), set the following environment variable:
+```bash
+$ RUSTFLAGS="-C link-args=-latomic" cargo build --locked --release
+```
+Relevant issues: [#134](https://github.com/romanz/electrs/issues/134) and [#391](https://github.com/romanz/electrs/issues/391).
+
 #### Dynamic linking
 
 ```
