@@ -272,10 +272,8 @@ impl ScriptHashStatus {
         }
     }
 
-    pub(crate) fn get_history(&self, chain: &Chain, mempool: &Mempool) -> Vec<HistoryEntry> {
-        let mut result = self.get_confirmed_history(chain);
-        result.extend(self.get_mempool_history(mempool));
-        result
+    pub(crate) fn get_history(&self) -> &[HistoryEntry] {
+        &self.history
     }
 
     /// Collect all confirmed history entries (in block order).
@@ -449,7 +447,11 @@ impl ScriptHashStatus {
         if !self.mempool.is_empty() {
             debug!("{} mempool transactions", self.mempool.len());
         }
-        self.history = self.get_history(index.chain(), mempool);
+        self.history.clear();
+        self.history
+            .extend(self.get_confirmed_history(index.chain()));
+        self.history.extend(self.get_mempool_history(mempool));
+
         self.statushash = compute_status_hash(&self.history);
         Ok(())
     }
