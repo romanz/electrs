@@ -258,16 +258,16 @@ impl Rpc {
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
         let history_entries = match client.scripthashes.get(&scripthash) {
-            Some(status) => self.tracker.get_history(status),
+            Some(status) => json!(status.get_history()),
             None => {
                 warn!(
                     "blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
                     scripthash
                 );
-                self.tracker.get_history(&self.new_status(scripthash)?)
+                json!(self.new_status(scripthash)?.get_history())
             }
         };
-        Ok(json!(history_entries))
+        Ok(history_entries)
     }
 
     fn scripthash_list_unspent(
