@@ -6,7 +6,7 @@ use crate::{
     chain::Chain,
     daemon::Daemon,
     db::{DBStore, Row, WriteBatch},
-    metrics::{Gauge, Histogram, Metrics},
+    metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
     types::{HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
 };
@@ -25,19 +25,13 @@ impl Stats {
                 "index_update_duration",
                 "Index update duration (in seconds)",
                 "step",
-                vec![
-                    1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2,
-                    2e-2, 5e-2, 1e-1, 2e-1, 5e-1, 1.0, 2.0, 5.0, 10.0,
-                ],
+                metrics::default_duration_buckets(),
             ),
             update_size: metrics.histogram_vec(
                 "index_update_size",
                 "Index update size (in bytes)",
                 "step",
-                vec![
-                    1.0, 2.0, 5.0, 1e1, 2e1, 5e1, 1e2, 2e2, 5e2, 1e3, 2e3, 5e3, 1e4, 2e4, 5e4, 1e5,
-                    2e5, 5e5, 1e6,
-                ],
+                metrics::default_size_buckets(),
             ),
             height: metrics.gauge("index_height", "Latest indexed block height"),
         }
