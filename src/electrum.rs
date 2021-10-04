@@ -136,9 +136,10 @@ impl Rpc {
             .sync(&Daemon::connect(config)?, signal.exit_flag())
             .context("initial sync failed")?;
 
+        let cache = Cache::new(tracker.metrics());
         Ok(Self {
             tracker,
-            cache: Cache::default(),
+            cache,
             rpc_duration,
             daemon: Daemon::connect(config)?,
             signal,
