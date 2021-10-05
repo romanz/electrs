@@ -11,7 +11,9 @@ use std::{
 use crate::{
     config::Config,
     electrum::{Client, Rpc},
+    signals::ExitError,
     thread::spawn,
+    tracker::Tracker,
 };
 
 struct Peer {
@@ -44,7 +46,27 @@ impl Peer {
     }
 }
 
-pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
+pub fn run() -> Result<()> {
+    let result = serve();
+    if let Err(e) = &result {
+        for cause in e.chain() {
+            if cause.downcast_ref::<ExitError>().is_some() {
+                info!("electrs stopped: {:?}", e);
+                return Ok(());
+            }
+        }
+    }
+    result.context("electrs failed")
+}
+
+fn serve() -> Result<()> {
+    let config = Config::from_args();
+    let tracker = Tracker::new(&config)?;
+    let mut rpc = Rpc::new(&config, tracker)?;
+    if config.sync_once {
+        return Ok(());
+    }
+
     let listener = TcpListener::bind(config.electrum_rpc_addr)?;
     info!("serving Electrum RPC on {}", listener.local_addr()?);
     let new_block_rx = rpc.new_block_notification();
@@ -57,9 +79,7 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
         select! {
             recv(rpc.signal().receiver()) -> result => {
                 result.context("signal channel disconnected")?;
-                if rpc.signal().exit_flag().is_set() {
-                    break;
-                }
+                rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
             },
             recv(new_block_rx) -> result => match result {
                 Ok(_) => (), // sync and update
@@ -77,7 +97,6 @@ pub fn run(config: &Config, mut rpc: Rpc) -> Result<()> {
         rpc.sync().context("rpc sync failed")?;
         peers = notify_peers(&rpc, peers); // peers are disconnected on error.
     }
-    info!("stopping Electrum RPC server");
     Ok(())
 }
 

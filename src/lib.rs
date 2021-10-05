@@ -20,11 +20,11 @@ mod mempool;
 mod merkle;
 mod metrics;
 mod p2p;
-pub mod server;
+mod server;
 mod signals;
 mod status;
 mod thread;
 mod tracker;
 mod types;
 
-pub use {config::Config, electrum::Rpc, tracker::Tracker};
+pub use server::run;

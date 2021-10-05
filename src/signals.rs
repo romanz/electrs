@@ -7,8 +7,20 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use std::{error, fmt};
 
 use crate::thread::spawn;
+
+#[derive(Debug)]
+pub struct ExitError;
+
+impl fmt::Display for ExitError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "exiting due to signal")
+    }
+}
+
+impl error::Error for ExitError {}
 
 #[derive(Clone)]
 pub(crate) struct ExitFlag {
@@ -22,8 +34,12 @@ impl ExitFlag {
         }
     }
 
-    pub fn is_set(&self) -> bool {
-        self.flag.load(Ordering::Relaxed)
+    pub fn poll(&self) -> Result<(), ExitError> {
+        if self.flag.load(Ordering::Relaxed) {
+            Err(ExitError)
+        } else {
+            Ok(())
+        }
     }
 
     fn set(&self) {

@@ -98,7 +98,7 @@ echo "Electrum `$EL stop`"  # disconnect wallet
 wait $ELECTRUM_PID
 
 kill -INT $ELECTRS_PID  # close server
-tail_log data/electrs/regtest-debug.log | grep -m1 "stopping Electrum RPC server"
+tail_log data/electrs/regtest-debug.log | grep -m1 "electrs stopped"
 wait $ELECTRS_PID
 
 $BTC stop # stop bitcoind

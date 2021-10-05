@@ -16,6 +16,7 @@ use crate::{
     chain::{Chain, NewHeader},
     config::Config,
     p2p::Connection,
+    signals::ExitFlag,
 };
 
 enum PollResult {
@@ -73,31 +74,22 @@ fn read_cookie(path: &Path) -> Result<(String, String)> {
 
 fn rpc_connect(config: &Config) -> Result<Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
-    let mut client = {
-        // Allow `wait_for_new_block` to take a bit longer before timing out.
-        // See https://github.com/romanz/electrs/issues/495 for more details.
-        let builder = jsonrpc::simple_http::SimpleHttpTransport::builder()
-            .url(&rpc_url)?
-            .timeout(config.jsonrpc_timeout);
-        let builder = match config.daemon_auth.get_auth() {
-            Auth::None => builder,
-            Auth::UserPass(user, pass) => builder.auth(user, Some(pass)),
-            Auth::CookieFile(path) => {
-                let (user, pass) = read_cookie(&path)?;
-                builder.auth(user, Some(pass))
-            }
-        };
-        Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
-    };
-
-    loop {
-        match rpc_poll(&mut client) {
-            PollResult::Done(result) => return result.map(|()| client),
-            PollResult::Retry => {
-                std::thread::sleep(std::time::Duration::from_secs(1)); // wait a bit before polling
-            }
+    // Allow `wait_for_new_block` to take a bit longer before timing out.
+    // See https://github.com/romanz/electrs/issues/495 for more details.
+    let builder = jsonrpc::simple_http::SimpleHttpTransport::builder()
+        .url(&rpc_url)?
+        .timeout(config.jsonrpc_timeout);
+    let builder = match config.daemon_auth.get_auth() {
+        Auth::None => builder,
+        Auth::UserPass(user, pass) => builder.auth(user, Some(pass)),
+        Auth::CookieFile(path) => {
+            let (user, pass) = read_cookie(&path)?;
+            builder.auth(user, Some(pass))
         }
-    }
+    };
+    Ok(Client::from_jsonrpc(jsonrpc::Client::with_transport(
+        builder.build(),
+    )))
 }
 
 pub struct Daemon {
@@ -120,8 +112,24 @@ struct BlockchainInfo {
 }
 
 impl Daemon {
-    pub fn connect(config: &Config) -> Result<Self> {
-        let rpc = rpc_connect(config)?;
+    pub(crate) fn connect(config: &Config, exit_flag: &ExitFlag) -> Result<Self> {
+        let mut rpc = rpc_connect(config)?;
+
+        loop {
+            exit_flag
+                .poll()
+                .context("bitcoin RPC polling interrupted")?;
+            match rpc_poll(&mut rpc) {
+                PollResult::Done(result) => {
+                    result.context("bitcoind RPC polling failed")?;
+                    break; // on success, finish polling
+                }
+                PollResult::Retry => {
+                    std::thread::sleep(std::time::Duration::from_secs(1)); // wait a bit before polling
+                }
+            }
+        }
+
         let network_info = rpc.get_network_info()?;
         if network_info.version < 21_00_00 {
             bail!("electrs requires bitcoind 0.21+");
@@ -133,6 +141,7 @@ impl Daemon {
         if blockchain_info.pruned {
             bail!("electrs requires non-pruned bitcoind node");
         }
+
         let p2p = Mutex::new(Connection::connect(config.network, config.daemon_p2p_addr)?);
         Ok(Self { p2p, rpc })
     }

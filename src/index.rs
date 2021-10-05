@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::{Block, BlockHash, OutPoint, Txid};
 
@@ -166,7 +166,7 @@ impl Index {
     }
 
     pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
-        while !exit_flag.is_set() {
+        loop {
             let new_headers =
                 self.observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
             if new_headers.is_empty() {
@@ -179,12 +179,12 @@ impl Index {
                 new_headers.last().unwrap().height()
             );
             for chunk in new_headers.chunks(self.batch_size) {
-                if exit_flag.is_set() {
-                    bail!(
+                exit_flag.poll().with_context(|| {
+                    format!(
                         "indexing interrupted at height: {}",
                         chunk.first().unwrap().height()
                     )
-                }
+                })?;
                 let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
                 let mut heights = chunk.iter().map(|h| h.height());
 
