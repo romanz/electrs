@@ -3,7 +3,7 @@ set -eux
 cd `dirname $0`
 
 cargo fmt --all
-cargo build --all --features "prometheus/process" --release
+cargo build --all --features "metrics_process" --release
 
 NETWORK=$1
 shift

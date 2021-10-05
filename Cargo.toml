@@ -15,6 +15,7 @@ build = "build.rs"
 [features]
 default = ["metrics"]
 metrics = ["prometheus", "tiny_http"]
+metrics_process = ["prometheus/process"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
