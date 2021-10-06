@@ -241,7 +241,7 @@ fn build_version_message() -> NetworkMessage {
         .expect("Time error")
         .as_secs() as i64;
 
-    let services = constants::ServiceFlags::WITNESS;
+    let services = constants::ServiceFlags::NONE;
 
     NetworkMessage::Version(message_network::VersionMessage {
         version: constants::PROTOCOL_VERSION,
