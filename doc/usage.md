@@ -150,8 +150,6 @@ $ mkdir db
 $ docker run --network host \
              --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
              --volume $PWD/db:/home/user/db \
-             --env ELECTRS_VERBOSE=2 \
-             --env ELECTRS_TIMESTAMP=true \
              --env ELECTRS_DB_DIR=/home/user/db \
              --rm -i -t electrs-app
 ```
@@ -161,8 +159,6 @@ If not using the host-network, you probably want to expose the ports for electrs
 ```bash
 $ docker run --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
              --volume $PWD/db:/home/user/db \
-             --env ELECTRS_VERBOSE=2 \
-             --env ELECTRS_TIMESTAMP=true \
              --env ELECTRS_DB_DIR=/home/user/db \
              --env ELECTRS_ELECTRUM_RPC_ADDR=0.0.0.0:50001 \
              --env ELECTRS_MONITORING_ADDR=0.0.0.0:4224 \
