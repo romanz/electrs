@@ -67,13 +67,14 @@ fn serve() -> Result<()> {
         return Ok(());
     }
 
-    let listener = TcpListener::bind(config.electrum_rpc_addr)?;
-    info!("serving Electrum RPC on {}", listener.local_addr()?);
-    let new_block_rx = rpc.new_block_notification();
-
     let (server_tx, server_rx) = unbounded();
-    spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
+    if !config.disable_electrum_rpc {
+        let listener = TcpListener::bind(config.electrum_rpc_addr)?;
+        info!("serving Electrum RPC on {}", listener.local_addr()?);
+        spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
+    };
 
+    let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
     loop {
         select! {

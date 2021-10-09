@@ -136,6 +136,7 @@ pub struct Config {
     pub auto_reindex: bool,
     pub ignore_mempool: bool,
     pub sync_once: bool,
+    pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub args: Vec<String>,
 }
@@ -308,6 +309,7 @@ impl Config {
             auto_reindex: config.auto_reindex,
             ignore_mempool: config.ignore_mempool,
             sync_once: config.sync_once,
+            disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             args: args.map(|a| a.into_string().unwrap()).collect(),
         };

@@ -97,6 +97,10 @@ name = "ignore_mempool"
 doc = "Don't sync mempool - queries will show only confirmed transactions."
 
 [[switch]]
+name = "disable_electrum_rpc"
+doc = "Disable Electrum RPC server - only sync and index blocks."
+
+[[switch]]
 name = "sync_once"
 doc = "Exit after the initial sync is over (don't start Electrum server)."
 
