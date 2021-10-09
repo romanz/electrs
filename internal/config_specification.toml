@@ -130,3 +130,8 @@ default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Ele
 name = "log_filters"
 type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"
+
+[[param]]
+name = "cache_db_dir"
+type = "std::path::PathBuf"
+doc = "Directory to store server-side cache database (default: disabled for privacy considerations)"
