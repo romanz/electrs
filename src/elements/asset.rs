@@ -4,7 +4,6 @@ use std::sync::{Arc, RwLock};
 use bitcoin::hashes::{hex::FromHex, sha256, Hash};
 use elements::confidential::{Asset, Value};
 use elements::encode::{deserialize, serialize};
-use elements::secp256k1_zkp::ZERO_TWEAK;
 use elements::{issuance::ContractHash, AssetId, AssetIssuance, OutPoint, Transaction, TxIn};
 
 use crate::chain::{BNetwork, BlockHash, Network, Txid};
@@ -279,7 +278,7 @@ fn index_tx_assets(
                 }),
             ));
         } else if txi.has_issuance() {
-            let is_reissuance = txi.asset_issuance.asset_blinding_nonce != ZERO_TWEAK;
+            let is_reissuance = txi.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
             let asset_entropy = get_issuance_entropy(txi).expect("invalid issuance");
             let asset_id = AssetId::from_entropy(asset_entropy);
@@ -396,7 +395,7 @@ pub fn get_issuance_entropy(txin: &TxIn) -> Result<sha256::Midstate> {
         bail!("input has no issuance");
     }
 
-    let is_reissuance = txin.asset_issuance.asset_blinding_nonce != ZERO_TWEAK;
+    let is_reissuance = txin.asset_issuance.asset_blinding_nonce != [0u8; 32];
 
     Ok(if !is_reissuance {
         let contract_hash = ContractHash::from_slice(&txin.asset_issuance.asset_entropy)
