@@ -22,6 +22,10 @@ pub struct Tracker {
     ignore_mempool: bool,
 }
 
+pub(crate) enum Error {
+    NotReady,
+}
+
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
         let store = DBStore::open(&config.db_path, config.auto_reindex)?;
@@ -58,13 +62,20 @@ impl Tracker {
         status.get_unspent(self.index.chain())
     }
 
-    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
-        self.index.sync(daemon, exit_flag)?;
-        if !self.ignore_mempool {
+    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<bool> {
+        let done = self.index.sync(daemon, exit_flag)?;
+        if done && !self.ignore_mempool {
             self.mempool.sync(daemon);
+            // TODO: double check tip - and retry on diff
         }
-        // TODO: double check tip - and retry on diff
-        Ok(())
+        Ok(done)
+    }
+
+    pub(crate) fn status(&self) -> Result<(), Error> {
+        if self.index.is_ready() {
+            return Ok(());
+        }
+        Err(Error::NotReady)
     }
 
     pub(crate) fn update_scripthash_status(

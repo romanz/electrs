@@ -103,6 +103,7 @@ pub struct Index {
     lookup_limit: Option<usize>,
     chain: Chain,
     stats: Stats,
+    is_ready: bool,
 }
 
 impl Index {
@@ -133,6 +134,7 @@ impl Index {
             lookup_limit,
             chain,
             stats,
+            is_ready: false,
         })
     }
 
@@ -179,56 +181,59 @@ impl Index {
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
-        self.stats.observe_db(&self.store);
-        loop {
-            let new_headers = self
-                .stats
-                .observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
-            if new_headers.is_empty() {
-                break;
-            }
-            info!(
-                "indexing {} blocks: [{}..{}]",
-                new_headers.len(),
-                new_headers.first().unwrap().height(),
-                new_headers.last().unwrap().height()
-            );
-            for chunk in new_headers.chunks(self.batch_size) {
-                exit_flag.poll().with_context(|| {
-                    format!(
-                        "indexing interrupted at height: {}",
-                        chunk.first().unwrap().height()
-                    )
-                })?;
-                let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
-                let mut heights = chunk.iter().map(|h| h.height());
-
-                let mut batch = WriteBatch::default();
-                daemon.for_blocks(blockhashes, |_blockhash, block| {
-                    let height = heights.next().expect("unexpected block");
-                    self.stats.observe_duration("block", || {
-                        index_single_block(block, height).extend(&mut batch)
-                    });
-                    self.stats.height.set("tip", height as f64);
-                })?;
-                let heights: Vec<_> = heights.collect();
-                assert!(
-                    heights.is_empty(),
-                    "some blocks were not indexed: {:?}",
-                    heights
-                );
-                batch.sort();
-                self.stats.observe_batch(&batch);
-                self.stats
-                    .observe_duration("write", || self.store.write(&batch));
-                self.stats.observe_db(&self.store);
-            }
-            self.chain.update(new_headers);
-            self.stats.observe_chain(&self.chain);
+    // Return `Ok(true)` when the chain is fully synced and the index is compacted.
+    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<bool> {
+        let new_headers = self
+            .stats
+            .observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
+        if new_headers.is_empty() {
+            self.store.flush(); // full compaction is performed on the first flush call
+            self.is_ready = true;
+            return Ok(true); // no more blocks to index (done for now)
         }
-        self.store.flush();
-        Ok(())
+        info!(
+            "indexing {} blocks: [{}..{}]",
+            new_headers.len(),
+            new_headers.first().unwrap().height(),
+            new_headers.last().unwrap().height()
+        );
+        for chunk in new_headers.chunks(self.batch_size) {
+            exit_flag.poll().with_context(|| {
+                format!(
+                    "indexing interrupted at height: {}",
+                    chunk.first().unwrap().height()
+                )
+            })?;
+            let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
+            let mut heights = chunk.iter().map(|h| h.height());
+
+            let mut batch = WriteBatch::default();
+            daemon.for_blocks(blockhashes, |_blockhash, block| {
+                let height = heights.next().expect("unexpected block");
+                self.stats.observe_duration("block", || {
+                    index_single_block(block, height).extend(&mut batch)
+                });
+                self.stats.height.set("tip", height as f64);
+            })?;
+            let heights: Vec<_> = heights.collect();
+            assert!(
+                heights.is_empty(),
+                "some blocks were not indexed: {:?}",
+                heights
+            );
+            batch.sort();
+            self.stats.observe_batch(&batch);
+            self.stats
+                .observe_duration("write", || self.store.write(&batch));
+            self.stats.observe_db(&self.store);
+        }
+        self.chain.update(new_headers);
+        self.stats.observe_chain(&self.chain);
+        Ok(false) // sync is not done
+    }
+
+    pub(crate) fn is_ready(&self) -> bool {
+        self.is_ready
     }
 }
 

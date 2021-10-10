@@ -82,11 +82,18 @@ fn serve() -> Result<()> {
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
     loop {
-        rpc.sync().context("sync failed")?; // initial sync and compaction may take a few hours
-        if config.sync_once {
-            return Ok(());
+        // initial sync and compaction may take a few hours
+        while server_rx.is_empty() {
+            let done = rpc.sync().context("sync failed")?; // sync a batch of blocks
+            peers = notify_peers(&rpc, peers); // peers are disconnected on error
+            if !done {
+                continue; // more blocks to sync
+            }
+            if config.sync_once {
+                return Ok(()); // exit after initial sync is done
+            }
+            break;
         }
-        peers = notify_peers(&rpc, peers); // peers are disconnected on error.
         select! {
             // Handle signals for graceful shutdown
             recv(rpc.signal().receiver()) -> result => {

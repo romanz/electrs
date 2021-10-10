@@ -88,6 +88,7 @@ enum RpcError {
     // Electrum-specific errors
     BadRequest(anyhow::Error),
     DaemonError(daemon::RpcError),
+    UnavailableIndex,
 }
 
 impl RpcError {
@@ -107,6 +108,10 @@ impl RpcError {
             },
             RpcError::BadRequest(err) => json!({"code": 1, "message": err.to_string()}),
             RpcError::DaemonError(err) => json!({"code": 2, "message": err.message}),
+            RpcError::UnavailableIndex => {
+                // Internal JSON-RPC error (https://www.jsonrpc.org/specification#error_object)
+                json!({"code": -32603, "message": "unavailable index"})
+            }
         }
     }
 }
@@ -155,7 +160,7 @@ impl Rpc {
         self.daemon.new_block_notification()
     }
 
-    pub fn sync(&mut self) -> Result<()> {
+    pub fn sync(&mut self) -> Result<bool> {
         self.tracker.sync(&self.daemon, self.signal.exit_flag())
     }
 
@@ -494,6 +499,16 @@ impl Rpc {
             Err(response) => return response, // params parsing may fail - the response contains request id
         };
         self.rpc_duration.observe_duration(&call.method, || {
+            if self.tracker.status().is_err() {
+                // Allow only a few RPC (for sync status notification) not requiring index DB being compacted.
+                match &call.params {
+                    Params::BlockHeader(_)
+                    | Params::BlockHeaders(_)
+                    | Params::HeadersSubscribe
+                    | Params::Version(_) => (),
+                    _ => return error_msg(&call.id, RpcError::UnavailableIndex),
+                };
+            }
             let result = match &call.params {
                 Params::Banner => Ok(json!(self.banner)),
                 Params::BlockHeader(args) => self.block_header(*args),
