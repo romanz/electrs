@@ -269,6 +269,10 @@ impl DBStore {
         }
     }
 
+    pub(crate) fn get_size(&self) -> Result<u64> {
+        fs_extra::dir::get_size(self.db.path()).context("failed to get DB size")
+    }
+
     fn start_compactions(&self) {
         self.bulk_import.store(false, Ordering::Relaxed);
         for name in COLUMN_FAMILIES {

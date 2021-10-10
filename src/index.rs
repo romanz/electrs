@@ -16,6 +16,7 @@ struct Stats {
     update_duration: Histogram,
     update_size: Histogram,
     height: Gauge,
+    db_size: Gauge,
 }
 
 impl Stats {
@@ -34,6 +35,7 @@ impl Stats {
                 metrics::default_size_buckets(),
             ),
             height: metrics.gauge("index_height", "Latest indexed block height"),
+            db_size: metrics.gauge("index_db_size", "Index DB size (bytes)"),
         }
     }
 }
@@ -89,7 +91,8 @@ impl Index {
         };
 
         let stats = Stats::new(metrics);
-        stats.height.set(chain.height());
+        stats.height.set(chain.height() as f64);
+        stats.db_size.set(store.get_size()? as f64);
 
         Ok(Index {
             store,
@@ -166,6 +169,7 @@ impl Index {
     }
 
     pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
+        self.stats.db_size.set(self.store.get_size()? as f64);
         loop {
             let new_headers =
                 self.observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
@@ -194,7 +198,7 @@ impl Index {
                     self.observe_duration("block", || {
                         index_single_block(block, height).extend(&mut batch)
                     });
-                    self.stats.height.set(height);
+                    self.stats.height.set(height as f64);
                 })?;
                 let heights: Vec<_> = heights.collect();
                 assert!(
@@ -205,6 +209,7 @@ impl Index {
                 batch.sort();
                 self.report_stats(&batch);
                 self.observe_duration("write", || self.store.write(batch));
+                self.stats.db_size.set(self.store.get_size()? as f64);
             }
             self.chain.update(new_headers);
         }

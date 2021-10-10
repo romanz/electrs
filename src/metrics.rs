@@ -74,8 +74,8 @@ mod metrics_impl {
     }
 
     impl Gauge {
-        pub fn set(&self, value: usize) {
-            self.gauge.set(value as f64)
+        pub fn set(&self, value: f64) {
+            self.gauge.set(value)
         }
     }
 
@@ -136,7 +136,7 @@ mod metrics_fake {
     pub struct Gauge {}
 
     impl Gauge {
-        pub fn set(&self, _value: usize) {}
+        pub fn set(&self, _value: f64) {}
     }
 
     #[derive(Clone)]
