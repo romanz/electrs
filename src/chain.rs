@@ -58,12 +58,11 @@ impl Chain {
         if n == 0 {
             return;
         }
-        if let Some(new_height) = self.height().checked_sub(n) {
-            self.update(vec![NewHeader::from((
-                self.headers[new_height].1,
-                new_height,
-            ))])
-        }
+        let new_height = self.height().saturating_sub(n);
+        self.update(vec![NewHeader::from((
+            self.headers[new_height].1,
+            new_height,
+        ))])
     }
 
     /// Load the chain from a collecion of headers, up to the given tip
