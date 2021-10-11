@@ -34,6 +34,7 @@ impl Tracker {
                 &metrics,
                 config.index_batch_size,
                 config.index_lookup_limit,
+                config.reindex_last_blocks,
             )
             .context("failed to open index")?,
             mempool: Mempool::new(),

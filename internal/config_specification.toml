@@ -111,6 +111,12 @@ doc = "Number of transactions to lookup before returning an error, to prevent 't
 default = "200"
 
 [[param]]
+name = "reindex_last_blocks"
+type = "usize"
+doc = "Number of last blocks to reindex (used for testing)"
+default = "0"
+
+[[param]]
 name = "server_banner"
 type = "String"
 doc = "The banner to be shown in the Electrum console"

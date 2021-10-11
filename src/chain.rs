@@ -54,6 +54,18 @@ impl Chain {
         }
     }
 
+    pub(crate) fn drop_last_headers(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        if let Some(new_height) = self.height().checked_sub(n) {
+            self.update(vec![NewHeader::from((
+                self.headers[new_height].1,
+                new_height,
+            ))])
+        }
+    }
+
     /// Load the chain from a collecion of headers, up to the given tip
     pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
         let genesis_hash = self.headers[0].0;
@@ -91,7 +103,6 @@ impl Chain {
     }
 
     /// Update the chain with a list of new headers (possibly a reorg)
-    /// Note that we cannot shorten a chain (e.g. by dropping )
     pub(crate) fn update(&mut self, headers: Vec<NewHeader>) {
         if let Some(first_height) = headers.first().map(|h| h.height) {
             for (hash, _header) in self.headers.drain(first_height..) {
@@ -211,13 +222,19 @@ mod tests {
 
         // test chain shortening
         for i in (0..=headers.len()).rev() {
-            let header = *regtest.get_block_header(i).unwrap();
             let hash = regtest.get_block_hash(i).unwrap();
             assert_eq!(regtest.get_block_height(&hash), Some(i));
-            regtest.update(vec![NewHeader::from((header, i))]);
             assert_eq!(regtest.height(), i);
             assert_eq!(regtest.tip(), hash);
+            regtest.drop_last_headers(1);
         }
+        assert_eq!(regtest.height(), 0);
+        assert_eq!(
+            regtest.tip().to_hex(),
+            "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
+        );
+
+        regtest.drop_last_headers(1);
         assert_eq!(regtest.height(), 0);
         assert_eq!(
             regtest.tip().to_hex(),

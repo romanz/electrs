@@ -79,6 +79,7 @@ impl Index {
         metrics: &Metrics,
         batch_size: usize,
         lookup_limit: Option<usize>,
+        reindex_last_blocks: usize,
     ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
@@ -88,6 +89,7 @@ impl Index {
                 .map(|row| HeaderRow::from_db_row(&row).header)
                 .collect();
             chain.load(headers, tip);
+            chain.drop_last_headers(reindex_last_blocks);
         };
 
         let stats = Stats::new(metrics);
