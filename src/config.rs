@@ -16,6 +16,7 @@ const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on 
 mod internal {
     #![allow(unused)]
     #![allow(clippy::identity_conversion)]
+    #![allow(clippy::cognitive_complexity)]
 
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
@@ -133,6 +134,7 @@ pub struct Config {
     pub jsonrpc_timeout: Duration,
     pub index_batch_size: usize,
     pub index_lookup_limit: Option<usize>,
+    pub reindex_last_blocks: usize,
     pub auto_reindex: bool,
     pub ignore_mempool: bool,
     pub sync_once: bool,
@@ -306,6 +308,7 @@ impl Config {
             jsonrpc_timeout: Duration::from_secs(config.jsonrpc_timeout_secs),
             index_batch_size: config.index_batch_size,
             index_lookup_limit,
+            reindex_last_blocks: config.reindex_last_blocks,
             auto_reindex: config.auto_reindex,
             ignore_mempool: config.ignore_mempool,
             sync_once: config.sync_once,
