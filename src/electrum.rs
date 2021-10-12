@@ -133,11 +133,9 @@ impl Rpc {
         );
 
         let signal = Signal::new();
+        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
         tracker
-            .sync(
-                &Daemon::connect(config, signal.exit_flag())?,
-                signal.exit_flag(),
-            )
+            .sync(&daemon, signal.exit_flag())
             .context("initial sync failed")?;
 
         let cache = Cache::new(tracker.metrics());
@@ -145,7 +143,7 @@ impl Rpc {
             tracker,
             cache,
             rpc_duration,
-            daemon: Daemon::connect(config, signal.exit_flag())?,
+            daemon,
             signal,
             banner: config.server_banner.clone(),
             port: config.electrum_rpc_addr.port(),
