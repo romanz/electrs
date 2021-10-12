@@ -15,6 +15,7 @@ use std::path::Path;
 use crate::{
     chain::{Chain, NewHeader},
     config::Config,
+    metrics::Metrics,
     p2p::Connection,
     signals::ExitFlag,
 };
@@ -112,7 +113,11 @@ struct BlockchainInfo {
 }
 
 impl Daemon {
-    pub(crate) fn connect(config: &Config, exit_flag: &ExitFlag) -> Result<Self> {
+    pub(crate) fn connect(
+        config: &Config,
+        exit_flag: &ExitFlag,
+        metrics: &Metrics,
+    ) -> Result<Self> {
         let mut rpc = rpc_connect(config)?;
 
         loop {
@@ -142,7 +147,11 @@ impl Daemon {
             bail!("electrs requires non-pruned bitcoind node");
         }
 
-        let p2p = Mutex::new(Connection::connect(config.network, config.daemon_p2p_addr)?);
+        let p2p = Mutex::new(Connection::connect(
+            config.network,
+            config.daemon_p2p_addr,
+            metrics,
+        )?);
         Ok(Self { p2p, rpc })
     }
 
