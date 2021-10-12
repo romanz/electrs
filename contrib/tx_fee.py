@@ -4,10 +4,11 @@ import client
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default='localhost')
     parser.add_argument("txid")
     args = parser.parse_args()
 
-    conn = client.Client(("localhost", 50001))
+    conn = client.Client((args.host, 50001))
     tx, = conn.call([client.request("blockchain.transaction.get", args.txid, True)])
     requests = []
     for vin in tx["vin"]:

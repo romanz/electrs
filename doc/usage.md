@@ -476,10 +476,10 @@ $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "i
 
 For more complex tasks, you may need to convert addresses to 
 [script hashes](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see 
-[contrib/addr.py](https://github.com/romanz/electrs/blob/master/contrib/addr.py) for getting an address balance and history:
+[contrib/history.py](https://github.com/romanz/electrs/blob/master/contrib/history.py) for getting an address balance and history:
 
 ```
-$ ./contrib/history.sh 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR
+$ ./contrib/history.sh --venv 144STc7gcb9XCp6t4hvrcUEKg9KemivsCR
 [2021-08-18 13:56:40.254317] INFO: electrum: connecting to localhost:50001
 [2021-08-18 13:56:40.574461] INFO: electrum: subscribed to 1 scripthashes
 [2021-08-18 13:56:40.645072] DEBUG: electrum:         0.00000 mBTC (total)

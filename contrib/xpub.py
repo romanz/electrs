@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import hashlib
 import sys
 
@@ -10,11 +11,20 @@ import client
 
 log = Logger("xpub")
 
+
 def main():
-    conn = client.Client(('localhost', 50001))
-    xpub, = sys.argv[1:]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default='localhost')
+    parser.add_argument('xpub')
+    args = parser.parse_args()
+
+    conn = client.Client((args.host, 50001))
     total = 0
-    xpub = network.parse.bip32_pub(xpub)
+    xpub = network.parse.bip32(args.xpub)
+
+    if xpub is None:
+        log.error('Invalid BIP32 pub key %s' % args.xpub)
+        sys.exit(1)
 
     for change in (0, 1):
         empty = 0
