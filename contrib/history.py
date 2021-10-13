@@ -5,7 +5,6 @@ import hashlib
 import io
 import sys
 
-import pycoin
 from logbook import Logger, StreamHandler
 import prettytable
 
@@ -30,6 +29,7 @@ def show_rows(rows, field_names):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default='localhost')
     parser.add_argument('--network', default='mainnet')
     parser.add_argument('address', nargs='+')
     args = parser.parse_args()
@@ -46,14 +46,14 @@ def main():
     else:
         raise ValueError(f"unknown network: {args.network}")
 
-    hostport = ('localhost', port)
+    hostport = (args.host, port)
     log.info('connecting to {}:{}', *hostport)
     conn = client.Client(hostport)
 
     tip, = conn.call([client.request('blockchain.headers.subscribe')])
 
     script_hashes = [
-        _script_hash(network.parse.address(addr).script()) 
+        _script_hash(network.parse.address(addr).script())
         for addr in args.address
     ]
 
