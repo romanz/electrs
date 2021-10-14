@@ -28,23 +28,22 @@ def main():
 
     for change in (0, 1):
         empty = 0
-        for n in range(100):
+        for n in range(1000):
             address = xpub.subkey(change).subkey(n).address()
             script = network.parse.address(address).script()
             script_hash = hashlib.sha256(script).digest()[::-1].hex()
-            log.debug('{}', conn.call('blockchain.scripthash.get_history',
-                                      script_hash))
-            reply = conn.call('blockchain.scripthash.get_balance', script_hash)
-            result = reply['result']
+            result, = conn.call([client.request('blockchain.scripthash.get_history', script_hash)])
+            ntx = len(result)
+            result, = conn.call([client.request('blockchain.scripthash.get_balance', script_hash)])
+            log.info('{}/{}: {} -> {} BTC confirmed, {} BTC unconfirmed, {} txs', change, n, address, result["confirmed"], result["unconfirmed"], ntx)
+
             confirmed = result['confirmed'] / 1e8
             total += confirmed
-            if confirmed:
-                log.info('{}/{} => {} has {:11.8f} BTC',
-                         change, n, address, confirmed)
+            if confirmed or ntx:
                 empty = 0
             else:
                 empty += 1
-                if empty >= 10:
+                if empty >= 20:
                     break
     log.info('total balance: {} BTC', total)
 
