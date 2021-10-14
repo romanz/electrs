@@ -5,8 +5,6 @@ import sys
 
 from logbook import Logger, StreamHandler
 
-from pycoin.symbols.btc import network
-
 import client
 
 log = Logger("xpub")
@@ -15,10 +13,23 @@ log = Logger("xpub")
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='localhost')
+    parser.add_argument('--network', default='mainnet')
     parser.add_argument('xpub')
     args = parser.parse_args()
 
-    conn = client.Client((args.host, 50001))
+    if args.network == 'regtest':
+        port = 60401
+        from pycoin.symbols.xrt import network
+    elif args.network == 'testnet':
+        port = 60001
+        from pycoin.symbols.xtn import network
+    elif args.network == 'mainnet':
+        port = 50001
+        from pycoin.symbols.btc import network
+    else:
+        raise ValueError(f"unknown network: {args.network}")
+
+    conn = client.Client((args.host, port))
     total = 0
     xpub = network.parse.bip32(args.xpub)
 
@@ -32,6 +43,7 @@ def main():
             address = xpub.subkey(change).subkey(n).address()
             script = network.parse.address(address).script()
             script_hash = hashlib.sha256(script).digest()[::-1].hex()
+            # conn.call([client.request('blockchain.scripthash.subscribe', script_hash)])
             result, = conn.call([client.request('blockchain.scripthash.get_history', script_hash)])
             ntx = len(result)
             result, = conn.call([client.request('blockchain.scripthash.get_balance', script_hash)])
