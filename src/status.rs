@@ -331,14 +331,24 @@ impl ScriptHashStatus {
 
         let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
-            for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                let funding_outputs = filter_outputs(&tx, &self.scripthash);
-                if funding_outputs.is_empty() {
-                    continue;
-                }
-                cache.add_tx(*txid, move || tx);
-                cache.add_proof(blockhash, *txid, || Proof::create(&txids, pos));
+            let funding_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
+            let found: Vec<(usize, &Txid, Vec<TxOutput>)> = block
+                .txdata
+                .into_par_iter()
+                .zip(&funding_txids)
+                .enumerate()
+                .filter_map(|(pos, (tx, txid))| {
+                    let funding_outputs = filter_outputs(&tx, &self.scripthash);
+                    if funding_outputs.is_empty() {
+                        return None;
+                    }
+                    cache.add_tx(*txid, move || tx);
+                    Some((pos, txid, funding_outputs))
+                })
+                .collect();
+
+            for (pos, txid, funding_outputs) in found {
+                cache.add_proof(blockhash, *txid, || Proof::create(&funding_txids, pos));
                 outpoints.extend(make_outpoints(txid, &funding_outputs));
                 result
                     .entry(blockhash)
@@ -353,14 +363,24 @@ impl ScriptHashStatus {
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let txids: Vec<Txid> = block.txdata.iter().map(|tx| tx.txid()).collect();
-            for (pos, (tx, txid)) in block.txdata.into_iter().zip(txids.iter()).enumerate() {
-                let spent_outpoints = filter_inputs(&tx, outpoints);
-                if spent_outpoints.is_empty() {
-                    continue;
-                }
-                cache.add_tx(*txid, move || tx);
-                cache.add_proof(blockhash, *txid, || Proof::create(&txids, pos));
+            let spending_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
+            let found: Vec<(usize, &Txid, Vec<OutPoint>)> = block
+                .txdata
+                .into_par_iter()
+                .zip(&spending_txids)
+                .enumerate()
+                .filter_map(|(pos, (tx, txid))| {
+                    let spent_outpoints = filter_inputs(&tx, outpoints);
+                    if spent_outpoints.is_empty() {
+                        return None;
+                    }
+                    cache.add_tx(*txid, move || tx);
+                    Some((pos, txid, spent_outpoints))
+                })
+                .collect();
+
+            for (pos, txid, spent_outpoints) in found {
+                cache.add_proof(blockhash, *txid, || Proof::create(&spending_txids, pos));
                 result
                     .entry(blockhash)
                     .or_default()
