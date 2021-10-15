@@ -8,7 +8,7 @@ use crate::{
     daemon::Daemon,
     db::DBStore,
     index::Index,
-    mempool::{Histogram, Mempool},
+    mempool::{FeeHistogram, Mempool},
     metrics::Metrics,
     signals::ExitFlag,
     status::{Balance, ScriptHashStatus, UnspentEntry},
@@ -47,7 +47,7 @@ impl Tracker {
         self.index.chain()
     }
 
-    pub(crate) fn fees_histogram(&self) -> &Histogram {
+    pub(crate) fn fees_histogram(&self) -> &FeeHistogram {
         self.mempool.fees_histogram()
     }
 
