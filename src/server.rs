@@ -13,7 +13,6 @@ use crate::{
     electrum::{Client, Rpc},
     signals::ExitError,
     thread::spawn,
-    tracker::Tracker,
 };
 
 struct Peer {
@@ -61,11 +60,7 @@ pub fn run() -> Result<()> {
 
 fn serve() -> Result<()> {
     let config = Config::from_args();
-    let tracker = Tracker::new(&config)?;
-    let mut rpc = Rpc::new(&config, tracker)?;
-    if config.sync_once {
-        return Ok(());
-    }
+    let mut rpc = Rpc::new(&config)?;
 
     let (server_tx, server_rx) = unbounded();
     if !config.disable_electrum_rpc {
@@ -77,28 +72,36 @@ fn serve() -> Result<()> {
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
     loop {
-        select! {
-            recv(rpc.signal().receiver()) -> result => {
-                result.context("signal channel disconnected")?;
-                rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
-            },
-            recv(new_block_rx) -> result => match result {
-                Ok(_) => (), // sync and update
-                Err(_) => break, // daemon is shutting down
-            },
-            recv(server_rx) -> event => {
-                let event = event.context("server disconnected")?;
-                handle_event(&rpc, &mut peers, event);
-            },
-            default(config.wait_duration) => (), // sync and update
-        };
-        if !server_rx.is_empty() {
-            continue; // continue RPC processing (if not done)
+        rpc.sync().context("sync failed")?; // initial sync and compaction may take a few hours
+        if config.sync_once {
+            return Ok(());
         }
-        rpc.sync().context("rpc sync failed")?;
         peers = notify_peers(&rpc, peers); // peers are disconnected on error.
+        loop {
+            select! {
+                // Handle signals for graceful shutdown
+                recv(rpc.signal().receiver()) -> result => {
+                    result.context("signal channel disconnected")?;
+                    rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
+                },
+                // Handle new blocks' notifications
+                recv(new_block_rx) -> result => match result {
+                    Ok(_) => break, // sync and update
+                    Err(_) => return Ok(()), // daemon is shutting down
+                },
+                // Handle Electrum RPC requests
+                recv(server_rx) -> event => {
+                    let event = event.context("server disconnected")?;
+                    handle_event(&rpc, &mut peers, event);
+                },
+                default(config.wait_duration) => break, // sync and update
+            };
+            // continue RPC processing (if more requests are pending)
+            if server_rx.is_empty() {
+                break;
+            }
+        }
     }
-    Ok(())
 }
 
 fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
