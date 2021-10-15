@@ -11,7 +11,7 @@ use bitcoincore_rpc::json;
 use rayon::prelude::*;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-use crate::{daemon::Daemon, types::ScriptHash};
+use crate::{daemon::Daemon, types::ScriptHash, metrics::{Metrics, Gauge}};
 
 pub(crate) struct Entry {
     pub txid: Txid,
@@ -27,6 +27,9 @@ pub(crate) struct Mempool {
     by_funding: BTreeSet<(ScriptHash, Txid)>,
     by_spending: BTreeSet<(OutPoint, Txid)>,
     fees: FeeHistogram,
+    // stats
+    vsize: Gauge,
+    count: Gauge,
 }
 
 // Smallest possible txid
@@ -40,12 +43,14 @@ fn txid_max() -> Txid {
 }
 
 impl Mempool {
-    pub fn new() -> Self {
+    pub fn new(metrics: &Metrics) -> Self {
         Self {
             entries: Default::default(),
             by_funding: Default::default(),
             by_spending: Default::default(),
             fees: FeeHistogram::empty(),
+            vsize: metrics.gauge("mempool_txs_vsize", "Total vsize of mempool transactions (in bytes)"),
+            count: metrics.gauge("mempool_txs_count", "Total number of mempool transactions"),
         }
     }
 
@@ -116,6 +121,8 @@ impl Mempool {
             self.add_entry(*txid, tx, entry);
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
+        self.vsize.set(self.entries.values().map(|e| e.vsize).sum::<u64>() as f64);
+        self.count.set(self.entries.values().len() as f64);
         debug!(
             "{} mempool txs: {} added, {} removed",
             self.entries.len(),

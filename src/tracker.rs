@@ -37,7 +37,7 @@ impl Tracker {
                 config.reindex_last_blocks,
             )
             .context("failed to open index")?,
-            mempool: Mempool::new(),
+            mempool: Mempool::new(&metrics),
             metrics,
             ignore_mempool: config.ignore_mempool,
         })
