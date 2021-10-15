@@ -124,7 +124,8 @@ pub struct Rpc {
 
 impl Rpc {
     /// Perform initial index sync (may take a while on first run).
-    pub fn new(config: &Config, mut tracker: Tracker) -> Result<Self> {
+    pub fn new(config: &Config) -> Result<Self> {
+        let tracker = Tracker::new(&config)?;
         let rpc_duration = tracker.metrics().histogram_vec(
             "rpc_duration",
             "RPC duration (in seconds)",
@@ -134,10 +135,6 @@ impl Rpc {
 
         let signal = Signal::new();
         let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
-        tracker
-            .sync(&daemon, signal.exit_flag())
-            .context("initial sync failed")?;
-
         let cache = Cache::new(tracker.metrics());
         Ok(Self {
             tracker,
