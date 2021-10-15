@@ -11,7 +11,11 @@ use bitcoincore_rpc::json;
 use rayon::prelude::*;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-use crate::{daemon::Daemon, types::ScriptHash, metrics::{Metrics, Gauge}};
+use crate::{
+    daemon::Daemon,
+    metrics::{Gauge, Metrics},
+    types::ScriptHash,
+};
 
 pub(crate) struct Entry {
     pub txid: Txid,
@@ -49,7 +53,10 @@ impl Mempool {
             by_funding: Default::default(),
             by_spending: Default::default(),
             fees: FeeHistogram::empty(),
-            vsize: metrics.gauge("mempool_txs_vsize", "Total vsize of mempool transactions (in bytes)"),
+            vsize: metrics.gauge(
+                "mempool_txs_vsize",
+                "Total vsize of mempool transactions (in bytes)",
+            ),
             count: metrics.gauge("mempool_txs_count", "Total number of mempool transactions"),
         }
     }
@@ -121,7 +128,8 @@ impl Mempool {
             self.add_entry(*txid, tx, entry);
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
-        self.vsize.set(self.entries.values().map(|e| e.vsize).sum::<u64>() as f64);
+        self.vsize
+            .set(self.entries.values().map(|e| e.vsize).sum::<u64>() as f64);
         self.count.set(self.entries.values().len() as f64);
         debug!(
             "{} mempool txs: {} added, {} removed",
