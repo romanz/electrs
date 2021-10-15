@@ -17,6 +17,7 @@ use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::{self, ErrorKind, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
@@ -127,8 +128,10 @@ impl Connection {
         address: SocketAddr,
         metrics: &Metrics,
     ) -> Result<Self> {
-        let mut stream = TcpStream::connect(address)
-            .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
+        let conn = Arc::new(
+            TcpStream::connect(address)
+                .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?,
+        );
 
         let (tx_send, tx_recv) = bounded::<NetworkMessage>(1);
         let (rx_send, rx_recv) = bounded::<NetworkMessage>(1);
@@ -158,8 +161,7 @@ impl Connection {
             default_duration_buckets(),
         );
 
-        let mut reader = stream.try_clone().context("stream failed to clone")?;
-
+        let stream = Arc::clone(&conn);
         crate::thread::spawn("p2p_send", move || loop {
             use std::net::Shutdown;
             let msg = match send_duration.observe_duration("wait", || tx_recv.recv()) {
@@ -180,15 +182,16 @@ impl Connection {
                     magic: network.magic(),
                     payload: msg,
                 };
-                stream
+                (&*stream)
                     .write_all(encode::serialize(&raw_msg).as_slice())
                     .context("p2p failed to send")
             })?;
         });
 
+        let stream = Arc::clone(&conn);
         crate::thread::spawn("p2p_recv", move || loop {
             let raw_msg = match recv_duration
-                .observe_duration("recv", || RawNetworkMessage::consensus_decode(&mut reader))
+                .observe_duration("recv", || RawNetworkMessage::consensus_decode(&*stream))
             {
                 Ok(raw_msg) => {
                     assert_eq!(raw_msg.magic, network.magic());
