@@ -1,3 +1,17 @@
+# 0.9.1 (TBD)
+
+* Initialize chain height metric (#515)
+* Don't shutdown write-side before all responses are sent back (#523)
+* Use p2p protocol to replace waitfornewblock hidden RPC (#526)
+* Use correct Prometheus buckets for size and duration (#528)
+* Don't ignore signals during IBD (#533)
+* Expose index DB size as a Prometheus gauge metric (#544)
+* Add p2p protocol monitoring (#546)
+* Fix contrib/xpub.py support for ypub/zpub keys (#549)
+* Rewrite and simplify p2p message receiving thread (#550)
+* Re-introduce mempool vsize and txs' count metrics (#557)
+* Allow RPC connection before initial sync is over (#558)
+
 # 0.9.0 (Sep 30 2021)
 
 **IMPORTANT: This release contains major changes, please read carefully!**
