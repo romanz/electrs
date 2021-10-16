@@ -133,9 +133,10 @@ impl Mempool {
             self.add_entry(*txid, tx, entry);
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
-        for i in 1..FeeHistogram::SIZE {
-            let bin_index = FeeHistogram::SIZE - i; // from 63 to 1
-            let label = format!("[{:20.0}, {:20.0})", 1u64 << (i - 1), 1u64 << i);
+        for i in 1..FeeHistogram::BINS {
+            let bin_index = FeeHistogram::BINS - i - 1; // from 63 to 0
+            let limit = 1u64 << i;
+            let label = format!("[{:20.0}, {:20.0})", limit / 2, limit);
             self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
             self.count.set(&label, self.fees.count[bin_index] as f64);
         }
@@ -182,6 +183,7 @@ impl Mempool {
 
 pub(crate) struct FeeHistogram {
     /// bins[64-i] contains transactions' statistics inside the fee band of [2**(i-1), 2**i).
+    /// bins[64] = [0, 1)
     /// bins[63] = [1, 2)
     /// bins[62] = [2, 4)
     /// bins[61] = [4, 8)
@@ -189,21 +191,21 @@ pub(crate) struct FeeHistogram {
     /// ...
     /// bins[1] = [2**62, 2**63)
     /// bins[0] = [2**63, 2**64)
-    vsize: [u64; FeeHistogram::SIZE],
-    count: [u64; FeeHistogram::SIZE],
+    vsize: [u64; FeeHistogram::BINS],
+    count: [u64; FeeHistogram::BINS],
 }
 
 impl Default for FeeHistogram {
     fn default() -> Self {
         Self {
-            vsize: [0; FeeHistogram::SIZE],
-            count: [0; FeeHistogram::SIZE],
+            vsize: [0; FeeHistogram::BINS],
+            count: [0; FeeHistogram::BINS],
         }
     }
 }
 
 impl FeeHistogram {
-    const SIZE: usize = 64;
+    const BINS: usize = 65; // 0..=64
 
     fn empty() -> Self {
         Self::new(std::iter::empty())
@@ -233,7 +235,8 @@ impl Serialize for FeeHistogram {
     {
         let mut seq = serializer.serialize_seq(Some(self.vsize.len()))?;
         // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
-        let fee_rates = (0..FeeHistogram::SIZE).map(|i| std::u64::MAX >> i);
+        let fee_rates =
+            (0..FeeHistogram::BINS).map(|i| std::u64::MAX.checked_shr(i as u32).unwrap_or(0));
         fee_rates
             .zip(self.vsize.iter().copied())
             .skip_while(|(_fee_rate, vsize)| *vsize == 0)
@@ -259,8 +262,12 @@ mod tests {
             (Amount::from_sat(50), 10),
             (Amount::from_sat(40), 10),
             (Amount::from_sat(80), 10),
+            (Amount::from_sat(1), 100),
         ];
-        let hist = json!(FeeHistogram::new(items.into_iter()));
-        assert_eq!(hist, json!([[15, 10], [7, 40], [3, 20], [1, 10]]));
+        let hist = FeeHistogram::new(items.into_iter());
+        assert_eq!(
+            json!(hist),
+            json!([[15, 10], [7, 40], [3, 20], [1, 10], [0, 100]])
+        );
     }
 }
