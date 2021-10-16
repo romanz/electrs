@@ -56,8 +56,13 @@ impl Mempool {
             vsize: metrics.gauge(
                 "mempool_txs_vsize",
                 "Total vsize of mempool transactions (in bytes)",
+                "fee_rate",
             ),
-            count: metrics.gauge("mempool_txs_count", "Total number of mempool transactions"),
+            count: metrics.gauge(
+                "mempool_txs_count",
+                "Total number of mempool transactions",
+                "fee_rate",
+            ),
         }
     }
 
@@ -128,9 +133,12 @@ impl Mempool {
             self.add_entry(*txid, tx, entry);
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
-        self.vsize
-            .set(self.entries.values().map(|e| e.vsize).sum::<u64>() as f64);
-        self.count.set(self.entries.values().len() as f64);
+        for i in 1..FeeHistogram::SIZE {
+            let bin_index = FeeHistogram::SIZE - i; // from 63 to 1
+            let label = format!("[{:20.0}, {:20.0})", 1u64 << (i - 1), 1u64 << i);
+            self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
+            self.count.set(&label, self.fees.count[bin_index] as f64);
+        }
         debug!(
             "{} mempool txs: {} added, {} removed",
             self.entries.len(),
@@ -173,7 +181,7 @@ impl Mempool {
 }
 
 pub(crate) struct FeeHistogram {
-    /// bins[64-i] contains the total vsize of transactions with fee rate [2**(i-1), 2**i).
+    /// bins[64-i] contains transactions' statistics inside the fee band of [2**(i-1), 2**i).
     /// bins[63] = [1, 2)
     /// bins[62] = [2, 4)
     /// bins[61] = [4, 8)
@@ -181,7 +189,17 @@ pub(crate) struct FeeHistogram {
     /// ...
     /// bins[1] = [2**62, 2**63)
     /// bins[0] = [2**63, 2**64)
-    bins: [u64; FeeHistogram::SIZE],
+    vsize: [u64; FeeHistogram::SIZE],
+    count: [u64; FeeHistogram::SIZE],
+}
+
+impl Default for FeeHistogram {
+    fn default() -> Self {
+        Self {
+            vsize: [0; FeeHistogram::SIZE],
+            count: [0; FeeHistogram::SIZE],
+        }
+    }
 }
 
 impl FeeHistogram {
@@ -192,16 +210,19 @@ impl FeeHistogram {
     }
 
     fn new(items: impl Iterator<Item = (Amount, u64)>) -> Self {
-        let mut bins = [0; Self::SIZE];
+        let mut result = FeeHistogram::default();
         for (fee, vsize) in items {
             let fee_rate = fee.as_sat() / vsize;
             let index = usize::try_from(fee_rate.leading_zeros()).unwrap();
             // skip transactions with too low fee rate (<1 sat/vB)
-            if let Some(bin) = bins.get_mut(index) {
+            if let Some(bin) = result.vsize.get_mut(index) {
                 *bin += vsize
             }
+            if let Some(bin) = result.count.get_mut(index) {
+                *bin += 1
+            }
         }
-        Self { bins }
+        result
     }
 }
 
@@ -210,11 +231,11 @@ impl Serialize for FeeHistogram {
     where
         S: Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.bins.len()))?;
+        let mut seq = serializer.serialize_seq(Some(self.vsize.len()))?;
         // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
         let fee_rates = (0..FeeHistogram::SIZE).map(|i| std::u64::MAX >> i);
         fee_rates
-            .zip(self.bins.iter().copied())
+            .zip(self.vsize.iter().copied())
             .skip_while(|(_fee_rate, vsize)| *vsize == 0)
             .try_for_each(|element| seq.serialize_element(&element))?;
         seq.end()
