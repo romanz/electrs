@@ -14,7 +14,7 @@ use std::iter::FromIterator;
 
 use crate::{
     cache::Cache,
-    config::Config,
+    config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
     metrics::{self, Histogram},
@@ -24,9 +24,7 @@ use crate::{
     types::ScriptHash,
 };
 
-const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "1.4";
-
 const UNKNOWN_FEE: isize = -1; // (allowed by Electrum protocol)
 
 /// Per-client Electrum protocol state

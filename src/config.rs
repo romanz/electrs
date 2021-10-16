@@ -9,8 +9,10 @@ use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use std::env::consts::{ARCH, OS};
 use std::time::Duration;
 
+pub const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on IPv4 localhost
 
 mod internal {
@@ -316,7 +318,10 @@ impl Config {
             server_banner: config.server_banner,
             args: args.map(|a| a.into_string().unwrap()).collect(),
         };
-        eprintln!("{:?}", config);
+        eprintln!(
+            "Starting electrs {} on {} {} with {:?}",
+            ELECTRS_VERSION, ARCH, OS, config
+        );
         env_logger::Builder::from_default_env()
             .default_format()
             .format_timestamp_millis()
