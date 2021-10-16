@@ -59,8 +59,9 @@ mod metrics_impl {
             Histogram { hist }
         }
 
-        pub fn gauge(&self, name: &str, desc: &str) -> Gauge {
-            let gauge = prometheus::Gauge::new(name, desc).unwrap();
+        pub fn gauge(&self, name: &str, desc: &str, label: &str) -> Gauge {
+            let opts = prometheus::Opts::new(name, desc);
+            let gauge = prometheus::GaugeVec::new(opts, &[label]).unwrap();
             self.reg
                 .register(Box::new(gauge.clone()))
                 .expect("failed to register Gauge");
@@ -70,12 +71,12 @@ mod metrics_impl {
 
     #[derive(Clone)]
     pub struct Gauge {
-        gauge: prometheus::Gauge,
+        gauge: prometheus::GaugeVec,
     }
 
     impl Gauge {
-        pub fn set(&self, value: f64) {
-            self.gauge.set(value)
+        pub fn set(&self, label: &str, value: f64) {
+            self.gauge.with_label_values(&[label]).set(value)
         }
     }
 
@@ -136,7 +137,7 @@ mod metrics_fake {
     pub struct Gauge {}
 
     impl Gauge {
-        pub fn set(&self, _value: f64) {}
+        pub fn set(&self, _label: &str, _value: f64) {}
     }
 
     #[derive(Clone)]
