@@ -1,4 +1,4 @@
-# 0.9.1 (TBD)
+# 0.9.1 (Oct 19 2021)
 
 * Initialize chain height metric (#515)
 * Don't shutdown write-side before all responses are sent back (#523)
@@ -9,7 +9,7 @@
 * Add p2p protocol monitoring (#546)
 * Fix contrib/xpub.py support for ypub/zpub keys (#549)
 * Rewrite and simplify p2p message receiving thread (#550)
-* Re-introduce mempool vsize and txs' count metrics (#557, #562)
+* Re-introduce mempool vsize and txs' count metrics (#557, #562, #563)
 * Allow RPC connection before initial sync is over (#558)
 
 # 0.9.0 (Sep 30 2021)
