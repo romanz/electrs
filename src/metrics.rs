@@ -128,7 +128,7 @@ mod metrics_fake {
             Histogram {}
         }
 
-        pub fn gauge(&self, _name: &str, _desc: &str) -> Gauge {
+        pub fn gauge(&self, _name: &str, _desc: &str, _label: &str) -> Gauge {
             Gauge {}
         }
     }
