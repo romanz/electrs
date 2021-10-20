@@ -22,6 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     chain::{Chain, NewHeader},
+    config::ELECTRS_VERSION,
     metrics::{default_duration_buckets, default_size_buckets, Histogram, Metrics},
 };
 
@@ -305,7 +306,7 @@ fn build_version_message() -> NetworkMessage {
         receiver: address::Address::new(&addr, services),
         sender: address::Address::new(&addr, services),
         nonce: secp256k1::rand::thread_rng().gen(),
-        user_agent: String::from("electrs"),
+        user_agent: format!("/electrs:{}/", ELECTRS_VERSION),
         start_height: 0,
         relay: false,
     })
