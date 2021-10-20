@@ -12,3 +12,5 @@ data/
 tests/bitcoin-*
 tests/bin
 .idea/
+*.txt
+*.json
