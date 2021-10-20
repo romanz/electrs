@@ -140,6 +140,10 @@ If you installed `cfg_me` to generate man page, you can run `cfg_me man` to see 
 
 ## Docker-based installation from source
 
+**Important**: The `Dockerfile` is provided for demonstration purposes and may NOT be suitable for production use.
+The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
+If you are not familiar with Docker either it's probably be safer to NOT use it.
+
 Note: currently Docker installation links statically
 
 Note: health check only works if Prometheus is running on port 4224 inside container
@@ -522,6 +526,7 @@ Upgrading checklist:
 * If you use `verbose = 4` (or `-vvvv` argument) lower it down to `2` (`-vv`) for production use.
   Keeping it would waste resources because we utilize it more now.
 * **After reindexing**, if you did **not** delete `mainnet` subdirectory within `db_dir` check that `electrs` works as expected and then *delete whole `mainnet` subdirectory*.
+* If you are using our Dockerfile, please make sure to re-map the DB volume (see [the section above](https://github.com/romanz/electrs/blob/master/doc/usage.md#docker-based-installation-from-source)).
 
 ### Important changes from version older than 0.8.8
 
