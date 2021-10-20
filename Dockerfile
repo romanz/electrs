@@ -1,3 +1,7 @@
+# Important: This file is provided for demonstration purposes and may NOT be suitable for production use.
+# The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
+# If you are not familiar with Docker either it's probably be safer to NOT use it.
+
 ### Electrum Rust Server ###
 FROM rust:1.41.1-slim as electrs-build
 RUN apt-get update

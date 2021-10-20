@@ -140,6 +140,10 @@ If you installed `cfg_me` to generate man page, you can run `cfg_me man` to see 
 
 ## Docker-based installation from source
 
+**Important**: The `Dockerfile` is provided for demonstration purposes and may NOT be suitable for production use.
+The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
+If you are not familiar with Docker either it's probably be safer to NOT use it.
+
 Note: currently Docker installation links statically
 
 Note: health check only works if Prometheus is running on port 4224 inside container
