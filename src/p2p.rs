@@ -231,7 +231,7 @@ impl Connection {
                         Ok(msg) => msg,
                         Err(_) => {  // p2p_recv is closed, so rx_send is disconnected
                             debug!("closing p2p_loop thread: peer has disconnected");
-                            return Ok(());
+                            return Ok(()); // new_block_send is dropped, causing the server to exit
                         }
                     };
                     match msg {

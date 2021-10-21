@@ -87,7 +87,10 @@ fn serve() -> Result<()> {
                 // Handle new blocks' notifications
                 recv(new_block_rx) -> result => match result {
                     Ok(_) => break, // sync and update
-                    Err(_) => return Ok(()), // daemon is shutting down
+                    Err(_) => {
+                        info!("disconnected from bitcoind");
+                        return Ok(());
+                    }
                 },
                 // Handle Electrum RPC requests
                 recv(server_rx) -> event => {
