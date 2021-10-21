@@ -23,7 +23,7 @@ The four main things to watch out for:
 * We now use **bitcoin p2p protocol** to fetch blocks - some configurations may not work.
 * Trace log level now logs much more information - make sure it's not used in production.
 
-See [upgrading](doc/usage.md#upgrading) section of our docs to learn more.
+See [upgrading](doc/upgrading.md) section of our docs to learn more.
 
 Full list of changes:
 

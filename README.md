@@ -25,7 +25,12 @@ External guides such as RaspiBolt can be out-of-date and have various problems.
 At least double-check that the guide you're using is actively maintained.
 If you can't use our guide ask about what you don't understand or consider using automated deployments.
 
-See [here](doc/usage.md) for installation, build and usage instructions.
+ * [Installation from source](doc/install.md) 
+ * [Pre-built binaries](doc/binaries.md) (No official binaries available but a beta repository is available for installation) 
+ * [Configuration](doc/config.md) 
+ * [Usage](doc/usage.md) 
+ * [Monitoring](doc/monitoring.md) 
+ * [Upgrading](doc/upgrading.md) - **contains information about important changes from older versions**
 
 ## Features
 
