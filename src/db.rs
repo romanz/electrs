@@ -179,26 +179,29 @@ impl DBStore {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
 
-    pub(crate) fn iter_funding(&self, prefix: Row) -> ScanIterator {
+    pub(crate) fn iter_funding(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
-    pub(crate) fn iter_spending(&self, prefix: Row) -> ScanIterator {
+    pub(crate) fn iter_spending(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
-    pub(crate) fn iter_txid(&self, prefix: Row) -> ScanIterator {
+    pub(crate) fn iter_txid(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
-    fn iter_prefix_cf(&self, cf: &rocksdb::ColumnFamily, prefix: Row) -> ScanIterator {
+    fn iter_prefix_cf(
+        &self,
+        cf: &rocksdb::ColumnFamily,
+        prefix: Row,
+    ) -> impl Iterator<Item = Row> + '_ {
         let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
-        let iter = self.db.iterator_cf(cf, mode);
-        ScanIterator {
-            prefix,
-            iter,
-            done: false,
-        }
+        let mut opts = rocksdb::ReadOptions::default();
+        opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
+        self.db
+            .iterator_cf_opt(cf, opts, mode)
+            .map(|(key, _value)| key) // values are empty in prefix-scanned CFs
     }
 
     pub(crate) fn read_headers(&self) -> Vec<Row> {
@@ -302,28 +305,6 @@ impl DBStore {
     }
 }
 
-pub(crate) struct ScanIterator<'a> {
-    prefix: Row,
-    iter: rocksdb::DBIterator<'a>,
-    done: bool,
-}
-
-impl<'a> Iterator for ScanIterator<'a> {
-    type Item = Row;
-
-    fn next(&mut self) -> Option<Row> {
-        if self.done {
-            return None;
-        }
-        let (key, _) = self.iter.next()?;
-        if !key.starts_with(&self.prefix) {
-            self.done = true;
-            return None;
-        }
-        Some(key)
-    }
-}
-
 impl Drop for DBStore {
     fn drop(&mut self) {
         info!("closing DB at {}", self.db.path().display());
@@ -332,7 +313,7 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{rocksdb, DBStore, CURRENT_FORMAT};
+    use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
 
     #[test]
     fn test_reindex_new_format() {
@@ -379,5 +360,36 @@ mod tests {
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
         }
+    }
+
+    #[test]
+    fn test_db_prefix_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = DBStore::open(dir.path(), true).unwrap();
+
+        let items: &[&[u8]] = &[
+            b"ab",
+            b"abcdefgh",
+            b"abcdefghj",
+            b"abcdefghjk",
+            b"abcdefghxyz",
+            b"abcdefgi",
+            b"b",
+            b"c",
+        ];
+
+        let mut batch = WriteBatch::default();
+        batch.txid_rows = to_rows(&items);
+        store.write(batch);
+
+        let rows = store.iter_txid(b"abcdefgh".to_vec().into_boxed_slice());
+        assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
+    }
+
+    fn to_rows(values: &[&[u8]]) -> Vec<Box<[u8]>> {
+        values
+            .iter()
+            .map(|v| v.to_vec().into_boxed_slice())
+            .collect()
     }
 }
