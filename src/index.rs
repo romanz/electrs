@@ -8,7 +8,7 @@ use crate::{
     db::{DBStore, Row, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
-    types::{HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
+    types::{HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
 };
 
 #[derive(Clone)]
@@ -42,20 +42,20 @@ impl Stats {
 
 struct IndexResult {
     header_row: HeaderRow,
-    funding_rows: Vec<ScriptHashRow>,
-    spending_rows: Vec<SpendingPrefixRow>,
-    txid_rows: Vec<TxidRow>,
+    funding_rows: Vec<HashPrefixRow>,
+    spending_rows: Vec<HashPrefixRow>,
+    txid_rows: Vec<HashPrefixRow>,
 }
 
 impl IndexResult {
     fn extend(&self, batch: &mut WriteBatch) {
-        let funding_rows = self.funding_rows.iter().map(ScriptHashRow::to_db_row);
+        let funding_rows = self.funding_rows.iter().map(HashPrefixRow::to_db_row);
         batch.funding_rows.extend(funding_rows);
 
-        let spending_rows = self.spending_rows.iter().map(SpendingPrefixRow::to_db_row);
+        let spending_rows = self.spending_rows.iter().map(HashPrefixRow::to_db_row);
         batch.spending_rows.extend(spending_rows);
 
-        let txid_rows = self.txid_rows.iter().map(TxidRow::to_db_row);
+        let txid_rows = self.txid_rows.iter().map(HashPrefixRow::to_db_row);
         batch.txid_rows.extend(txid_rows);
 
         batch.header_rows.push(self.header_row.to_db_row());
@@ -124,7 +124,7 @@ impl Index {
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| TxidRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(&row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -134,7 +134,7 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| ScriptHashRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(&row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -144,7 +144,7 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| SpendingPrefixRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(&row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -234,7 +234,7 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
     let mut txid_rows = Vec::with_capacity(block.txdata.len());
 
     for tx in &block.txdata {
-        txid_rows.push(TxidRow::new(tx.txid(), height));
+        txid_rows.push(TxidRow::row(tx.txid(), height));
 
         funding_rows.extend(
             tx.output
@@ -242,7 +242,7 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
                 .filter(|txo| !txo.script_pubkey.is_provably_unspendable())
                 .map(|txo| {
                     let scripthash = ScriptHash::new(&txo.script_pubkey);
-                    ScriptHashRow::new(scripthash, height)
+                    ScriptHashRow::row(scripthash, height)
                 }),
         );
 
@@ -252,7 +252,7 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
         spending_rows.extend(
             tx.input
                 .iter()
-                .map(|txin| SpendingPrefixRow::new(txin.previous_output, height)),
+                .map(|txin| SpendingPrefixRow::row(txin.previous_output, height)),
         );
     }
     IndexResult {

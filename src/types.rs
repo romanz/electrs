@@ -37,6 +37,33 @@ macro_rules! impl_consensus_encoding {
     );
 }
 
+const HASH_PREFIX_LEN: usize = 8;
+
+type HashPrefix = [u8; HASH_PREFIX_LEN];
+type Height = u32;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub(crate) struct HashPrefixRow {
+    prefix: [u8; HASH_PREFIX_LEN],
+    height: Height, // transaction confirmed height
+}
+
+impl HashPrefixRow {
+    pub(crate) fn to_db_row(&self) -> db::Row {
+        serialize(self).into_boxed_slice()
+    }
+
+    pub(crate) fn from_db_row(row: &[u8]) -> Self {
+        deserialize(row).expect("bad HashPrefixRow")
+    }
+
+    pub fn height(&self) -> usize {
+        usize::try_from(self.height).expect("invalid height")
+    }
+}
+
+impl_consensus_encoding!(HashPrefixRow, prefix, height);
+
 hash_newtype!(
     ScriptHash,
     sha256::Hash,
@@ -50,54 +77,25 @@ impl ScriptHash {
         ScriptHash::hash(&script[..])
     }
 
-    fn prefix(&self) -> ScriptHashPrefix {
-        let mut prefix = [0u8; HASH_PREFIX_LEN];
+    fn prefix(&self) -> HashPrefix {
+        let mut prefix = HashPrefix::default();
         prefix.copy_from_slice(&self.0[..HASH_PREFIX_LEN]);
-        ScriptHashPrefix { prefix }
+        prefix
     }
 }
 
-const HASH_PREFIX_LEN: usize = 8;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct ScriptHashPrefix {
-    prefix: [u8; HASH_PREFIX_LEN],
-}
-
-impl_consensus_encoding!(ScriptHashPrefix, prefix);
-
-type Height = u32;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ScriptHashRow {
-    prefix: ScriptHashPrefix,
-    height: Height, // transaction confirmed height
-}
-
-impl_consensus_encoding!(ScriptHashRow, prefix, height);
+pub(crate) struct ScriptHashRow;
 
 impl ScriptHashRow {
     pub(crate) fn scan_prefix(scripthash: ScriptHash) -> Box<[u8]> {
         scripthash.0[..HASH_PREFIX_LEN].to_vec().into_boxed_slice()
     }
 
-    pub(crate) fn new(scripthash: ScriptHash, height: usize) -> Self {
-        Self {
+    pub(crate) fn row(scripthash: ScriptHash, height: usize) -> HashPrefixRow {
+        HashPrefixRow {
             prefix: scripthash.prefix(),
             height: Height::try_from(height).expect("invalid height"),
         }
-    }
-
-    pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
-    }
-
-    pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(row).expect("bad ScriptHashRow")
-    }
-
-    pub(crate) fn height(&self) -> usize {
-        usize::try_from(self.height).expect("invalid height")
     }
 }
 
@@ -113,100 +111,48 @@ hash_newtype!(
 
 // ***************************************************************************
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct SpendingPrefix {
-    prefix: [u8; HASH_PREFIX_LEN],
-}
-
-impl_consensus_encoding!(SpendingPrefix, prefix);
-
-fn spending_prefix(prev: OutPoint) -> SpendingPrefix {
+fn spending_prefix(prev: OutPoint) -> HashPrefix {
     let txid_prefix = <[u8; HASH_PREFIX_LEN]>::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
     let value = u64::from_be_bytes(txid_prefix);
     let value = value.wrapping_add(prev.vout.into());
-    SpendingPrefix {
-        prefix: value.to_be_bytes(),
-    }
+    value.to_be_bytes()
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct SpendingPrefixRow {
-    prefix: SpendingPrefix,
-    height: Height, // transaction confirmed height
-}
-
-impl_consensus_encoding!(SpendingPrefixRow, prefix, height);
+pub(crate) struct SpendingPrefixRow;
 
 impl SpendingPrefixRow {
     pub(crate) fn scan_prefix(outpoint: OutPoint) -> Box<[u8]> {
-        Box::new(spending_prefix(outpoint).prefix)
+        Box::new(spending_prefix(outpoint))
     }
 
-    pub(crate) fn new(outpoint: OutPoint, height: usize) -> Self {
-        Self {
+    pub(crate) fn row(outpoint: OutPoint, height: usize) -> HashPrefixRow {
+        HashPrefixRow {
             prefix: spending_prefix(outpoint),
             height: Height::try_from(height).expect("invalid height"),
         }
-    }
-
-    pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
-    }
-
-    pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(row).expect("bad SpendingPrefixRow")
-    }
-
-    pub(crate) fn height(&self) -> usize {
-        usize::try_from(self.height).expect("invalid height")
     }
 }
 
 // ***************************************************************************
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct TxidPrefix {
-    prefix: [u8; HASH_PREFIX_LEN],
-}
-
-impl_consensus_encoding!(TxidPrefix, prefix);
-
-fn txid_prefix(txid: &Txid) -> TxidPrefix {
+fn txid_prefix(txid: &Txid) -> HashPrefix {
     let mut prefix = [0u8; HASH_PREFIX_LEN];
     prefix.copy_from_slice(&txid[..HASH_PREFIX_LEN]);
-    TxidPrefix { prefix }
+    prefix
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct TxidRow {
-    prefix: TxidPrefix,
-    height: Height, // transaction confirmed height
-}
-
-impl_consensus_encoding!(TxidRow, prefix, height);
+pub(crate) struct TxidRow;
 
 impl TxidRow {
     pub(crate) fn scan_prefix(txid: Txid) -> Box<[u8]> {
-        Box::new(txid_prefix(&txid).prefix)
+        Box::new(txid_prefix(&txid))
     }
 
-    pub(crate) fn new(txid: Txid, height: usize) -> Self {
-        Self {
+    pub(crate) fn row(txid: Txid, height: usize) -> HashPrefixRow {
+        HashPrefixRow {
             prefix: txid_prefix(&txid),
             height: Height::try_from(height).expect("invalid height"),
         }
-    }
-
-    pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
-    }
-
-    pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(row).expect("bad TxidRow")
-    }
-
-    pub(crate) fn height(&self) -> usize {
-        usize::try_from(self.height).expect("invalid height")
     }
 }
 
@@ -235,7 +181,7 @@ impl HeaderRow {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{spending_prefix, ScriptHash, ScriptHashRow, SpendingPrefix, TxidRow};
+    use crate::types::{spending_prefix, HashPrefixRow, ScriptHash, ScriptHashRow, TxidRow};
     use bitcoin::{hashes::hex::ToHex, Address, OutPoint, Txid};
     use serde_json::{from_str, json};
 
@@ -253,10 +199,10 @@ mod tests {
     fn test_scripthash_row() {
         let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
         let scripthash: ScriptHash = from_str(&hex).unwrap();
-        let row1 = ScriptHashRow::new(scripthash, 123456);
+        let row1 = ScriptHashRow::row(scripthash, 123456);
         let db_row = row1.to_db_row();
         assert_eq!(db_row[..].to_hex(), "a384491d38929fcc40e20100");
-        let row2 = ScriptHashRow::from_db_row(&db_row);
+        let row2 = HashPrefixRow::from_db_row(&db_row);
         assert_eq!(row1, row2);
     }
 
@@ -276,8 +222,8 @@ mod tests {
         let hex = "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599";
         let txid = Txid::from_str(hex).unwrap();
 
-        let row1 = TxidRow::new(txid, 91812);
-        let row2 = TxidRow::new(txid, 91842);
+        let row1 = TxidRow::row(txid, 91812);
+        let row2 = TxidRow::row(txid, 91842);
 
         assert_eq!(row1.to_db_row().to_hex(), "9985d82954e10f22a4660100");
         assert_eq!(row2.to_db_row().to_hex(), "9985d82954e10f22c2660100");
@@ -289,8 +235,8 @@ mod tests {
         let hex = "e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468";
         let txid = Txid::from_str(hex).unwrap();
 
-        let row1 = TxidRow::new(txid, 91722);
-        let row2 = TxidRow::new(txid, 91880);
+        let row1 = TxidRow::row(txid, 91722);
+        let row2 = TxidRow::row(txid, 91880);
 
         // low-endian encoding => rows should be sorted according to block height
         assert_eq!(row1.to_db_row().to_hex(), "68b45f58b674e94e4a660100");
@@ -304,27 +250,19 @@ mod tests {
 
         assert_eq!(
             spending_prefix(OutPoint { txid, vout: 0 }),
-            SpendingPrefix {
-                prefix: [31, 30, 29, 28, 27, 26, 25, 24]
-            }
+            [31, 30, 29, 28, 27, 26, 25, 24]
         );
         assert_eq!(
             spending_prefix(OutPoint { txid, vout: 10 }),
-            SpendingPrefix {
-                prefix: [31, 30, 29, 28, 27, 26, 25, 34]
-            }
+            [31, 30, 29, 28, 27, 26, 25, 34]
         );
         assert_eq!(
             spending_prefix(OutPoint { txid, vout: 255 }),
-            SpendingPrefix {
-                prefix: [31, 30, 29, 28, 27, 26, 26, 23]
-            }
+            [31, 30, 29, 28, 27, 26, 26, 23]
         );
         assert_eq!(
             spending_prefix(OutPoint { txid, vout: 256 }),
-            SpendingPrefix {
-                prefix: [31, 30, 29, 28, 27, 26, 26, 24]
-            }
+            [31, 30, 29, 28, 27, 26, 26, 24]
         );
     }
 }
