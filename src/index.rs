@@ -229,8 +229,8 @@ fn db_rows_size(rows: &[Row]) -> usize {
 }
 
 fn index_single_block(block: Block, height: usize) -> IndexResult {
-    let mut funding_rows = vec![];
-    let mut spending_rows = vec![];
+    let mut funding_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.output.len()).sum());
+    let mut spending_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.input.len()).sum());
     let mut txid_rows = Vec::with_capacity(block.txdata.len());
 
     for tx in &block.txdata {
