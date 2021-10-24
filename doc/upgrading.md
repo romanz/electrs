@@ -62,8 +62,8 @@ If a new version of `electrs` is not yet in the package system, try wait a few d
    If you've deleted it, you need to `git clone` again.
 2. `git checkout master`
 3. `git pull`
-4. Strongly recommended: `git verify-tag v0.9.0` (fix the version number if we've forgotten to update the docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
-5. `git checkout v0.9.0`
+4. Strongly recommended: `git verify-tag v0.9.1` (fix the version number if we've forgotten to update the docs ;)) should show "Good signature from 15C8 C357 4AE4 F1E2 5F3F 35C5 87CA E5FA 4691 7CBB"
+5. `git checkout v0.9.1`
 6. If you used static linking: `cargo build --locked --release`.
    If you used dynamic linking `ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --release`.
    If you don't remember which linking you used, you probably used static.
