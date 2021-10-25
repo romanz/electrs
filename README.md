@@ -9,10 +9,10 @@
 
 An efficient re-implementation of Electrum Server, inspired by [ElectrumX](https://github.com/kyuupichan/electrumx), [Electrum Personal Server](https://github.com/chris-belcher/electrum-personal-server) and [bitcoincore-indexd](https://github.com/jonasschnelli/bitcoincore-indexd).
 
-The motivation behind this project is to enable a user to run his own Electrum server,
+The motivation behind this project is to enable a user to self host an Electrum server,
 with required hardware resources not much beyond those of a [full node](https://en.bitcoin.it/wiki/Full_node#Why_should_you_use_a_full_node_wallet).
 The server indexes the entire Bitcoin blockchain, and the resulting index enables fast queries for any given user wallet,
-allowing the user to keep real-time track of his balances and his transaction history using the [Electrum wallet](https://electrum.org/).
+allowing the user to keep real-time track of balances and transaction history using the [Electrum wallet](https://electrum.org/).
 Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
 thus preserving the privacy of the user's addresses and balances.
 
