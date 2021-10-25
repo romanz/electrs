@@ -1,3 +1,11 @@
+# 0.9.2 (TBD)
+
+* Add a feature to ignore default config files (#396)
+* Support Rust 1.48.0 and test on Debian 11 (#455)
+* Ignore `cargo audit` warning in `tiny_http` (#575)
+* Re-organize and split documentation (#583)
+* Use `/electrs:$VERSION/` in p2p 'user-agent' (#585)
+
 # 0.9.1 (Oct 19 2021)
 
 * Initialize chain height metric (#515)
