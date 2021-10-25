@@ -44,7 +44,7 @@ tiny_http = { version = "0.9", optional = true }
 # support building with Rust 1.41.1 and workaround the following issues:
 # https://github.com/romanz/electrs/issues/403 (support building on ARM 32-bit)
 # https://github.com/romanz/electrs/issues/469 (dynamic linking on Debian 11)
-version = "0.15.0-e1"
+version = "0.15.0-e2"
 default-features = false
 # ZSTD is used for data compression
 # Snappy is only for checking old DB

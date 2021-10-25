@@ -5,6 +5,7 @@
 * Ignore `cargo audit` warning in `tiny_http` (#575)
 * Re-organize and split documentation (#583)
 * Use `/electrs:$VERSION/` in p2p 'user-agent' (#585)
+* Build rocksdb with conditional SSE support (#595)
 
 # 0.9.1 (Oct 19 2021)
 
