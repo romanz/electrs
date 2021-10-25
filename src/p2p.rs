@@ -258,6 +258,7 @@ impl Connection {
                         NetworkMessage::Block(block) => blocks_send.send(block)?,
                         NetworkMessage::Headers(headers) => headers_send.send(headers)?,
                         NetworkMessage::Alert(_) => (),  // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
+                        NetworkMessage::Addr(_) => (),   // unused
                         msg => warn!("unexpected message: {:?}", msg),
                     }
                 }
