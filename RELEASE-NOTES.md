@@ -6,6 +6,7 @@
 * Re-organize and split documentation (#583)
 * Use `/electrs:$VERSION/` in p2p 'user-agent' (#585)
 * Build rocksdb with conditional SSE support (#595)
+* Ignore 'addr' p2p messages (#596)
 
 # 0.9.1 (Oct 19 2021)
 
