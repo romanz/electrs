@@ -23,8 +23,7 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    pub fn new(config: &Config) -> Result<Self> {
-        let metrics = Metrics::new(config.monitoring_addr)?;
+    pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
         let store = DBStore::open(&config.db_path, config.auto_reindex)?;
         let chain = Chain::new(config.network);
         Ok(Self {

@@ -17,7 +17,7 @@ use crate::{
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
-    metrics::{self, Histogram},
+    metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
     tracker::Tracker,
@@ -122,15 +122,15 @@ pub struct Rpc {
 
 impl Rpc {
     /// Perform initial index sync (may take a while on first run).
-    pub fn new(config: &Config) -> Result<Self> {
-        let tracker = Tracker::new(config)?;
-        let rpc_duration = tracker.metrics().histogram_vec(
+    pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
+        let rpc_duration = metrics.histogram_vec(
             "rpc_duration",
             "RPC duration (in seconds)",
             "method",
             metrics::default_duration_buckets(),
         );
 
+        let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
         let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
         let cache = Cache::new(tracker.metrics());
@@ -395,7 +395,14 @@ impl Rpc {
         }))
     }
 
-    pub fn handle_request(&self, client: &mut Client, line: &str) -> String {
+    pub fn handle_requests(&self, client: &mut Client, lines: &[String]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| self.handle_request(client, &line))
+            .collect()
+    }
+
+    fn handle_request(&self, client: &mut Client, line: &str) -> String {
         let error_msg_no_id = |err| error_msg(Value::Null, RpcError::Standard(err));
         let response: Value = match serde_json::from_str(line) {
             // parse JSON from str

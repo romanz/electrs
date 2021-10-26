@@ -5,12 +5,14 @@ use rayon::prelude::*;
 use std::{
     collections::hash_map::HashMap,
     io::{BufRead, BufReader, Write},
+    iter::once,
     net::{Shutdown, TcpListener, TcpStream},
 };
 
 use crate::{
     config::Config,
     electrum::{Client, Rpc},
+    metrics::{self, Metrics},
     signals::ExitError,
     thread::spawn,
 };
@@ -60,7 +62,16 @@ pub fn run() -> Result<()> {
 
 fn serve() -> Result<()> {
     let config = Config::from_args();
-    let mut rpc = Rpc::new(&config)?;
+    let metrics = Metrics::new(config.monitoring_addr)?;
+
+    let server_batch_size = metrics.histogram_vec(
+        "server_batch_size",
+        "# of server events handled in a single batch",
+        "type",
+        metrics::default_size_buckets(),
+    );
+
+    let mut rpc = Rpc::new(&config, metrics)?;
 
     let (server_tx, server_rx) = unbounded();
     if !config.disable_electrum_rpc {
@@ -77,32 +88,29 @@ fn serve() -> Result<()> {
             return Ok(());
         }
         peers = notify_peers(&rpc, peers); // peers are disconnected on error.
-        loop {
-            select! {
-                // Handle signals for graceful shutdown
-                recv(rpc.signal().receiver()) -> result => {
-                    result.context("signal channel disconnected")?;
-                    rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
-                },
-                // Handle new blocks' notifications
-                recv(new_block_rx) -> result => match result {
-                    Ok(_) => break, // sync and update
-                    Err(_) => {
-                        info!("disconnected from bitcoind");
-                        return Ok(());
-                    }
-                },
-                // Handle Electrum RPC requests
-                recv(server_rx) -> event => {
-                    let event = event.context("server disconnected")?;
-                    handle_event(&rpc, &mut peers, event);
-                },
-                default(config.wait_duration) => break, // sync and update
-            };
-            // continue RPC processing (if more requests are pending)
-            if server_rx.is_empty() {
-                break;
-            }
+        select! {
+            // Handle signals for graceful shutdown
+            recv(rpc.signal().receiver()) -> result => {
+                result.context("signal channel disconnected")?;
+                rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
+            },
+            // Handle new blocks' notifications
+            recv(new_block_rx) -> result => match result {
+                Ok(_) => (), // sync and update
+                Err(_) => {
+                    info!("disconnected from bitcoind");
+                    return Ok(());
+                }
+            },
+            // Handle Electrum RPC requests
+            recv(server_rx) -> event => {
+                let first = once(event.context("server disconnected")?);
+                let rest = server_rx.iter().take(server_rx.len());
+                let events: Vec<Event> = first.chain(rest).collect();
+                server_batch_size.observe("recv", events.len());
+                handle_events(&rpc, &mut peers, events);
+            },
+            default(config.wait_duration) => (), // sync and update
         }
     }
 }
@@ -140,33 +148,50 @@ enum Message {
     Done,
 }
 
-fn handle_event(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, event: Event) {
-    let Event { msg, peer_id } = event;
-    match msg {
-        Message::New(stream) => {
-            debug!("{}: connected", peer_id);
-            peers.insert(peer_id, Peer::new(peer_id, stream));
-        }
-        Message::Request(line) => {
-            let result = match peers.get_mut(&peer_id) {
-                Some(peer) => handle_request(rpc, peer, &line),
-                None => return, // unknown peer
-            };
-            if let Err(e) = result {
-                error!("{}: disconnecting due to {}", peer_id, e);
-                peers.remove(&peer_id).unwrap().disconnect();
-            }
-        }
-        Message::Done => {
-            // already disconnected, just remove from peers' map
-            peers.remove(&peer_id);
-        }
+fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
+    let mut events_by_peer = HashMap::<usize, Vec<Message>>::new();
+    events
+        .into_iter()
+        .for_each(|e| events_by_peer.entry(e.peer_id).or_default().push(e.msg));
+    for (peer_id, messages) in events_by_peer {
+        handle_peer_events(rpc, peers, peer_id, messages);
     }
 }
 
-fn handle_request(rpc: &Rpc, peer: &mut Peer, line: &str) -> Result<()> {
-    let response = rpc.handle_request(&mut peer.client, line);
-    peer.send(vec![response])
+fn handle_peer_events(
+    rpc: &Rpc,
+    peers: &mut HashMap<usize, Peer>,
+    peer_id: usize,
+    messages: Vec<Message>,
+) {
+    let mut lines = vec![];
+    let mut done = false;
+    for msg in messages {
+        match msg {
+            Message::New(stream) => {
+                debug!("{}: connected", peer_id);
+                peers.insert(peer_id, Peer::new(peer_id, stream));
+            }
+            Message::Request(line) => lines.push(line),
+            Message::Done => {
+                done = true;
+                break;
+            }
+        }
+    }
+    let result = match peers.get_mut(&peer_id) {
+        Some(peer) => {
+            let responses = rpc.handle_requests(&mut peer.client, &lines);
+            peer.send(responses)
+        }
+        None => return, // unknown peer
+    };
+    if let Err(e) = result {
+        error!("{}: disconnecting due to {}", peer_id, e);
+        peers.remove(&peer_id).unwrap().disconnect();
+    } else if done {
+        peers.remove(&peer_id); // already disconnected, just remove from peers' map
+    }
 }
 
 fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
