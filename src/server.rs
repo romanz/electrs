@@ -64,21 +64,20 @@ fn serve() -> Result<()> {
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr)?;
 
-    let server_batch_size = metrics.histogram_vec(
-        "server_batch_size",
-        "# of server events handled in a single batch",
-        "type",
-        metrics::default_size_buckets(),
-    );
-
-    let mut rpc = Rpc::new(&config, metrics)?;
-
     let (server_tx, server_rx) = unbounded();
     if !config.disable_electrum_rpc {
         let listener = TcpListener::bind(config.electrum_rpc_addr)?;
         info!("serving Electrum RPC on {}", listener.local_addr()?);
         spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
     };
+
+    let server_batch_size = metrics.histogram_vec(
+        "server_batch_size",
+        "# of server events handled in a single batch",
+        "type",
+        metrics::default_size_buckets(),
+    );
+    let mut rpc = Rpc::new(&config, metrics)?;
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
