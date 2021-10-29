@@ -64,11 +64,11 @@ enum TxGetArgs {
     TxidVerbose(Txid, bool),
 }
 
-impl From<TxGetArgs> for (Txid, bool) {
-    fn from(args: TxGetArgs) -> Self {
+impl From<&TxGetArgs> for (Txid, bool) {
+    fn from(args: &TxGetArgs) -> Self {
         match args {
-            TxGetArgs::Txid((txid,)) => (txid, false),
-            TxGetArgs::TxidVerbose(txid, verbose) => (txid, verbose),
+            TxGetArgs::Txid((txid,)) => (*txid, false),
+            TxGetArgs::TxidVerbose(txid, verbose) => (*txid, *verbose),
         }
     }
 }
@@ -241,16 +241,16 @@ impl Rpc {
     fn scripthash_get_balance(
         &self,
         client: &Client,
-        (scripthash,): (ScriptHash,),
+        (scripthash,): &(ScriptHash,),
     ) -> Result<Value> {
-        let balance = match client.scripthashes.get(&scripthash) {
+        let balance = match client.scripthashes.get(scripthash) {
             Some(status) => self.tracker.get_balance(status),
             None => {
                 warn!(
                     "blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
                     scripthash
                 );
-                self.tracker.get_balance(&self.new_status(scripthash)?)
+                self.tracker.get_balance(&self.new_status(*scripthash)?)
             }
         };
         Ok(json!(balance))
@@ -259,16 +259,16 @@ impl Rpc {
     fn scripthash_get_history(
         &self,
         client: &Client,
-        (scripthash,): (ScriptHash,),
+        (scripthash,): &(ScriptHash,),
     ) -> Result<Value> {
-        let history_entries = match client.scripthashes.get(&scripthash) {
+        let history_entries = match client.scripthashes.get(scripthash) {
             Some(status) => json!(status.get_history()),
             None => {
                 warn!(
                     "blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
                     scripthash
                 );
-                json!(self.new_status(scripthash)?.get_history())
+                json!(self.new_status(*scripthash)?.get_history())
             }
         };
         Ok(history_entries)
@@ -277,16 +277,16 @@ impl Rpc {
     fn scripthash_list_unspent(
         &self,
         client: &Client,
-        (scripthash,): (ScriptHash,),
+        (scripthash,): &(ScriptHash,),
     ) -> Result<Value> {
-        let unspent_entries = match client.scripthashes.get(&scripthash) {
+        let unspent_entries = match client.scripthashes.get(scripthash) {
             Some(status) => self.tracker.get_unspent(status),
             None => {
                 warn!(
                     "blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
                     scripthash
                 );
-                self.tracker.get_unspent(&self.new_status(scripthash)?)
+                self.tracker.get_unspent(&self.new_status(*scripthash)?)
             }
         };
         Ok(json!(unspent_entries))
@@ -295,11 +295,11 @@ impl Rpc {
     fn scripthash_subscribe(
         &self,
         client: &mut Client,
-        (scripthash,): (ScriptHash,),
+        (scripthash,): &(ScriptHash,),
     ) -> Result<Value> {
-        let result = match client.scripthashes.entry(scripthash) {
+        let result = match client.scripthashes.entry(*scripthash) {
             Entry::Occupied(e) => e.get().statushash(),
-            Entry::Vacant(e) => e.insert(self.new_status(scripthash)?).statushash(),
+            Entry::Vacant(e) => e.insert(self.new_status(*scripthash)?).statushash(),
         };
         Ok(json!(result))
     }
@@ -311,14 +311,14 @@ impl Rpc {
         Ok(status)
     }
 
-    fn transaction_broadcast(&self, (tx_hex,): (String,)) -> Result<Value> {
+    fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
         let tx_bytes = Vec::from_hex(&tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
         let txid = self.daemon.broadcast(&tx)?;
         Ok(json!(txid))
     }
 
-    fn transaction_get(&self, args: TxGetArgs) -> Result<Value> {
+    fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
         let (txid, verbose) = args.into();
         if verbose {
             let blockhash = self.tracker.get_blockhash_by_txid(txid);
@@ -335,9 +335,9 @@ impl Rpc {
         })
     }
 
-    fn transaction_get_merkle(&self, (txid, height): (Txid, usize)) -> Result<Value> {
+    fn transaction_get_merkle(&self, (txid, height): &(Txid, usize)) -> Result<Value> {
         let chain = self.tracker.chain();
-        let blockhash = match chain.get_block_hash(height) {
+        let blockhash = match chain.get_block_hash(*height) {
             None => bail!("missing block at {}", height),
             Some(blockhash) => blockhash,
         };
@@ -348,12 +348,12 @@ impl Rpc {
                 "merkle": proof.to_hex(),
             })
         };
-        if let Some(result) = self.cache.get_proof(blockhash, txid, proof_to_value) {
+        if let Some(result) = self.cache.get_proof(blockhash, *txid, proof_to_value) {
             return Ok(result);
         }
         debug!("txids cache miss: {}", blockhash);
         let txids = self.daemon.get_block_txids(blockhash)?;
-        match txids.iter().position(|current_txid| *current_txid == txid) {
+        match txids.iter().position(|current_txid| *current_txid == *txid) {
             None => bail!("missing txid {} in block {}", txid, blockhash),
             Some(position) => Ok(proof_to_value(&Proof::create(&txids, position))),
         }
@@ -367,7 +367,7 @@ impl Rpc {
         format!("electrs/{}", ELECTRS_VERSION)
     }
 
-    fn version(&self, (client_id, client_version): (String, Version)) -> Result<Value> {
+    fn version(&self, (client_id, client_version): &(String, Version)) -> Result<Value> {
         match client_version {
             Version::Single(v) if v == PROTOCOL_VERSION => {
                 Ok(json!([self.server_id(), PROTOCOL_VERSION]))
@@ -423,17 +423,17 @@ impl Rpc {
     }
 
     fn single_call(&self, client: &mut Client, call: Result<Call, Value>) -> Value {
-        let Call { id, method, params } = match call {
+        let call = match call {
             Ok(call) => call,
             Err(response) => return response, // params parsing may fail - the response contains request id
         };
-        self.rpc_duration.observe_duration(&method, || {
-            let result = match params {
+        self.rpc_duration.observe_duration(&call.method, || {
+            let result = match &call.params {
                 Params::Banner => Ok(json!(self.banner)),
-                Params::BlockHeader(args) => self.block_header(args),
-                Params::BlockHeaders(args) => self.block_headers(args),
+                Params::BlockHeader(args) => self.block_header(*args),
+                Params::BlockHeaders(args) => self.block_headers(*args),
                 Params::Donation => Ok(Value::Null),
-                Params::EstimateFee(args) => self.estimate_fee(args),
+                Params::EstimateFee(args) => self.estimate_fee(*args),
                 Params::Features => self.features(),
                 Params::HeadersSubscribe => self.headers_subscribe(client),
                 Params::MempoolFeeHistogram => self.get_fee_histogram(),
@@ -449,19 +449,7 @@ impl Rpc {
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::Version(args) => self.version(args),
             };
-            match result {
-                Ok(value) => result_msg(id, value),
-                Err(err) => {
-                    warn!("RPC {} failed: {:#}", method, err);
-                    match err
-                        .downcast_ref::<bitcoincore_rpc::Error>()
-                        .and_then(extract_bitcoind_error)
-                    {
-                        Some(e) => error_msg(id, RpcError::DaemonError(e.clone())),
-                        None => error_msg(id, RpcError::BadRequest(err)),
-                    }
-                }
-            }
+            call.response(result)
         })
     }
 }
@@ -533,7 +521,23 @@ impl Call {
                 method: request.method,
                 params,
             }),
-            Err(e) => Err(error_msg(request.id, RpcError::Standard(e))),
+            Err(e) => Err(error_msg(&request.id, RpcError::Standard(e))),
+        }
+    }
+
+    fn response(&self, result: Result<Value>) -> Value {
+        match result {
+            Ok(value) => result_msg(&self.id, value),
+            Err(err) => {
+                warn!("RPC {} failed: {:#}", self.method, err);
+                match err
+                    .downcast_ref::<bitcoincore_rpc::Error>()
+                    .and_then(extract_bitcoind_error)
+                {
+                    Some(e) => error_msg(&self.id, RpcError::DaemonError(e.clone())),
+                    None => error_msg(&self.id, RpcError::BadRequest(err)),
+                }
+            }
         }
     }
 }
@@ -569,16 +573,16 @@ fn notification(method: &str, params: &[Value]) -> Value {
     json!({"jsonrpc": "2.0", "method": method, "params": params})
 }
 
-fn result_msg(id: Value, result: Value) -> Value {
+fn result_msg(id: &Value, result: Value) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "result": result})
 }
 
-fn error_msg(id: Value, error: RpcError) -> Value {
+fn error_msg(id: &Value, error: RpcError) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": error.to_value()})
 }
 
 fn error_msg_no_id(err: StandardError) -> Value {
-    error_msg(Value::Null, RpcError::Standard(err))
+    error_msg(&Value::Null, RpcError::Standard(err))
 }
 
 fn parse_requests(line: &str) -> Result<Requests, StandardError> {
