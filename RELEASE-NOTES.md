@@ -1,7 +1,8 @@
-# 0.9.2 (TBD)
+# 0.9.2 (Oct 31 2021)
 
 * Add a feature to ignore default config files (#396)
 * Support Rust 1.48.0 and test on Debian 11 (#455)
+* Allow multiple scripthashes' subscription in parallel(#464)
 * Ignore `cargo audit` warning in `tiny_http` (#575)
 * Re-organize and split documentation (#583)
 * Use `/electrs:$VERSION/` in p2p 'user-agent' (#585)
