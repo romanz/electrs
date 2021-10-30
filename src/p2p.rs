@@ -349,6 +349,7 @@ impl RawNetworkMessage {
             "pong" => NetworkMessage::Pong(Decodable::consensus_decode(&mut raw)?),
             "reject" => NetworkMessage::Reject(Decodable::consensus_decode(&mut raw)?),
             "alert" => NetworkMessage::Alert(Decodable::consensus_decode(&mut raw)?),
+            "addr" => NetworkMessage::Addr(Decodable::consensus_decode(&mut raw)?),
             _ => NetworkMessage::Unknown {
                 command: self.cmd,
                 payload: self.raw,
