@@ -46,6 +46,43 @@ const COLUMN_FAMILIES: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, S
 const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
 
+// Taken from https://github.com/facebook/rocksdb/blob/master/include/rocksdb/db.h#L654-L689
+const DB_PROPERIES: &[&str] = &[
+    "rocksdb.num-immutable-mem-table",
+    "rocksdb.mem-table-flush-pending",
+    "rocksdb.compaction-pending",
+    "rocksdb.background-errors",
+    "rocksdb.cur-size-active-mem-table",
+    "rocksdb.cur-size-all-mem-tables",
+    "rocksdb.size-all-mem-tables",
+    "rocksdb.num-entries-active-mem-table",
+    "rocksdb.num-entries-imm-mem-tables",
+    "rocksdb.num-deletes-active-mem-table",
+    "rocksdb.num-deletes-imm-mem-tables",
+    "rocksdb.estimate-num-keys",
+    "rocksdb.estimate-table-readers-mem",
+    "rocksdb.is-file-deletions-enabled",
+    "rocksdb.num-snapshots",
+    "rocksdb.oldest-snapshot-time",
+    "rocksdb.num-live-versions",
+    "rocksdb.current-super-version-number",
+    "rocksdb.estimate-live-data-size",
+    "rocksdb.min-log-number-to-keep",
+    "rocksdb.min-obsolete-sst-number-to-keep",
+    "rocksdb.total-sst-files-size",
+    "rocksdb.live-sst-files-size",
+    "rocksdb.base-level",
+    "rocksdb.estimate-pending-compaction-bytes",
+    "rocksdb.num-running-compactions",
+    "rocksdb.num-running-flushes",
+    "rocksdb.actual-delayed-write-rate",
+    "rocksdb.is-write-stopped",
+    "rocksdb.estimate-oldest-key-time",
+    "rocksdb.block-cache-capacity",
+    "rocksdb.block-cache-usage",
+    "rocksdb.block-cache-pinned-usage",
+];
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Config {
     compacted: bool,
@@ -220,21 +257,21 @@ impl DBStore {
             .expect("get_tip failed")
     }
 
-    pub(crate) fn write(&self, batch: WriteBatch) {
+    pub(crate) fn write(&self, batch: &WriteBatch) {
         let mut db_batch = rocksdb::WriteBatch::default();
-        for key in batch.funding_rows {
+        for key in &batch.funding_rows {
             db_batch.put_cf(self.funding_cf(), key, b"");
         }
-        for key in batch.spending_rows {
+        for key in &batch.spending_rows {
             db_batch.put_cf(self.spending_cf(), key, b"");
         }
-        for key in batch.txid_rows {
+        for key in &batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
         }
-        for key in batch.header_rows {
+        for key in &batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
         }
-        db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
+        db_batch.put_cf(self.headers_cf(), TIP_KEY, &batch.tip_row);
 
         let mut opts = rocksdb::WriteOptions::new();
         let bulk_import = self.bulk_import.load(Ordering::Relaxed);
@@ -272,8 +309,19 @@ impl DBStore {
         }
     }
 
-    pub(crate) fn get_size(&self) -> Result<u64> {
-        fs_extra::dir::get_size(self.db.path()).context("failed to get DB size")
+    pub(crate) fn get_properties(
+        &self,
+    ) -> impl Iterator<Item = (&'static str, &'static str, u64)> + '_ {
+        COLUMN_FAMILIES.iter().flat_map(move |cf_name| {
+            let cf = self.db.cf_handle(cf_name).expect("missing CF");
+            DB_PROPERIES.iter().filter_map(move |property_name| {
+                let value = self
+                    .db
+                    .property_int_value_cf(cf, property_name)
+                    .expect("failed to get property");
+                Some((*cf_name, *property_name, value?))
+            })
+        })
     }
 
     fn start_compactions(&self) {
@@ -380,7 +428,7 @@ mod tests {
 
         let mut batch = WriteBatch::default();
         batch.txid_rows = to_rows(&items);
-        store.write(batch);
+        store.write(&batch);
 
         let rows = store.iter_txid(b"abcdefgh".to_vec().into_boxed_slice());
         assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));

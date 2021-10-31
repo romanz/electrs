@@ -16,7 +16,7 @@ struct Stats {
     update_duration: Histogram,
     update_size: Histogram,
     height: Gauge,
-    db_size: Gauge,
+    db_properties: Gauge,
 }
 
 impl Stats {
@@ -35,7 +35,40 @@ impl Stats {
                 metrics::default_size_buckets(),
             ),
             height: metrics.gauge("index_height", "Indexed block height", "type"),
-            db_size: metrics.gauge("index_db_size", "Index DB size (bytes)", "type"),
+            db_properties: metrics.gauge("index_db_properties", "Index DB properties", "name"),
+        }
+    }
+
+    fn observe_duration<T>(&self, label: &str, f: impl FnOnce() -> T) -> T {
+        self.update_duration.observe_duration(label, f)
+    }
+
+    fn observe_size(&self, label: &str, rows: &[Row]) {
+        self.update_size.observe(label, db_rows_size(rows));
+    }
+
+    fn observe_batch(&self, batch: &WriteBatch) {
+        self.observe_size("write_funding_rows", &batch.funding_rows);
+        self.observe_size("write_spending_rows", &batch.spending_rows);
+        self.observe_size("write_txid_rows", &batch.txid_rows);
+        self.observe_size("write_header_rows", &batch.header_rows);
+        debug!(
+            "writing {} funding and {} spending rows from {} transactions, {} blocks",
+            batch.funding_rows.len(),
+            batch.spending_rows.len(),
+            batch.txid_rows.len(),
+            batch.header_rows.len()
+        );
+    }
+
+    fn observe_chain(&self, chain: &Chain) {
+        self.height.set("tip", chain.height() as f64);
+    }
+
+    fn observe_db(&self, store: &DBStore) {
+        for (cf, name, value) in store.get_properties() {
+            self.db_properties
+                .set(&format!("{}:{}", name, cf), value as f64);
         }
     }
 }
@@ -91,11 +124,9 @@ impl Index {
             chain.load(headers, tip);
             chain.drop_last_headers(reindex_last_blocks);
         };
-
         let stats = Stats::new(metrics);
-        stats.height.set("tip", chain.height() as f64);
-        stats.db_size.set("total", store.get_size()? as f64);
-
+        stats.observe_chain(&chain);
+        stats.observe_db(&store);
         Ok(Index {
             store,
             batch_size,
@@ -148,35 +179,12 @@ impl Index {
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
-    fn observe_duration<T>(&self, label: &str, f: impl FnOnce() -> T) -> T {
-        self.stats.update_duration.observe_duration(label, f)
-    }
-
-    fn observe_size(&self, label: &str, rows: &[Row]) {
-        self.stats.update_size.observe(label, db_rows_size(rows));
-    }
-
-    fn report_stats(&self, batch: &WriteBatch) {
-        self.observe_size("write_funding_rows", &batch.funding_rows);
-        self.observe_size("write_spending_rows", &batch.spending_rows);
-        self.observe_size("write_txid_rows", &batch.txid_rows);
-        self.observe_size("write_header_rows", &batch.header_rows);
-        debug!(
-            "writing {} funding and {} spending rows from {} transactions, {} blocks",
-            batch.funding_rows.len(),
-            batch.spending_rows.len(),
-            batch.txid_rows.len(),
-            batch.header_rows.len()
-        );
-    }
-
     pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<()> {
+        self.stats.observe_db(&self.store);
         loop {
-            self.stats
-                .db_size
-                .set("total", self.store.get_size()? as f64);
-            let new_headers =
-                self.observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
+            let new_headers = self
+                .stats
+                .observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
             if new_headers.is_empty() {
                 break;
             }
@@ -199,7 +207,7 @@ impl Index {
                 let mut batch = WriteBatch::default();
                 daemon.for_blocks(blockhashes, |_blockhash, block| {
                     let height = heights.next().expect("unexpected block");
-                    self.observe_duration("block", || {
+                    self.stats.observe_duration("block", || {
                         index_single_block(block, height).extend(&mut batch)
                     });
                     self.stats.height.set("tip", height as f64);
@@ -211,13 +219,13 @@ impl Index {
                     heights
                 );
                 batch.sort();
-                self.report_stats(&batch);
-                self.observe_duration("write", || self.store.write(batch));
+                self.stats.observe_batch(&batch);
                 self.stats
-                    .db_size
-                    .set("total", self.store.get_size()? as f64);
+                    .observe_duration("write", || self.store.write(&batch));
+                self.stats.observe_db(&self.store);
             }
             self.chain.update(new_headers);
+            self.stats.observe_chain(&self.chain);
         }
         self.store.flush();
         Ok(())
