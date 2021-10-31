@@ -244,7 +244,7 @@ impl Connection {
                         }
                         NetworkMessage::Inv(inventory) => {
                             debug!("peer inventory: {:?}", inventory);
-                            if inventory.iter().any(is_block_inv) {
+                            if inventory.iter().any(|inv| matches!(inv, Inventory::Block(_))) {
                                 let _ = new_block_send.try_send(()); // best-effort notification
                             }
 
@@ -311,15 +311,6 @@ fn build_version_message() -> NetworkMessage {
         start_height: 0,
         relay: false,
     })
-}
-
-fn is_block_inv(inv: &Inventory) -> bool {
-    #![allow(clippy::match_like_matches_macro)] // TODO: remove after dropping Rust 1.41.1 support
-    if let Inventory::Block(_) = inv {
-        true
-    } else {
-        false
-    }
 }
 
 struct RawNetworkMessage {
