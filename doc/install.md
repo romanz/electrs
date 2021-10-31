@@ -7,7 +7,7 @@
 Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries.
 Make sure to use latest OS! (see #226)
 
-Install [recent Rust](https://rustup.rs/) (1.41.1+, `apt install cargo` is preferred for Debian 10),
+Install [recent Rust](https://rustup.rs/) (1.48.0+, `apt install cargo` is preferred for Debian 11),
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.21+)
 and [latest Electrum wallet](https://electrum.org/#download) (4.0+).
 
