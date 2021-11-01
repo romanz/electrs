@@ -105,7 +105,6 @@ First create the service file
 Copy and paste the below. Edit the 'username' accordingly.
 
 ```
-
 [Unit]
 Description=Electrs
 After=bitcoind.service
