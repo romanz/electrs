@@ -1,3 +1,9 @@
+# 0.9.3 (TBD)
+
+* Update MSRV requirements to Rust 1.48 (#603)
+* Bump `env_logger` to 0.9 (#604)
+* Monitor RocksDB statistics via Prometheus (#605)
+
 # 0.9.2 (Oct 31 2021)
 
 * Add a feature to ignore default config files (#396)
