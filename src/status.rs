@@ -343,16 +343,15 @@ impl ScriptHashStatus {
                         return None;
                     }
                     cache.add_tx(*txid, move || tx);
+                    cache.add_proof(blockhash, *txid, || Proof::create(&funding_txids, pos));
                     Some((pos, txid, funding_outputs))
                 })
                 .collect();
 
+            let block_entries = result.entry(blockhash).or_default();
             for (pos, txid, funding_outputs) in found {
-                cache.add_proof(blockhash, *txid, || Proof::create(&funding_txids, pos));
                 outpoints.extend(make_outpoints(txid, &funding_outputs));
-                result
-                    .entry(blockhash)
-                    .or_default()
+                block_entries
                     .entry(pos)
                     .or_insert_with(|| TxEntry::new(*txid))
                     .outputs = funding_outputs;
@@ -375,15 +374,14 @@ impl ScriptHashStatus {
                         return None;
                     }
                     cache.add_tx(*txid, move || tx);
+                    cache.add_proof(blockhash, *txid, || Proof::create(&spending_txids, pos));
                     Some((pos, txid, spent_outpoints))
                 })
                 .collect();
 
+            let block_entries = result.entry(blockhash).or_default();
             for (pos, txid, spent_outpoints) in found {
-                cache.add_proof(blockhash, *txid, || Proof::create(&spending_txids, pos));
-                result
-                    .entry(blockhash)
-                    .or_default()
+                block_entries
                     .entry(pos)
                     .or_insert_with(|| TxEntry::new(*txid))
                     .spent = spent_outpoints;
