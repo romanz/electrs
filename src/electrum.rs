@@ -27,6 +27,8 @@ use crate::{
 const PROTOCOL_VERSION: &str = "1.4";
 const UNKNOWN_FEE: isize = -1; // (allowed by Electrum protocol)
 
+const UNSUBSCRIBED_QUERY_MESSAGE: &str = "your wallet uses less efficient method of querying electrs, consider contacting the developer of your wallet. Reason:";
+
 /// Per-client Electrum protocol state
 #[derive(Default)]
 pub struct Client {
@@ -246,9 +248,9 @@ impl Rpc {
         let balance = match client.scripthashes.get(scripthash) {
             Some(status) => self.tracker.get_balance(status),
             None => {
-                warn!(
-                    "blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
-                    scripthash
+                info!(
+                    "{}: blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
+                    UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 self.tracker.get_balance(&self.new_status(*scripthash)?)
             }
@@ -264,9 +266,9 @@ impl Rpc {
         let history_entries = match client.scripthashes.get(scripthash) {
             Some(status) => json!(status.get_history()),
             None => {
-                warn!(
-                    "blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
-                    scripthash
+                info!(
+                    "{}: blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
+                    UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 json!(self.new_status(*scripthash)?.get_history())
             }
@@ -282,9 +284,9 @@ impl Rpc {
         let unspent_entries = match client.scripthashes.get(scripthash) {
             Some(status) => self.tracker.get_unspent(status),
             None => {
-                warn!(
-                    "blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
-                    scripthash
+                info!(
+                    "{}: blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
+                    UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 self.tracker.get_unspent(&self.new_status(*scripthash)?)
             }
