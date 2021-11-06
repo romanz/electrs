@@ -331,21 +331,15 @@ impl ScriptHashStatus {
 
         let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let funding_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
-            let found: Vec<(TxPosition, Transaction, Txid, Vec<TxOutput>, Proof)> = block
-                .txdata
-                .into_par_iter()
-                .zip(&funding_txids)
-                .enumerate()
-                .filter_map(|(pos, (tx, txid))| {
-                    let funding_outputs = filter_outputs(&tx, &self.scripthash);
-                    if funding_outputs.is_empty() {
-                        return None;
-                    }
-                    let proof = Proof::create(&funding_txids, pos);
-                    Some((pos, tx, *txid, funding_outputs, proof))
-                })
-                .collect();
+            let found = filter_block_txs(block, |pos, tx, funding_txids| {
+                let funding_outputs = filter_outputs(&tx, &self.scripthash);
+                if funding_outputs.is_empty() {
+                    return None;
+                }
+                let txid = funding_txids[pos];
+                let proof = Proof::create(&funding_txids, pos);
+                Some((pos, tx, txid, funding_outputs, proof))
+            });
 
             let block_entries = result.entry(blockhash).or_default();
             for (pos, tx, txid, funding_outputs, proof) in found {
@@ -363,21 +357,15 @@ impl ScriptHashStatus {
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let spending_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
-            let found: Vec<(TxPosition, Transaction, Txid, Vec<OutPoint>, Proof)> = block
-                .txdata
-                .into_par_iter()
-                .zip(&spending_txids)
-                .enumerate()
-                .filter_map(|(pos, (tx, txid))| {
-                    let spent_outpoints = filter_inputs(&tx, outpoints);
-                    if spent_outpoints.is_empty() {
-                        return None;
-                    }
-                    let proof = Proof::create(&spending_txids, pos);
-                    Some((pos, tx, *txid, spent_outpoints, proof))
-                })
-                .collect();
+            let found = filter_block_txs(block, |pos, tx, spending_txids| {
+                let spent_outpoints = filter_inputs(&tx, outpoints);
+                if spent_outpoints.is_empty() {
+                    return None;
+                }
+                let txid = spending_txids[pos];
+                let proof = Proof::create(&spending_txids, pos);
+                Some((pos, tx, txid, spent_outpoints, proof))
+            });
 
             let block_entries = result.entry(blockhash).or_default();
             for (pos, tx, txid, spent_outpoints, proof) in found {
@@ -526,6 +514,19 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
         entry.hash(&mut engine);
     }
     Some(StatusHash::from_engine(engine))
+}
+
+fn filter_block_txs<T: Send>(
+    block: Block,
+    f: impl Fn(usize, Transaction, &[Txid]) -> Option<T> + Sync,
+) -> Vec<T> {
+    let txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
+    block
+        .txdata
+        .into_par_iter()
+        .enumerate()
+        .filter_map(|(pos, tx)| f(pos, tx, &txids))
+        .collect()
 }
 
 #[cfg(test)]
