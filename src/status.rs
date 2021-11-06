@@ -42,7 +42,7 @@ impl TxEntry {
 
     /// Relevant (scripthash-wise) funded outpoints
     fn funding_outpoints(&self) -> impl Iterator<Item = OutPoint> + '_ {
-        make_outpoints(&self.txid, &self.outputs)
+        make_outpoints(self.txid, &self.outputs)
     }
 }
 
@@ -332,7 +332,7 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let funding_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
-            let found: Vec<(usize, &Txid, Vec<TxOutput>)> = block
+            let found: Vec<(TxPosition, Transaction, Txid, Vec<TxOutput>, Proof)> = block
                 .txdata
                 .into_par_iter()
                 .zip(&funding_txids)
@@ -342,18 +342,19 @@ impl ScriptHashStatus {
                     if funding_outputs.is_empty() {
                         return None;
                     }
-                    cache.add_tx(*txid, move || tx);
-                    cache.add_proof(blockhash, *txid, || Proof::create(&funding_txids, pos));
-                    Some((pos, txid, funding_outputs))
+                    let proof = Proof::create(&funding_txids, pos);
+                    Some((pos, tx, *txid, funding_outputs, proof))
                 })
                 .collect();
 
             let block_entries = result.entry(blockhash).or_default();
-            for (pos, txid, funding_outputs) in found {
+            for (pos, tx, txid, funding_outputs, proof) in found {
+                cache.add_tx(txid, move || tx);
+                cache.add_proof(blockhash, txid, proof);
                 outpoints.extend(make_outpoints(txid, &funding_outputs));
                 block_entries
                     .entry(pos)
-                    .or_insert_with(|| TxEntry::new(*txid))
+                    .or_insert_with(|| TxEntry::new(txid))
                     .outputs = funding_outputs;
             }
         })?;
@@ -363,7 +364,7 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let spending_txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
-            let found: Vec<(usize, &Txid, Vec<OutPoint>)> = block
+            let found: Vec<(TxPosition, Transaction, Txid, Vec<OutPoint>, Proof)> = block
                 .txdata
                 .into_par_iter()
                 .zip(&spending_txids)
@@ -373,17 +374,18 @@ impl ScriptHashStatus {
                     if spent_outpoints.is_empty() {
                         return None;
                     }
-                    cache.add_tx(*txid, move || tx);
-                    cache.add_proof(blockhash, *txid, || Proof::create(&spending_txids, pos));
-                    Some((pos, txid, spent_outpoints))
+                    let proof = Proof::create(&spending_txids, pos);
+                    Some((pos, tx, *txid, spent_outpoints, proof))
                 })
                 .collect();
 
             let block_entries = result.entry(blockhash).or_default();
-            for (pos, txid, spent_outpoints) in found {
+            for (pos, tx, txid, spent_outpoints, proof) in found {
+                cache.add_tx(txid, move || tx);
+                cache.add_proof(blockhash, txid, proof);
                 block_entries
                     .entry(pos)
-                    .or_insert_with(|| TxEntry::new(*txid))
+                    .or_insert_with(|| TxEntry::new(txid))
                     .spent = spent_outpoints;
             }
         })?;
@@ -415,7 +417,7 @@ impl ScriptHashStatus {
         for entry in mempool.filter_by_funding(&self.scripthash) {
             let funding_outputs = filter_outputs(&entry.tx, &self.scripthash);
             assert!(!funding_outputs.is_empty());
-            outpoints.extend(make_outpoints(&entry.txid, &funding_outputs));
+            outpoints.extend(make_outpoints(entry.txid, &funding_outputs));
             result
                 .entry(entry.txid)
                 .or_insert_with(|| TxEntry::new(entry.txid))
@@ -480,13 +482,10 @@ impl ScriptHashStatus {
     }
 }
 
-fn make_outpoints<'a>(
-    txid: &'a Txid,
-    outputs: &'a [TxOutput],
-) -> impl Iterator<Item = OutPoint> + 'a {
+fn make_outpoints<'a>(txid: Txid, outputs: &'a [TxOutput]) -> impl Iterator<Item = OutPoint> + 'a {
     outputs
         .iter()
-        .map(move |out| OutPoint::new(*txid, out.index))
+        .map(move |out| OutPoint::new(txid, out.index))
 }
 
 fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<TxOutput> {

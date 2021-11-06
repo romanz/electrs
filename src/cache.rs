@@ -46,14 +46,11 @@ impl Cache {
         self.txs.read().get(txid).map(f)
     }
 
-    pub fn add_proof<F>(&self, blockhash: BlockHash, txid: Txid, f: F)
-    where
-        F: FnOnce() -> Proof,
-    {
+    pub fn add_proof(&self, blockhash: BlockHash, txid: Txid, proof: Proof) {
         self.proofs
             .write()
             .entry((blockhash, txid))
-            .or_insert_with(f);
+            .or_insert(proof);
     }
 
     pub fn get_proof<F, T>(&self, blockhash: BlockHash, txid: Txid, f: F) -> Option<T>
