@@ -324,58 +324,59 @@ impl ScriptHashStatus {
         index: &Index,
         daemon: &Daemon,
         cache: &Cache,
+        cache_proofs: bool,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
-        type TxPosition = usize; // transaction position within a block
-        let mut result = HashMap::<BlockHash, HashMap<TxPosition, TxEntry>>::new();
+        let scripthash = self.scripthash;
+        let mut result = HashMap::<BlockHash, HashMap<usize, TxEntry>>::new();
 
-        let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
+        let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let found = filter_block_txs(block, |pos, tx, funding_txids| {
-                let funding_outputs = filter_outputs(&tx, &self.scripthash);
-                if funding_outputs.is_empty() {
-                    return None;
-                }
-                let txid = funding_txids[pos];
-                let proof = Proof::create(&funding_txids, pos);
-                Some((pos, tx, txid, funding_outputs, proof))
-            });
-
             let block_entries = result.entry(blockhash).or_default();
-            for (pos, tx, txid, funding_outputs, proof) in found {
-                cache.add_tx(txid, move || tx);
-                cache.add_proof(blockhash, txid, proof);
-                outpoints.extend(make_outpoints(txid, &funding_outputs));
-                block_entries
-                    .entry(pos)
-                    .or_insert_with(|| TxEntry::new(txid))
-                    .outputs = funding_outputs;
-            }
+            filter_block_txs(block, |tx| filter_outputs(&tx, scripthash), cache_proofs).for_each(
+                |FilteredTx {
+                     pos,
+                     tx,
+                     txid,
+                     proof,
+                     result: funding_outputs,
+                 }| {
+                    cache.add_tx(txid, move || tx);
+                    if let Some(proof) = proof {
+                        cache.add_proof(blockhash, txid, proof);
+                    }
+                    outpoints.extend(make_outpoints(txid, &funding_outputs));
+                    block_entries
+                        .entry(pos)
+                        .or_insert_with(|| TxEntry::new(txid))
+                        .outputs = funding_outputs;
+                },
+            );
         })?;
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let found = filter_block_txs(block, |pos, tx, spending_txids| {
-                let spent_outpoints = filter_inputs(&tx, outpoints);
-                if spent_outpoints.is_empty() {
-                    return None;
-                }
-                let txid = spending_txids[pos];
-                let proof = Proof::create(&spending_txids, pos);
-                Some((pos, tx, txid, spent_outpoints, proof))
-            });
-
             let block_entries = result.entry(blockhash).or_default();
-            for (pos, tx, txid, spent_outpoints, proof) in found {
-                cache.add_tx(txid, move || tx);
-                cache.add_proof(blockhash, txid, proof);
-                block_entries
-                    .entry(pos)
-                    .or_insert_with(|| TxEntry::new(txid))
-                    .spent = spent_outpoints;
-            }
+            filter_block_txs(block, |tx| filter_inputs(&tx, outpoints), cache_proofs).for_each(
+                |FilteredTx {
+                     pos,
+                     tx,
+                     txid,
+                     proof,
+                     result: spent_outpoints,
+                 }| {
+                    cache.add_tx(txid, move || tx);
+                    if let Some(proof) = proof {
+                        cache.add_proof(blockhash, txid, proof);
+                    }
+                    block_entries
+                        .entry(pos)
+                        .or_insert_with(|| TxEntry::new(txid))
+                        .spent = spent_outpoints;
+                },
+            );
         })?;
 
         Ok(result
@@ -384,7 +385,7 @@ impl ScriptHashStatus {
                 // sort transactions by their position in a block
                 let sorted_entries = entries_map
                     .into_iter()
-                    .collect::<BTreeMap<TxPosition, TxEntry>>()
+                    .collect::<BTreeMap<usize, TxEntry>>()
                     .into_iter()
                     .map(|(_pos, entry)| entry)
                     .collect::<Vec<TxEntry>>();
@@ -403,7 +404,7 @@ impl ScriptHashStatus {
     ) -> Vec<TxEntry> {
         let mut result = HashMap::<Txid, TxEntry>::new();
         for entry in mempool.filter_by_funding(&self.scripthash) {
-            let funding_outputs = filter_outputs(&entry.tx, &self.scripthash);
+            let funding_outputs = filter_outputs(&entry.tx, self.scripthash);
             assert!(!funding_outputs.is_empty());
             outpoints.extend(make_outpoints(entry.txid, &funding_outputs));
             result
@@ -435,12 +436,13 @@ impl ScriptHashStatus {
         mempool: &Mempool,
         daemon: &Daemon,
         cache: &Cache,
+        cache_proofs: bool,
     ) -> Result<()> {
         let mut outpoints: HashSet<OutPoint> = self.confirmed_outpoints(index.chain());
 
         let new_tip = index.chain().tip();
         if self.tip != new_tip {
-            let update = self.sync_confirmed(index, daemon, cache, &mut outpoints)?;
+            let update = self.sync_confirmed(index, daemon, cache, cache_proofs, &mut outpoints)?;
             self.confirmed.extend(update);
             self.tip = new_tip;
         }
@@ -476,11 +478,11 @@ fn make_outpoints<'a>(txid: Txid, outputs: &'a [TxOutput]) -> impl Iterator<Item
         .map(move |out| OutPoint::new(txid, out.index))
 }
 
-fn filter_outputs(tx: &Transaction, scripthash: &ScriptHash) -> Vec<TxOutput> {
+fn filter_outputs(tx: &Transaction, scripthash: ScriptHash) -> Vec<TxOutput> {
     let outputs = tx.output.iter().zip(0u32..);
     outputs
         .filter_map(move |(txo, vout)| {
-            if ScriptHash::new(&txo.script_pubkey) == *scripthash {
+            if ScriptHash::new(&txo.script_pubkey) == scripthash {
                 Some(TxOutput {
                     index: vout,
                     value: Amount::from_sat(txo.value),
@@ -516,17 +518,48 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
     Some(StatusHash::from_engine(engine))
 }
 
+struct FilteredTx<T> {
+    tx: Transaction,
+    txid: Txid,
+    pos: usize,
+    proof: Option<Proof>,
+    result: Vec<T>,
+}
+
 fn filter_block_txs<T: Send>(
     block: Block,
-    f: impl Fn(usize, Transaction, &[Txid]) -> Option<T> + Sync,
-) -> Vec<T> {
-    let txids: Vec<Txid> = block.txdata.par_iter().map(|tx| tx.txid()).collect();
+    map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
+    cache_proofs: bool,
+) -> impl Iterator<Item = FilteredTx<T>> {
+    let txids: Vec<Txid> = if cache_proofs {
+        block.txdata.par_iter().map(|tx| tx.txid()).collect()
+    } else {
+        vec![] // txids are not needed if we don't cache merkle proofs
+    };
     block
         .txdata
         .into_par_iter()
         .enumerate()
-        .filter_map(|(pos, tx)| f(pos, tx, &txids))
-        .collect()
+        .filter_map(|(pos, tx)| {
+            let result = map_fn(&tx);
+            if result.is_empty() {
+                return None; // skip irrelevant transaction
+            }
+            let txid = txids.get(pos).copied().unwrap_or_else(|| tx.txid());
+            Some(FilteredTx {
+                tx,
+                txid,
+                pos,
+                proof: if cache_proofs {
+                    Some(Proof::create(&txids, pos))
+                } else {
+                    None
+                },
+                result,
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
 }
 
 #[cfg(test)]

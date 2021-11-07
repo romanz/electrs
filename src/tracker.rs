@@ -20,6 +20,7 @@ pub struct Tracker {
     mempool: Mempool,
     metrics: Metrics,
     ignore_mempool: bool,
+    cache_merkle_proofs: bool,
 }
 
 impl Tracker {
@@ -39,6 +40,7 @@ impl Tracker {
             mempool: Mempool::new(&metrics),
             metrics,
             ignore_mempool: config.ignore_mempool,
+            cache_merkle_proofs: config.cache_merkle_proofs,
         })
     }
 
@@ -74,7 +76,13 @@ impl Tracker {
         cache: &Cache,
     ) -> Result<bool> {
         let prev_statushash = status.statushash();
-        status.sync(&self.index, &self.mempool, daemon, cache)?;
+        status.sync(
+            &self.index,
+            &self.mempool,
+            daemon,
+            cache,
+            self.cache_merkle_proofs,
+        )?;
         Ok(prev_statushash != status.statushash())
     }
 

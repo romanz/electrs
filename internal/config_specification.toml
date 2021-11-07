@@ -104,6 +104,10 @@ doc = "Disable Electrum RPC server - only sync and index blocks."
 name = "sync_once"
 doc = "Exit after the initial sync is over (don't start Electrum server)."
 
+[[switch]]
+name = "cache_merkle_proofs"
+doc = "Cache merkle proofs on subscription (if disabled, they are computed on demand)."
+
 [[param]]
 name = "index_lookup_limit"
 type = "usize"
