@@ -308,6 +308,11 @@ impl Config {
             std::process::exit(1);
         }
 
+        if config.version {
+            println!("v{}", ELECTRS_VERSION);
+            std::process::exit(0);
+        }
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,

@@ -108,6 +108,10 @@ doc = "Exit after the initial sync is over (don't start Electrum server)."
 name = "cache_merkle_proofs"
 doc = "Cache merkle proofs on subscription (if disabled, they are computed on demand)."
 
+[[switch]]
+name = "version"
+doc = "Print out the program version."
+
 [[param]]
 name = "index_lookup_limit"
 type = "usize"
