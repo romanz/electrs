@@ -249,7 +249,7 @@ impl Rpc {
             Some(status) => self.tracker.get_balance(status),
             None => {
                 info!(
-                    "{}: blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
+                    "{} blockchain.scripthash.get_balance called for unsubscribed scripthash: {}",
                     UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 self.tracker.get_balance(&self.new_status(*scripthash)?)
@@ -267,7 +267,7 @@ impl Rpc {
             Some(status) => json!(status.get_history()),
             None => {
                 info!(
-                    "{}: blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
+                    "{} blockchain.scripthash.get_history called for unsubscribed scripthash: {}",
                     UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 json!(self.new_status(*scripthash)?.get_history())
@@ -285,7 +285,7 @@ impl Rpc {
             Some(status) => self.tracker.get_unspent(status),
             None => {
                 info!(
-                    "{}: blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
+                    "{} blockchain.scripthash.listunspent called for unsubscribed scripthash: {}",
                     UNSUBSCRIBED_QUERY_MESSAGE, scripthash
                 );
                 self.tracker.get_unspent(&self.new_status(*scripthash)?)
