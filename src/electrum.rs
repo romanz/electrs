@@ -358,7 +358,7 @@ impl Rpc {
         Ok(match cached {
             Some(tx_hex) => json!(tx_hex),
             None => {
-                debug!("tx cache miss: {}", txid);
+                debug!("tx cache miss: txid={}", txid);
                 let blockhash = self.tracker.get_blockhash_by_txid(txid);
                 json!(self.daemon.get_transaction_hex(&txid, blockhash)?)
             }
@@ -381,7 +381,7 @@ impl Rpc {
         if let Some(result) = self.cache.get_proof(blockhash, *txid, proof_to_value) {
             return Ok(result);
         }
-        debug!("txids cache miss: {}", blockhash);
+        debug!("proof cache miss: blockhash={} txid={}", blockhash, txid);
         let txids = self.daemon.get_block_txids(blockhash)?;
         match txids.iter().position(|current_txid| *current_txid == *txid) {
             None => bail!("missing txid {} in block {}", txid, blockhash),
