@@ -287,12 +287,10 @@ impl Config {
             }
         });
 
-        let level = match config.verbose {
-            0 => log::LevelFilter::Error,
-            1 => log::LevelFilter::Warn,
-            2 => log::LevelFilter::Info,
-            _ => log::LevelFilter::Debug,
-        };
+        if config.verbose > 0 {
+            eprintln!("Error: please use `log_filter` to set logging verbosity",);
+            std::process::exit(1);
+        }
 
         let index_lookup_limit = match config.index_lookup_limit {
             0 => None,
@@ -340,7 +338,6 @@ impl Config {
         env_logger::Builder::from_default_env()
             .default_format()
             .format_timestamp_millis()
-            .filter_level(level)
             .init();
         config
     }
