@@ -5,6 +5,7 @@
 * Monitor RocksDB statistics via Prometheus (#605)
 * Don't warn when queried with unsubscribed scripthashes (#609)
 * Allow skipping merkle proofs' during subscription (#610)
+* Remove `verbose` configuration (#615)
 
 # 0.9.2 (Oct 31 2021)
 

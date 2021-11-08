@@ -1,3 +1,9 @@
+### Important changes from versions older than 0.9.3
+
+* If you use `verbose` (or `-v` argument), switch to `log_filters` (or `RUST_LOG` environment variable).
+  Please note that it allows to set per-module filters, but module naming is considered unstable.
+
+
 ### Important changes from versions older than 0.9.0
 
 In 0.9.0 we have changed the RocksDB index format to optimize electrs performance.
