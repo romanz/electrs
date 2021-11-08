@@ -15,7 +15,6 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    merkle::Proof,
     types::{ScriptHash, StatusHash},
 };
 
@@ -324,7 +323,6 @@ impl ScriptHashStatus {
         index: &Index,
         daemon: &Daemon,
         cache: &Cache,
-        cache_proofs: bool,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
         let scripthash = self.scripthash;
@@ -333,18 +331,14 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(&tx, scripthash), cache_proofs).for_each(
+            filter_block_txs(block, |tx| filter_outputs(&tx, scripthash)).for_each(
                 |FilteredTx {
                      pos,
                      tx,
                      txid,
-                     proof,
                      result: funding_outputs,
                  }| {
                     cache.add_tx(txid, move || tx);
-                    if let Some(proof) = proof {
-                        cache.add_proof(blockhash, txid, proof);
-                    }
                     outpoints.extend(make_outpoints(txid, &funding_outputs));
                     block_entries
                         .entry(pos)
@@ -359,18 +353,14 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(&tx, outpoints), cache_proofs).for_each(
+            filter_block_txs(block, |tx| filter_inputs(&tx, outpoints)).for_each(
                 |FilteredTx {
                      pos,
                      tx,
                      txid,
-                     proof,
                      result: spent_outpoints,
                  }| {
                     cache.add_tx(txid, move || tx);
-                    if let Some(proof) = proof {
-                        cache.add_proof(blockhash, txid, proof);
-                    }
                     block_entries
                         .entry(pos)
                         .or_insert_with(|| TxEntry::new(txid))
@@ -436,13 +426,12 @@ impl ScriptHashStatus {
         mempool: &Mempool,
         daemon: &Daemon,
         cache: &Cache,
-        cache_proofs: bool,
     ) -> Result<()> {
         let mut outpoints: HashSet<OutPoint> = self.confirmed_outpoints(index.chain());
 
         let new_tip = index.chain().tip();
         if self.tip != new_tip {
-            let update = self.sync_confirmed(index, daemon, cache, cache_proofs, &mut outpoints)?;
+            let update = self.sync_confirmed(index, daemon, cache, &mut outpoints)?;
             self.confirmed.extend(update);
             self.tip = new_tip;
         }
@@ -522,20 +511,13 @@ struct FilteredTx<T> {
     tx: Transaction,
     txid: Txid,
     pos: usize,
-    proof: Option<Proof>,
     result: Vec<T>,
 }
 
 fn filter_block_txs<T: Send>(
     block: Block,
     map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
-    cache_proofs: bool,
 ) -> impl Iterator<Item = FilteredTx<T>> {
-    let txids: Vec<Txid> = if cache_proofs {
-        block.txdata.par_iter().map(|tx| tx.txid()).collect()
-    } else {
-        vec![] // txids are not needed if we don't cache merkle proofs
-    };
     block
         .txdata
         .into_par_iter()
@@ -545,16 +527,11 @@ fn filter_block_txs<T: Send>(
             if result.is_empty() {
                 return None; // skip irrelevant transaction
             }
-            let txid = txids.get(pos).copied().unwrap_or_else(|| tx.txid());
+            let txid = tx.txid();
             Some(FilteredTx {
                 tx,
                 txid,
                 pos,
-                proof: if cache_proofs {
-                    Some(Proof::create(&txids, pos))
-                } else {
-                    None
-                },
                 result,
             })
         })

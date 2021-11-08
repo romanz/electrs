@@ -105,10 +105,6 @@ name = "sync_once"
 doc = "Exit after the initial sync is over (don't start Electrum server)."
 
 [[switch]]
-name = "cache_merkle_proofs"
-doc = "Cache merkle proofs on subscription (if disabled, they are computed on demand)."
-
-[[switch]]
 name = "version"
 doc = "Print out the program version."
 
