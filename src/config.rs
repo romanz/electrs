@@ -288,9 +288,10 @@ impl Config {
         });
 
         if config.verbose > 0 {
-            eprintln!("Error: please use `log_filter` to set logging verbosity",);
+            eprintln!("Error: please use `log_filters` to set logging verbosity",);
             std::process::exit(1);
         }
+        let log_filters = config.log_filters;
 
         let index_lookup_limit = match config.index_lookup_limit {
             0 => None,
@@ -335,10 +336,13 @@ impl Config {
             "Starting electrs {} on {} {} with {:?}",
             ELECTRS_VERSION, ARCH, OS, config
         );
-        env_logger::Builder::from_default_env()
-            .default_format()
-            .format_timestamp_millis()
-            .init();
+        let mut builder = env_logger::Builder::from_default_env();
+        builder.default_format().format_timestamp_millis();
+        if let Some(log_filters) = &log_filters {
+            builder.parse_filters(log_filters);
+        }
+        builder.init();
+
         config
     }
 }

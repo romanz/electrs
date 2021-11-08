@@ -125,3 +125,8 @@ name = "server_banner"
 type = "String"
 doc = "The banner to be shown in the Electrum console"
 default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Electrum Rust Server)!\").to_owned()"
+
+[[param]]
+name = "log_filters"
+type = "String"
+doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"
