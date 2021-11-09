@@ -11,6 +11,7 @@ use crate::util::{
 #[cfg(not(feature = "liquid"))]
 use {bitcoin::consensus::encode, std::str::FromStr};
 
+use bitcoin::blockdata::opcodes;
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::Error as HashError;
 use hex::{self, FromHexError};
@@ -318,6 +319,8 @@ impl TxOutValue {
             "v0_p2wpkh"
         } else if script.is_v0_p2wsh() {
             "v0_p2wsh"
+        } else if is_v1_p2tr(script) {
+            "v1_p2tr"
         } else if script.is_provably_unspendable() {
             "provably_unspendable"
         } else {
@@ -343,6 +346,12 @@ impl TxOutValue {
             pegout,
         }
     }
+}
+
+fn is_v1_p2tr(script: &Script) -> bool {
+    script.len() == 34
+        && script[0] == opcodes::all::OP_PUSHNUM_1.into_u8()
+        && script[1] == opcodes::all::OP_PUSHBYTES_32.into_u8()
 }
 
 #[derive(Serialize)]
