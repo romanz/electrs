@@ -436,9 +436,12 @@ impl From<Utxo> for UtxoValue {
                 _ => None,
             },
             #[cfg(feature = "liquid")]
-            surjection_proof: utxo.witness.surjection_proof,
+            surjection_proof: utxo
+                .witness
+                .surjection_proof
+                .map_or(vec![], |p| p.serialize()),
             #[cfg(feature = "liquid")]
-            range_proof: utxo.witness.rangeproof,
+            range_proof: utxo.witness.rangeproof.map_or(vec![], |p| p.serialize()),
         }
     }
 }
