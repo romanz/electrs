@@ -2,6 +2,16 @@
 
 * If you use `verbose` (or `-v` argument), switch to `log_filters` (or `RUST_LOG` environment variable).
   Please note that it allows to set per-module filters, but module naming is considered unstable.
+  If you have used `-vv` (the value suggested in the documentation), switch to `--log-filters INFO`:
+
+
+|Log filter|Old `verbose` value|Description                                                           |
+|----------|-------------------|----------------------------------------------------------------------|
+|ERROR     |                  0|Only fatal errors                                                     |
+|WARN      |                  1|Things that could indicate serious problems                           |
+|INFO      |                  2|Various significant events and suggestions                            |
+|DEBUG     |                  3|Details that could be useful when debugging - only use when debugging!|
+|TRACE     |                  4|**Very** detailed information - only use when debugging!              |  
 
 
 ### Important changes from versions older than 0.9.0

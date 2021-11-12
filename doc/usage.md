@@ -5,7 +5,7 @@ First index sync should take ~4 hours for ~336GB @ August 2021 (on a dual core I
 $ du -ch ~/.bitcoin/blocks/blk*.dat | tail -n1
 336G  total
 
-$ ./target/release/electrs -vv --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
+$ ./target/release/electrs --log-filters INFO --timestamp --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
 Config { network: Bitcoin, db_path: "./db/bitcoin", daemon_dir: "/home/user/.bitcoin", daemon_auth: CookieFile("/home/user/.bitcoin/.cookie"), daemon_rpc_addr: V4(127.0.0.1:8332), daemon_p2p_addr: V4(127.0.0.1:8333), electrum_rpc_addr: V4(127.0.0.1:50001), monitoring_addr: V4(127.0.0.1:4224), wait_duration: 10s, index_batch_size: 10, index_lookup_limit: 100, ignore_mempool: false, server_banner: "Welcome to electrs 0.9.0 (Electrum Rust Server)!", args: [] }
 [2021-08-17T18:48:40.054Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224
 [2021-08-17T18:48:40.944Z INFO  electrs::db] "./db/bitcoin": 0 SST files, 0 GB, 0 Grows

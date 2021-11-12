@@ -55,7 +55,7 @@ For each command line argument an **environment variable** of the same name with
 
 Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`).
 
-You need to use a number in config file if you want to increase verbosity (e.g. `verbose = 3` is equivalent to `-vvv`) and `true` value in case of flags (e.g. `timestamp = true`)
+You need to use `true` value in case of flags (e.g. `timestamp = true`).
 
 **Authentication**
 
@@ -162,7 +162,7 @@ After=bitcoind.service
 
 [Service]
 WorkingDirectory=/home/bitcoin/electrs
-ExecStart=/home/bitcoin/electrs/target/release/electrs -vv --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
+ExecStart=/home/bitcoin/electrs/target/release/electrs --log-filters INFO --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
 User=bitcoin
 Group=bitcoin
 Type=simple
