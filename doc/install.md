@@ -1,3 +1,21 @@
+## Quickstart
+
+<details>
+<summary>Building from source on an Ubuntu 21.10 VM:</summary>
+
+```bash
+$ sudo apt update
+$ sudo apt install -y clang cmake build-essential git cargo 
+$ git clone https://github.com/romanz/electrs 
+$ cd electrs
+$ cargo build --locked --release
+$ ./target/release/electrs --version  # should print the latest version
+```
+
+</details>
+
+[![asciicast](https://asciinema.org/a/XKznxilP4O7lCZiVZ9vZNd5vx.svg)](https://asciinema.org/a/XKznxilP4O7lCZiVZ9vZNd5vx?speed=3)
+
 ## Manual installation from source
 
 **See below for automated/binary installation options.**
