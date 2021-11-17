@@ -8,7 +8,7 @@ from logbook import Logger, StreamHandler
 
 import client
 
-log = Logger("xpub")
+log = Logger("get_balance")
 
 
 prefix_dict = {
@@ -35,7 +35,7 @@ def convert_key(key, target_prefix, network_name):
     return base58.b58encode_check(target_key_bytes).decode('ascii')
 
 
-def compute_balance(xpub, conn, network):
+def compute_xpub_balance(xpub, conn, network, details):
     total = 0
     for change in (0, 1):
         empty = 0
@@ -57,13 +57,16 @@ def compute_balance(xpub, conn, network):
             confirmed = result['confirmed'] / 1e8
             total += confirmed
 
-            log.info(
+            log.debug(
                 '{}/{}: {} -> {} BTC confirmed, {} BTC unconfirmed, '
                 '{} txs balance = {} BTC', change, n, address,
-                result["confirmed"] / 1e8, result["unconfirmed"] / 1e8, ntx, total)
+                result["confirmed"] / 1e8, result["unconfirmed"] / 1e8, ntx,
+                total)
 
             if confirmed or ntx:
                 empty = 0
+                if confirmed > 0:
+                    details[address] = confirmed
             else:
                 empty += 1
                 if empty >= 10:
@@ -71,12 +74,21 @@ def compute_balance(xpub, conn, network):
     return total
 
 
+def compute_address_balance(address, conn, network):
+    script = network.parse.address(address).script()
+    script_hash = hashlib.sha256(script).digest()[::-1].hex()
+    result, = conn.call(
+        [client.request('blockchain.scripthash.get_balance',
+                        script_hash)])
+    return result['confirmed'] / 1e8
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='localhost')
     parser.add_argument('--network', default='mainnet',
                         choices=['mainnet', 'testnet', 'regtest'])
-    parser.add_argument('xpub')
+    parser.add_argument('address')
     args = parser.parse_args()
 
     if args.network == 'regtest':
@@ -93,26 +105,30 @@ def main():
 
     conn = client.Client((args.host, port))
     total = 0
-    xpub = (network.parse.bip32(args.xpub) or network.parse.bip49(args.xpub) or
-            network.parse.bip84(args.xpub))
+    xpub = (network.parse.bip32(args.address) or
+            network.parse.bip49(args.address) or
+            network.parse.bip84(args.address))
 
     if xpub is None:
-        log.error('Invalid BIP32/BIP49/BIP84 pub key %s' % args.xpub)
-        sys.exit(1)
+        total = compute_address_balance(args.address, conn, network)
+    else:
+        details = {}
+        total = compute_xpub_balance(xpub, conn, network, details)
 
-    total = compute_balance(xpub, conn, network)
+        for prefix in prefix_dict[args.network]:
+            if args.address[:4] != prefix:
+                key = convert_key(args.address, prefix, args.network)
+                log.debug('Trying with {}', key)
+                xpub = (network.parse.bip32(key) or network.parse.bip49(key)
+                        or network.parse.bip84(key))
+                total += compute_xpub_balance(xpub, conn, network, details)
 
-    for prefix in prefix_dict[args.network]:
-        if args.xpub[:4] != prefix:
-            key = convert_key(args.xpub, prefix, args.network)
-            log.info('Trying with {}', key)
-            xpub = (network.parse.bip32(key) or network.parse.bip49(key)
-                    or network.parse.bip84(key))
-            total += compute_balance(xpub, conn, network)
+        for addr in details:
+            log.info('{} balance: {} BTC', addr, details[addr])
 
     log.info('total balance: {} BTC', total)
 
 
 if __name__ == '__main__':
-    with StreamHandler(sys.stderr, level='INFO').applicationbound():
+    with StreamHandler(sys.stderr, level='DEBUG').applicationbound():
         main()
