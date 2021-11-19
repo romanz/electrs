@@ -1,11 +1,13 @@
-# 0.9.3 (TBD)
+# 0.9.3 (Nov 20 2021)
 
+* Support basic RPC handling during initial sync (#543)
 * Update MSRV requirements to Rust 1.48 (#603)
 * Bump `env_logger` to 0.9 (#604)
 * Monitor RocksDB statistics via Prometheus (#605)
 * Don't warn when queried with unsubscribed scripthashes (#609)
 * Allow skipping merkle proofs' during subscription (#610)
 * Remove `verbose` configuration (#615)
+* Add `curl` to `Dockerfile` (#624)
 
 # 0.9.2 (Oct 31 2021)
 
