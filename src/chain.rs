@@ -5,20 +5,17 @@ use bitcoin::hashes::hex::FromHex;
 use bitcoin::network::constants;
 use bitcoin::{BlockHash, BlockHeader};
 
+use crate::types::{GlobalTxId, HeaderRow};
+
 /// A new header found, to be added to the chain at specific height
-pub(crate) struct NewHeader {
-    header: BlockHeader,
+pub(crate) struct NewBlockHash {
     hash: BlockHash,
     height: usize,
 }
 
-impl NewHeader {
-    pub(crate) fn from((header, height): (BlockHeader, usize)) -> Self {
-        Self {
-            header,
-            hash: header.block_hash(),
-            height,
-        }
+impl NewBlockHash {
+    pub(crate) fn from(hash: BlockHash, height: usize) -> Self {
+        Self { hash, height }
     }
 
     pub(crate) fn height(&self) -> usize {
@@ -30,9 +27,33 @@ impl NewHeader {
     }
 }
 
+pub(crate) struct IndexedHeader {
+    header: BlockHeader,
+    hash: BlockHash,
+    height: usize,
+    gtxid: GlobalTxId,
+}
+
+impl IndexedHeader {
+    pub(crate) fn from(row: &HeaderRow, height: usize) -> Self {
+        Self {
+            header: row.header,
+            hash: row.header.block_hash(),
+            height,
+            gtxid: row.gtxid,
+        }
+    }
+}
+
+struct HeaderEntry {
+    hash: BlockHash,
+    header: BlockHeader,
+    gtxid: GlobalTxId,
+}
+
 /// Current blockchain headers' list
 pub struct Chain {
-    headers: Vec<(BlockHash, BlockHeader)>,
+    headers: Vec<HeaderEntry>,
     heights: HashMap<BlockHash, usize>,
 }
 
@@ -49,7 +70,11 @@ impl Chain {
         let genesis: BlockHeader = deserialize(&genesis_header_bytes).unwrap();
         assert_eq!(genesis.prev_blockhash, BlockHash::default());
         Self {
-            headers: vec![(genesis.block_hash(), genesis)],
+            headers: vec![HeaderEntry {
+                hash: genesis.block_hash(),
+                header: genesis,
+                gtxid: GlobalTxId::default(),
+            }],
             heights: std::iter::once((genesis.block_hash(), 0)).collect(), // genesis header @ zero height
         }
     }
@@ -59,41 +84,60 @@ impl Chain {
             return;
         }
         let new_height = self.height().saturating_sub(n);
-        self.update(vec![NewHeader::from((
-            self.headers[new_height].1,
-            new_height,
-        ))])
+        let entry = &self.headers[new_height];
+        let header = IndexedHeader {
+            header: entry.header,
+            height: new_height,
+            hash: entry.hash,
+            gtxid: entry.gtxid,
+        };
+        self.update(vec![header])
     }
 
     /// Load the chain from a collecion of headers, up to the given tip
-    pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
-        let genesis_hash = self.headers[0].0;
+    pub(crate) fn load(&mut self, rows: &[HeaderRow], tip: BlockHash) {
+        let genesis_hash = self.headers[0].hash;
 
-        let mut header_map: HashMap<BlockHash, BlockHeader> =
-            headers.into_iter().map(|h| (h.block_hash(), h)).collect();
+        let mut map: HashMap<BlockHash, &HeaderRow> = rows
+            .iter()
+            .map(|row| (row.header.block_hash(), row))
+            .collect();
         let mut blockhash = tip;
-        let mut new_headers = vec![];
+        let mut ordered_rows = vec![];
         while blockhash != genesis_hash {
-            let header = match header_map.remove(&blockhash) {
-                Some(header) => header,
+            let row = match map.remove(&blockhash) {
+                Some(row) => row,
                 None => panic!("missing header {} while loading from DB", blockhash),
             };
-            blockhash = header.prev_blockhash;
-            new_headers.push(header);
+            blockhash = row.header.prev_blockhash;
+            ordered_rows.push(row);
         }
-        info!("loading {} headers, tip={}", new_headers.len(), tip);
-        let new_headers = new_headers.into_iter().rev(); // order by height
-        self.update(new_headers.zip(1..).map(NewHeader::from).collect())
+        info!("loading {} headers, tip={}", ordered_rows.len(), tip);
+        let ordered_rows = ordered_rows.iter().rev(); // order by height
+        self.update(
+            ordered_rows
+                .zip(1..)
+                .map(|(row, height)| IndexedHeader::from(row, height))
+                .collect(),
+        )
     }
 
     /// Get the block hash at specified height (if exists)
     pub(crate) fn get_block_hash(&self, height: usize) -> Option<BlockHash> {
-        self.headers.get(height).map(|(hash, _header)| *hash)
+        self.headers.get(height).map(|entry| entry.hash)
+    }
+
+    pub(crate) fn get_block_hash_by_gtxid(&self, id: GlobalTxId) -> Option<BlockHash> {
+        let height = match self.headers.binary_search_by_key(&id, |entry| entry.gtxid) {
+            Ok(height) => height,
+            Err(height) => height,
+        };
+        self.get_block_hash(height)
     }
 
     /// Get the block header at specified height (if exists)
     pub(crate) fn get_block_header(&self, height: usize) -> Option<&BlockHeader> {
-        self.headers.get(height).map(|(_hash, header)| header)
+        self.headers.get(height).map(|entry| &entry.header)
     }
 
     /// Get the block height given the specified hash (if exists)
@@ -102,28 +146,46 @@ impl Chain {
     }
 
     /// Update the chain with a list of new headers (possibly a reorg)
-    pub(crate) fn update(&mut self, headers: Vec<NewHeader>) {
+    pub(crate) fn update(&mut self, headers: Vec<IndexedHeader>) {
         if let Some(first_height) = headers.first().map(|h| h.height) {
-            for (hash, _header) in self.headers.drain(first_height..) {
-                assert!(self.heights.remove(&hash).is_some());
+            for entry in self.headers.drain(first_height..) {
+                assert!(self.heights.remove(&entry.hash).is_some());
             }
             for (h, height) in headers.into_iter().zip(first_height..) {
                 assert_eq!(h.height, height);
                 assert_eq!(h.hash, h.header.block_hash());
+
+                if height > 0 {
+                    let prev = &self.headers[height - 1];
+                    assert!(prev.hash == h.header.prev_blockhash);
+                    assert!(prev.gtxid < h.gtxid);
+                } else {
+                    assert_eq!(h.header.prev_blockhash, BlockHash::default());
+                }
+
                 assert!(self.heights.insert(h.hash, h.height).is_none());
-                self.headers.push((h.hash, h.header));
+                self.headers.push(HeaderEntry {
+                    hash: h.hash,
+                    header: h.header,
+                    gtxid: h.gtxid,
+                });
             }
             info!(
                 "chain updated: tip={}, height={}",
-                self.headers.last().unwrap().0,
-                self.headers.len() - 1
+                self.tip(),
+                self.height()
             );
         }
     }
 
     /// Best block hash
     pub(crate) fn tip(&self) -> BlockHash {
-        self.headers.last().expect("empty chain").0
+        self.headers.last().expect("empty chain").hash
+    }
+
+    /// Latest global transaction id
+    pub(crate) fn gtxid(&self) -> GlobalTxId {
+        self.headers.last().expect("empty chain").gtxid
     }
 
     /// Number of blocks (excluding genesis block)
@@ -141,7 +203,7 @@ impl Chain {
             if result.len() >= 10 {
                 step *= 2;
             }
-            result.push(self.headers[index].0);
+            result.push(self.headers[index].hash);
             if index == 0 {
                 break;
             }
@@ -153,7 +215,7 @@ impl Chain {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chain, NewHeader};
+    use super::{Chain, GlobalTxId, HeaderRow, IndexedHeader};
     use bitcoin::consensus::deserialize;
     use bitcoin::hashes::hex::{FromHex, ToHex};
     use bitcoin::network::constants::Network::Regtest;
@@ -188,16 +250,34 @@ mod tests {
             .map(|hex_header| deserialize(&Vec::from_hex(hex_header).unwrap()).unwrap())
             .collect();
 
+        let mut header_rows = vec![];
+        let mut gtxid = GlobalTxId::default();
+        for header in &headers {
+            gtxid.next();
+            header_rows.push(HeaderRow {
+                header: *header,
+                gtxid,
+            })
+        }
+
         for chunk_size in 1..hex_headers.len() {
             let mut regtest = Chain::new(Regtest);
             let mut height = 0;
+            let mut gtxid = GlobalTxId::default();
             let mut tip = regtest.tip();
             for chunk in headers.chunks(chunk_size) {
                 let mut update = vec![];
                 for header in chunk {
                     height += 1;
+                    gtxid.next();
                     tip = header.block_hash();
-                    update.push(NewHeader::from((*header, height)))
+                    update.push(IndexedHeader::from(
+                        &HeaderRow {
+                            header: *header,
+                            gtxid,
+                        },
+                        height,
+                    ))
                 }
                 regtest.update(update);
                 assert_eq!(regtest.tip(), tip);
@@ -209,7 +289,7 @@ mod tests {
 
         // test loading from a list of headers and tip
         let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
+        regtest.load(&header_rows, headers.last().unwrap().block_hash());
         assert_eq!(regtest.height(), headers.len());
 
         // test getters
@@ -242,11 +322,18 @@ mod tests {
 
         // test reorg
         let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
+        regtest.load(&header_rows, headers.last().unwrap().block_hash());
         let height = regtest.height();
+        let gtxid = regtest.gtxid();
 
         let new_header: BlockHeader = deserialize(&Vec::from_hex("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a0304d2e55fe0b6415949cff9bca0f88c0717884a5e5797509f89f856af93624a7a6bcc60ffff7f2000000000").unwrap()).unwrap();
-        regtest.update(vec![NewHeader::from((new_header, height))]);
+        regtest.update(vec![IndexedHeader::from(
+            &HeaderRow {
+                header: new_header,
+                gtxid,
+            },
+            height,
+        )]);
         assert_eq!(regtest.height(), height);
         assert_eq!(
             regtest.tip().to_hex(),

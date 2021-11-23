@@ -11,19 +11,20 @@ use bitcoin::{
         message_network,
     },
     secp256k1::{self, rand::Rng},
-    Block, BlockHash, BlockHeader, Network,
+    Block, BlockHash, BlockHeader, Network, Transaction,
 };
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Cursor, ErrorKind, Seek, SeekFrom, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
-    chain::{Chain, NewHeader},
+    chain::{Chain, NewBlockHash},
     config::ELECTRS_VERSION,
     metrics::{default_duration_buckets, default_size_buckets, Histogram, Metrics},
+    types::TxLocation,
 };
 
 enum Request {
@@ -43,15 +44,76 @@ impl Request {
         Request::GetBlocks(
             blockhashes
                 .iter()
-                .map(|blockhash| Inventory::WitnessBlock(*blockhash))
+                .copied()
+                .map(Inventory::WitnessBlock)
                 .collect(),
         )
     }
 }
 
+pub(crate) struct BlockRequest {
+    hash: BlockHash,
+    offsets: Option<Vec<usize>>, // if None, fetch all txs
+}
+
+impl BlockRequest {
+    pub fn get_single_transaction(loc: TxLocation) -> Self {
+        Self {
+            hash: loc.blockhash,
+            offsets: Some(vec![loc.offset as usize]),
+        }
+    }
+
+    pub fn get_full_block(hash: BlockHash) -> Self {
+        Self {
+            hash,
+            offsets: None,
+        }
+    }
+
+    pub fn blockhash(&self) -> BlockHash {
+        self.hash
+    }
+
+    pub fn parse_header<'a>(&'a self, mut block: &'a [u8]) -> BlockHeader {
+        let header = BlockHeader::consensus_decode(&mut block).expect("TODO: better handling");
+        assert_eq!(header.block_hash(), self.hash, "got wrong block");
+        header
+    }
+
+    pub fn parse_transactions<'a>(
+        &'a self,
+        block: &'a [u8],
+    ) -> Box<dyn Iterator<Item = (Transaction, usize)> + 'a> {
+        if let Some(offsets) = &self.offsets {
+            let result = offsets.iter().map(move |offset| {
+                let tx = Transaction::consensus_decode(&block[*offset..])
+                    .expect("TODO: better handling");
+                (tx, *offset)
+            });
+            return Box::new(result);
+        }
+        let mut cursor = Cursor::new(block);
+        cursor
+            .seek(SeekFrom::Start(80))
+            .expect("TODO: better handling"); // skip block header
+        let count = VarInt::consensus_decode(&mut cursor)
+            .expect("TODO: better handling")
+            .0;
+        let result = (0..count).map(move |_| {
+            let offset = cursor.position() as usize;
+            let tx = Transaction::consensus_decode(&mut cursor).expect("TODO: better handling");
+            (tx, offset)
+        });
+        // TODO: check all block is parsed
+        Box::new(result)
+    }
+    // TODO: add tests
+}
+
 pub(crate) struct Connection {
     req_send: Sender<Request>,
-    blocks_recv: Receiver<Block>,
+    blocks_recv: Receiver<Vec<u8>>,
     headers_recv: Receiver<Vec<BlockHeader>>,
     new_block_recv: Receiver<()>,
 
@@ -62,7 +124,7 @@ impl Connection {
     /// Get new block headers (supporting reorgs).
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
+    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewBlockHash>> {
         self.req_send.send(Request::get_new_headers(chain))?;
         let headers = self
             .headers_recv
@@ -79,41 +141,42 @@ impl Connection {
             None => bail!("missing prev_blockhash: {}", prev_blockhash),
         };
         Ok(headers
-            .into_iter()
+            .iter()
             .zip(new_heights)
-            .map(NewHeader::from)
+            .map(|(header, height)| NewBlockHash::from(header.block_hash(), height))
             .collect())
     }
 
     /// Request and process the specified blocks (in the specified order).
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    pub(crate) fn for_blocks<F>(&mut self, requests: Vec<BlockRequest>, mut func: F) -> Result<()>
     where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockRequest, &[u8]),
     {
         self.blocks_duration.observe_duration("total", || {
-            let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
-            if blockhashes.is_empty() {
+            if requests.is_empty() {
                 return Ok(());
             }
+            let blockhashes: Vec<_> = requests.iter().map(|req| req.hash).collect();
             self.blocks_duration.observe_duration("request", || {
-                debug!("loading {} blocks", blockhashes.len());
+                debug!("loading {} blocks", requests.len());
                 self.req_send.send(Request::get_blocks(&blockhashes))
             })?;
 
-            for hash in blockhashes {
-                let block = self.blocks_duration.observe_duration("response", || {
-                    let block = self
-                        .blocks_recv
-                        .recv()
-                        .with_context(|| format!("failed to get block {}", hash))?;
-                    ensure!(block.block_hash() == hash, "got unexpected block");
-                    Ok(block)
-                })?;
+            for (req, blockhash) in requests.into_iter().zip(blockhashes.into_iter()) {
+                let block =
+                    self.blocks_duration
+                        .observe_duration("response", || -> Result<Vec<u8>> {
+                            let block = self
+                                .blocks_recv
+                                .recv()
+                                .with_context(|| format!("failed to get block {}", blockhash))?;
+                            // ensure!(block.block_hash() == hash, "got unexpected block"); // TODO: add it back
+                            Ok(block)
+                        })?;
                 self.blocks_duration
-                    .observe_duration("process", || func(hash, block));
+                    .observe_duration("process", || func(req, &block));
             }
             Ok(())
         })
@@ -227,7 +290,7 @@ impl Connection {
         });
 
         let (req_send, req_recv) = bounded::<Request>(1);
-        let (blocks_send, blocks_recv) = bounded::<Block>(10);
+        let (blocks_send, blocks_recv) = bounded::<Vec<u8>>(10);
         let (headers_send, headers_recv) = bounded::<Vec<BlockHeader>>(1);
         let (new_block_send, new_block_recv) = bounded::<()>(0);
         let (init_send, init_recv) = bounded::<()>(0);
@@ -271,10 +334,10 @@ impl Connection {
                         NetworkMessage::Verack => {
                             init_send.send(())?; // peer acknowledged our version
                         }
-                        NetworkMessage::Block(block) => blocks_send.send(block)?,
                         NetworkMessage::Headers(headers) => headers_send.send(headers)?,
                         NetworkMessage::Alert(_) => (),  // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
                         NetworkMessage::Addr(_) => (),   // unused
+                        NetworkMessage::Unknown { command, payload } if command.as_ref() == "block" => blocks_send.send(payload)?,
                         msg => warn!("unexpected message: {:?}", msg),
                     }
                 }
@@ -343,7 +406,6 @@ impl RawNetworkMessage {
             "verack" => NetworkMessage::Verack,
             "inv" => NetworkMessage::Inv(Decodable::consensus_decode(&mut raw)?),
             "notfound" => NetworkMessage::NotFound(Decodable::consensus_decode(&mut raw)?),
-            "block" => NetworkMessage::Block(Decodable::consensus_decode(&mut raw)?),
             "headers" => {
                 let len = VarInt::consensus_decode(&mut raw)?.0;
                 let mut headers = Vec::with_capacity(len as usize);

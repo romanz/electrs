@@ -13,6 +13,7 @@ pub(crate) struct WriteBatch {
     pub(crate) funding_rows: Vec<Row>,
     pub(crate) spending_rows: Vec<Row>,
     pub(crate) txid_rows: Vec<Row>,
+    pub(crate) offset_rows: Vec<(Row, Row)>,
 }
 
 impl WriteBatch {
@@ -21,6 +22,7 @@ impl WriteBatch {
         self.funding_rows.sort_unstable();
         self.spending_rows.sort_unstable();
         self.txid_rows.sort_unstable();
+        self.offset_rows.sort_unstable();
     }
 }
 
@@ -33,10 +35,18 @@ pub struct DBStore {
 const CONFIG_CF: &str = "config";
 const HEADERS_CF: &str = "headers";
 const TXID_CF: &str = "txid";
+const OFFSET_CF: &str = "offset";
 const FUNDING_CF: &str = "funding";
 const SPENDING_CF: &str = "spending";
 
-const COLUMN_FAMILIES: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
+const COLUMN_FAMILIES: &[&str] = &[
+    CONFIG_CF,
+    HEADERS_CF,
+    TXID_CF,
+    OFFSET_CF,
+    FUNDING_CF,
+    SPENDING_CF,
+];
 
 const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
@@ -84,7 +94,7 @@ struct Config {
     format: u64,
 }
 
-const CURRENT_FORMAT: u64 = 0;
+const CURRENT_FORMAT: u64 = 1;
 
 impl Default for Config {
     fn default() -> Self {
@@ -207,6 +217,10 @@ impl DBStore {
         self.db.cf_handle(TXID_CF).expect("missing TXID_CF")
     }
 
+    fn offset_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db.cf_handle(OFFSET_CF).expect("missing TXID_CF")
+    }
+
     fn headers_cf(&self) -> &rocksdb::ColumnFamily {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
@@ -252,6 +266,12 @@ impl DBStore {
             .expect("get_tip failed")
     }
 
+    pub(crate) fn get_tx_offset(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.db
+            .get_cf(self.offset_cf(), key)
+            .expect("get_tx_offset failed")
+    }
+
     pub(crate) fn write(&self, batch: &WriteBatch) {
         let mut db_batch = rocksdb::WriteBatch::default();
         for key in &batch.funding_rows {
@@ -262,6 +282,9 @@ impl DBStore {
         }
         for key in &batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
+        }
+        for (key, value) in &batch.offset_rows {
+            db_batch.put_cf(self.offset_cf(), key, value);
         }
         for key in &batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");

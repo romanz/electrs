@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 
-use bitcoin::{
-    consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
-};
+use bitcoin::{consensus::serialize, hashes::hex::ToHex, Amount, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
@@ -13,10 +11,10 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::{
-    chain::{Chain, NewHeader},
+    chain::{Chain, NewBlockHash},
     config::Config,
     metrics::Metrics,
-    p2p::Connection,
+    p2p::{BlockRequest, Connection},
     signals::ExitFlag,
 };
 
@@ -230,16 +228,15 @@ impl Daemon {
             .context("failed to get mempool entry")
     }
 
-    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
+    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewBlockHash>> {
         self.p2p.lock().get_new_headers(chain)
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
+    pub(crate) fn for_blocks<F>(&self, requests: Vec<BlockRequest>, func: F) -> Result<()>
     where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockRequest, &[u8]),
     {
-        self.p2p.lock().for_blocks(blockhashes, func)
+        self.p2p.lock().for_blocks(requests, func)
     }
 
     pub(crate) fn new_block_notification(&self) -> Receiver<()> {

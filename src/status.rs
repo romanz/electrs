@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bitcoin::{
     hashes::{sha256, Hash, HashEngine},
-    Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
+    Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use rayon::prelude::*;
 use serde::ser::{Serialize, Serializer};
@@ -15,7 +15,8 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    types::{ScriptHash, StatusHash},
+    p2p::BlockRequest,
+    types::{ScriptHash, StatusHash, TxLocation},
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
@@ -303,17 +304,20 @@ impl ScriptHashStatus {
     }
 
     /// Apply func only on the new blocks (fetched from daemon).
-    fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
+    fn for_new_blocks<B, F>(&self, locations: B, daemon: &Daemon, mut func: F) -> Result<()>
     where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        B: IntoIterator<Item = TxLocation>,
+        F: FnMut(BlockRequest, &[u8]),
     {
-        daemon.for_blocks(
-            blockhashes
-                .into_iter()
-                .filter(|blockhash| !self.confirmed.contains_key(blockhash)),
-            func,
-        )
+        let requests = locations
+            .into_iter()
+            .filter(|loc| !self.confirmed.contains_key(&loc.blockhash))
+            .map(BlockRequest::get_single_transaction)
+            .collect();
+        daemon.for_blocks(requests, |loc, blob| {
+            // assert_eq!(loc.blockhash, block.block_hash()); // TODO: re-add
+            func(loc, blob)
+        })
     }
 
     /// Get funding and spending entries from new blocks.
@@ -328,12 +332,12 @@ impl ScriptHashStatus {
         let scripthash = self.scripthash;
         let mut result = HashMap::<BlockHash, HashMap<usize, TxEntry>>::new();
 
-        let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
-        self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(tx, scripthash)).for_each(
+        let funding_locations = index.limit_result(index.filter_by_funding(scripthash))?;
+        self.for_new_blocks(funding_locations, daemon, |req, blob| {
+            let block_entries = result.entry(req.blockhash()).or_default();
+            filter_block_txs(blob, &req, |tx| filter_outputs(tx, scripthash)).for_each(
                 |FilteredTx {
-                     pos,
+                     offset,
                      tx,
                      txid,
                      result: funding_outputs,
@@ -341,28 +345,28 @@ impl ScriptHashStatus {
                     cache.add_tx(txid, move || tx);
                     outpoints.extend(make_outpoints(txid, &funding_outputs));
                     block_entries
-                        .entry(pos)
+                        .entry(offset)
                         .or_insert_with(|| TxEntry::new(txid))
                         .outputs = funding_outputs;
                 },
             );
         })?;
-        let spending_blockhashes: HashSet<BlockHash> = outpoints
+        let spending_locations: HashSet<TxLocation> = outpoints
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
-        self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(tx, outpoints)).for_each(
+        self.for_new_blocks(spending_locations, daemon, |req, blob| {
+            let block_entries = result.entry(req.blockhash()).or_default();
+            filter_block_txs(blob, &req, |tx| filter_inputs(tx, outpoints)).for_each(
                 |FilteredTx {
-                     pos,
+                     offset,
                      tx,
                      txid,
                      result: spent_outpoints,
                  }| {
                     cache.add_tx(txid, move || tx);
                     block_entries
-                        .entry(pos)
+                        .entry(offset)
                         .or_insert_with(|| TxEntry::new(txid))
                         .spent = spent_outpoints;
                 },
@@ -377,7 +381,7 @@ impl ScriptHashStatus {
                     .into_iter()
                     .collect::<BTreeMap<usize, TxEntry>>()
                     .into_iter()
-                    .map(|(_pos, entry)| entry)
+                    .map(|(_offset, entry)| entry)
                     .collect::<Vec<TxEntry>>();
                 (blockhash, sorted_entries)
             })
@@ -510,33 +514,31 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
 struct FilteredTx<T> {
     tx: Transaction,
     txid: Txid,
-    pos: usize,
+    offset: usize,
     result: Vec<T>,
 }
 
-fn filter_block_txs<T: Send>(
-    block: Block,
-    map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
-) -> impl Iterator<Item = FilteredTx<T>> {
-    block
-        .txdata
-        .into_par_iter()
-        .enumerate()
-        .filter_map(|(pos, tx)| {
+fn filter_block_txs<'a, T: Send>(
+    blob: &'a [u8],
+    req: &'a BlockRequest,
+    map_fn: impl Fn(&Transaction) -> Vec<T> + Sync + 'a,
+) -> impl Iterator<Item = FilteredTx<T>> + 'a {
+    req.parse_transactions(blob)
+        .into_iter()
+        .filter_map(move |(tx, offset)| {
             let result = map_fn(&tx);
             if result.is_empty() {
-                return None; // skip irrelevant transaction
+                None // skip irrelevant transaction
+            } else {
+                let txid = tx.txid();
+                Some(FilteredTx {
+                    tx,
+                    txid,
+                    offset,
+                    result,
+                })
             }
-            let txid = tx.txid();
-            Some(FilteredTx {
-                tx,
-                txid,
-                pos,
-                result,
-            })
         })
-        .collect::<Vec<_>>()
-        .into_iter()
 }
 
 #[cfg(test)]

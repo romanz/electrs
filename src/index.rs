@@ -1,14 +1,18 @@
 use anyhow::{Context, Result};
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::{Block, BlockHash, OutPoint, Txid};
+use bitcoin::{BlockHash, OutPoint, Txid};
 
 use crate::{
-    chain::{Chain, NewHeader},
+    chain::{Chain, IndexedHeader, NewBlockHash},
     daemon::Daemon,
     db::{DBStore, Row, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
+    p2p::BlockRequest,
     signals::ExitFlag,
-    types::{HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
+    types::{
+        GlobalTxId, HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow,
+        TxLocation, TxOffsetRow, TxidRow,
+    },
 };
 
 #[derive(Clone)]
@@ -78,6 +82,7 @@ struct IndexResult {
     funding_rows: Vec<HashPrefixRow>,
     spending_rows: Vec<HashPrefixRow>,
     txid_rows: Vec<HashPrefixRow>,
+    offset_rows: Vec<TxOffsetRow>,
 }
 
 impl IndexResult {
@@ -90,6 +95,9 @@ impl IndexResult {
 
         let txid_rows = self.txid_rows.iter().map(HashPrefixRow::to_db_row);
         batch.txid_rows.extend(txid_rows);
+
+        let offset_rows = self.offset_rows.iter().map(|row| (row.key(), row.value()));
+        batch.offset_rows.extend(offset_rows);
 
         batch.header_rows.push(self.header_row.to_db_row());
         batch.tip_row = serialize(&self.header_row.header.block_hash()).into_boxed_slice();
@@ -117,12 +125,12 @@ impl Index {
     ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
-            let headers = store
+            let rows: Vec<HeaderRow> = store
                 .read_headers()
                 .into_iter()
-                .map(|row| HeaderRow::from_db_row(&row).header)
+                .map(|row| HeaderRow::from_db_row(&row))
                 .collect();
-            chain.load(headers, tip);
+            chain.load(&rows, tip);
             chain.drop_last_headers(reindex_last_blocks);
         };
         let stats = Stats::new(metrics);
@@ -154,31 +162,43 @@ impl Index {
         Ok(result)
     }
 
+    pub(crate) fn get_tx_location(&self, id: GlobalTxId) -> Option<TxLocation> {
+        let blockhash = self.chain.get_block_hash_by_gtxid(id);
+        let offset = self
+            .store
+            .get_tx_offset(&serialize(&id))
+            .map(|value| TxOffsetRow::parse_offset(&value));
+        match (blockhash, offset) {
+            (Some(blockhash), Some(offset)) => Some(TxLocation { blockhash, offset }),
+            _ => None,
+        }
+    }
+
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).id())
+            .filter_map(move |id| self.chain.get_block_hash_by_gtxid(id))
     }
 
     pub(crate) fn filter_by_funding(
         &self,
         scripthash: ScriptHash,
-    ) -> impl Iterator<Item = BlockHash> + '_ {
+    ) -> impl Iterator<Item = TxLocation> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).id())
+            .filter_map(move |id| self.get_tx_location(id))
     }
 
     pub(crate) fn filter_by_spending(
         &self,
         outpoint: OutPoint,
-    ) -> impl Iterator<Item = BlockHash> + '_ {
+    ) -> impl Iterator<Item = TxLocation> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).id())
+            .filter_map(move |id| self.get_tx_location(id))
     }
 
     // Return `Ok(true)` when the chain is fully synced and the index is compacted.
@@ -202,6 +222,8 @@ impl Index {
                 return Ok(true); // no more blocks to index (done for now)
             }
         }
+        let mut gtxid = self.chain.gtxid();
+        let mut indexed_headers = Vec::with_capacity(new_headers.len());
         for chunk in new_headers.chunks(self.batch_size) {
             exit_flag.poll().with_context(|| {
                 format!(
@@ -209,22 +231,33 @@ impl Index {
                     chunk.first().unwrap().height()
                 )
             })?;
-            self.sync_blocks(daemon, chunk)?;
+            indexed_headers.extend(self.sync_blocks(daemon, chunk, &mut gtxid)?);
         }
-        self.chain.update(new_headers);
+        self.chain.update(indexed_headers);
         self.stats.observe_chain(&self.chain);
         Ok(false) // sync is not done
     }
 
-    fn sync_blocks(&mut self, daemon: &Daemon, chunk: &[NewHeader]) -> Result<()> {
-        let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
+    fn sync_blocks(
+        &mut self,
+        daemon: &Daemon,
+        chunk: &[NewBlockHash],
+        gtxid: &mut GlobalTxId,
+    ) -> Result<Vec<IndexedHeader>> {
+        let mut indexed_headers = Vec::with_capacity(chunk.len());
+        let requests: Vec<BlockRequest> = chunk
+            .iter()
+            .map(|h| BlockRequest::get_full_block(h.hash()))
+            .collect();
         let mut heights = chunk.iter().map(|h| h.height());
 
         let mut batch = WriteBatch::default();
-        daemon.for_blocks(blockhashes, |_blockhash, block| {
+        daemon.for_blocks(requests, |req, raw| {
             let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
-                index_single_block(block, height).extend(&mut batch)
+                let result = index_single_block(req, raw, gtxid);
+                indexed_headers.push(IndexedHeader::from(&result.header_row, height));
+                result.extend(&mut batch);
             });
             self.stats.height.set("tip", height as f64);
         })?;
@@ -239,7 +272,7 @@ impl Index {
         self.stats
             .observe_duration("write", || self.store.write(&batch));
         self.stats.observe_db(&self.store);
-        Ok(())
+        Ok(indexed_headers)
     }
 
     pub(crate) fn is_ready(&self) -> bool {
@@ -251,13 +284,17 @@ fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
-fn index_single_block(block: Block, height: usize) -> IndexResult {
-    let mut funding_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.output.len()).sum());
-    let mut spending_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.input.len()).sum());
-    let mut txid_rows = Vec::with_capacity(block.txdata.len());
+fn index_single_block(req: BlockRequest, raw: &[u8], gtxid: &mut GlobalTxId) -> IndexResult {
+    let header = req.parse_header(raw);
+    let mut funding_rows = vec![];
+    let mut spending_rows = vec![];
+    let mut txid_rows = vec![];
+    let mut offset_rows = vec![];
 
-    for tx in &block.txdata {
-        txid_rows.push(TxidRow::row(tx.txid(), height));
+    for (tx, offset) in req.parse_transactions(raw) {
+        gtxid.next();
+        txid_rows.push(TxidRow::row(tx.txid(), *gtxid));
+        offset_rows.push(TxOffsetRow::row(*gtxid, offset));
 
         funding_rows.extend(
             tx.output
@@ -265,7 +302,7 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
                 .filter(|txo| !txo.script_pubkey.is_provably_unspendable())
                 .map(|txo| {
                     let scripthash = ScriptHash::new(&txo.script_pubkey);
-                    ScriptHashRow::row(scripthash, height)
+                    ScriptHashRow::row(scripthash, *gtxid)
                 }),
         );
 
@@ -275,13 +312,14 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
         spending_rows.extend(
             tx.input
                 .iter()
-                .map(|txin| SpendingPrefixRow::row(txin.previous_output, height)),
+                .map(|txin| SpendingPrefixRow::row(txin.previous_output, *gtxid)),
         );
     }
     IndexResult {
         funding_rows,
         spending_rows,
         txid_rows,
-        header_row: HeaderRow::new(block.header),
+        offset_rows,
+        header_row: HeaderRow::new(header, *gtxid),
     }
 }
