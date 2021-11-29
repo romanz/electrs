@@ -18,7 +18,7 @@ use crossbeam_channel::{bounded, select, Receiver, Sender};
 use std::io::{self, ErrorKind, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -191,12 +191,23 @@ impl Connection {
 
         let stream = Arc::clone(&conn);
         crate::thread::spawn("p2p_recv", move || loop {
-            let raw_msg = match recv_duration
-                .observe_duration("recv", || RawNetworkMessage::consensus_decode(&*stream))
+            let start = Instant::now();
+            let raw_msg = RawNetworkMessage::consensus_decode(&*stream);
             {
+                let duration = duration_to_seconds(start.elapsed());
+                let label = format!(
+                    "recv_{}",
+                    raw_msg
+                        .as_ref()
+                        .map(|msg| msg.cmd.as_ref())
+                        .unwrap_or("err")
+                );
+                recv_duration.observe(&label, duration);
+            }
+            let raw_msg = match raw_msg {
                 Ok(raw_msg) => {
                     assert_eq!(raw_msg.magic, network.magic());
-                    recv_size.observe(raw_msg.cmd.as_ref(), raw_msg.raw.len());
+                    recv_size.observe(raw_msg.cmd.as_ref(), raw_msg.raw.len() as f64);
                     raw_msg
                 }
                 Err(encode::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
@@ -362,4 +373,11 @@ impl Decodable for RawNetworkMessage {
 
         Ok(RawNetworkMessage { magic, cmd, raw })
     }
+}
+
+/// `duration_to_seconds` converts Duration to seconds.
+#[inline]
+pub fn duration_to_seconds(d: Duration) -> f64 {
+    let nanos = f64::from(d.subsec_nanos()) / 1e9;
+    d.as_secs() as f64 + nanos
 }
