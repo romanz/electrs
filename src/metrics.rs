@@ -86,8 +86,8 @@ mod metrics_impl {
     }
 
     impl Histogram {
-        pub fn observe(&self, label: &str, value: usize) {
-            self.hist.with_label_values(&[label]).observe(value as f64);
+        pub fn observe(&self, label: &str, value: f64) {
+            self.hist.with_label_values(&[label]).observe(value);
         }
 
         pub fn observe_duration<F, T>(&self, label: &str, func: F) -> T
@@ -144,7 +144,7 @@ mod metrics_fake {
     pub struct Histogram {}
 
     impl Histogram {
-        pub fn observe(&self, _label: &str, _value: usize) {}
+        pub fn observe(&self, _label: &str, _value: f64) {}
 
         pub fn observe_duration<F, T>(&self, _label: &str, func: F) -> T
         where

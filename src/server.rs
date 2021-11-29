@@ -113,7 +113,7 @@ fn serve() -> Result<()> {
                 let first = once(event.context("server disconnected")?);
                 let rest = server_rx.iter().take(server_rx.len());
                 let events: Vec<Event> = first.chain(rest).collect();
-                server_batch_size.observe("recv", events.len());
+                server_batch_size.observe("recv", events.len() as f64);
                 handle_events(&rpc, &mut peers, events);
             },
             default(config.wait_duration) => (), // sync and update

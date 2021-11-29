@@ -44,7 +44,7 @@ impl Stats {
     }
 
     fn observe_size(&self, label: &str, rows: &[Row]) {
-        self.update_size.observe(label, db_rows_size(rows));
+        self.update_size.observe(label, db_rows_size(rows) as f64);
     }
 
     fn observe_batch(&self, batch: &WriteBatch) {
