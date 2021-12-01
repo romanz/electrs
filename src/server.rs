@@ -219,11 +219,18 @@ fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Re
     let msg = Message::New(stream.try_clone()?);
     server_tx.send(Event { peer_id, msg })?;
 
+    let mut first_line = true;
     for line in BufReader::new(stream).lines() {
+        if let Err(e) = &line {
+            if first_line && e.kind() == std::io::ErrorKind::InvalidData {
+                warn!("InvalidData on first line may indicate client attempted to connect using SSL when server expects unencrypted communication.")
+            }
+        }
         let line = line.with_context(|| format!("{}: recv failed", peer_id))?;
         debug!("{}: recv {}", peer_id, line);
         let msg = Message::Request(line);
         server_tx.send(Event { peer_id, msg })?;
+        first_line = false;
     }
 
     debug!("{}: disconnected", peer_id);
