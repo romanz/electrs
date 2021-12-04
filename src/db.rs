@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use electrs_rocksdb as rocksdb;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(crate) type Row = Box<[u8]>;
@@ -22,11 +22,6 @@ impl WriteBatch {
         self.spending_rows.sort_unstable();
         self.txid_rows.sort_unstable();
     }
-}
-
-#[derive(Debug)]
-struct Options {
-    path: PathBuf,
 }
 
 /// RocksDB wrapper for index storage

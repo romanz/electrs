@@ -347,7 +347,7 @@ impl Rpc {
     }
 
     fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
-        let tx_bytes = Vec::from_hex(&tx_hex).context("non-hex transaction")?;
+        let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
         let txid = self.daemon.broadcast(&tx)?;
         Ok(json!(txid))
@@ -427,17 +427,13 @@ impl Rpc {
     }
 
     pub fn handle_requests(&self, client: &mut Client, lines: &[String]) -> Vec<String> {
-        let parsed: Vec<Result<Calls, Value>> = lines
+        lines
             .iter()
             .map(|line| {
-                parse_requests(&line)
+                parse_requests(line)
                     .map(Calls::parse)
                     .map_err(error_msg_no_id)
             })
-            .collect();
-
-        parsed
-            .into_iter()
             .map(|calls| self.handle_calls(client, calls).to_string())
             .collect()
     }

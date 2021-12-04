@@ -331,7 +331,7 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(&tx, scripthash)).for_each(
+            filter_block_txs(block, |tx| filter_outputs(tx, scripthash)).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -353,7 +353,7 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(&tx, outpoints)).for_each(
+            filter_block_txs(block, |tx| filter_inputs(tx, outpoints)).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -461,7 +461,7 @@ impl ScriptHashStatus {
     }
 }
 
-fn make_outpoints<'a>(txid: Txid, outputs: &'a [TxOutput]) -> impl Iterator<Item = OutPoint> + 'a {
+fn make_outpoints(txid: Txid, outputs: &[TxOutput]) -> impl Iterator<Item = OutPoint> + '_ {
     outputs
         .iter()
         .map(move |out| OutPoint::new(txid, out.index))
