@@ -1,5 +1,7 @@
 # 0.9.4 (TBD)
 
+* Update dependencies (`anyhow`, `serde_json`)
+* Improve p2p receiving metrics (#633)
 * Disable `index_lookup_limit` by default (#635)
 
 # 0.9.3 (Nov 20 2021)
