@@ -1,3 +1,7 @@
+# 0.9.4 (TBD)
+
+* Disable `index_lookup_limit` by default (#635)
+
 # 0.9.3 (Nov 20 2021)
 
 * Support basic RPC handling during initial sync (#543)
