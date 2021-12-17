@@ -1,6 +1,5 @@
 #![recursion_limit = "256"]
 
-mod mempool;
 mod rpc;
 mod util;
 
@@ -126,7 +125,6 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
             sig = future::timeout(Duration::from_secs(5), signals.next()).fuse() => {
                 match sig {
                     Ok(Some(libc::SIGUSR1)) | Err(_) => {
-                        rpc.sync_mempool();
                         continue;
                     },
                     Ok(Some(s)) => {
@@ -151,8 +149,6 @@ async fn server_loop(events: Receiver<Event>, rpc: Rpc) -> Result<()> {
                 match msg {
                     Some(result) => {
                         info!("indexing finished: {:?}", result);
-                        // TODO: rate-limit?
-                        rpc.sync_mempool();  // remove confirmed transactions from mempool
                         continue;
                     },
                     None => break,  // indexer has exited

@@ -12,7 +12,6 @@ use std::{
     time::Duration,
 };
 
-use crate::mempool::{Mempool, MempoolEntry};
 use crate::util::{spawn, unbounded, Receiver, Sender};
 
 use electrs_index::{
@@ -41,18 +40,6 @@ struct TxEntry {
 }
 
 impl TxEntry {
-    fn unconfirmed(entry: &MempoolEntry, mempool: &Mempool) -> Self {
-        let inputs = &entry.tx.input;
-        let has_unconfirmed_inputs = inputs
-            .iter()
-            .any(|txi| mempool.get(&txi.previous_output.txid).is_some());
-        Self {
-            txid: entry.txid,
-            height: if has_unconfirmed_inputs { -1 } else { 0 },
-            fee: Some(entry.fee.as_sat()),
-        }
-    }
-
     fn confirmed(c: &Confirmed) -> Self {
         Self {
             txid: c.txid,
@@ -241,7 +228,6 @@ impl Indexer {
 pub(crate) struct Rpc {
     index: Arc<Index>,
     daemon: Daemon,
-    mempool: RwLock<Mempool>,
     tx_cache: RwLock<HashMap<Txid, Transaction>>,
     stats: Stats,
     history_limit: Option<usize>,
@@ -252,7 +238,6 @@ impl Rpc {
         Self {
             index: Arc::new(index),
             daemon,
-            mempool: RwLock::new(Mempool::empty(metrics)),
             tx_cache: RwLock::new(HashMap::new()),
             stats: Stats::new(metrics),
             history_limit: Some(10_000),
@@ -284,15 +269,6 @@ impl Rpc {
         Ok(new_block_rx)
     }
 
-    pub(crate) fn sync_mempool(&self) {
-        let sync_duration = self.stats.sync_duration.clone();
-        sync_duration.observe_duration("mempool", || {
-            if let Err(e) = self.mempool.write().unwrap().update(&self.daemon) {
-                warn!("failed to sync mempool: {:?}", e);
-            }
-        })
-    }
-
     pub(crate) fn notify(&self, subscription: &mut Subscription) -> Result<Vec<Value>> {
         self.stats.sync_duration.observe_duration("notify", || {
             let mut result = vec![];
@@ -321,7 +297,7 @@ impl Rpc {
                 .filter_map(
                     |(scripthash, status): (&ScriptHash, &mut Status)| -> Option<Result<Value>> {
                         let current_hash = status.hash;
-                        let (mut entries, tip) = if status.tip == current_tip {
+                        let (entries, tip) = if status.tip == current_tip {
                             (status.confirmed(), status.tip)
                         } else {
                             // TODO: use the map above, otherwise each lookup will lock separately
@@ -330,7 +306,6 @@ impl Rpc {
                                 Err(e) => return Some(Err(e)),
                             }
                         };
-                        entries.extend(self.get_unconfirmed(&scripthash));
                         *status = Status::new(entries, tip);
                         if current_hash == status.hash {
                             return None;
@@ -412,8 +387,7 @@ impl Rpc {
         subscription: &mut Subscription,
         (scripthash,): (ScriptHash,),
     ) -> Result<Value> {
-        let (mut entries, tip) = self.get_confirmed(&scripthash)?;
-        entries.extend(self.get_unconfirmed(&scripthash));
+        let (entries, tip) = self.get_confirmed(&scripthash)?;
         let status = Status::new(entries, tip);
         let hash = status.hash;
         subscription.scripthashes.insert(scripthash, status);
@@ -462,25 +436,6 @@ impl Rpc {
         Ok((entries, result.tip))
     }
 
-    fn get_unconfirmed(&self, scripthash: &ScriptHash) -> Vec<TxEntry> {
-        let mempool = self.mempool.read().unwrap();
-        let entries: Vec<&MempoolEntry> = mempool.lookup(*scripthash);
-        let mut unconfirmed: Vec<TxEntry> = entries
-            .iter()
-            .map(|e| TxEntry::unconfirmed(e, &mempool))
-            .collect();
-        unconfirmed.sort_by_key(|u| u.txid);
-        let getter = |txid| match mempool.get(txid) {
-            Some(e) => e.tx.clone(),
-            None => panic!("missing mempool entry {}", txid),
-        };
-        let mut tx_cache = self.tx_cache.write().unwrap();
-        for u in &unconfirmed {
-            tx_cache.entry(u.txid).or_insert_with(|| getter(&u.txid));
-        }
-        unconfirmed
-    }
-
     fn transaction_get_confirmed(&self, txid: &Txid) -> Result<Option<Confirmed>> {
         let result = self.index.lookup_by_txid(&txid, &self.daemon)?;
         let confirmed: Vec<Confirmed> = result
@@ -521,13 +476,7 @@ impl Rpc {
                     debug!("tx {} is not cached", txid);
                     match self.transaction_get_confirmed(&txid)? {
                         Some(confirmed) => serialize(entry.insert(confirmed.tx)),
-                        None => {
-                            debug!("unconfirmed transaction {}", txid);
-                            match self.mempool.read().unwrap().get(&txid) {
-                                Some(e) => serialize(entry.insert(e.tx.clone())),
-                                None => bail!("missing transaction {}", txid),
-                            }
-                        }
+                        None => bail!("missing transaction {}", txid),
                     }
                 }
             }
@@ -568,7 +517,6 @@ impl Rpc {
             .daemon
             .broadcast(&tx)
             .with_context(|| format!("failed to broadcast transaction: {}", tx.txid()))?;
-        self.sync_mempool();
         Ok(json!(txid))
     }
 
@@ -577,7 +525,7 @@ impl Rpc {
     }
 
     fn get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!(self.mempool.read().unwrap().histogram()))
+        Ok(json!([]))
     }
 
     fn version(&self, (client_id, client_version): (String, ClientVersion)) -> Result<Value> {
