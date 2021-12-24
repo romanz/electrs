@@ -77,6 +77,12 @@ fn serve() -> Result<()> {
         "type",
         metrics::default_size_buckets(),
     );
+    let duration = metrics.histogram_vec(
+        "server_loop_duration",
+        "server loop duration",
+        "step",
+        metrics::default_duration_buckets(),
+    );
     let mut rpc = Rpc::new(&config, metrics)?;
 
     let new_block_rx = rpc.new_block_notification();
@@ -84,8 +90,8 @@ fn serve() -> Result<()> {
     loop {
         // initial sync and compaction may take a few hours
         while server_rx.is_empty() {
-            let done = rpc.sync().context("sync failed")?; // sync a batch of blocks
-            peers = notify_peers(&rpc, peers); // peers are disconnected on error
+            let done = duration.observe_duration("sync", || rpc.sync().context("sync failed"))?; // sync a batch of blocks
+            peers = duration.observe_duration("notify", || notify_peers(&rpc, peers)); // peers are disconnected on error
             if !done {
                 continue; // more blocks to sync
             }
@@ -94,30 +100,33 @@ fn serve() -> Result<()> {
             }
             break;
         }
-        select! {
-            // Handle signals for graceful shutdown
-            recv(rpc.signal().receiver()) -> result => {
-                result.context("signal channel disconnected")?;
-                rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
-            },
-            // Handle new blocks' notifications
-            recv(new_block_rx) -> result => match result {
-                Ok(_) => (), // sync and update
-                Err(_) => {
-                    info!("disconnected from bitcoind");
-                    return Ok(());
-                }
-            },
-            // Handle Electrum RPC requests
-            recv(server_rx) -> event => {
-                let first = once(event.context("server disconnected")?);
-                let rest = server_rx.iter().take(server_rx.len());
-                let events: Vec<Event> = first.chain(rest).collect();
-                server_batch_size.observe("recv", events.len() as f64);
-                handle_events(&rpc, &mut peers, events);
-            },
-            default(config.wait_duration) => (), // sync and update
-        }
+        duration.observe_duration("select", || -> Result<()> {
+            select! {
+                // Handle signals for graceful shutdown
+                recv(rpc.signal().receiver()) -> result => {
+                    result.context("signal channel disconnected")?;
+                    rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
+                },
+                // Handle new blocks' notifications
+                recv(new_block_rx) -> result => match result {
+                    Ok(_) => (), // sync and update
+                    Err(_) => {
+                        info!("disconnected from bitcoind");
+                        return Ok(());
+                    }
+                },
+                // Handle Electrum RPC requests
+                recv(server_rx) -> event => {
+                    let first = once(event.context("server disconnected")?);
+                    let rest = server_rx.iter().take(server_rx.len());
+                    let events: Vec<Event> = first.chain(rest).collect();
+                    server_batch_size.observe("recv", events.len() as f64);
+                    duration.observe_duration("handle", || handle_events(&rpc, &mut peers, events));
+                },
+                default(config.wait_duration) => (), // sync and update
+            };
+            Ok(())
+        })?;
     }
 }
 
