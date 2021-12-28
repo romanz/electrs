@@ -1,10 +1,11 @@
-# 0.9.4 (TBD)
+# 0.9.4 (Dec 30 2021)
 
 * Update dependencies (`anyhow`, `serde`, `serde_json`, `signal-hook`)
 * Improve p2p receiving metrics (#633)
 * Warn on attempt to connect over SSL (#634)
 * Disable `index_lookup_limit` by default (#635)
 * Parse p2p messages in a separate thread (#638)
+* Add server loop-related metrics
 
 # 0.9.3 (Nov 20 2021)
 
