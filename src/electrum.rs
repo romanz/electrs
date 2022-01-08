@@ -356,18 +356,26 @@ impl Rpc {
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
         let (txid, verbose) = args.into();
         if verbose {
-            let blockhash = self.tracker.get_blockhash_by_txid(txid);
+            let blockhash = self
+                .tracker
+                .lookup_transaction(&self.daemon, txid)?
+                .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
-        let cached = self.cache.get_tx(&txid, |tx| serialize(tx).to_hex());
-        Ok(match cached {
-            Some(tx_hex) => json!(tx_hex),
-            None => {
-                debug!("tx cache miss: txid={}", txid);
-                let blockhash = self.tracker.get_blockhash_by_txid(txid);
-                json!(self.daemon.get_transaction_hex(&txid, blockhash)?)
-            }
-        })
+        if let Some(tx) = self.cache.get_tx(&txid, |tx| serialize(tx)) {
+            return Ok(json!(tx.to_hex()));
+        }
+        debug!("tx cache miss: txid={}", txid);
+        // use internal index to load confirmed transaction without an RPC
+        if let Some(tx) = self
+            .tracker
+            .lookup_transaction(&self.daemon, txid)?
+            .map(|(_blockhash, tx)| tx)
+        {
+            return Ok(json!(serialize(&tx).to_hex()));
+        }
+        // load unconfirmed transaction via RPC
+        Ok(json!(self.daemon.get_transaction_hex(&txid, None)?))
     }
 
     fn transaction_get_merkle(&self, (txid, height): &(Txid, usize)) -> Result<Value> {

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bitcoin::{BlockHash, Txid};
+use bitcoin::{BlockHash, Transaction, Txid};
 
 use crate::{
     cache::Cache,
@@ -93,8 +93,25 @@ impl Tracker {
         status.get_balance(self.chain())
     }
 
-    pub(crate) fn get_blockhash_by_txid(&self, txid: Txid) -> Option<BlockHash> {
+    pub(crate) fn lookup_transaction(
+        &self,
+        daemon: &Daemon,
+        txid: Txid,
+    ) -> Result<Option<(BlockHash, Transaction)>> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
-        self.index.filter_by_txid(txid).next()
+        let blockhashes = self.index.filter_by_txid(txid);
+        let mut result = None;
+        daemon.for_blocks(blockhashes, |blockhash, block| {
+            for tx in block.txdata {
+                if result.is_some() {
+                    return;
+                }
+                if tx.txid() == txid {
+                    result = Some((blockhash, tx));
+                    return;
+                }
+            }
+        })?;
+        Ok(result)
     }
 }
