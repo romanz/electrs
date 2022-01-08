@@ -13,7 +13,7 @@ pub(crate) struct NewHeader {
 }
 
 impl NewHeader {
-    pub(crate) fn from((header, height): (BlockHeader, usize)) -> Self {
+    pub(crate) fn new(header: BlockHeader, height: usize) -> Self {
         Self {
             header,
             hash: header.block_hash(),
@@ -59,10 +59,7 @@ impl Chain {
             return;
         }
         let new_height = self.height().saturating_sub(n);
-        self.update(vec![NewHeader::from((
-            self.headers[new_height].1,
-            new_height,
-        ))])
+        self.update(vec![NewHeader::new(self.headers[new_height].1, new_height)])
     }
 
     /// Load the chain from a collecion of headers, up to the given tip
@@ -83,7 +80,12 @@ impl Chain {
         }
         info!("loading {} headers, tip={}", new_headers.len(), tip);
         let new_headers = new_headers.into_iter().rev(); // order by height
-        self.update(new_headers.zip(1..).map(NewHeader::from).collect())
+        self.update(
+            new_headers
+                .zip(1..)
+                .map(|(header, height)| NewHeader::new(header, height))
+                .collect(),
+        )
     }
 
     /// Get the block hash at specified height (if exists)
@@ -197,7 +199,7 @@ mod tests {
                 for header in chunk {
                     height += 1;
                     tip = header.block_hash();
-                    update.push(NewHeader::from((*header, height)))
+                    update.push(NewHeader::new(*header, height))
                 }
                 regtest.update(update);
                 assert_eq!(regtest.tip(), tip);
@@ -246,7 +248,7 @@ mod tests {
         let height = regtest.height();
 
         let new_header: BlockHeader = deserialize(&Vec::from_hex("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a0304d2e55fe0b6415949cff9bca0f88c0717884a5e5797509f89f856af93624a7a6bcc60ffff7f2000000000").unwrap()).unwrap();
-        regtest.update(vec![NewHeader::from((new_header, height))]);
+        regtest.update(vec![NewHeader::new(new_header, height)]);
         assert_eq!(regtest.height(), height);
         assert_eq!(
             regtest.tip().to_hex(),

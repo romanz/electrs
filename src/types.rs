@@ -42,6 +42,16 @@ const HASH_PREFIX_LEN: usize = 8;
 type HashPrefix = [u8; HASH_PREFIX_LEN];
 type Height = u32;
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
+pub(crate) struct FilePosition {
+    #[serde(rename = "file")]
+    pub file_id: u16, // blk*.dat file index (<3k as of 2022/01)
+    #[serde(rename = "data")]
+    pub offset: u32, // offset within a single blk*.dat file (~128MB as 2022/01)
+}
+
+impl_consensus_encoding!(FilePosition, file_id, offset);
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {
     prefix: [u8; HASH_PREFIX_LEN],

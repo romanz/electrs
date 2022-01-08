@@ -134,6 +134,7 @@ pub struct Config {
     pub daemon_p2p_addr: SocketAddr,
     pub electrum_rpc_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
+    pub blocks_dir: PathBuf,
     pub wait_duration: Duration,
     pub jsonrpc_timeout: Duration,
     pub index_batch_size: usize,
@@ -271,6 +272,7 @@ impl Config {
         }
 
         let daemon_dir = &config.daemon_dir;
+        let blocks_dir = daemon_dir.join("blocks");
         let daemon_auth = SensitiveAuth(match (config.auth, config.cookie_file) {
             (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
             (None, Some(cookie_file)) => Auth::CookieFile(cookie_file),
@@ -316,6 +318,7 @@ impl Config {
             network: config.network,
             db_path: config.db_dir,
             daemon_dir: config.daemon_dir,
+            blocks_dir,
             daemon_auth,
             daemon_rpc_addr,
             daemon_p2p_addr,

@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 
 use bitcoin::{
-    consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
+    consensus::{serialize, Decodable},
+    hashes::hex::ToHex,
+    Amount, Block, BlockHash, Transaction, Txid,
 };
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
@@ -9,8 +11,8 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -18,6 +20,7 @@ use crate::{
     metrics::Metrics,
     p2p::Connection,
     signals::ExitFlag,
+    types::FilePosition,
 };
 
 enum PollResult {
@@ -93,9 +96,25 @@ fn rpc_connect(config: &Config) -> Result<Client> {
     )))
 }
 
+pub(crate) struct FileReader {
+    blocks_dir: PathBuf,
+}
+
+impl FileReader {
+    pub(crate) fn open(&self, pos: &FilePosition) -> Result<File> {
+        let name = format!("blk{:05}.dat", pos.file_id);
+        let path = self.blocks_dir.join(name);
+        let mut file =
+            File::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
+        file.seek(SeekFrom::Start(u64::from(pos.offset)))?;
+        Ok(file)
+    }
+}
+
 pub struct Daemon {
     p2p: Mutex<Connection>,
     rpc: Client,
+    reader: FileReader,
 }
 
 impl Daemon {
@@ -138,7 +157,18 @@ impl Daemon {
             config.daemon_p2p_addr,
             metrics,
         )?);
-        Ok(Self { p2p, rpc })
+        let reader = FileReader {
+            blocks_dir: config.blocks_dir.clone(),
+        };
+        let daemon = Self { p2p, rpc, reader };
+        // Make sure `getblocklocations` RPC is available (and test it with the latest block)
+        let locations = daemon.get_block_locations(&[info.best_block_hash])?;
+        assert_eq!(locations.len(), 1);
+        let pos = locations[0];
+        info!("reading block {} from {:?}", info.best_block_hash, pos);
+        let block = Block::consensus_decode(&mut daemon.open_file(&pos)?)?;
+        assert_eq!(block.block_hash(), info.best_block_hash);
+        Ok(daemon)
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
@@ -216,16 +246,41 @@ impl Daemon {
             .context("failed to get mempool entry")
     }
 
-    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        self.p2p.lock().get_new_headers(chain)
+    fn get_block_locations(&self, blockhashes: &[BlockHash]) -> Result<Vec<FilePosition>> {
+        self.rpc
+            .call("getblocklocations", &[json!(blockhashes)])
+            .context("failed to get block locations")
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
+    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
+        let headers_with_heights = self.p2p.lock().get_new_headers(chain)?;
+        let blockhashes: Vec<BlockHash> = headers_with_heights
+            .iter()
+            .map(|(header, _height)| header.block_hash())
+            .collect();
+        let positions = self.get_block_locations(&blockhashes)?;
+        assert_eq!(blockhashes.len(), positions.len());
+        Ok(headers_with_heights
+            .into_iter()
+            .map(|(header, height)| NewHeader::new(header, height))
+            .collect())
+    }
+
+    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, mut func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
         F: FnMut(BlockHash, Block),
     {
-        self.p2p.lock().for_blocks(blockhashes, func)
+        let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
+        for pos in self.get_block_locations(&blockhashes)? {
+            let block = Block::consensus_decode(&mut self.open_file(&pos)?)?;
+            func(block.block_hash(), block);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn open_file(&self, pos: &FilePosition) -> Result<File> {
+        self.reader.open(pos)
     }
 
     pub(crate) fn new_block_notification(&self) -> Receiver<()> {

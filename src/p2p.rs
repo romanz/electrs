@@ -21,14 +21,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
-    chain::{Chain, NewHeader},
+    chain::Chain,
     config::ELECTRS_VERSION,
-    metrics::{default_duration_buckets, default_size_buckets, Histogram, Metrics},
+    metrics::{default_duration_buckets, default_size_buckets, Metrics},
 };
 
 enum Request {
     GetNewHeaders(GetHeadersMessage),
-    GetBlocks(Vec<Inventory>),
 }
 
 impl Request {
@@ -38,31 +37,19 @@ impl Request {
             BlockHash::default(),
         ))
     }
-
-    fn get_blocks(blockhashes: &[BlockHash]) -> Request {
-        Request::GetBlocks(
-            blockhashes
-                .iter()
-                .map(|blockhash| Inventory::WitnessBlock(*blockhash))
-                .collect(),
-        )
-    }
 }
 
 pub(crate) struct Connection {
     req_send: Sender<Request>,
-    blocks_recv: Receiver<Block>,
     headers_recv: Receiver<Vec<BlockHeader>>,
     new_block_recv: Receiver<()>,
-
-    blocks_duration: Histogram,
 }
 
 impl Connection {
     /// Get new block headers (supporting reorgs).
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
+    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<(BlockHeader, usize)>> {
         self.req_send.send(Request::get_new_headers(chain))?;
         let headers = self
             .headers_recv
@@ -78,45 +65,7 @@ impl Connection {
             Some(last_height) => (last_height + 1)..,
             None => bail!("missing prev_blockhash: {}", prev_blockhash),
         };
-        Ok(headers
-            .into_iter()
-            .zip(new_heights)
-            .map(NewHeader::from)
-            .collect())
-    }
-
-    /// Request and process the specified blocks (in the specified order).
-    /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
-    /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
-    where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
-    {
-        self.blocks_duration.observe_duration("total", || {
-            let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
-            if blockhashes.is_empty() {
-                return Ok(());
-            }
-            self.blocks_duration.observe_duration("request", || {
-                debug!("loading {} blocks", blockhashes.len());
-                self.req_send.send(Request::get_blocks(&blockhashes))
-            })?;
-
-            for hash in blockhashes {
-                let block = self.blocks_duration.observe_duration("response", || {
-                    let block = self
-                        .blocks_recv
-                        .recv()
-                        .with_context(|| format!("failed to get block {}", hash))?;
-                    ensure!(block.block_hash() == hash, "got unexpected block");
-                    Ok(block)
-                })?;
-                self.blocks_duration
-                    .observe_duration("process", || func(hash, block));
-            }
-            Ok(())
-        })
+        Ok(headers.into_iter().zip(new_heights).collect())
     }
 
     /// Note: only a single receiver will get the notification (https://github.com/romanz/electrs/pull/526#issuecomment-934687415).
@@ -160,12 +109,6 @@ impl Connection {
             "Size of p2p messages read (in bytes)",
             "message",
             default_size_buckets(),
-        );
-        let blocks_duration = metrics.histogram_vec(
-            "p2p_blocks_duration",
-            "Time spent getting blocks via p2p protocol (in seconds)",
-            "step",
-            default_duration_buckets(),
         );
 
         let stream = Arc::clone(&conn);
@@ -227,7 +170,6 @@ impl Connection {
         });
 
         let (req_send, req_recv) = bounded::<Request>(1);
-        let (blocks_send, blocks_recv) = bounded::<Block>(10);
         let (headers_send, headers_recv) = bounded::<Vec<BlockHeader>>(1);
         let (new_block_send, new_block_recv) = bounded::<()>(0);
         let (init_send, init_recv) = bounded::<()>(0);
@@ -271,7 +213,6 @@ impl Connection {
                         NetworkMessage::Verack => {
                             init_send.send(())?; // peer acknowledged our version
                         }
-                        NetworkMessage::Block(block) => blocks_send.send(block)?,
                         NetworkMessage::Headers(headers) => headers_send.send(headers)?,
                         NetworkMessage::Alert(_) => (),  // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
                         NetworkMessage::Addr(_) => (),   // unused
@@ -288,7 +229,6 @@ impl Connection {
                     };
                     let msg = match req {
                         Request::GetNewHeaders(msg) => NetworkMessage::GetHeaders(msg),
-                        Request::GetBlocks(inv) => NetworkMessage::GetData(inv),
                     };
                     tx_send.send(msg)?;
                 }
@@ -299,10 +239,8 @@ impl Connection {
 
         Ok(Connection {
             req_send,
-            blocks_recv,
             headers_recv,
             new_block_recv,
-            blocks_duration,
         })
     }
 }
