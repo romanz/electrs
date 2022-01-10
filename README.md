@@ -48,6 +48,13 @@ which is better optimized for public usage at the cost of consuming *significant
  * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
  * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
 
+## Altcoins
+
+Altcoins are **not supported**!
+Forks of Bitcoin codebase that relax the consensus rules (hard forks) are also **not supported**.
+
+You may be able to find a fork of electrs that does support them, look around or make your own, just don't file issues/PRs here.
+
 ## Index database
 
 The database schema is described [here](doc/schema.md).
