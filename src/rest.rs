@@ -348,10 +348,6 @@ impl TxOutValue {
     }
 }
 fn is_v1_p2tr(script: &Script) -> bool {
-    // This can be removed once https://github.com/ElementsProject/rust-elements/pull/102 makes it in.
-    #[cfg(feature = "liquid")]
-    let script = script.as_bytes();
-
     script.len() == 34
         && script[0] == opcodes::all::OP_PUSHNUM_1.into_u8()
         && script[1] == opcodes::all::OP_PUSHBYTES_32.into_u8()
