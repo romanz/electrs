@@ -341,22 +341,9 @@ impl Config {
                 default_dir.push(".bitcoin");
                 default_dir
             });
-        match network_type {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => (),
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => daemon_dir.push("testnet3"),
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => daemon_dir.push("regtest"),
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => daemon_dir.push("signet"),
 
-            #[cfg(feature = "liquid")]
-            Network::Liquid => daemon_dir.push("liquidv1"),
-            #[cfg(feature = "liquid")]
-            Network::LiquidTestnet => daemon_dir.push("liquidtestnet"),
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => daemon_dir.push("liquidregtest"),
+        if let Some(network_subdir) = get_network_subdir(network_type) {
+            daemon_dir.push(network_subdir);
         }
         let blocks_dir = m
             .value_of("blocks_dir")
@@ -430,6 +417,26 @@ impl Config {
                 daemon_dir: self.daemon_dir.clone(),
             })
         }
+    }
+}
+
+pub fn get_network_subdir(network: Network) -> Option<&'static str> {
+    match network {
+        #[cfg(not(feature = "liquid"))]
+        Network::Bitcoin => None,
+        #[cfg(not(feature = "liquid"))]
+        Network::Testnet => Some("testnet3"),
+        #[cfg(not(feature = "liquid"))]
+        Network::Regtest => Some("regtest"),
+        #[cfg(not(feature = "liquid"))]
+        Network::Signet => Some("signet"),
+
+        #[cfg(feature = "liquid")]
+        Network::Liquid => Some("liquidv1"),
+        #[cfg(feature = "liquid")]
+        Network::LiquidTestnet => Some("liquidtestnet"),
+        #[cfg(feature = "liquid")]
+        Network::LiquidRegtest => Some("liquidregtest"),
     }
 }
 

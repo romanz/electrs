@@ -342,6 +342,10 @@ impl Indexer {
         };
         self.store.history_db.write(rows, self.flush);
     }
+
+    pub fn fetch_from(&mut self, from: FetchFrom) {
+        self.from = from;
+    }
 }
 
 impl ChainQuery {
