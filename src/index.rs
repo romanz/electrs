@@ -1,14 +1,23 @@
 use anyhow::{Context, Result};
-use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::{Block, BlockHash, OutPoint, Txid};
+use bitcoin::consensus::{deserialize, serialize, Decodable};
+use bitcoin::BlockHeader;
+use bitcoin::Transaction;
+use bitcoin::VarInt;
+use bitcoin::{BlockHash, OutPoint, Txid};
+
+use std::convert::TryFrom;
+use std::io::{Read, Seek, SeekFrom};
 
 use crate::{
-    chain::{Chain, NewHeader},
-    daemon::Daemon,
+    chain::Chain,
+    daemon::{BlockHashPosition, Daemon},
     db::{DBStore, Row, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
-    types::{HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
+    types::{
+        FilePosition, HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow,
+        TxidRow,
+    },
 };
 
 #[derive(Clone)]
@@ -117,12 +126,11 @@ impl Index {
     ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
-            let headers = store
-                .read_headers()
-                .into_iter()
-                .map(|row| HeaderRow::from_db_row(&row).header)
-                .collect();
-            chain.load(headers, tip);
+            let rows = store.read_headers();
+            chain.load(
+                rows.iter().map(|r| HeaderRow::from_db_row(r)).collect(),
+                tip,
+            );
             chain.drop_last_headers(reindex_last_blocks);
         };
         let stats = Stats::new(metrics);
@@ -157,8 +165,8 @@ impl Index {
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).pos())
+            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
     }
 
     pub(crate) fn filter_by_funding(
@@ -167,8 +175,8 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).pos())
+            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
     }
 
     pub(crate) fn filter_by_spending(
@@ -177,8 +185,8 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
-            .filter_map(move |height| self.chain.get_block_hash(height))
+            .map(|row| HashPrefixRow::from_db_row(&row).pos())
+            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
     }
 
     // Return `Ok(true)` when the chain is fully synced and the index is compacted.
@@ -186,60 +194,53 @@ impl Index {
         let new_headers = self
             .stats
             .observe_duration("headers", || daemon.get_new_headers(&self.chain))?;
-        match (new_headers.first(), new_headers.last()) {
-            (Some(first), Some(last)) => {
-                let count = new_headers.len();
-                info!(
-                    "indexing {} blocks: [{}..{}]",
-                    count,
-                    first.height(),
-                    last.height()
-                );
-            }
-            _ => {
-                self.store.flush(); // full compaction is performed on the first flush call
-                self.is_ready = true;
-                return Ok(true); // no more blocks to index (done for now)
-            }
+        if new_headers.is_empty() {
+            // no more new headers
+            self.store.flush(); // full compaction is performed on the first flush call
+            self.is_ready = true; // the index is ready for queries
+            return Ok(true); // no more blocks to index (sync is over)
         }
+        let count = new_headers.len();
+        info!("indexing {} blocks", count);
+        let mut header_rows = Vec::with_capacity(new_headers.len());
         for chunk in new_headers.chunks(self.batch_size) {
             exit_flag.poll().with_context(|| {
                 format!(
-                    "indexing interrupted at height: {}",
-                    chunk.first().unwrap().height()
+                    "indexing interrupted at block: {}",
+                    chunk.first().unwrap().hash
                 )
             })?;
-            self.sync_blocks(daemon, chunk)?;
+            header_rows.extend(self.sync_blocks(daemon, chunk)?);
         }
-        self.chain.update(new_headers);
+        self.chain.update(header_rows);
+        self.stats.height.set("tip", self.chain.height() as f64);
         self.stats.observe_chain(&self.chain);
+        daemon.verify_blocks(&[self.chain.tip()])?; // sanity check
         Ok(false) // sync is not done
     }
 
-    fn sync_blocks(&mut self, daemon: &Daemon, chunk: &[NewHeader]) -> Result<()> {
-        let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
-        let mut heights = chunk.iter().map(|h| h.height());
-
+    fn sync_blocks(
+        &mut self,
+        daemon: &Daemon,
+        chunk: &[BlockHashPosition],
+    ) -> Result<Vec<HeaderRow>> {
         let mut batch = WriteBatch::default();
-        daemon.for_blocks(blockhashes, |_blockhash, block| {
-            let height = heights.next().expect("unexpected block");
-            self.stats.observe_duration("block", || {
-                index_single_block(block, height).extend(&mut batch)
-            });
-            self.stats.height.set("tip", height as f64);
-        })?;
-        let heights: Vec<_> = heights.collect();
-        assert!(
-            heights.is_empty(),
-            "some blocks were not indexed: {:?}",
-            heights
-        );
+        let mut header_rows = Vec::with_capacity(chunk.len());
+        for h in chunk {
+            self.stats.observe_duration("block", || -> Result<()> {
+                let file = daemon.open_file(h.pos)?;
+                let result = index_single_block(h.pos, file)?;
+                result.extend(&mut batch); // FIXME
+                header_rows.push(result.header_row);
+                Ok(())
+            })?;
+        }
         batch.sort();
         self.stats.observe_batch(&batch);
         self.stats
             .observe_duration("write", || self.store.write(&batch));
         self.stats.observe_db(&self.store);
-        Ok(())
+        Ok(header_rows)
     }
 
     pub(crate) fn is_ready(&self) -> bool {
@@ -251,13 +252,19 @@ fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
-fn index_single_block(block: Block, height: usize) -> IndexResult {
-    let mut funding_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.output.len()).sum());
-    let mut spending_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.input.len()).sum());
-    let mut txid_rows = Vec::with_capacity(block.txdata.len());
+fn index_single_block(block_pos: FilePosition, mut file: impl Read + Seek) -> Result<IndexResult> {
+    let block_header = BlockHeader::consensus_decode(&mut file)?;
+    let tx_count = VarInt::consensus_decode(&mut file)?.0 as usize;
 
-    for tx in &block.txdata {
-        txid_rows.push(TxidRow::row(tx.txid(), height));
+    let mut funding_rows = Vec::with_capacity(tx_count);
+    let mut spending_rows = Vec::with_capacity(tx_count);
+    let mut txid_rows = Vec::with_capacity(tx_count);
+
+    for _ in 0..tx_count {
+        let offset = file.seek(SeekFrom::Current(0))?;
+        let tx_pos = block_pos.with_offset(u32::try_from(offset)?);
+        let tx = Transaction::consensus_decode(&mut file)?;
+        txid_rows.push(TxidRow::row(tx.txid(), tx_pos));
 
         funding_rows.extend(
             tx.output
@@ -265,7 +272,7 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
                 .filter(|txo| !txo.script_pubkey.is_provably_unspendable())
                 .map(|txo| {
                     let scripthash = ScriptHash::new(&txo.script_pubkey);
-                    ScriptHashRow::row(scripthash, height)
+                    ScriptHashRow::row(scripthash, tx_pos)
                 }),
         );
 
@@ -275,13 +282,15 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
         spending_rows.extend(
             tx.input
                 .iter()
-                .map(|txin| SpendingPrefixRow::row(txin.previous_output, height)),
+                .map(|txin| SpendingPrefixRow::row(txin.previous_output, tx_pos)),
         );
     }
-    IndexResult {
+    let block_limit = file.seek(SeekFrom::Current(0))?;
+    let block_size = u32::try_from(block_limit)? - block_pos.offset;
+    Ok(IndexResult {
         funding_rows,
         spending_rows,
         txid_rows,
-        header_row: HeaderRow::new(block.header),
-    }
+        header_row: HeaderRow::new(block_header, block_pos, block_size),
+    })
 }

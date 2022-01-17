@@ -3,41 +3,40 @@
 The index is stored at a single RocksDB database using the following column families.
 Most of the data is stored in key-only DB rows (i.e. having empty values).
 
+Note that building this index requires `getblocklocation` RPC (see [commit](https://github.com/romanz/bitcoin/commit/9dd68c4dc1139edc65772c37171053cf8b05ec97)).
+
 ## Transaction outputs' index (`funding`)
 
 Allows efficiently finding all funding transactions for a specific address:
 
-|  Script Hash Prefix  | Confirmed Block Height |
-| -------------------- | ---------------------- |
-| `SHA256(script)[:8]` | `height as u32`        |
+|  Script Hash Prefix  |       Transaction position       |
+| -------------------- | -------------------------------- |
+| `SHA256(script)[:8]` | `(file_id, offset) as (u16, u32)`|
 
 ## Transaction inputs' index (`spending`)
 
 Allows efficiently finding spending transaction of a specific output:
 
-| Previous Outpoint Prefix | Confirmed Block Height |
-| ------------------------ | ---------------------- |
-| `txid[:8] as u64 + vout` | `height as u32`        |
+| Previous Outpoint Prefix |       Transaction position       |
+| ------------------------ | -------------------------------- |
+| `txid[:8] as u64 + vout` | `(file_id, offset) as (u16, u32)`|
 
 
 ## Transaction ID index (`txid`)
 
-In order to save storage space, we map the 8-byte transaction ID prefix to its confirmed block height:
+In order to save storage space, we map the 8-byte transaction ID prefix to its position:
 
-| Txid Prefix | Confirmed height |
-| ----------- | ---------------- |
-| `txid[:8]`  | `height as u32`  |
-
-Note that this mapping allows us to use `getrawtransaction` RPC to retrieve actual transaction data from without `-txindex` enabled
-(by explicitly specifying the [blockhash](https://github.com/bitcoin/bitcoin/commit/497d0e014cc79d46531d570e74e4aeae72db602d)).
+| Txid Prefix |       Transaction position       |
+| ----------- | -------------------------------- |
+| `txid[:8]`  | `(file_id, offset) as (u16, u32)`|
 
 ## Headers (`headers`)
 
 For faster loading, we store all block headers in RocksDB:
 
-|    Serialized header    |
-| ----------------------- |
-| `header as BlockHeader` |
+|    Serialized header    | Block hash  |           Block position         | Block size |
+| ----------------------- | ----------- | -------------------------------- | ---------- |
+|      `BlockHeader`      | `BlockHash` | `(file_id, offset) as (u16, u32)`|   `u32`    |
 
 In addition, we also store the chain tip:
 

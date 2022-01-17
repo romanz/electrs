@@ -84,7 +84,7 @@ struct Config {
     format: u64,
 }
 
-const CURRENT_FORMAT: u64 = 0;
+const CURRENT_FORMAT: u64 = 1;
 
 impl Default for Config {
     fn default() -> Self {

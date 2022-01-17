@@ -18,7 +18,6 @@ use crate::{
 pub struct Tracker {
     index: Index,
     mempool: Mempool,
-    metrics: Metrics,
     ignore_mempool: bool,
 }
 
@@ -27,9 +26,9 @@ pub(crate) enum Error {
 }
 
 impl Tracker {
-    pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
+    pub fn new(config: &Config, daemon: &Daemon, metrics: &Metrics) -> Result<Self> {
         let store = DBStore::open(&config.db_path, config.auto_reindex)?;
-        let chain = Chain::new(config.network);
+        let chain = Chain::new(daemon.get_genesis()?);
         Ok(Self {
             index: Index::load(
                 store,
@@ -41,7 +40,6 @@ impl Tracker {
             )
             .context("failed to open index")?,
             mempool: Mempool::new(&metrics),
-            metrics,
             ignore_mempool: config.ignore_mempool,
         })
     }
@@ -52,10 +50,6 @@ impl Tracker {
 
     pub(crate) fn fees_histogram(&self) -> &FeeHistogram {
         self.mempool.fees_histogram()
-    }
-
-    pub(crate) fn metrics(&self) -> &Metrics {
-        &self.metrics
     }
 
     pub(crate) fn get_unspent(&self, status: &ScriptHashStatus) -> Vec<UnspentEntry> {

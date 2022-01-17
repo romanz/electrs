@@ -1,56 +1,25 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Bound;
 
-use bitcoin::consensus::deserialize;
-use bitcoin::hashes::hex::FromHex;
-use bitcoin::network::constants;
 use bitcoin::{BlockHash, BlockHeader};
 
-/// A new header found, to be added to the chain at specific height
-pub(crate) struct NewHeader {
-    header: BlockHeader,
-    hash: BlockHash,
-    height: usize,
-}
-
-impl NewHeader {
-    pub(crate) fn new(header: BlockHeader, height: usize) -> Self {
-        Self {
-            header,
-            hash: header.block_hash(),
-            height,
-        }
-    }
-
-    pub(crate) fn height(&self) -> usize {
-        self.height
-    }
-
-    pub(crate) fn hash(&self) -> BlockHash {
-        self.hash
-    }
-}
+use crate::types::{FilePosition, HeaderRow};
 
 /// Current blockchain headers' list
-pub struct Chain {
-    headers: Vec<(BlockHash, BlockHeader)>,
-    heights: HashMap<BlockHash, usize>,
+pub(crate) struct Chain {
+    rows: Vec<HeaderRow>,
+    heights: HashMap<BlockHash, usize>, // map block hash to its height
+    positions: BTreeMap<FilePosition, usize>, // map block file position to its height
 }
 
 impl Chain {
-    // create an empty chain
-    pub fn new(network: constants::Network) -> Self {
-        let genesis_header_hex = match network {
-            constants::Network::Bitcoin => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
-            constants::Network::Testnet => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff001d1aa4ae18",
-            constants::Network::Regtest => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff7f2002000000",
-            constants::Network::Signet => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a008f4d5fae77031e8ad22203",
-        };
-        let genesis_header_bytes = Vec::from_hex(genesis_header_hex).unwrap();
-        let genesis: BlockHeader = deserialize(&genesis_header_bytes).unwrap();
-        assert_eq!(genesis.prev_blockhash, BlockHash::default());
+    // create an empty chain (with only the genesis block)
+    pub(crate) fn new(genesis: HeaderRow) -> Self {
+        assert_eq!(genesis.header.prev_blockhash, BlockHash::default());
         Self {
-            headers: vec![(genesis.block_hash(), genesis)],
-            heights: std::iter::once((genesis.block_hash(), 0)).collect(), // genesis header @ zero height
+            heights: std::iter::once((genesis.hash, 0)).collect(), // genesis block @ zero height
+            positions: std::iter::once((genesis.pos, 0)).collect(),
+            rows: vec![genesis],
         }
     }
 
@@ -59,91 +28,120 @@ impl Chain {
             return;
         }
         let new_height = self.height().saturating_sub(n);
-        self.update(vec![NewHeader::new(self.headers[new_height].1, new_height)])
+        let row = self.rows[new_height].clone();
+        self.update(vec![row]);
     }
 
     /// Load the chain from a collecion of headers, up to the given tip
-    pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
-        let genesis_hash = self.headers[0].0;
+    pub(crate) fn load(&mut self, unordered_rows: Vec<HeaderRow>, tip: BlockHash) {
+        let genesis_hash = self.rows[0].header.block_hash();
 
-        let mut header_map: HashMap<BlockHash, BlockHeader> =
-            headers.into_iter().map(|h| (h.block_hash(), h)).collect();
+        let mut rows_map: HashMap<BlockHash, HeaderRow> =
+            unordered_rows.into_iter().map(|r| (r.hash, r)).collect();
         let mut blockhash = tip;
-        let mut new_headers = vec![];
+        let mut rows = vec![]; // from tip to genesis
         while blockhash != genesis_hash {
-            let header = match header_map.remove(&blockhash) {
-                Some(header) => header,
+            let row = match rows_map.remove(&blockhash) {
+                Some(row) => row,
                 None => panic!("missing header {} while loading from DB", blockhash),
             };
-            blockhash = header.prev_blockhash;
-            new_headers.push(header);
+            blockhash = row.header.prev_blockhash;
+            rows.push(row);
         }
-        info!("loading {} headers, tip={}", new_headers.len(), tip);
-        let new_headers = new_headers.into_iter().rev(); // order by height
-        self.update(
-            new_headers
-                .zip(1..)
-                .map(|(header, height)| NewHeader::new(header, height))
-                .collect(),
-        )
+        info!("loading {} headers, tip={}", rows.len(), tip);
+        self.update(rows.into_iter().rev().collect()); // order by height
     }
 
     /// Get the block hash at specified height (if exists)
     pub(crate) fn get_block_hash(&self, height: usize) -> Option<BlockHash> {
-        self.headers.get(height).map(|(hash, _header)| *hash)
+        self.rows.get(height).map(|r| r.header.block_hash())
+    }
+
+    /// Get the block hash at file position
+    pub(crate) fn get_header_row_for(&self, pos: FilePosition) -> Option<&HeaderRow> {
+        let range = (Bound::Unbounded, Bound::Included(&pos));
+        let (_, height) = self.positions.range(range).last()?;
+        let row = &self.rows[*height];
+        if row.pos.file_id != pos.file_id {
+            return None;
+        }
+        let block_start = row.pos.offset;
+        let block_limit = row.pos.offset + row.size;
+        if block_start <= pos.offset && pos.offset < block_limit {
+            Some(row)
+        } else {
+            None
+        }
     }
 
     /// Get the block header at specified height (if exists)
     pub(crate) fn get_block_header(&self, height: usize) -> Option<&BlockHeader> {
-        self.headers.get(height).map(|(_hash, header)| header)
+        self.rows.get(height).map(|info| &info.header)
     }
 
     /// Get the block height given the specified hash (if exists)
-    pub(crate) fn get_block_height(&self, blockhash: &BlockHash) -> Option<usize> {
-        self.heights.get(blockhash).copied()
+    pub(crate) fn get_block_height(&self, blockhash: BlockHash) -> Option<usize> {
+        self.heights.get(&blockhash).copied()
     }
 
     /// Update the chain with a list of new headers (possibly a reorg)
-    pub(crate) fn update(&mut self, headers: Vec<NewHeader>) {
-        if let Some(first_height) = headers.first().map(|h| h.height) {
-            for (hash, _header) in self.headers.drain(first_height..) {
-                assert!(self.heights.remove(&hash).is_some());
-            }
-            for (h, height) in headers.into_iter().zip(first_height..) {
-                assert_eq!(h.height, height);
-                assert_eq!(h.hash, h.header.block_hash());
-                assert!(self.heights.insert(h.hash, h.height).is_none());
-                self.headers.push((h.hash, h.header));
-            }
-            info!(
-                "chain updated: tip={}, height={}",
-                self.headers.last().unwrap().0,
-                self.headers.len() - 1
-            );
+    pub(crate) fn update(&mut self, rows: Vec<HeaderRow>) {
+        if rows.is_empty() {
+            return;
         }
+        let first_new_height = self.connect_headers(&rows);
+        for row in self.rows.drain(first_new_height..) {
+            assert!(self.heights.remove(&row.header.block_hash()).is_some());
+            assert!(self.positions.remove(&row.pos).is_some());
+        }
+        for (row, height) in rows.into_iter().zip(first_new_height..) {
+            assert!(self.heights.insert(row.hash, height).is_none());
+            assert!(self.positions.insert(row.pos, height).is_none());
+            self.rows.push(row);
+            assert_eq!(height, self.height());
+        }
+        info!(
+            "chain updated: tip={}, height={}",
+            self.rows.last().unwrap().hash,
+            self.height(),
+        );
+    }
+
+    fn connect_headers(&self, rows: &[HeaderRow]) -> usize {
+        for pair in rows.windows(2) {
+            assert_eq!(pair[0].hash, pair[1].header.prev_blockhash);
+        }
+        let first = rows.first().expect("connect connect empty headers' list");
+        if let Some(height) = self.get_block_height(first.header.prev_blockhash) {
+            return height + 1;
+        }
+        if let Some(first_new_height) = self.get_block_height(first.hash) {
+            return first_new_height;
+        }
+        panic!("failed to connect headers to chain: {:?}", rows);
     }
 
     /// Best block hash
     pub(crate) fn tip(&self) -> BlockHash {
-        self.headers.last().expect("empty chain").0
+        self.rows.last().expect("empty chain").hash
     }
 
     /// Number of blocks (excluding genesis block)
     pub(crate) fn height(&self) -> usize {
-        self.headers.len() - 1
+        self.rows.len() - 1
     }
 
     /// List of block hashes for efficient fork detection and block/header sync
     /// see https://en.bitcoin.it/wiki/Protocol_documentation#getblocks
     pub(crate) fn locator(&self) -> Vec<BlockHash> {
         let mut result = vec![];
-        let mut index = self.headers.len() - 1;
+        let mut index = self.height();
         let mut step = 1;
         loop {
             if result.len() >= 10 {
                 step *= 2;
             }
-            result.push(self.headers[index].0);
+            result.push(self.rows[index].hash);
             if index == 0 {
                 break;
             }
@@ -155,15 +153,28 @@ impl Chain {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chain, NewHeader};
+    use super::{Chain, FilePosition, HeaderRow};
     use bitcoin::consensus::deserialize;
     use bitcoin::hashes::hex::{FromHex, ToHex};
-    use bitcoin::network::constants::Network::Regtest;
-    use bitcoin::BlockHeader;
+    use bitcoin::Block;
+
+    fn regtest_genesis() -> HeaderRow {
+        let block_bytes = Vec::from_hex("0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff7f20020000000101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000").unwrap();
+        let block: Block = deserialize(&block_bytes).unwrap();
+        HeaderRow {
+            header: block.header,
+            hash: block.header.block_hash(),
+            pos: FilePosition {
+                file_id: 0,
+                offset: 0,
+            },
+            size: block_bytes.len() as u32,
+        }
+    }
 
     #[test]
     fn test_genesis() {
-        let regtest = Chain::new(Regtest);
+        let regtest = Chain::new(regtest_genesis());
         assert_eq!(regtest.height(), 0);
         assert_eq!(
             regtest.tip().to_hex(),
@@ -171,88 +182,184 @@ mod tests {
         );
     }
 
+    // created with `generateblock ADDR 10`
+    const HEX_BLOCKS: &[&str] = &[
+        "0000002006226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910fc98e8631211374711ec913c13da27c0ee394227e4bedcd959e80c027da9207afe2fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03510101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "000000202765a8bf8b681c0c458ac9b0a88751aee2786b22ff5993c223e745cd6340751d1e52eaf9a6127c213ecf28177d090ce7430e92c6ac1db9fe5a78465abdcb24c0e3fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03520101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "000000200b44e582bba99a1c5dcd6bc4873aa64892eacce78ef01260daeeaff64f26e1100305c258b05c9089330cf35b50ec5550fff0b1f9c7bddbdcc3fe38e08b0664cae3fbe361ffff7f200200000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03530101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "00000020718bcf9f20342fdb3802e1bc62e001b6a0489be9f313ab1f73c4a90772aa343d323e25b2d9b0df77a9bd6051a61d11b0c2733499d2c2ec98cc9e16c71704e500e4fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03540101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "00000020bfcf1eb57e7b8605291755a19cd14b8e3c9e43a35092f5256679683d8c087d4789c375dbf882d8a08e39cda75319592c1f0ee0390e0a8459f0a1c33fc658dc31e4fbe361ffff7f200100000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03550101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "000000206d72323928ebef586a2ed015d90ce3031ecbac80fda6efe5c17ae40ac3ad0631395bff9ef467b8d84f24934b3ff7ae360fe68b9ad30e61446930180c7f2b4f26e4fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03560101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "000000208fa24b82c36f9c96900e963a7ba6ab02cea9db79c79ca9657d171dab89e9650cfc94a57dbc4f7ae23d72732479f7eb5608f1db5d82cf1b209f70be7ff8c84820e4fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03570101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "00000020e99dfc425c3023fcbd33d2904136e84c889f09aa0e4d7c73d5e3c99b648a461c884dea2fc958de0030fe6ac8f121787b7af4b12952b48046c248dc3285d54099e5fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03580101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "00000020e6f833e0062b64ac3e8f0ec1bc2f10a69c8e8022c13b90aed62f58792ac6085fb61f3d95caf732fbd1afa12f5d0d49d4d22f263741a1a16292c7cb00f865097de5fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03590101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+        "000000205f93098ed406ce8e423d8fce238c8bd7a5007f37b6e855b21cc144a26414873fd03879408e9336e958b3549936da1d63e68d8b42381a9715c08094ae6c560e77e5fbe361ffff7f200000000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff035a0101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000",
+    ];
+
+    #[test]
+    fn test_lookups() {
+        fn file_pos(offset: u32) -> FilePosition {
+            FilePosition { file_id: 1, offset }
+        }
+
+        let mut regtest = Chain::new(regtest_genesis());
+
+        let mut offset = 0;
+        let mut limits = vec![];
+        let mut rows = vec![];
+        for hex_block in HEX_BLOCKS {
+            offset += 100; // "separate" blocks within the file
+            let block_bytes = Vec::from_hex(hex_block).unwrap();
+            let block: Block = deserialize(&block_bytes).unwrap();
+            let size = block_bytes.len() as u32;
+            let row = HeaderRow {
+                header: block.header,
+                hash: block.block_hash(),
+                pos: file_pos(offset),
+                size,
+            };
+            let end = offset + size;
+            limits.push((offset, end));
+            offset = end;
+            rows.push(row.clone());
+            regtest.update(vec![row]);
+        }
+        for ((offset, end), row) in limits.into_iter().zip(rows) {
+            assert_eq!(None, regtest.get_header_row_for(file_pos(offset - 9)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(offset - 4)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(offset - 1)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(offset)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(offset + 1)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(offset + 4)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(offset + 9)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(end - 9)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(end - 4)));
+            assert_eq!(Some(&row), regtest.get_header_row_for(file_pos(end - 1)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(end)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(end + 1)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(end + 4)));
+            assert_eq!(None, regtest.get_header_row_for(file_pos(end + 9)));
+        }
+    }
+
+    // created with `invalidateblock` and then `generateblock ADDR 1`
+    const REORG_HEX_BLOCK: &str = "000000205f93098ed406ce8e423d8fce238c8bd7a5007f37b6e855b21cc144a26414873fd03879408e9336e958b3549936da1d63e68d8b42381a9715c08094ae6c560e77e9fce361ffff7f200400000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff035a0101ffffffff0200f2052a010000001976a9147f95f4c31a3a70f2c3661573a7d2926b451d760d88ac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000";
+
     #[test]
     fn test_updates() {
-        let hex_headers = vec![
-"0000002006226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f1d14d3c7ff12d6adf494ebbcfba69baa915a066358b68a2b8c37126f74de396b1d61cc60ffff7f2000000000",
-"00000020d700ae5d3c705702e0a5d9ababd22ded079f8a63b880b1866321d6bfcb028c3fc816efcf0e84ccafa1dda26be337f58d41b438170c357cda33a68af5550590bc1e61cc60ffff7f2004000000",
-"00000020d13731bc59bc0989e06a5e7cab9843a4e17ad65c7ca47cd77f50dfd24f1f55793f7f342526aca9adb6ce8f33d8a07662c97d29d83b9e18117fb3eceecb2ab99b1e61cc60ffff7f2001000000",
-"00000020a603def3e1255cadfb6df072946327c58b344f9bfb133e8e3e280d1c2d55b31c731a68f70219472864a7cb010cd53dc7e0f67e57f7d08b97e5e092b0c3942ad51f61cc60ffff7f2001000000",
-"0000002041dd202b3b2edcdd3c8582117376347d48ff79ff97c95e5ac814820462012e785142dc360975b982ca43eecd14b4ba6f019041819d4fc5936255d7a2c45a96651f61cc60ffff7f2000000000",
-"0000002072e297a2d6b633c44f3c9b1a340d06f3ce4e6bcd79ebd4c4ff1c249a77e1e37c59c7be1ca0964452e1735c0d2740f0d98a11445a6140c36b55770b5c0bcf801f1f61cc60ffff7f2000000000",
-"000000200c9eb5889a8e924d1c4e8e79a716514579e41114ef37d72295df8869d6718e4ac5840f28de43ff25c7b9200aaf7873b20587c92827eaa61943484ca828bdd2e11f61cc60ffff7f2000000000",
-"000000205873f322b333933e656b07881bb399dae61a6c0fa74188b5fb0e3dd71c9e2442f9e2f433f54466900407cf6a9f676913dd54aad977f7b05afcd6dcd81e98ee752061cc60ffff7f2004000000",
-"00000020fd1120713506267f1dba2e1856ca1d4490077d261cde8d3e182677880df0d856bf94cfa5e189c85462813751ab4059643759ed319a81e0617113758f8adf67bc2061cc60ffff7f2000000000",
-"000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a0304d2e55fe0b6415949cff9bca0f88c0717884a5e5797509f89f856af93624a2061cc60ffff7f2002000000",
-        ];
-        let headers: Vec<BlockHeader> = hex_headers
+        let rows: Vec<HeaderRow> = HEX_BLOCKS
             .iter()
-            .map(|hex_header| deserialize(&Vec::from_hex(hex_header).unwrap()).unwrap())
+            .zip(1u16..) // genesis block is not part of this list
+            .map(|(hex_header, i)| {
+                let block_bytes = Vec::from_hex(hex_header).unwrap();
+                let block: Block = deserialize(&block_bytes).unwrap();
+                let header = block.header;
+                let pos = FilePosition {
+                    file_id: i,
+                    offset: 0,
+                };
+                HeaderRow {
+                    header,
+                    hash: header.block_hash(),
+                    pos,
+                    size: block_bytes.len() as u32,
+                }
+            })
             .collect();
 
-        for chunk_size in 1..hex_headers.len() {
-            let mut regtest = Chain::new(Regtest);
+        for chunk_size in 1..rows.len() {
+            let mut regtest = Chain::new(regtest_genesis());
             let mut height = 0;
             let mut tip = regtest.tip();
-            for chunk in headers.chunks(chunk_size) {
+            for chunk in rows.chunks(chunk_size) {
                 let mut update = vec![];
-                for header in chunk {
+                for row in chunk {
                     height += 1;
-                    tip = header.block_hash();
-                    update.push(NewHeader::new(*header, height))
+                    tip = row.hash;
+                    update.push(row.clone())
                 }
                 regtest.update(update);
                 assert_eq!(regtest.tip(), tip);
                 assert_eq!(regtest.height(), height);
             }
-            assert_eq!(regtest.tip(), headers.last().unwrap().block_hash());
-            assert_eq!(regtest.height(), headers.len());
+            assert_eq!(regtest.tip(), rows.last().unwrap().header.block_hash());
+            assert_eq!(regtest.height(), rows.len());
         }
 
-        // test loading from a list of headers and tip
-        let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
-        assert_eq!(regtest.height(), headers.len());
+        // test loading from a list of rows and tip
+        let mut regtest = Chain::new(regtest_genesis());
+        regtest.load(rows.clone(), rows.last().unwrap().header.block_hash());
+        assert_eq!(regtest.height(), rows.len());
 
         // test getters
-        for (header, height) in headers.iter().zip(1usize..) {
-            assert_eq!(regtest.get_block_header(height), Some(header));
-            assert_eq!(regtest.get_block_hash(height), Some(header.block_hash()));
-            assert_eq!(regtest.get_block_height(&header.block_hash()), Some(height));
+        for (row, height) in rows.iter().zip(1usize..) {
+            assert_eq!(regtest.get_block_header(height), Some(&row.header));
+            assert_eq!(
+                regtest.get_block_hash(height),
+                Some(row.header.block_hash())
+            );
+            assert_eq!(
+                regtest.get_block_height(row.header.block_hash()),
+                Some(height)
+            );
         }
 
         // test chain shortening
-        for i in (0..=headers.len()).rev() {
+        for i in (0..=regtest.height()).rev() {
             let hash = regtest.get_block_hash(i).unwrap();
-            assert_eq!(regtest.get_block_height(&hash), Some(i));
-            assert_eq!(regtest.height(), i);
+            assert_eq!(regtest.get_block_height(hash), Some(i));
             assert_eq!(regtest.tip(), hash);
+            assert_eq!(regtest.height(), i);
             regtest.drop_last_headers(1);
         }
         assert_eq!(regtest.height(), 0);
         assert_eq!(
             regtest.tip().to_hex(),
-            "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
+            "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206" // genesis
         );
 
         regtest.drop_last_headers(1);
         assert_eq!(regtest.height(), 0);
         assert_eq!(
             regtest.tip().to_hex(),
-            "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
+            "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206" // still genesis
         );
+
+        // test block locations' lookup
+        for height in 0..=regtest.height() {
+            let hash = regtest.get_block_hash(height).unwrap();
+            for offset in vec![0, 1, 2, 4, 8, 16] {
+                let pos = FilePosition {
+                    file_id: height as u16,
+                    offset,
+                };
+                let row = regtest.get_header_row_for(pos).unwrap();
+                assert_eq!(row.hash, hash);
+                assert_eq!(row.pos, pos.with_offset(0));
+            }
+        }
 
         // test reorg
-        let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
+        let mut regtest = Chain::new(regtest_genesis());
+        regtest.load(rows.clone(), rows.last().unwrap().hash);
         let height = regtest.height();
 
-        let new_header: BlockHeader = deserialize(&Vec::from_hex("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a0304d2e55fe0b6415949cff9bca0f88c0717884a5e5797509f89f856af93624a7a6bcc60ffff7f2000000000").unwrap()).unwrap();
-        regtest.update(vec![NewHeader::new(new_header, height)]);
+        let reorg_block_bytes = Vec::from_hex(REORG_HEX_BLOCK).unwrap();
+        let reorg_block: Block = deserialize(&reorg_block_bytes).unwrap();
+        let hash = reorg_block.block_hash();
+        assert!(regtest.tip() != hash);
+
+        let row = HeaderRow {
+            header: reorg_block.header,
+            hash,
+            size: reorg_block_bytes.len() as u32,
+            pos: FilePosition {
+                file_id: 9999,
+                offset: 99,
+            },
+        };
+        regtest.update(vec![row]);
         assert_eq!(regtest.height(), height);
-        assert_eq!(
-            regtest.tip().to_hex(),
-            "0e16637fe0700a7c52e9a6eaa58bd6ac7202652103be8f778680c66f51ad2e9b"
-        );
+        assert_eq!(regtest.tip(), hash);
     }
 }

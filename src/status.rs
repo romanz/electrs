@@ -240,7 +240,7 @@ impl ScriptHashStatus {
             .iter()
             .filter_map(move |(blockhash, entries)| {
                 chain
-                    .get_block_height(blockhash)
+                    .get_block_height(*blockhash)
                     .map(|height| (height, &entries[..]))
             })
     }

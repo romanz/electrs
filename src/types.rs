@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use bitcoin::{
     consensus::encode::{deserialize, serialize, Decodable, Encodable},
     hashes::{borrow_slice_impl, hash_newtype, hex_fmt_impl, index_impl, serde_impl, sha256, Hash},
-    BlockHeader, OutPoint, Script, Txid,
+    BlockHash, BlockHeader, OutPoint, Script, Txid,
 };
 
 use crate::db;
@@ -40,7 +40,6 @@ macro_rules! impl_consensus_encoding {
 const HASH_PREFIX_LEN: usize = 8;
 
 type HashPrefix = [u8; HASH_PREFIX_LEN];
-type Height = u32;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub(crate) struct FilePosition {
@@ -50,12 +49,21 @@ pub(crate) struct FilePosition {
     pub offset: u32, // offset within a single blk*.dat file (~128MB as 2022/01)
 }
 
+impl FilePosition {
+    pub fn with_offset(&self, offset: u32) -> Self {
+        Self {
+            file_id: self.file_id,
+            offset,
+        }
+    }
+}
+
 impl_consensus_encoding!(FilePosition, file_id, offset);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {
     prefix: [u8; HASH_PREFIX_LEN],
-    height: Height, // transaction confirmed height
+    pos: FilePosition, // transaction confirmed height
 }
 
 impl HashPrefixRow {
@@ -67,12 +75,12 @@ impl HashPrefixRow {
         deserialize(row).expect("bad HashPrefixRow")
     }
 
-    pub fn height(&self) -> usize {
-        usize::try_from(self.height).expect("invalid height")
+    pub fn pos(&self) -> FilePosition {
+        self.pos
     }
 }
 
-impl_consensus_encoding!(HashPrefixRow, prefix, height);
+impl_consensus_encoding!(HashPrefixRow, prefix, pos);
 
 hash_newtype!(
     ScriptHash,
@@ -101,10 +109,10 @@ impl ScriptHashRow {
         scripthash.0[..HASH_PREFIX_LEN].to_vec().into_boxed_slice()
     }
 
-    pub(crate) fn row(scripthash: ScriptHash, height: usize) -> HashPrefixRow {
+    pub(crate) fn row(scripthash: ScriptHash, pos: FilePosition) -> HashPrefixRow {
         HashPrefixRow {
             prefix: scripthash.prefix(),
-            height: Height::try_from(height).expect("invalid height"),
+            pos,
         }
     }
 }
@@ -135,10 +143,10 @@ impl SpendingPrefixRow {
         Box::new(spending_prefix(outpoint))
     }
 
-    pub(crate) fn row(outpoint: OutPoint, height: usize) -> HashPrefixRow {
+    pub(crate) fn row(outpoint: OutPoint, pos: FilePosition) -> HashPrefixRow {
         HashPrefixRow {
             prefix: spending_prefix(outpoint),
-            height: Height::try_from(height).expect("invalid height"),
+            pos,
         }
     }
 }
@@ -158,26 +166,35 @@ impl TxidRow {
         Box::new(txid_prefix(&txid))
     }
 
-    pub(crate) fn row(txid: Txid, height: usize) -> HashPrefixRow {
+    pub(crate) fn row(txid: Txid, pos: FilePosition) -> HashPrefixRow {
         HashPrefixRow {
             prefix: txid_prefix(&txid),
-            height: Height::try_from(height).expect("invalid height"),
+            pos,
         }
     }
 }
 
 // ***************************************************************************
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub(crate) struct HeaderRow {
     pub(crate) header: BlockHeader,
+    pub(crate) hash: BlockHash,
+    pub(crate) pos: FilePosition,
+    pub(crate) size: u32, // block size in bytes
 }
 
-impl_consensus_encoding!(HeaderRow, header);
+impl_consensus_encoding!(HeaderRow, header, hash, pos, size);
 
 impl HeaderRow {
-    pub(crate) fn new(header: BlockHeader) -> Self {
-        Self { header }
+    pub(crate) fn new(header: BlockHeader, pos: FilePosition, size: u32) -> Self {
+        let hash = header.block_hash();
+        Self {
+            header,
+            hash,
+            pos,
+            size,
+        }
     }
 
     pub(crate) fn to_db_row(&self) -> db::Row {
@@ -191,7 +208,7 @@ impl HeaderRow {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{spending_prefix, HashPrefixRow, ScriptHash, ScriptHashRow, TxidRow};
+    use super::{spending_prefix, FilePosition, HashPrefixRow, ScriptHash, ScriptHashRow, TxidRow};
     use bitcoin::{hashes::hex::ToHex, Address, OutPoint, Txid};
     use serde_json::{from_str, json};
 
@@ -209,9 +226,32 @@ mod tests {
     fn test_scripthash_row() {
         let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
         let scripthash: ScriptHash = from_str(&hex).unwrap();
-        let row1 = ScriptHashRow::row(scripthash, 123456);
+        let row1 = ScriptHashRow::row(
+            scripthash,
+            FilePosition {
+                file_id: 0xabcd,
+                offset: 0x12345678,
+            },
+        );
         let db_row = row1.to_db_row();
-        assert_eq!(db_row[..].to_hex(), "a384491d38929fcc40e20100");
+        assert_eq!(db_row[..].to_hex(), "a384491d38929fcccdab78563412");
+        let row2 = HashPrefixRow::from_db_row(&db_row);
+        assert_eq!(row1, row2);
+    }
+
+    #[test]
+    fn test_txid_row() {
+        let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
+        let txid: Txid = from_str(&hex).unwrap();
+        let row1 = TxidRow::row(
+            txid,
+            FilePosition {
+                file_id: 0xabcd,
+                offset: 0x12345678,
+            },
+        );
+        let db_row = row1.to_db_row();
+        assert_eq!(db_row[..].to_hex(), "a384491d38929fcccdab78563412");
         let row2 = HashPrefixRow::from_db_row(&db_row);
         assert_eq!(row1, row2);
     }
@@ -224,33 +264,6 @@ mod tests {
             scripthash.to_hex(),
             "00dfb264221d07712a144bda338e89237d1abd2db4086057573895ea2659766a"
         );
-    }
-
-    #[test]
-    fn test_txid1_prefix() {
-        // duplicate txids from BIP-30
-        let hex = "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599";
-        let txid = Txid::from_str(hex).unwrap();
-
-        let row1 = TxidRow::row(txid, 91812);
-        let row2 = TxidRow::row(txid, 91842);
-
-        assert_eq!(row1.to_db_row().to_hex(), "9985d82954e10f22a4660100");
-        assert_eq!(row2.to_db_row().to_hex(), "9985d82954e10f22c2660100");
-    }
-
-    #[test]
-    fn test_txid2_prefix() {
-        // duplicate txids from BIP-30
-        let hex = "e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468";
-        let txid = Txid::from_str(hex).unwrap();
-
-        let row1 = TxidRow::row(txid, 91722);
-        let row2 = TxidRow::row(txid, 91880);
-
-        // low-endian encoding => rows should be sorted according to block height
-        assert_eq!(row1.to_db_row().to_hex(), "68b45f58b674e94e4a660100");
-        assert_eq!(row2.to_db_row().to_hex(), "68b45f58b674e94ee8660100");
     }
 
     #[test]

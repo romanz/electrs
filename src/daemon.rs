@@ -10,17 +10,18 @@ use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use crate::{
-    chain::{Chain, NewHeader},
+    chain::Chain,
     config::Config,
     metrics::Metrics,
     p2p::Connection,
     signals::ExitFlag,
-    types::FilePosition,
+    types::{FilePosition, HeaderRow},
 };
 
 enum PollResult {
@@ -101,13 +102,24 @@ pub(crate) struct FileReader {
 }
 
 impl FileReader {
-    pub(crate) fn open(&self, pos: &FilePosition) -> Result<File> {
+    pub(crate) fn open(&self, pos: FilePosition) -> Result<File> {
         let name = format!("blk{:05}.dat", pos.file_id);
         let path = self.blocks_dir.join(name);
         let mut file =
             File::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
         file.seek(SeekFrom::Start(u64::from(pos.offset)))?;
         Ok(file)
+    }
+}
+
+pub(crate) struct BlockHashPosition {
+    pub(crate) hash: BlockHash,
+    pub(crate) pos: FilePosition,
+}
+
+impl BlockHashPosition {
+    fn new(hash: BlockHash, pos: FilePosition) -> Self {
+        Self { hash, pos }
     }
 }
 
@@ -162,12 +174,7 @@ impl Daemon {
         };
         let daemon = Self { p2p, rpc, reader };
         // Make sure `getblocklocations` RPC is available (and test it with the latest block)
-        let locations = daemon.get_block_locations(&[info.best_block_hash])?;
-        assert_eq!(locations.len(), 1);
-        let pos = locations[0];
-        info!("reading block {} from {:?}", info.best_block_hash, pos);
-        let block = Block::consensus_decode(&mut daemon.open_file(&pos)?)?;
-        assert_eq!(block.block_hash(), info.best_block_hash);
+        daemon.verify_blocks(&[info.best_block_hash])?;
         Ok(daemon)
     }
 
@@ -252,17 +259,43 @@ impl Daemon {
             .context("failed to get block locations")
     }
 
-    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        let headers_with_heights = self.p2p.lock().get_new_headers(chain)?;
-        let blockhashes: Vec<BlockHash> = headers_with_heights
-            .iter()
-            .map(|(header, _height)| header.block_hash())
-            .collect();
+    fn read_block(&self, blockhash: BlockHash) -> Result<(Block, FilePosition)> {
+        let locations = self.get_block_locations(&[blockhash])?;
+        assert_eq!(locations.len(), 1);
+        let pos = locations[0];
+        let block = Block::consensus_decode(&mut self.open_file(pos)?)?;
+        Ok((block, pos))
+    }
+
+    pub(crate) fn verify_blocks(&self, blockhashes: &[BlockHash]) -> Result<()> {
+        for blockhash in blockhashes {
+            let (block, pos) = self.read_block(*blockhash)?;
+            ensure!(block.block_hash() == *blockhash, "incorrect block loaded");
+            debug!("verified block {} at {:?}", blockhash, pos);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn get_genesis(&self) -> Result<HeaderRow> {
+        let hash = self.rpc.get_block_hash(0)?;
+        let (block, pos) = self.read_block(hash)?;
+        let size = u32::try_from(serialize(&block).len())?;
+        Ok(HeaderRow {
+            header: block.header,
+            hash,
+            pos,
+            size,
+        })
+    }
+
+    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<BlockHashPosition>> {
+        let blockhashes = self.p2p.lock().get_new_headers(chain)?;
         let positions = self.get_block_locations(&blockhashes)?;
         assert_eq!(blockhashes.len(), positions.len());
-        Ok(headers_with_heights
+        Ok(blockhashes
             .into_iter()
-            .map(|(header, height)| NewHeader::new(header, height))
+            .zip(positions.into_iter())
+            .map(|(blockhash, position)| BlockHashPosition::new(blockhash, position))
             .collect())
     }
 
@@ -273,13 +306,13 @@ impl Daemon {
     {
         let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
         for pos in self.get_block_locations(&blockhashes)? {
-            let block = Block::consensus_decode(&mut self.open_file(&pos)?)?;
+            let block = Block::consensus_decode(&mut self.open_file(pos)?)?;
             func(block.block_hash(), block);
         }
         Ok(())
     }
 
-    pub(crate) fn open_file(&self, pos: &FilePosition) -> Result<File> {
+    pub(crate) fn open_file(&self, pos: FilePosition) -> Result<File> {
         self.reader.open(pos)
     }
 

@@ -137,10 +137,10 @@ impl Rpc {
             metrics::default_duration_buckets(),
         );
 
-        let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
-        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
-        let cache = Cache::new(tracker.metrics());
+        let daemon = Daemon::connect(config, signal.exit_flag(), &metrics)?;
+        let cache = Cache::new(&metrics);
+        let tracker = Tracker::new(config, &daemon, &metrics)?;
         Ok(Self {
             tracker,
             cache,

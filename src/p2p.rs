@@ -49,7 +49,7 @@ impl Connection {
     /// Get new block headers (supporting reorgs).
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<(BlockHeader, usize)>> {
+    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<BlockHash>> {
         self.req_send.send(Request::get_new_headers(chain))?;
         let headers = self
             .headers_recv
@@ -58,14 +58,21 @@ impl Connection {
 
         debug!("got {} new headers", headers.len());
         let prev_blockhash = match headers.first().map(|h| h.prev_blockhash) {
-            None => return Ok(vec![]),
+            None => return Ok(vec![]), // no new headers
             Some(prev_blockhash) => prev_blockhash,
         };
-        let new_heights = match chain.get_block_height(&prev_blockhash) {
-            Some(last_height) => (last_height + 1)..,
-            None => bail!("missing prev_blockhash: {}", prev_blockhash),
+        if chain.get_block_height(prev_blockhash).is_none() {
+            bail!("missing prev_blockhash: {}", prev_blockhash);
         };
-        Ok(headers.into_iter().zip(new_heights).collect())
+        let hashes: Vec<_> = headers.iter().map(BlockHeader::block_hash).collect();
+        for i in 1..hashes.len() {
+            ensure!(
+                hashes[i - 1] == headers[i].prev_blockhash,
+                "received unordered headers: {:?}",
+                headers,
+            );
+        }
+        Ok(hashes)
     }
 
     /// Note: only a single receiver will get the notification (https://github.com/romanz/electrs/pull/526#issuecomment-934687415).
