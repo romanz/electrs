@@ -9,7 +9,7 @@ use bitcoind::{
 };
 
 use electrs::{
-    chain::Network,
+    chain::{self, Network},
     config::{self, Config},
     daemon::Daemon,
     electrum::RPC as ElectrumRPC,
@@ -20,7 +20,7 @@ use electrs::{
 };
 use tempfile::TempDir;
 
-pub fn init_server() -> Result<TestRunner> {
+pub fn init_tester() -> Result<TestRunner> {
     let log = init_log();
 
     let mut bitcoind_conf = bitcoind::Conf::default();
@@ -70,7 +70,7 @@ pub fn init_server() -> Result<TestRunner> {
         #[cfg(feature = "liquid")]
         asset_db_path: None, // XXX
         #[cfg(feature = "liquid")]
-        parent_network: electrs::chain::BNetwork::Regtest,
+        parent_network: chain::BNetwork::Regtest,
         //#[cfg(feature = "electrum-discovery")]
         //electrum_public_hosts: Option<crate::electrum::ServerHosts>,
         //#[cfg(feature = "electrum-discovery")]
@@ -94,7 +94,6 @@ pub fn init_server() -> Result<TestRunner> {
     )?);
 
     let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
-
 
     let fetch_from = if !env::var("JSONRPC_IMPORT").is_ok() {
         // run the initial indexing from the blk files then switch to using the jsonrpc,
@@ -163,19 +162,38 @@ impl TestRunner {
 
     pub fn sync(&mut self) -> Result<()> {
         self.indexer.update(&self.daemon)?;
-        self.mempool.write().unwrap().update(&self.daemon)?;
+        let mut mempool = self.mempool.write().unwrap();
+        mempool.update(&self.daemon)?;
+        // force an update for the mempool stats, which are normally cached
+        mempool.update_backlog_stats();
         Ok(())
+    }
+
+    pub fn mine(&mut self) -> Result<chain::BlockHash> {
+        let addr = self.bitcoind.client.get_new_address(None, None)?;
+        let mut generated = self.bitcoind.client.generate_to_address(1, &addr)?;
+        self.sync()?;
+        Ok(generated.remove(0))
+    }
+
+    pub fn send(&mut self, addr: &chain::Address, amount: bitcoin::Amount) -> Result<chain::Txid> {
+        let txid = self
+            .bitcoind
+            .client
+            .send_to_address(addr, amount, None, None, None, None, None, None)?;
+        self.sync()?;
+        Ok(txid)
     }
 }
 
-pub fn init_rest_server() -> Result<(rest::Handle, net::SocketAddr, TestRunner)> {
-    let tester = init_server()?;
+pub fn init_rest_tester() -> Result<(rest::Handle, net::SocketAddr, TestRunner)> {
+    let tester = init_tester()?;
     let rest_server = rest::start(Arc::clone(&tester.config), Arc::clone(&tester.query));
     log::info!("REST server running on {}", tester.config.http_addr);
     Ok((rest_server, tester.config.http_addr, tester))
 }
-pub fn init_electrum_server() -> Result<(ElectrumRPC, net::SocketAddr, TestRunner)> {
-    let tester = init_server()?;
+pub fn init_electrum_tester() -> Result<(ElectrumRPC, net::SocketAddr, TestRunner)> {
+    let tester = init_tester()?;
     let electrum_server = ElectrumRPC::start(
         Arc::clone(&tester.config),
         Arc::clone(&tester.query),
@@ -224,6 +242,15 @@ error_chain::error_chain! {
             description("Bitcoind RPC error")
             display("Bitcoind RPC error: {:?}", e)
         }
+
+        Io(e: std::io::Error) {
+            description("IO error")
+            display("IO error: {:?}", e)
+        }
+        Ureq(e: ureq::Error) {
+            description("ureq error")
+            display("ureq error: {:?}", e)
+        }
     }
 }
 
@@ -235,5 +262,15 @@ impl From<electrs::errors::Error> for Error {
 impl From<bitcoind::bitcoincore_rpc::Error> for Error {
     fn from(e: bitcoind::bitcoincore_rpc::Error) -> Self {
         Error::from(ErrorKind::BitcoindRpc(e))
+    }
+}
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::from(ErrorKind::Io(e))
+    }
+}
+impl From<ureq::Error> for Error {
+    fn from(e: ureq::Error) -> Self {
+        Error::from(ErrorKind::Ureq(e))
     }
 }

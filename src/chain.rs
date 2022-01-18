@@ -1,7 +1,7 @@
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
 pub use bitcoin::{
     address, blockdata::block::Header as BlockHeader, blockdata::script, consensus::deserialize,
-    hash_types::TxMerkleNode, Block, BlockHash, OutPoint, ScriptBuf as Script, Sequence,
+    hash_types::TxMerkleNode, Address, Block, BlockHash, OutPoint, ScriptBuf as Script, Sequence,
     Transaction, TxIn, TxOut, Txid,
 };
 

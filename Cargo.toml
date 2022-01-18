@@ -62,6 +62,7 @@ electrum-client = { version = "0.8", optional = true }
 
 [dev-dependencies]
 bitcoind = { version = "0.20.0", features = [ "22_0" ] }
+ureq = { version = "2.4", default-features = false, features = [ "json" ] }
 tempfile = "3.0"
 
 [profile.release]

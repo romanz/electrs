@@ -304,14 +304,18 @@ impl Mempool {
 
         // Update cached backlog stats (if expired)
         if self.backlog_stats.1.elapsed() > Duration::from_secs(BACKLOG_STATS_TTL) {
-            let _timer = self
-                .latency
-                .with_label_values(&["update_backlog_stats"])
-                .start_timer();
-            self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
+            self.update_backlog_stats();
         }
 
         Ok(())
+    }
+
+    pub fn update_backlog_stats(&mut self) {
+        let _timer = self
+            .latency
+            .with_label_values(&["update_backlog_stats"])
+            .start_timer();
+        self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
     }
 
     pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) {
