@@ -4,3 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # tiny_http 0.10.0 requiers Rust 1.51 to build
+      - dependency-name: "tiny_http"
+        update-types: ["version-update:semver-minor"] 
