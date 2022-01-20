@@ -7,7 +7,10 @@ use electrumd::ElectrumD;
 
 use electrs::chain::Address;
 
-#[test]
+/// Test the Electrum RPC server using an headless Electrum wallet
+/// This only runs on Bitcoin (non-Liquid) mode.
+#[cfg_attr(not(feature = "liquid"), test)]
+#[cfg_attr(feature = "liquid", allow(dead_code))]
 fn test_electrum() -> Result<()> {
     // Spawn an Electrs Electrum RPC server
     let (electrum_server, electrum_addr, mut tester) = common::init_electrum_tester().unwrap();
@@ -100,14 +103,14 @@ fn test_electrum() -> Result<()> {
     // Send an outgoing payment
     electrum_wallet.call(
         "broadcast",
-        &json!([ electrum_wallet.call(
+        &json!([electrum_wallet.call(
             "payto",
             &json!({
-                "destination": tester.bitcoind().get_new_address(None, None)?,
+                "destination": tester.node_client().get_new_address(None, None)?,
                 "amount": 0.16,
                 "fee": 0.001,
             }),
-        )? ]),
+        )?]),
     )?;
     notify_wallet();
     assert_balance(0.3, -0.161);

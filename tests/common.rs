@@ -2,14 +2,19 @@ use std::sync::{Arc, Once, RwLock};
 use std::{env, net};
 
 use stderrlog::StdErrLog;
+use tempfile::TempDir;
 
-use bitcoind::{
-    bitcoincore_rpc::{self, RpcApi},
-    BitcoinD,
-};
+use serde_json::{json, Value};
+
+#[cfg(not(feature = "liquid"))]
+use bitcoind::{self as noded, BitcoinD as NodeD};
+#[cfg(feature = "liquid")]
+use elementsd::{self as noded, ElementsD as NodeD};
+
+use noded::bitcoincore_rpc::{self, RpcApi};
 
 use electrs::{
-    chain::{self, Network},
+    chain::{self, Address, BlockHash, Network, Txid},
     config::{self, Config},
     daemon::Daemon,
     electrum::RPC as ElectrumRPC,
@@ -18,28 +23,49 @@ use electrs::{
     rest,
     signal::Waiter,
 };
-use tempfile::TempDir;
 
 pub fn init_tester() -> Result<TestRunner> {
     let log = init_log();
 
-    let mut bitcoind_conf = bitcoind::Conf::default();
-    bitcoind_conf.view_stdout = true;
+    // Setup the bitcoind/elementsd config
+    let mut node_conf = noded::Conf::default();
+    {
+        #[cfg(not(feature = "liquid"))]
+        let node_conf = &mut node_conf;
+        #[cfg(feature = "liquid")]
+        let node_conf = &mut node_conf.0;
 
-    let bitcoind =
-        BitcoinD::with_conf(bitcoind::downloaded_exe_path().unwrap(), &bitcoind_conf).unwrap();
+        #[cfg(feature = "liquid")]
+        {
+            node_conf.args.push("-anyonecanspendaremine=1");
+        }
 
-    init_node(&bitcoind.client).chain_err(|| "failed initializing node")?;
+        node_conf.view_stdout = true;
+    }
 
-    log::info!("bitcoind: {:?}", bitcoind.params);
+    // Setup node
+    let node = NodeD::with_conf(noded::downloaded_exe_path().unwrap(), &node_conf).unwrap();
+
+    #[cfg(not(feature = "liquid"))]
+    let (node_client, params) = (&node.client, &node.params);
+    #[cfg(feature = "liquid")]
+    let (node_client, params) = (node.client(), &node.params());
+
+    log::info!("node params: {:?}", params);
+
+    generate(node_client, 101).chain_err(|| "failed initializing blocks")?;
+
+    // Needed to claim the initialfreecoins as our own
+    // See https://github.com/ElementsProject/elements/issues/956
+    #[cfg(feature = "liquid")]
+    node_client.call::<Value>("rescanblockchain", &[])?;
 
     #[cfg(not(feature = "liquid"))]
     let network_type = Network::Regtest;
     #[cfg(feature = "liquid")]
     let network_type = Network::LiquidRegtest;
 
-    let daemon_subdir = bitcoind
-        .params
+    let daemon_subdir = params
         .datadir
         .join(config::get_network_subdir(network_type).unwrap());
 
@@ -51,7 +77,7 @@ pub fn init_tester() -> Result<TestRunner> {
         db_path: electrsdb.path().to_path_buf(),
         daemon_dir: daemon_subdir.clone(),
         blocks_dir: daemon_subdir.join("blocks"),
-        daemon_rpc_addr: bitcoind.params.rpc_socket.into(),
+        daemon_rpc_addr: params.rpc_socket.into(),
         cookie: None,
         electrum_rpc_addr: rand_available_addr(),
         http_addr: rand_available_addr(),
@@ -95,13 +121,14 @@ pub fn init_tester() -> Result<TestRunner> {
 
     let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
 
-    let fetch_from = if !env::var("JSONRPC_IMPORT").is_ok() {
+    let fetch_from = if !env::var("JSONRPC_IMPORT").is_ok() && !cfg!(feature = "liquid") {
         // run the initial indexing from the blk files then switch to using the jsonrpc,
         // similarly to how electrs is typically used.
         FetchFrom::BlkFiles
     } else {
         // when JSONRPC_IMPORT is set, use the jsonrpc for the initial indexing too.
         // this runs faster on small regtest chains and can be useful for quicker local development iteration.
+        // this is also used on liquid regtest, which currently fails to parse the BlkFiles due to the magic bytes
         FetchFrom::Bitcoind
     };
 
@@ -134,7 +161,7 @@ pub fn init_tester() -> Result<TestRunner> {
 
     Ok(TestRunner {
         config,
-        bitcoind,
+        node,
         _electrsdb: electrsdb,
         indexer,
         query,
@@ -146,7 +173,8 @@ pub fn init_tester() -> Result<TestRunner> {
 
 pub struct TestRunner {
     config: Arc<Config>,
-    bitcoind: BitcoinD,
+    /// bitcoind::BitcoinD or an elementsd::ElementsD in liquid mode
+    node: NodeD,
     _electrsdb: TempDir, // rm'd when dropped
     indexer: Indexer,
     query: Arc<Query>,
@@ -156,8 +184,11 @@ pub struct TestRunner {
 }
 
 impl TestRunner {
-    pub fn bitcoind(&self) -> &bitcoincore_rpc::Client {
-        &self.bitcoind.client
+    pub fn node_client(&self) -> &bitcoincore_rpc::Client {
+        #[cfg(not(feature = "liquid"))]
+        return &self.node.client;
+        #[cfg(feature = "liquid")]
+        return &self.node.client();
     }
 
     pub fn sync(&mut self) -> Result<()> {
@@ -169,18 +200,17 @@ impl TestRunner {
         Ok(())
     }
 
-    pub fn mine(&mut self) -> Result<chain::BlockHash> {
-        let addr = self.bitcoind.client.get_new_address(None, None)?;
-        let mut generated = self.bitcoind.client.generate_to_address(1, &addr)?;
+    pub fn mine(&mut self) -> Result<BlockHash> {
+        let mut generated = generate(self.node_client(), 1)?;
         self.sync()?;
         Ok(generated.remove(0))
     }
 
-    pub fn send(&mut self, addr: &chain::Address, amount: bitcoin::Amount) -> Result<chain::Txid> {
-        let txid = self
-            .bitcoind
-            .client
-            .send_to_address(addr, amount, None, None, None, None, None, None)?;
+    pub fn send(&mut self, addr: &Address, amount: bitcoin::Amount) -> Result<Txid> {
+        let txid = self.node_client().call(
+            "sendtoaddress",
+            &[addr.to_string().into(), json!(amount.as_btc())],
+        )?;
         self.sync()?;
         Ok(txid)
     }
@@ -206,10 +236,15 @@ pub fn init_electrum_tester() -> Result<(ElectrumRPC, net::SocketAddr, TestRunne
     Ok((electrum_server, tester.config.electrum_rpc_addr, tester))
 }
 
-fn init_node(client: &bitcoincore_rpc::Client) -> bitcoincore_rpc::Result<()> {
-    let addr = client.get_new_address(None, None)?;
-    client.generate_to_address(101, &addr)?;
-    Ok(())
+fn generate(
+    client: &bitcoincore_rpc::Client,
+    num_blocks: u32,
+) -> bitcoincore_rpc::Result<Vec<BlockHash>> {
+    let addr = client.call::<Address>("getnewaddress", &[])?;
+    client.call(
+        "generatetoaddress",
+        &[num_blocks.into(), addr.to_string().into()],
+    )
 }
 
 fn init_log() -> StdErrLog {
@@ -256,6 +291,10 @@ error_chain::error_chain! {
             description("ureq error")
             display("ureq error: {:?}", e)
         }
+        Json(e: serde_json::Error) {
+            description("JSON error")
+            display("JSON error: {:?}", e)
+        }
     }
 }
 
@@ -282,5 +321,10 @@ impl From<std::io::Error> for Error {
 impl From<ureq::Error> for Error {
     fn from(e: ureq::Error) -> Self {
         Error::from(ErrorKind::Ureq(e))
+    }
+}
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::from(ErrorKind::Json(e))
     }
 }

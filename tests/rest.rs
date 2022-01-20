@@ -2,6 +2,8 @@ use bitcoind::bitcoincore_rpc::RpcApi;
 use serde_json::Value;
 use std::collections::HashSet;
 
+use electrs::chain::{Address, Txid};
+
 pub mod common;
 
 use common::Result;
@@ -22,8 +24,23 @@ fn test_rest() -> Result<()> {
             .into_string()?)
     };
 
+    let newaddress = || -> Result<Address> {
+        let addr = tester.node_client().call::<Address>("getnewaddress", &[])?;
+        // On Liquid, return the unconfidential address, so that the tests below work
+        // on both Bitcoin and Liquid mode. The Liquid-specific functionality, including
+        // confidentially, is tested separately below.
+        #[cfg(feature = "liquid")]
+        let addr = {
+            let mut info = tester
+                .node_client()
+                .call::<Value>("getaddressinfo", &[addr.to_string().into()])?;
+            serde_json::from_value(info["unconfidential"].take())?
+        };
+        Ok(addr)
+    };
+
     // Send transaction and confirm it
-    let addr1 = tester.bitcoind().get_new_address(None, None)?;
+    let addr1 = newaddress()?;
     let txid1_confirmed = tester.send(&addr1, "1.19123 BTC".parse().unwrap())?;
     tester.mine()?;
 
@@ -32,6 +49,7 @@ fn test_rest() -> Result<()> {
 
     // Test GET /tx/:txid
     let res = get_json(&format!("/tx/{}", txid1_confirmed))?;
+    log::debug!("tx: {:#?}", res);
     let outs = res["vout"].as_array().expect("array of outs");
     assert!(outs.iter().any(|vout| {
         vout["scriptpubkey_address"].as_str() == Some(&addr1.to_string())
@@ -50,11 +68,13 @@ fn test_rest() -> Result<()> {
     // Test GET /address/:address
     let res = get_json(&format!("/address/{}", addr1))?;
     assert_eq!(res["chain_stats"]["funded_txo_count"].as_u64(), Some(1));
+    #[cfg(not(feature = "liquid"))]
     assert_eq!(
         res["chain_stats"]["funded_txo_sum"].as_u64(),
         Some(119123000)
     );
     assert_eq!(res["mempool_stats"]["funded_txo_count"].as_u64(), Some(1));
+    #[cfg(not(feature = "liquid"))]
     assert_eq!(
         res["mempool_stats"]["funded_txo_sum"].as_u64(),
         Some(71130000)
@@ -66,7 +86,7 @@ fn test_rest() -> Result<()> {
     let mut txids = txs
         .iter()
         .map(|tx| tx["txid"].as_str().unwrap().parse().unwrap())
-        .collect::<HashSet<electrs::chain::Txid>>();
+        .collect::<HashSet<Txid>>();
     assert!(txids.remove(&txid1_confirmed));
     assert!(txids.remove(&txid2_mempool));
     assert!(txids.is_empty());
@@ -79,7 +99,7 @@ fn test_rest() -> Result<()> {
     assert_eq!(found[0].as_str(), Some(addr1.to_string().as_str()));
 
     // Test GET /blocks/tip/hash
-    let bestblockhash = tester.bitcoind().get_best_block_hash()?;
+    let bestblockhash = tester.node_client().get_best_block_hash()?;
     let res = get_plain("/blocks/tip/hash")?;
     assert_eq!(res, bestblockhash.to_string());
 
@@ -88,7 +108,7 @@ fn test_rest() -> Result<()> {
     assert_eq!(res, bestblockhash.to_string());
 
     // Test GET /blocks/tip/height
-    let bestblockheight = tester.bitcoind().get_block_count()?;
+    let bestblockheight = tester.node_client().get_block_count()?;
     let res = get_plain("/blocks/tip/height")?;
     assert_eq!(
         res.parse::<u64>().expect("tip block height as an int"),
@@ -124,7 +144,7 @@ fn test_rest() -> Result<()> {
     assert_eq!(res["id"].as_str(), Some(blockhash.to_string().as_str()));
     assert_eq!(
         res["height"].as_u64(),
-        Some(tester.bitcoind().get_block_count()?)
+        Some(tester.node_client().get_block_count()?)
     );
     assert_eq!(res["tx_count"].as_u64(), Some(2));
 
