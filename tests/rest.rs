@@ -1,4 +1,5 @@
-use bitcoind::bitcoincore_rpc::RpcApi;
+use bitcoin::hashes::{sha256, Hash};
+use bitcoind::bitcoincore_rpc::{self, RpcApi};
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -24,23 +25,8 @@ fn test_rest() -> Result<()> {
             .into_string()?)
     };
 
-    let newaddress = || -> Result<Address> {
-        let addr = tester.node_client().call::<Address>("getnewaddress", &[])?;
-        // On Liquid, return the unconfidential address, so that the tests below work
-        // on both Bitcoin and Liquid mode. The Liquid-specific functionality, including
-        // confidentially, is tested separately below.
-        #[cfg(feature = "liquid")]
-        let addr = {
-            let mut info = tester
-                .node_client()
-                .call::<Value>("getaddressinfo", &[addr.to_string().into()])?;
-            serde_json::from_value(info["unconfidential"].take())?
-        };
-        Ok(addr)
-    };
-
     // Send transaction and confirm it
-    let addr1 = newaddress()?;
+    let addr1 = newaddress(tester.node_client())?;
     let txid1_confirmed = tester.send(&addr1, "1.19123 BTC".parse().unwrap())?;
     tester.mine()?;
 
@@ -183,6 +169,171 @@ fn test_rest() -> Result<()> {
     tester.mine()?;
     assert_eq!(get_json("/mempool")?["count"].as_u64(), Some(0));
 
+    // Elements-only tests
+    #[cfg(feature = "liquid")]
+    {
+        // Test confidential transactions
+        {
+            let (c_addr, uc_addr) = elements_newaddress(tester.node_client())?;
+            let txid = tester.send(&c_addr, "3.5 BTC".parse().unwrap())?;
+            tester.mine()?;
+
+            let tx = get_json(&format!("/tx/{}", txid))?;
+            log::debug!("blinded tx = {:#?}", tx);
+            assert_eq!(tx["status"]["confirmed"].as_bool(), Some(true));
+            let outs = tx["vout"].as_array().expect("array of outs");
+            let vout = outs
+                .iter()
+                .find(|vout| vout["scriptpubkey_address"].as_str() == Some(&uc_addr.to_string()))
+                .expect("our output");
+            assert!(vout["value"].is_null());
+            assert!(vout["valuecommitment"].is_string());
+            assert!(vout["assetcommitment"].is_string());
+        }
+
+        // Test blinded asset issuance
+        {
+            let contract_hash = sha256::Hash::hash(&[0x11, 0x22, 0x33, 0x44]).to_string();
+            let contract_hash = contract_hash.as_str();
+            let issuance = tester.node_client().call::<Value>(
+                "issueasset",
+                &[1.5.into(), 0.into(), true.into(), contract_hash.into()],
+            )?;
+            tester.mine()?;
+
+            let assetid = issuance["asset"].as_str().expect("asset id");
+            let issuance_txid = issuance["txid"].as_str().expect("issuance txid");
+
+            // Test GET /asset/:assetid
+            let asset = get_json(&format!("/asset/{}", assetid))?;
+            let stats = &asset["chain_stats"];
+            assert_eq!(asset["asset_id"].as_str(), Some(assetid));
+            assert_eq!(asset["issuance_txin"]["txid"].as_str(), Some(issuance_txid));
+            assert_eq!(asset["contract_hash"].as_str(), Some(contract_hash));
+            assert_eq!(asset["status"]["confirmed"].as_bool(), Some(true));
+            assert_eq!(stats["issuance_count"].as_u64(), Some(1));
+            assert_eq!(stats["has_blinded_issuances"].as_bool(), Some(true));
+            assert_eq!(stats["issued_amount"].as_u64(), Some(0));
+
+            // Test GET /tx/:txid for issuance tx
+            let issuance_tx = get_json(&format!("/tx/{}", issuance_txid))?;
+            let issuance_in_index = asset["issuance_txin"]["vin"].as_u64().unwrap();
+            let issuance_in = &issuance_tx["vin"][issuance_in_index as usize];
+            let issuance_data = &issuance_in["issuance"];
+            assert_eq!(issuance_data["asset_id"].as_str(), Some(assetid));
+            assert_eq!(issuance_data["is_reissuance"].as_bool(), Some(false));
+            assert_eq!(issuance_data["contract_hash"].as_str(), Some(contract_hash));
+            assert!(issuance_data["assetamount"].is_null());
+            assert!(issuance_data["assetamountcommitment"].is_string());
+        }
+
+        // Test unblinded asset issuance
+        {
+            let issuance = tester
+                .node_client()
+                .call::<Value>("issueasset", &[1.5.into(), 0.into(), false.into()])?;
+            tester.mine()?;
+            let assetid = issuance["asset"].as_str().expect("asset id");
+            let issuance_txid = issuance["txid"].as_str().expect("issuance txid");
+
+            // Test GET /asset/:assetid
+            let asset = get_json(&format!("/asset/{}", assetid))?;
+            let stats = &asset["chain_stats"];
+            assert_eq!(stats["has_blinded_issuances"].as_bool(), Some(false));
+            assert_eq!(stats["issued_amount"].as_u64(), Some(150000000));
+
+            // Test GET /tx/:txid for issuance tx
+            let issuance_tx = get_json(&format!("/tx/{}", issuance_txid))?;
+            let issuance_in_index = asset["issuance_txin"]["vin"].as_u64().unwrap();
+            let issuance_in = &issuance_tx["vin"][issuance_in_index as usize];
+            let issuance_data = &issuance_in["issuance"];
+            assert_eq!(issuance_data["assetamount"].as_u64(), Some(150000000));
+            assert!(issuance_data["assetamountcommitment"].is_null());
+        }
+
+        // Test a regular (non-issuance) transaction sending an issued asset
+        {
+            let issuance = tester
+                .node_client()
+                .call::<Value>("issueasset", &[1.5.into(), 0.into(), false.into()])?;
+            let assetid = issuance["asset"].as_str().expect("asset id");
+            tester.mine()?;
+
+            let (c_addr, uc_addr) = elements_newaddress(tester.node_client())?;
+
+            // With blinding off
+            let txid = tester.send_asset(
+                &uc_addr,
+                "0.3 BTC".parse().unwrap(), // not actually BTC, but this is what Amount expects
+                assetid.parse().unwrap(),
+            )?;
+            let tx = get_json(&format!("/tx/{}", txid))?;
+            let outs = tx["vout"].as_array().expect("array of outs");
+            let vout = outs
+                .iter()
+                .find(|vout| vout["scriptpubkey_address"].as_str() == Some(&uc_addr.to_string()))
+                .expect("our output");
+            assert_eq!(vout["asset"].as_str(), Some(assetid));
+            assert_eq!(vout["value"].as_u64(), Some(30000000));
+
+            // With blinding on
+            let txid = tester.send_asset(
+                &c_addr,
+                "0.3 BTC".parse().unwrap(),
+                assetid.parse().unwrap(),
+            )?;
+            let tx = get_json(&format!("/tx/{}", txid))?;
+            let outs = tx["vout"].as_array().expect("array of outs");
+            let vout = outs
+                .iter()
+                .find(|vout| vout["scriptpubkey_address"].as_str() == Some(&uc_addr.to_string()))
+                .expect("our output");
+            assert!(vout["asset"].is_null());
+            assert!(vout["value"].is_null());
+            assert!(vout["assetcommitment"].is_string());
+            assert!(vout["valuecommitment"].is_string());
+        }
+
+        // Test GET /block/:hash
+        {
+            let bestblockhash = get_plain("/blocks/tip/hash")?;
+            let block = get_json(&format!("/block/{}", bestblockhash))?;
+
+            // No PoW-related stuff
+            assert!(block["bits"].is_null());
+            assert!(block["nonce"].is_null());
+            assert!(block["difficulty"].is_null());
+
+            // Dynamic Federations (dynafed) fields
+            assert!(block["ext"]["current"]["signblockscript"].is_string());
+            assert!(block["ext"]["current"]["fedpegscript"].is_string());
+            assert!(block["ext"]["current"]["fedpeg_program"].is_string());
+            assert!(block["ext"]["current"]["signblock_witness_limit"].is_u64());
+            assert!(block["ext"]["current"]["extension_space"].is_array());
+            assert!(block["ext"]["proposed"].is_object());
+            assert!(block["ext"]["signblock_witness"].is_array());
+        }
+    }
+
     rest_handle.stop();
     Ok(())
+}
+
+fn newaddress(client: &bitcoincore_rpc::Client) -> Result<Address> {
+    #[cfg(not(feature = "liquid"))]
+    return Ok(client.get_new_address(None, None)?);
+
+    // Return the unconfidential address on Liquid, so that the same tests work
+    // on both Bitcoin and Liquid mode. The Liquid-specific functionality, including
+    // confidentially, is tested separately.
+    #[cfg(feature = "liquid")]
+    return Ok(elements_newaddress(client)?.1);
+}
+
+#[cfg(feature = "liquid")]
+fn elements_newaddress(client: &bitcoincore_rpc::Client) -> Result<(Address, Address)> {
+    let c_addr = client.call::<Address>("getnewaddress", &[])?;
+    let mut info = client.call::<Value>("getaddressinfo", &[c_addr.to_string().into()])?;
+    let uc_addr = serde_json::from_value(info["unconfidential"].take())?;
+    Ok((c_addr, uc_addr))
 }

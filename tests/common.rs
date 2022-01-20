@@ -214,6 +214,32 @@ impl TestRunner {
         self.sync()?;
         Ok(txid)
     }
+
+    #[cfg(feature = "liquid")]
+    pub fn send_asset(
+        &mut self,
+        addr: &Address,
+        amount: bitcoin::Amount,
+        assetid: elements::AssetId,
+    ) -> Result<Txid> {
+        let txid = self.node_client().call(
+            "sendtoaddress",
+            &[
+                addr.to_string().into(),
+                json!(amount.as_btc()),
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                json!(assetid),
+            ],
+        )?;
+        self.sync()?;
+        Ok(txid)
+    }
 }
 
 pub fn init_rest_tester() -> Result<(rest::Handle, net::SocketAddr, TestRunner)> {
