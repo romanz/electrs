@@ -243,6 +243,11 @@ error_chain::error_chain! {
             display("Bitcoind RPC error: {:?}", e)
         }
 
+        ElectrumD(e: electrumd::Error) {
+            description("Electrum wallet RPC error")
+            display("Electrum wallet RPC error: {:?}", e)
+        }
+
         Io(e: std::io::Error) {
             description("IO error")
             display("IO error: {:?}", e)
@@ -262,6 +267,11 @@ impl From<electrs::errors::Error> for Error {
 impl From<bitcoind::bitcoincore_rpc::Error> for Error {
     fn from(e: bitcoind::bitcoincore_rpc::Error) -> Self {
         Error::from(ErrorKind::BitcoindRpc(e))
+    }
+}
+impl From<electrumd::Error> for Error {
+    fn from(e: electrumd::Error) -> Self {
+        Error::from(ErrorKind::ElectrumD(e))
     }
 }
 impl From<std::io::Error> for Error {

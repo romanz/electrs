@@ -7,7 +7,7 @@ pub mod common;
 use common::Result;
 
 #[test]
-fn test() -> Result<()> {
+fn test_rest() -> Result<()> {
     let (rest_handle, rest_addr, mut tester) = common::init_rest_tester().unwrap();
 
     let get_json = |path: &str| -> Result<Value> {
@@ -155,7 +155,6 @@ fn test() -> Result<()> {
     assert_eq!(mempool_txids.len(), 2);
 
     // Test GET /mempool
-    // The mempool stats
     assert_eq!(get_json("/mempool")?["count"].as_u64(), Some(2));
 
     tester.send(&addr1, "0.00022 BTC".parse().unwrap())?;

@@ -62,6 +62,7 @@ electrum-client = { version = "0.8", optional = true }
 
 [dev-dependencies]
 bitcoind = { version = "0.20.0", features = [ "22_0" ] }
+electrumd = { version = "0.1.0", features = [ "4_1_5" ] }
 ureq = { version = "2.4", default-features = false, features = [ "json" ] }
 tempfile = "3.0"
 
@@ -73,3 +74,8 @@ codegen-units = 1
 [patch.crates-io.electrum-client]
 git = "https://github.com/Blockstream/rust-electrum-client"
 rev = "d3792352992a539afffbe11501d1aff9fd5b919d" # add-peer branch
+
+# not yet published on crates.io
+[patch.crates-io.electrumd]
+git = "https://github.com/shesek/electrumd"
+rev = "6eac0b7b1f2447472016e2c1473a6284f7f8648e"
