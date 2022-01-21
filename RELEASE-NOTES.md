@@ -1,3 +1,9 @@
+# 0.9.5 (TBD)
+
+* Update dependencies (`serde-json`, `serde`, `tempfile`, `crossbeam-channel`)
+* Fix `txid` index collision handling (#653)
+* Use `bitcoincore_rpc`'s `getblockchaininfo` implementation (#656)
+
 # 0.9.4 (Dec 30 2021)
 
 * Update dependencies (`anyhow`, `serde`, `serde_json`, `signal-hook`)
