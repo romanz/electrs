@@ -26,9 +26,9 @@ Upgrading checklist:
   Because of reindex electrs will be unable to serve your requests for a few hours.
   (The exact time depends on your hardware.)
   If you wish to check the database without reindexing run electrs with `--no-auto-reindex`.
-* If you have less than 40 GB of free space delete `mainnet` subdirectory inside your `db_dir` *before* running the new version.
-  Note however if you have less than 40 GB of free space you should consider extending your storage soon
-  since in the worst case scenario you will run out of space in ~69 days.
+* If you have less than 60 GB of free space delete `mainnet` subdirectory inside your `db_dir` *before* running the new version.
+  Note however if you have less than 60 GB of free space you should consider extending your storage soon
+  since in the worst case scenario you will run out of space in ~100 days.
 * Make sure to allow accesses to bitcoind from local address, ideally whitelist it using `whitelist=download@127.0.0.1` bitcoind option.
   Either don't use `maxconnections` bitcoind option or set it to 12 or more.
 * If you use non-default P2P port (or address) for bitcoind adjust `electrs` configuration.
