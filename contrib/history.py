@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--host', default='localhost')
     parser.add_argument('--network', default='mainnet')
     parser.add_argument('address', nargs='+')
+    parser.add_argument('--only-subscribe', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.network == 'regtest':
@@ -62,6 +63,8 @@ def main():
         for script_hash in script_hashes
     )
     log.info('subscribed to {} scripthashes', len(script_hashes))
+    if args.only_subscribe:
+        return
 
     balances = conn.call(
         client.request('blockchain.scripthash.get_balance', script_hash)
