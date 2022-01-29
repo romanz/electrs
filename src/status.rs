@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bitcoin::{
+    consensus::Decodable,
     hashes::{sha256, Hash, HashEngine},
-    Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
+    Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use rayon::prelude::*;
 use serde::ser::{Serialize, Serializer};
@@ -15,7 +16,7 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    types::{ScriptHash, StatusHash},
+    types::{FilePosition, HeaderRow, ScriptHash, StatusHash},
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
@@ -303,17 +304,53 @@ impl ScriptHashStatus {
     }
 
     /// Apply func only on the new blocks (fetched from daemon).
-    fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
+    fn for_new_blocks<P, F>(
+        &self,
+        positions: P,
+        chain: &Chain,
+        daemon: &Daemon,
+        mut func: F,
+    ) -> Result<()>
     where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        P: IntoIterator<Item = FilePosition>,
+        F: FnMut(BlockHash, Vec<(Transaction, u32)>),
     {
-        daemon.for_blocks(
-            blockhashes
-                .into_iter()
-                .filter(|blockhash| !self.confirmed.contains_key(blockhash)),
-            func,
-        )
+        let positions: Vec<_> = positions
+            .into_iter()
+            .filter_map(|tx_pos| {
+                let block: &HeaderRow = match chain.get_header_row_for(tx_pos) {
+                    Some(row) => row,
+                    None => return None,
+                };
+                if self.confirmed.contains_key(&block.hash) {
+                    return None; // skip already scanned blocks
+                }
+                let offset_within_block = tx_pos.offset - block.pos.offset;
+                assert!(offset_within_block > 0);
+                assert!(offset_within_block < block.size);
+                Some((block, (tx_pos, offset_within_block)))
+            })
+            .collect();
+
+        let results = positions
+            .into_par_iter() // for parallel reads
+            .map(
+                |(block, (tx_pos, offset_within_block))| -> Result<(BlockHash, (Transaction, u32))> {
+                    let mut file = daemon.open_file(tx_pos)?;
+                    let tx = Transaction::consensus_decode(&mut file)?;
+                    Ok((block.hash, (tx, offset_within_block)))
+                },
+            )
+            .collect::<Result<Vec<_>>>().context("failed to read transactions from disk")?;
+
+        let mut txs_map: HashMap<BlockHash, Vec<(Transaction, u32)>> = HashMap::new();
+        for (blockhash, tx_info) in results {
+            txs_map.entry(blockhash).or_default().push(tx_info);
+        }
+        for (key, values) in txs_map {
+            func(key, values);
+        }
+        Ok(())
     }
 
     /// Get funding and spending entries from new blocks.
@@ -325,15 +362,16 @@ impl ScriptHashStatus {
         cache: &Cache,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
+        let chain = index.chain();
         let scripthash = self.scripthash;
-        let mut result = HashMap::<BlockHash, HashMap<usize, TxEntry>>::new();
+        let mut result = HashMap::<BlockHash, HashMap<u32, TxEntry>>::new();
 
-        let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
-        self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
+        let funding_positions = index.limit_result(index.filter_by_funding(scripthash))?;
+        self.for_new_blocks(funding_positions, chain, daemon, |blockhash, txs| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(tx, scripthash)).for_each(
+            filter_txs(txs, |tx| filter_outputs(tx, scripthash)).for_each(
                 |FilteredTx {
-                     pos,
+                     offset,
                      tx,
                      txid,
                      result: funding_outputs,
@@ -341,28 +379,28 @@ impl ScriptHashStatus {
                     cache.add_tx(txid, move || tx);
                     outpoints.extend(make_outpoints(txid, &funding_outputs));
                     block_entries
-                        .entry(pos)
+                        .entry(offset)
                         .or_insert_with(|| TxEntry::new(txid))
                         .outputs = funding_outputs;
                 },
             );
         })?;
-        let spending_blockhashes: HashSet<BlockHash> = outpoints
+        let spending_positions: HashSet<FilePosition> = outpoints
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
-        self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
+        self.for_new_blocks(spending_positions, chain, daemon, |blockhash, txs| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(tx, outpoints)).for_each(
+            filter_txs(txs, |tx| filter_inputs(tx, outpoints)).for_each(
                 |FilteredTx {
-                     pos,
+                     offset,
                      tx,
                      txid,
                      result: spent_outpoints,
                  }| {
                     cache.add_tx(txid, move || tx);
                     block_entries
-                        .entry(pos)
+                        .entry(offset)
                         .or_insert_with(|| TxEntry::new(txid))
                         .spent = spent_outpoints;
                 },
@@ -375,9 +413,9 @@ impl ScriptHashStatus {
                 // sort transactions by their position in a block
                 let sorted_entries = entries_map
                     .into_iter()
-                    .collect::<BTreeMap<usize, TxEntry>>()
+                    .collect::<BTreeMap<u32, TxEntry>>()
                     .into_iter()
-                    .map(|(_pos, entry)| entry)
+                    .map(|(_offset, entry)| entry)
                     .collect::<Vec<TxEntry>>();
                 (blockhash, sorted_entries)
             })
@@ -510,19 +548,16 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
 struct FilteredTx<T> {
     tx: Transaction,
     txid: Txid,
-    pos: usize,
+    offset: u32, // within the blk*.dat file (for ordering of transactions within a block)
     result: Vec<T>,
 }
 
-fn filter_block_txs<T: Send>(
-    block: Block,
+fn filter_txs<T: Send>(
+    txs: Vec<(Transaction, u32)>,
     map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
 ) -> impl Iterator<Item = FilteredTx<T>> {
-    block
-        .txdata
-        .into_par_iter()
-        .enumerate()
-        .filter_map(|(pos, tx)| {
+    txs.into_par_iter()
+        .filter_map(|(tx, offset)| {
             let result = map_fn(&tx);
             if result.is_empty() {
                 return None; // skip irrelevant transaction
@@ -531,7 +566,7 @@ fn filter_block_txs<T: Send>(
             Some(FilteredTx {
                 tx,
                 txid,
-                pos,
+                offset,
                 result,
             })
         })

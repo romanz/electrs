@@ -354,11 +354,12 @@ impl Rpc {
     }
 
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
+        let chain = self.tracker.chain();
         let (txid, verbose) = args.into();
         if verbose {
             let blockhash = self
                 .tracker
-                .lookup_transaction(&self.daemon, txid)?
+                .lookup_transaction(&self.daemon, chain, txid)?
                 .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
@@ -369,7 +370,7 @@ impl Rpc {
         // use internal index to load confirmed transaction without an RPC
         if let Some(tx) = self
             .tracker
-            .lookup_transaction(&self.daemon, txid)?
+            .lookup_transaction(&self.daemon, chain, txid)?
             .map(|(_blockhash, tx)| tx)
         {
             return Ok(json!(serialize(&tx).to_hex()));

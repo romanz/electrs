@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
-use bitcoin::consensus::{deserialize, serialize, Decodable};
-use bitcoin::BlockHeader;
-use bitcoin::Transaction;
-use bitcoin::VarInt;
-use bitcoin::{BlockHash, OutPoint, Txid};
+use bitcoin::{
+    consensus::{deserialize, serialize, Decodable},
+    BlockHeader, OutPoint, Transaction, Txid, VarInt,
+};
 
 use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom};
@@ -162,31 +161,30 @@ impl Index {
         Ok(result)
     }
 
-    pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
+    // Note: the `filter_by_*` methods may return transactions from stale blocks..
+
+    pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = FilePosition> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| HashPrefixRow::from_db_row(&row).pos())
-            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
+            .map(position_from_row)
     }
 
     pub(crate) fn filter_by_funding(
         &self,
         scripthash: ScriptHash,
-    ) -> impl Iterator<Item = BlockHash> + '_ {
+    ) -> impl Iterator<Item = FilePosition> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| HashPrefixRow::from_db_row(&row).pos())
-            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
+            .map(position_from_row)
     }
 
     pub(crate) fn filter_by_spending(
         &self,
         outpoint: OutPoint,
-    ) -> impl Iterator<Item = BlockHash> + '_ {
+    ) -> impl Iterator<Item = FilePosition> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| HashPrefixRow::from_db_row(&row).pos())
-            .filter_map(move |pos| self.chain.get_header_row_for(pos).map(|row| row.hash))
+            .map(position_from_row)
     }
 
     // Return `Ok(true)` when the chain is fully synced and the index is compacted.
@@ -246,6 +244,10 @@ impl Index {
     pub(crate) fn is_ready(&self) -> bool {
         self.is_ready
     }
+}
+
+fn position_from_row(row: Row) -> FilePosition {
+    HashPrefixRow::from_db_row(&row).pos()
 }
 
 fn db_rows_size(rows: &[Row]) -> usize {

@@ -299,19 +299,6 @@ impl Daemon {
             .collect())
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, mut func: F) -> Result<()>
-    where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
-    {
-        let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
-        for pos in self.get_block_locations(&blockhashes)? {
-            let block = Block::consensus_decode(&mut self.open_file(pos)?)?;
-            func(block.block_hash(), block);
-        }
-        Ok(())
-    }
-
     pub(crate) fn open_file(&self, pos: FilePosition) -> Result<File> {
         self.reader.open(pos)
     }

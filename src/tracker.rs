@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bitcoin::{BlockHash, Transaction, Txid};
+use bitcoin::{consensus::Decodable, BlockHash, Transaction, Txid};
 
 use crate::{
     cache::Cache,
@@ -33,13 +33,13 @@ impl Tracker {
             index: Index::load(
                 store,
                 chain,
-                &metrics,
+                metrics,
                 config.index_batch_size,
                 config.index_lookup_limit,
                 config.reindex_last_blocks,
             )
             .context("failed to open index")?,
-            mempool: Mempool::new(&metrics),
+            mempool: Mempool::new(metrics),
             ignore_mempool: config.ignore_mempool,
         })
     }
@@ -90,22 +90,18 @@ impl Tracker {
     pub(crate) fn lookup_transaction(
         &self,
         daemon: &Daemon,
+        chain: &Chain,
         txid: Txid,
     ) -> Result<Option<(BlockHash, Transaction)>> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
-        let blockhashes = self.index.filter_by_txid(txid);
-        let mut result = None;
-        daemon.for_blocks(blockhashes, |blockhash, block| {
-            for tx in block.txdata {
-                if result.is_some() {
-                    return;
-                }
+        for pos in self.index.filter_by_txid(txid) {
+            if let Some(row) = chain.get_header_row_for(pos) {
+                let tx = Transaction::consensus_decode(&mut daemon.open_file(pos)?)?;
                 if tx.txid() == txid {
-                    result = Some((blockhash, tx));
-                    return;
+                    return Ok(Some((row.hash, tx)));
                 }
             }
-        })?;
-        Ok(result)
+        }
+        Ok(None)
     }
 }
