@@ -31,7 +31,7 @@ dirs-next = "2.0"
 env_logger = "0.9"
 fs_extra = "1.2"
 log = "0.4"
-parking_lot = "0.11"
+parking_lot = "0.12"
 prometheus = { version = "0.13", optional = true }
 rayon = "1.5"
 serde = "1.0"
