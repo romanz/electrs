@@ -1,4 +1,4 @@
-# 0.9.5 (TBD)
+# 0.9.5 (Feb 4 2022)
 
 * Update dependencies (`serde-json`, `serde`, `tempfile`, `crossbeam-channel`)
 * Fix `txid` index collision handling (#653)
