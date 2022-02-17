@@ -16,7 +16,6 @@ build = "build.rs"
 default = ["metrics"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
-ignore_default_config_files = []
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -51,7 +50,7 @@ default-features = false
 features = ["zstd", "snappy"]
 
 [build-dependencies]
-configure_me_codegen = "0.4"
+configure_me_codegen = "0.4.2"
 
 [dev-dependencies]
 tempfile = "3.2"

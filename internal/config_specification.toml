@@ -2,6 +2,7 @@
 env_prefix = "ELECTRS"
 conf_file_param = "conf"
 conf_dir_param = "conf_dir"
+skip_default_conf_files_switch = "skip_default_conf_files"
 doc = """
 An efficient re-implementation of Electrum Server, inspired by ElectrumX, Electrum Personal Server and bitcoincore-indexd.
 
