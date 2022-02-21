@@ -235,9 +235,9 @@ dependencies = [
 
 [[package]]
 name = "configure_me_codegen"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7ddbd860cbff075ceadf4714922a73afbe8bf53d9ed9add6c6b733feeb6f3c7"
+checksum = "9aa65df44cc55922b4e22f49939727156a8de25492bf6bd2462a75afc5e155d6"
 dependencies = [
  "cargo_toml",
  "fmt2io",
