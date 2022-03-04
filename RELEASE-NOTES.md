@@ -1,3 +1,8 @@
+# 0.9.6 (Mar 4 2022)
+
+* Allow skipping default config files (#686)
+* Update dependencies (`anyhow`, `serde-json`)
+
 # 0.9.5 (Feb 4 2022)
 
 * Update dependencies (`serde-json`, `serde`, `tempfile`, `crossbeam-channel`)
