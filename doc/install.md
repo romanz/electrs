@@ -59,6 +59,15 @@ On [Debian 11 (bullseye)](https://packages.debian.org/bullseye/librocksdb-dev) a
 $ sudo apt install librocksdb-dev=6.11.4-3
 ```
 
+For other versions of Debian or Ubuntu, you can build librocksdb and install inside `/usr/local` directory using following command.
+
+```bash
+$ sudo apt install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
+$ git clone -b v6.11.4 --depth 1 https://github.com/facebook/rocksdb && cd rocksdb
+$ make shared_lib -j $(nproc) && sudo make install-shared
+$ cd .. && rm -r rocksdb
+```
+
 #### Preparing for cross compilation
 
 Cross compilation can save you some time since you can compile `electrs` for a slower computer (like Raspberry Pi) on a faster machine
@@ -138,6 +147,12 @@ Relevant issues: [#134](https://github.com/romanz/electrs/issues/134) and [#391]
 
 ```
 $ ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib cargo build --locked --release
+```
+
+Or if you have installed librocksdb from source
+
+```
+$ ROCKSDB_INCLUDE_DIR=/usr/local/include ROCKSDB_LIB_DIR=/usr/local/lib cargo build --locked --release
 ```
 
 #### Cross compilation
