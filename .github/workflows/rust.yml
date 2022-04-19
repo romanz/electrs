@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: '0 0 * * *'  # once a day
+    - cron: "0 0 * * *" # once a day
 
 jobs:
   audit:
@@ -19,6 +19,14 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-args:
+          [
+            --locked --no-default-features,
+            --locked,
+            --locked --features metrics_process,
+          ]
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -39,7 +47,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --locked --all
+          args: ${{ matrix.build-args }} --all
 
       - name: Test
         uses: actions-rs/cargo@v1
