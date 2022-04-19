@@ -53,6 +53,18 @@ jobs:
           command: clippy
           args: -- -D warnings
 
+      - name: Install cargo-bloat
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-bloat
+
+      - name: Run cargo-bloat
+        uses: actions-rs/cargo@v1
+        with:
+          command: bloat
+          args: --locked --all --release --crates --time
+
   integration:
     name: Integration
     runs-on: ubuntu-latest
