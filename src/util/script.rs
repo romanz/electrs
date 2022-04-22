@@ -56,7 +56,7 @@ pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {
         let witness = &txin.witness;
         #[cfg(feature = "liquid")]
         let witness = &witness.script_witness;
-        witness.iter().last().cloned().map(Script::from)
+        witness.iter().last().map(Vec::from).map(Script::from)
     } else {
         None
     };

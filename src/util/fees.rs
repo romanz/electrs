@@ -12,7 +12,7 @@ pub struct TxFeeInfo {
 impl TxFeeInfo {
     pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, network: Network) -> Self {
         let fee = get_tx_fee(tx, prevouts, network);
-        let vsize = tx.get_weight() / 4;
+        let vsize = tx.weight() / 4;
 
         TxFeeInfo {
             fee,

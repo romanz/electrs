@@ -294,7 +294,7 @@ impl From<&BlockEntry> for BlockMeta {
     fn from(b: &BlockEntry) -> BlockMeta {
         BlockMeta {
             tx_count: b.block.txdata.len() as u32,
-            weight: b.block.get_weight() as u32,
+            weight: b.block.weight() as u32,
             size: b.size,
         }
     }

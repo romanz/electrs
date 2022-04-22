@@ -88,7 +88,7 @@ fn bitcoind_fetcher(
                     .zip(entries)
                     .map(|(block, entry)| BlockEntry {
                         entry: entry.clone(), // TODO: remove this clone()
-                        size: block.get_size() as u32,
+                        size: block.size() as u32,
                         block,
                     })
                     .collect();

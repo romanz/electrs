@@ -156,8 +156,8 @@ impl TransactionValue {
             locktime: tx.lock_time,
             vin: vins,
             vout: vouts,
-            size: tx.get_size() as u32,
-            weight: tx.get_weight() as u32,
+            size: tx.size() as u32,
+            weight: tx.weight() as u32,
             fee,
             status: Some(TransactionStatus::from(blockid)),
         }
