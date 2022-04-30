@@ -22,7 +22,7 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.27.1", features = ["use-serde", "rand"] }
+bitcoin = { version = "0.28.0", features = ["use-serde", "rand"] }
 bitcoincore-rpc = "0.14.0"
 configure_me = "0.4"
 crossbeam-channel = "0.5"
