@@ -1,3 +1,10 @@
+# 0.9.7 (Apr 30 2022)
+
+* Add build matrix to test all features in CI (#706)
+* Install and run cargo-bloat in CI (#705)
+* Add guide for other Ubuntu & Debian releases to compile and install librocksdb (#696)
+* Update dependencies (`anyhow`, `log`, `crossbeam-channel`, `rayon`)
+
 # 0.9.6 (Mar 4 2022)
 
 * Allow skipping default config files (#686)
