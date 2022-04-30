@@ -29,7 +29,7 @@ impl Cache {
     pub fn add_tx(&self, txid: Txid, f: impl FnOnce() -> Transaction) {
         self.txs.write().entry(txid).or_insert_with(|| {
             let tx = f();
-            self.txs_size.observe("serialized", tx.get_size() as f64);
+            self.txs_size.observe("serialized", tx.size() as f64);
             tx
         });
     }
