@@ -75,7 +75,7 @@ echo " * getaddresshistory"
 test "`$EL getaddresshistory $NEW_ADDR | jq -c .`" == "[{\"fee\":100000,\"height\":0,\"tx_hash\":\"$TXID\"}]"
 
 echo " * getbalance"
-test "`$EL getbalance | jq -c .`" == '{"confirmed":"550","unconfirmed":"-0.001","unmatured":"4950"}'
+test "`$EL getbalance | jq -c .`" == '{"confirmed":"549.999","unmatured":"4950"}'
 
 echo "Generating bitcoin block..."
 $BTC generatetoaddress 1 $MINING_ADDR > /dev/null
