@@ -1,3 +1,8 @@
+# 0.9.8 (Jun 3 2022)
+
+* Update dependencies (`serde_json`, `serde`, `bitcoin`, `bitcoincore-rpc`, `rayon`, `log`)
+* Support new Electrum release `getbalance` response format (#717)
+
 # 0.9.7 (Apr 30 2022)
 
 * Add build matrix to test all features in CI (#706)
