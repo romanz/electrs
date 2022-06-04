@@ -9,6 +9,9 @@ use std::slice;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime as DateTime;
 
+#[cfg(feature = "liquid")]
+use crate::elements::EBCompact;
+
 const MTP_SPAN: usize = 11;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

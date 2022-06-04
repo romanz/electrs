@@ -56,7 +56,14 @@ pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {
         let witness = &txin.witness;
         #[cfg(feature = "liquid")]
         let witness = &witness.script_witness;
-        witness.iter().last().map(Vec::from).map(Script::from)
+
+        // rust-bitcoin returns witness items as a [u8] slice, while rust-elements returns a Vec<u8>
+        #[cfg(not(feature = "liquid"))]
+        let wit_to_vec = Vec::from;
+        #[cfg(feature = "liquid")]
+        let wit_to_vec = Clone::clone;
+
+        witness.iter().last().map(wit_to_vec).map(Script::from)
     } else {
         None
     };
