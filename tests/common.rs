@@ -24,153 +24,6 @@ use electrs::{
     signal::Waiter,
 };
 
-pub fn init_tester() -> Result<TestRunner> {
-    let log = init_log();
-
-    // Setup the bitcoind/elementsd config
-    let mut node_conf = noded::Conf::default();
-    {
-        #[cfg(not(feature = "liquid"))]
-        let node_conf = &mut node_conf;
-        #[cfg(feature = "liquid")]
-        let node_conf = &mut node_conf.0;
-
-        #[cfg(feature = "liquid")]
-        {
-            node_conf.args.push("-anyonecanspendaremine=1");
-        }
-
-        node_conf.view_stdout = true;
-    }
-
-    // Setup node
-    let node = NodeD::with_conf(noded::downloaded_exe_path().unwrap(), &node_conf).unwrap();
-
-    #[cfg(not(feature = "liquid"))]
-    let (node_client, params) = (&node.client, &node.params);
-    #[cfg(feature = "liquid")]
-    let (node_client, params) = (node.client(), &node.params());
-
-    log::info!("node params: {:?}", params);
-
-    generate(node_client, 101).chain_err(|| "failed initializing blocks")?;
-
-    // Needed to claim the initialfreecoins as our own
-    // See https://github.com/ElementsProject/elements/issues/956
-    #[cfg(feature = "liquid")]
-    node_client.call::<Value>("rescanblockchain", &[])?;
-
-    #[cfg(not(feature = "liquid"))]
-    let network_type = Network::Regtest;
-    #[cfg(feature = "liquid")]
-    let network_type = Network::LiquidRegtest;
-
-    let daemon_subdir = params
-        .datadir
-        .join(config::get_network_subdir(network_type).unwrap());
-
-    let electrsdb = tempfile::tempdir().unwrap();
-
-    let config = Arc::new(Config {
-        log,
-        network_type,
-        db_path: electrsdb.path().to_path_buf(),
-        daemon_dir: daemon_subdir.clone(),
-        blocks_dir: daemon_subdir.join("blocks"),
-        daemon_rpc_addr: params.rpc_socket.into(),
-        cookie: None,
-        electrum_rpc_addr: rand_available_addr(),
-        http_addr: rand_available_addr(),
-        http_socket_file: None, // XXX test with socket file or tcp?
-        monitoring_addr: rand_available_addr(),
-        jsonrpc_import: false,
-        light_mode: false,
-        address_search: true,
-        index_unspendables: false,
-        cors: None,
-        precache_scripts: None,
-        utxos_limit: 100,
-        electrum_txs_limit: 100,
-        electrum_banner: "".into(),
-
-        #[cfg(feature = "liquid")]
-        asset_db_path: None, // XXX
-        #[cfg(feature = "liquid")]
-        parent_network: chain::BNetwork::Regtest,
-        //#[cfg(feature = "electrum-discovery")]
-        //electrum_public_hosts: Option<crate::electrum::ServerHosts>,
-        //#[cfg(feature = "electrum-discovery")]
-        //electrum_announce: bool,
-        //#[cfg(feature = "electrum-discovery")]
-        //tor_proxy: Option<std::net::SocketAddr>,
-    });
-
-    let signal = Waiter::start();
-    let metrics = Metrics::new(rand_available_addr());
-    metrics.start();
-
-    let daemon = Arc::new(Daemon::new(
-        &config.daemon_dir,
-        &config.blocks_dir,
-        config.daemon_rpc_addr,
-        config.cookie_getter(),
-        config.network_type,
-        signal.clone(),
-        &metrics,
-    )?);
-
-    let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
-
-    let fetch_from = if !env::var("JSONRPC_IMPORT").is_ok() && !cfg!(feature = "liquid") {
-        // run the initial indexing from the blk files then switch to using the jsonrpc,
-        // similarly to how electrs is typically used.
-        FetchFrom::BlkFiles
-    } else {
-        // when JSONRPC_IMPORT is set, use the jsonrpc for the initial indexing too.
-        // this runs faster on small regtest chains and can be useful for quicker local development iteration.
-        // this is also used on liquid regtest, which currently fails to parse the BlkFiles due to the magic bytes
-        FetchFrom::Bitcoind
-    };
-
-    let mut indexer = Indexer::open(Arc::clone(&store), fetch_from, &config, &metrics);
-    indexer.update(&daemon)?;
-    indexer.fetch_from(FetchFrom::Bitcoind);
-
-    let chain = Arc::new(ChainQuery::new(
-        Arc::clone(&store),
-        Arc::clone(&daemon),
-        &config,
-        &metrics,
-    ));
-
-    let mempool = Arc::new(RwLock::new(Mempool::new(
-        Arc::clone(&chain),
-        &metrics,
-        Arc::clone(&config),
-    )));
-    mempool.write().unwrap().update(&daemon)?;
-
-    let query = Arc::new(Query::new(
-        Arc::clone(&chain),
-        Arc::clone(&mempool),
-        Arc::clone(&daemon),
-        Arc::clone(&config),
-        #[cfg(feature = "liquid")]
-        None, // TODO
-    ));
-
-    Ok(TestRunner {
-        config,
-        node,
-        _electrsdb: electrsdb,
-        indexer,
-        query,
-        daemon,
-        mempool,
-        metrics,
-    })
-}
-
 pub struct TestRunner {
     config: Arc<Config>,
     /// bitcoind::BitcoinD or an elementsd::ElementsD in liquid mode
@@ -184,6 +37,151 @@ pub struct TestRunner {
 }
 
 impl TestRunner {
+    pub fn new() -> Result<TestRunner> {
+        let log = init_log();
+
+        // Setup the bitcoind/elementsd config
+        let mut node_conf = noded::Conf::default();
+        {
+            #[cfg(not(feature = "liquid"))]
+            let node_conf = &mut node_conf;
+            #[cfg(feature = "liquid")]
+            let node_conf = &mut node_conf.0;
+
+            #[cfg(feature = "liquid")]
+            node_conf.args.push("-anyonecanspendaremine=1");
+
+            node_conf.view_stdout = true;
+        }
+
+        // Setup node
+        let node = NodeD::with_conf(noded::downloaded_exe_path().unwrap(), &node_conf).unwrap();
+
+        #[cfg(not(feature = "liquid"))]
+        let (node_client, params) = (&node.client, &node.params);
+        #[cfg(feature = "liquid")]
+        let (node_client, params) = (node.client(), &node.params());
+
+        log::info!("node params: {:?}", params);
+
+        generate(node_client, 101).chain_err(|| "failed initializing blocks")?;
+
+        // Needed to claim the initialfreecoins as our own
+        // See https://github.com/ElementsProject/elements/issues/956
+        #[cfg(feature = "liquid")]
+        node_client.call::<Value>("rescanblockchain", &[])?;
+
+        #[cfg(not(feature = "liquid"))]
+        let network_type = Network::Regtest;
+        #[cfg(feature = "liquid")]
+        let network_type = Network::LiquidRegtest;
+
+        let daemon_subdir = params
+            .datadir
+            .join(config::get_network_subdir(network_type).unwrap());
+
+        let electrsdb = tempfile::tempdir().unwrap();
+
+        let config = Arc::new(Config {
+            log,
+            network_type,
+            db_path: electrsdb.path().to_path_buf(),
+            daemon_dir: daemon_subdir.clone(),
+            blocks_dir: daemon_subdir.join("blocks"),
+            daemon_rpc_addr: params.rpc_socket.into(),
+            cookie: None,
+            electrum_rpc_addr: rand_available_addr(),
+            http_addr: rand_available_addr(),
+            http_socket_file: None, // XXX test with socket file or tcp?
+            monitoring_addr: rand_available_addr(),
+            jsonrpc_import: false,
+            light_mode: false,
+            address_search: true,
+            index_unspendables: false,
+            cors: None,
+            precache_scripts: None,
+            utxos_limit: 100,
+            electrum_txs_limit: 100,
+            electrum_banner: "".into(),
+
+            #[cfg(feature = "liquid")]
+            asset_db_path: None, // XXX
+            #[cfg(feature = "liquid")]
+            parent_network: chain::BNetwork::Regtest,
+            //#[cfg(feature = "electrum-discovery")]
+            //electrum_public_hosts: Option<crate::electrum::ServerHosts>,
+            //#[cfg(feature = "electrum-discovery")]
+            //electrum_announce: bool,
+            //#[cfg(feature = "electrum-discovery")]
+            //tor_proxy: Option<std::net::SocketAddr>,
+        });
+
+        let signal = Waiter::start();
+        let metrics = Metrics::new(rand_available_addr());
+        metrics.start();
+
+        let daemon = Arc::new(Daemon::new(
+            &config.daemon_dir,
+            &config.blocks_dir,
+            config.daemon_rpc_addr,
+            config.cookie_getter(),
+            config.network_type,
+            signal.clone(),
+            &metrics,
+        )?);
+
+        let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
+
+        let fetch_from = if !env::var("JSONRPC_IMPORT").is_ok() && !cfg!(feature = "liquid") {
+            // run the initial indexing from the blk files then switch to using the jsonrpc,
+            // similarly to how electrs is typically used.
+            FetchFrom::BlkFiles
+        } else {
+            // when JSONRPC_IMPORT is set, use the jsonrpc for the initial indexing too.
+            // this runs faster on small regtest chains and can be useful for quicker local development iteration.
+            // this is also used on liquid regtest, which currently fails to parse the BlkFiles due to the magic bytes
+            FetchFrom::Bitcoind
+        };
+
+        let mut indexer = Indexer::open(Arc::clone(&store), fetch_from, &config, &metrics);
+        indexer.update(&daemon)?;
+        indexer.fetch_from(FetchFrom::Bitcoind);
+
+        let chain = Arc::new(ChainQuery::new(
+            Arc::clone(&store),
+            Arc::clone(&daemon),
+            &config,
+            &metrics,
+        ));
+
+        let mempool = Arc::new(RwLock::new(Mempool::new(
+            Arc::clone(&chain),
+            &metrics,
+            Arc::clone(&config),
+        )));
+        mempool.write().unwrap().update(&daemon)?;
+
+        let query = Arc::new(Query::new(
+            Arc::clone(&chain),
+            Arc::clone(&mempool),
+            Arc::clone(&daemon),
+            Arc::clone(&config),
+            #[cfg(feature = "liquid")]
+            None, // TODO
+        ));
+
+        Ok(TestRunner {
+            config,
+            node,
+            _electrsdb: electrsdb,
+            indexer,
+            query,
+            daemon,
+            mempool,
+            metrics,
+        })
+    }
+
     pub fn node_client(&self) -> &bitcoincore_rpc::Client {
         #[cfg(not(feature = "liquid"))]
         return &self.node.client;
@@ -240,16 +238,36 @@ impl TestRunner {
         self.sync()?;
         Ok(txid)
     }
+
+    pub fn newaddress(&self) -> Result<Address> {
+        #[cfg(not(feature = "liquid"))]
+        return Ok(self.node_client().get_new_address(None, None)?);
+
+        // Return the unconfidential address on Liquid, so that the Bitcoin tests using
+        // newaddress() can work on Liquid too. The confidential address can be obtained
+        // by calling ct_newaddress()
+        #[cfg(feature = "liquid")]
+        return Ok(self.ct_newaddress()?.1);
+    }
+
+    #[cfg(feature = "liquid")]
+    pub fn ct_newaddress(&self) -> Result<(Address, Address)> {
+        let client = self.node_client();
+        let c_addr = client.call::<Address>("getnewaddress", &[])?;
+        let mut info = client.call::<Value>("getaddressinfo", &[c_addr.to_string().into()])?;
+        let uc_addr = serde_json::from_value(info["unconfidential"].take())?;
+        Ok((c_addr, uc_addr))
+    }
 }
 
 pub fn init_rest_tester() -> Result<(rest::Handle, net::SocketAddr, TestRunner)> {
-    let tester = init_tester()?;
+    let tester = TestRunner::new()?;
     let rest_server = rest::start(Arc::clone(&tester.config), Arc::clone(&tester.query));
     log::info!("REST server running on {}", tester.config.http_addr);
     Ok((rest_server, tester.config.http_addr, tester))
 }
 pub fn init_electrum_tester() -> Result<(ElectrumRPC, net::SocketAddr, TestRunner)> {
-    let tester = init_tester()?;
+    let tester = TestRunner::new()?;
     let electrum_server = ElectrumRPC::start(
         Arc::clone(&tester.config),
         Arc::clone(&tester.query),

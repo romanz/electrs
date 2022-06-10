@@ -26,7 +26,7 @@ fn test_rest() -> Result<()> {
     };
 
     // Send transaction and confirm it
-    let addr1 = newaddress(tester.node_client())?;
+    let addr1 = tester.newaddress()?;
     let txid1_confirmed = tester.send(&addr1, "1.19123 BTC".parse().unwrap())?;
     tester.mine()?;
 
@@ -174,7 +174,7 @@ fn test_rest() -> Result<()> {
     {
         // Test confidential transactions
         {
-            let (c_addr, uc_addr) = elements_newaddress(tester.node_client())?;
+            let (c_addr, uc_addr) = tester.ct_newaddress()?;
             let txid = tester.send(&c_addr, "3.5 BTC".parse().unwrap())?;
             tester.mine()?;
 
@@ -259,7 +259,7 @@ fn test_rest() -> Result<()> {
             let assetid = issuance["asset"].as_str().expect("asset id");
             tester.mine()?;
 
-            let (c_addr, uc_addr) = elements_newaddress(tester.node_client())?;
+            let (c_addr, uc_addr) = tester.ct_newaddress()?;
 
             // With blinding off
             let txid = tester.send_asset(
@@ -317,23 +317,4 @@ fn test_rest() -> Result<()> {
 
     rest_handle.stop();
     Ok(())
-}
-
-fn newaddress(client: &bitcoincore_rpc::Client) -> Result<Address> {
-    #[cfg(not(feature = "liquid"))]
-    return Ok(client.get_new_address(None, None)?);
-
-    // Return the unconfidential address on Liquid, so that the same tests work
-    // on both Bitcoin and Liquid mode. The Liquid-specific functionality, including
-    // confidentially, is tested separately.
-    #[cfg(feature = "liquid")]
-    return Ok(elements_newaddress(client)?.1);
-}
-
-#[cfg(feature = "liquid")]
-fn elements_newaddress(client: &bitcoincore_rpc::Client) -> Result<(Address, Address)> {
-    let c_addr = client.call::<Address>("getnewaddress", &[])?;
-    let mut info = client.call::<Value>("getaddressinfo", &[c_addr.to_string().into()])?;
-    let uc_addr = serde_json::from_value(info["unconfidential"].take())?;
-    Ok((c_addr, uc_addr))
 }
