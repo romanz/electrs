@@ -1,9 +1,6 @@
 use crate::chain::{Network, Transaction, TxOut};
 use std::collections::HashMap;
 
-#[cfg(feature = "liquid")]
-use crate::elements::EBCompact;
-
 const VSIZE_BIN_WIDTH: u32 = 50_000; // in vbytes
 
 pub struct TxFeeInfo {

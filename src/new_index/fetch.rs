@@ -4,8 +4,6 @@ use rayon::prelude::*;
 use bitcoin::consensus::encode::{deserialize, Decodable};
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, Decodable};
-#[cfg(feature = "liquid")]
-use crate::elements::EBCompact;
 
 use std::collections::HashMap;
 use std::fs;

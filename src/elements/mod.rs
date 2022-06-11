@@ -74,29 +74,3 @@ impl From<&TxIn> for IssuanceValue {
         }
     }
 }
-
-// Compatibility for Transaction/Block methods between rust-bitcoin and rust-elements
-// rust-bitcoin deprecated the 'get_' prefix in https://github.com/rust-bitcoin/rust-bitcoin/pull/861,
-// while rust-elements still uses it. This allows using the prefix-less methods to avoid the deprecation warnings.
-pub trait EBCompact {
-    fn weight(&self) -> usize;
-    fn size(&self) -> usize;
-}
-
-impl EBCompact for elements::Transaction {
-    fn weight(&self) -> usize {
-        self.get_weight()
-    }
-    fn size(&self) -> usize {
-        self.get_size()
-    }
-}
-
-impl EBCompact for elements::Block {
-    fn weight(&self) -> usize {
-        self.get_weight()
-    }
-    fn size(&self) -> usize {
-        self.get_size()
-    }
-}

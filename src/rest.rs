@@ -23,7 +23,7 @@ use hyperlocal::UnixServerExt;
 use std::fs;
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue, EBCompact},
+    crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue},
     elements::{
         confidential::{Asset, Nonce, Value},
         encode, AssetId,

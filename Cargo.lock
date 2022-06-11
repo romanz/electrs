@@ -407,9 +407,9 @@ dependencies = [
 
 [[package]]
 name = "elements"
-version = "0.19.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a00dab52c515c0cb85d33267326da8fc8a0f8a523f13a0b4c3c73af4ad09cade"
+checksum = "61c5ef61d480567b862631efcc22f704eeed7291dbf929ae008a8d5b7f5c4527"
 dependencies = [
  "bitcoin 0.28.0",
  "bitcoin_hashes 0.10.0",
