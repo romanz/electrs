@@ -13,9 +13,10 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["metrics"]
+default = ["metrics", "rocksdb"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+rocksdb = ["electrs-rocksdb"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -48,6 +49,7 @@ default-features = false
 # ZSTD is used for data compression
 # Snappy is only for checking old DB
 features = ["zstd", "snappy"]
+optional = true
 
 [build-dependencies]
 configure_me_codegen = "0.4.2"

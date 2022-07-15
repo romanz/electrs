@@ -6,7 +6,8 @@ use crate::{
     chain::Chain,
     config::Config,
     daemon::Daemon,
-    db::DBStore,
+    db_rocksdb::RocksDBStore,
+    db_store::DBStore,
     index::Index,
     mempool::{FeeHistogram, Mempool},
     metrics::Metrics,
@@ -28,7 +29,12 @@ pub(crate) enum Error {
 
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store = DBStore::open(&config.db_path, config.auto_reindex)?;
+        let store: Box<dyn DBStore + Send + Sync + 'static> = if cfg!(rocksdb) {
+            Box::new(RocksDBStore::open(&config.db_path, config.auto_reindex)?)
+        } else {
+            panic!("Must choose exactly one backing store in the features: rocksdb");
+        };
+
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(

@@ -8,7 +8,7 @@ use bitcoin::{
     BlockHeader, OutPoint, Script, Txid,
 };
 
-use crate::db;
+use crate::db_store;
 
 macro_rules! impl_consensus_encoding {
     ($thing:ident, $($field:ident),+) => (
@@ -49,7 +49,7 @@ pub(crate) struct HashPrefixRow {
 }
 
 impl HashPrefixRow {
-    pub(crate) fn to_db_row(&self) -> db::Row {
+    pub(crate) fn to_db_row(&self) -> db_store::Row {
         serialize(self).into_boxed_slice()
     }
 
@@ -170,7 +170,7 @@ impl HeaderRow {
         Self { header }
     }
 
-    pub(crate) fn to_db_row(&self) -> db::Row {
+    pub(crate) fn to_db_row(&self) -> db_store::Row {
         serialize(self).into_boxed_slice()
     }
 

@@ -1,45 +1,19 @@
-use anyhow::{Context, Result};
-use electrs_rocksdb as rocksdb;
-
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub(crate) type Row = Box<[u8]>;
+use anyhow::{Context, Result};
+use electrs_rocksdb as rocksdb;
 
-#[derive(Default)]
-pub(crate) struct WriteBatch {
-    pub(crate) tip_row: Row,
-    pub(crate) header_rows: Vec<Row>,
-    pub(crate) funding_rows: Vec<Row>,
-    pub(crate) spending_rows: Vec<Row>,
-    pub(crate) txid_rows: Vec<Row>,
-}
-
-impl WriteBatch {
-    pub(crate) fn sort(&mut self) {
-        self.header_rows.sort_unstable();
-        self.funding_rows.sort_unstable();
-        self.spending_rows.sort_unstable();
-        self.txid_rows.sort_unstable();
-    }
-}
+use crate::db_store::{
+    Config, DBStore, Row, WriteBatch, CONFIG_GROUP, CONFIG_KEY, CURRENT_FORMAT, FUNDING_GROUP,
+    GROUPS, HEADERS_GROUP, SPENDING_GROUP, TIP_KEY, TXID_GROUP,
+};
 
 /// RocksDB wrapper for index storage
-pub struct DBStore {
+pub struct RocksDBStore {
     db: rocksdb::DB,
     bulk_import: AtomicBool,
 }
-
-const CONFIG_CF: &str = "config";
-const HEADERS_CF: &str = "headers";
-const TXID_CF: &str = "txid";
-const FUNDING_CF: &str = "funding";
-const SPENDING_CF: &str = "spending";
-
-const COLUMN_FAMILIES: &[&str] = &[CONFIG_CF, HEADERS_CF, TXID_CF, FUNDING_CF, SPENDING_CF];
-
-const CONFIG_KEY: &str = "C";
-const TIP_KEY: &[u8] = b"T";
 
 // Taken from https://github.com/facebook/rocksdb/blob/master/include/rocksdb/db.h#L654-L689
 const DB_PROPERIES: &[&str] = &[
@@ -78,23 +52,6 @@ const DB_PROPERIES: &[&str] = &[
     "rocksdb.block-cache-pinned-usage",
 ];
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Config {
-    compacted: bool,
-    format: u64,
-}
-
-const CURRENT_FORMAT: u64 = 0;
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            compacted: false,
-            format: CURRENT_FORMAT,
-        }
-    }
-}
-
 fn default_opts() -> rocksdb::Options {
     let mut opts = rocksdb::Options::default();
     opts.set_keep_log_file_num(10);
@@ -109,9 +66,9 @@ fn default_opts() -> rocksdb::Options {
     opts
 }
 
-impl DBStore {
+impl RocksDBStore {
     fn create_cf_descriptors() -> Vec<rocksdb::ColumnFamilyDescriptor> {
-        COLUMN_FAMILIES
+        GROUPS
             .iter()
             .map(|&name| rocksdb::ColumnFamilyDescriptor::new(name, default_opts()))
             .collect()
@@ -132,7 +89,7 @@ impl DBStore {
             live_files.iter().map(|f| f.size).sum::<usize>() as f64 / 1e9,
             live_files.iter().map(|f| f.num_entries).sum::<u64>() as f64 / 1e9
         );
-        let store = DBStore {
+        let store = RocksDBStore {
             db,
             bulk_import: AtomicBool::new(true),
         };
@@ -147,8 +104,77 @@ impl DBStore {
             .is_some()
     }
 
+    fn config_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db.cf_handle(CONFIG_GROUP).expect("missing CONFIG_CF")
+    }
+
+    fn funding_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db
+            .cf_handle(FUNDING_GROUP)
+            .expect("missing FUNDING_CF")
+    }
+
+    fn spending_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db
+            .cf_handle(SPENDING_GROUP)
+            .expect("missing SPENDING_CF")
+    }
+
+    fn txid_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db.cf_handle(TXID_GROUP).expect("missing TXID_CF")
+    }
+
+    fn headers_cf(&self) -> &rocksdb::ColumnFamily {
+        self.db
+            .cf_handle(HEADERS_GROUP)
+            .expect("missing HEADERS_CF")
+    }
+
+    fn iter_prefix_cf(
+        &self,
+        cf: &rocksdb::ColumnFamily,
+        prefix: Row,
+    ) -> impl Iterator<Item = Row> + '_ {
+        let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
+        let mut opts = rocksdb::ReadOptions::default();
+        opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
+        self.db
+            .iterator_cf_opt(cf, opts, mode)
+            .map(|(key, _value)| key) // values are empty in prefix-scanned CFs
+    }
+
+    fn start_compactions(&self) {
+        self.bulk_import.store(false, Ordering::Relaxed);
+        for name in GROUPS {
+            let cf = self.db.cf_handle(name).expect("missing CF");
+            self.db
+                .set_options_cf(cf, &[("disable_auto_compactions", "false")])
+                .expect("failed to start auto-compactions");
+        }
+        debug!("auto-compactions enabled");
+    }
+
+    fn set_config(&self, config: Config) {
+        let mut opts = rocksdb::WriteOptions::default();
+        opts.set_sync(true);
+        opts.disable_wal(false);
+        let value = serde_json::to_vec(&config).expect("failed to serialize config");
+        self.db
+            .put_cf_opt(self.config_cf(), CONFIG_KEY, value, &opts)
+            .expect("DB::put failed");
+    }
+
+    fn get_config(&self) -> Option<Config> {
+        self.db
+            .get_cf(self.config_cf(), CONFIG_KEY)
+            .expect("DB::get failed")
+            .map(|value| serde_json::from_slice(&value).expect("failed to deserialize Config"))
+    }
+}
+
+impl DBStore for RocksDBStore {
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
+    fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
         let mut store = Self::open_internal(path)?;
         let config = store.get_config();
         debug!("DB {:?}", config);
@@ -191,52 +217,19 @@ impl DBStore {
         Ok(store)
     }
 
-    fn config_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(CONFIG_CF).expect("missing CONFIG_CF")
+    fn iter_funding(&self, prefix: Row) -> Box<dyn Iterator<Item = Row> + '_> {
+        Box::new(self.iter_prefix_cf(self.funding_cf(), prefix))
     }
 
-    fn funding_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(FUNDING_CF).expect("missing FUNDING_CF")
+    fn iter_spending(&self, prefix: Row) -> Box<dyn Iterator<Item = Row> + '_> {
+        Box::new(self.iter_prefix_cf(self.spending_cf(), prefix))
     }
 
-    fn spending_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(SPENDING_CF).expect("missing SPENDING_CF")
+    fn iter_txid(&self, prefix: Row) -> Box<dyn Iterator<Item = Row> + '_> {
+        Box::new(self.iter_prefix_cf(self.txid_cf(), prefix))
     }
 
-    fn txid_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(TXID_CF).expect("missing TXID_CF")
-    }
-
-    fn headers_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
-    }
-
-    pub(crate) fn iter_funding(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
-        self.iter_prefix_cf(self.funding_cf(), prefix)
-    }
-
-    pub(crate) fn iter_spending(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
-        self.iter_prefix_cf(self.spending_cf(), prefix)
-    }
-
-    pub(crate) fn iter_txid(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
-        self.iter_prefix_cf(self.txid_cf(), prefix)
-    }
-
-    fn iter_prefix_cf(
-        &self,
-        cf: &rocksdb::ColumnFamily,
-        prefix: Row,
-    ) -> impl Iterator<Item = Row> + '_ {
-        let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
-        let mut opts = rocksdb::ReadOptions::default();
-        opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.db
-            .iterator_cf_opt(cf, opts, mode)
-            .map(|(key, _value)| key) // values are empty in prefix-scanned CFs
-    }
-
-    pub(crate) fn read_headers(&self) -> Vec<Row> {
+    fn read_headers(&self) -> Vec<Row> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.db
@@ -246,13 +239,13 @@ impl DBStore {
             .collect()
     }
 
-    pub(crate) fn get_tip(&self) -> Option<Vec<u8>> {
+    fn get_tip(&self) -> Option<Vec<u8>> {
         self.db
             .get_cf(self.headers_cf(), TIP_KEY)
             .expect("get_tip failed")
     }
 
-    pub(crate) fn write(&self, batch: &WriteBatch) {
+    fn write(&self, batch: &WriteBatch) {
         let mut db_batch = rocksdb::WriteBatch::default();
         for key in &batch.funding_rows {
             db_batch.put_cf(self.funding_cf(), key, b"");
@@ -275,14 +268,14 @@ impl DBStore {
         self.db.write_opt(db_batch, &opts).unwrap();
     }
 
-    pub(crate) fn flush(&self) {
+    fn flush(&self) {
         let mut config = self.get_config().unwrap_or_default();
-        for name in COLUMN_FAMILIES {
+        for name in GROUPS {
             let cf = self.db.cf_handle(name).expect("missing CF");
             self.db.flush_cf(cf).expect("CF flush failed");
         }
         if !config.compacted {
-            for name in COLUMN_FAMILIES {
+            for name in GROUPS {
                 info!("starting {} compaction", name);
                 let cf = self.db.cf_handle(name).expect("missing CF");
                 self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
@@ -304,10 +297,8 @@ impl DBStore {
         }
     }
 
-    pub(crate) fn get_properties(
-        &self,
-    ) -> impl Iterator<Item = (&'static str, &'static str, u64)> + '_ {
-        COLUMN_FAMILIES.iter().flat_map(move |cf_name| {
+    fn get_properties(&self) -> Box<dyn Iterator<Item = (&'static str, &'static str, u64)> + '_> {
+        Box::new(GROUPS.iter().flat_map(move |cf_name| {
             let cf = self.db.cf_handle(cf_name).expect("missing CF");
             DB_PROPERIES.iter().filter_map(move |property_name| {
                 let value = self
@@ -316,39 +307,11 @@ impl DBStore {
                     .expect("failed to get property");
                 Some((*cf_name, *property_name, value?))
             })
-        })
-    }
-
-    fn start_compactions(&self) {
-        self.bulk_import.store(false, Ordering::Relaxed);
-        for name in COLUMN_FAMILIES {
-            let cf = self.db.cf_handle(name).expect("missing CF");
-            self.db
-                .set_options_cf(cf, &[("disable_auto_compactions", "false")])
-                .expect("failed to start auto-compactions");
-        }
-        debug!("auto-compactions enabled");
-    }
-
-    fn set_config(&self, config: Config) {
-        let mut opts = rocksdb::WriteOptions::default();
-        opts.set_sync(true);
-        opts.disable_wal(false);
-        let value = serde_json::to_vec(&config).expect("failed to serialize config");
-        self.db
-            .put_cf_opt(self.config_cf(), CONFIG_KEY, value, &opts)
-            .expect("DB::put failed");
-    }
-
-    fn get_config(&self) -> Option<Config> {
-        self.db
-            .get_cf(self.config_cf(), CONFIG_KEY)
-            .expect("DB::get failed")
-            .map(|value| serde_json::from_slice(&value).expect("failed to deserialize Config"))
+        }))
     }
 }
 
-impl Drop for DBStore {
+impl Drop for RocksDBStore {
     fn drop(&mut self) {
         info!("closing DB at {}", self.db.path().display());
     }
@@ -356,19 +319,24 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use crate::db_store::DBStore;
+
+    use super::{rocksdb, RocksDBStore, WriteBatch, CURRENT_FORMAT};
 
     #[test]
     fn test_reindex_new_format() {
         let dir = tempfile::tempdir().unwrap();
         {
-            let store = DBStore::open(dir.path(), false).unwrap();
+            let store = RocksDBStore::open(dir.path(), false).unwrap();
             let mut config = store.get_config().unwrap();
             config.format += 1;
             store.set_config(config);
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            RocksDBStore::open(dir.path(), false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!(
                 "re-index required due to unsupported format {} != {}",
                 CURRENT_FORMAT + 1,
@@ -376,7 +344,7 @@ mod tests {
             )
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = RocksDBStore::open(dir.path(), true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -394,11 +362,14 @@ mod tests {
             db.put(b"F", b"").unwrap(); // insert legacy DB compaction marker (in 'default' column family)
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            RocksDBStore::open(dir.path(), false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!("re-index required due to legacy format",)
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = RocksDBStore::open(dir.path(), true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -408,7 +379,7 @@ mod tests {
     #[test]
     fn test_db_prefix_scan() {
         let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), true).unwrap();
+        let store = RocksDBStore::open(dir.path(), true).unwrap();
 
         let items: &[&[u8]] = &[
             b"ab",
