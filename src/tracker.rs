@@ -6,7 +6,6 @@ use crate::{
     chain::Chain,
     config::Config,
     daemon::Daemon,
-    db_rocksdb::RocksDBStore,
     db_store::DBStore,
     index::Index,
     mempool::{FeeHistogram, Mempool},
@@ -27,13 +26,30 @@ pub(crate) enum Error {
     NotReady,
 }
 
+#[cfg(feature = "rocksdb")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_rocksdb::RocksDBStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(feature = "sled")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_sled::SledStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(not(any(feature = "sled", feature = "rocksdb")))]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    panic!("Must choose exactly one backing store in the features: rocksdb_store, sled_store");
+}
+
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store: Box<dyn DBStore + Send + Sync + 'static> = if cfg!(rocksdb) {
-            Box::new(RocksDBStore::open(&config.db_path, config.auto_reindex)?)
-        } else {
-            panic!("Must choose exactly one backing store in the features: rocksdb");
-        };
+        let store: Box<dyn DBStore + Send + Sync + 'static> = get_db_store(config)?;
 
         let chain = Chain::new(config.network);
         Ok(Self {

@@ -50,6 +50,7 @@ pub(crate) const TXID_GROUP: &str = "txid";
 pub(crate) const FUNDING_GROUP: &str = "funding";
 pub(crate) const SPENDING_GROUP: &str = "spending";
 
+#[allow(dead_code)]
 pub(crate) const GROUPS: &[&str] = &[
     CONFIG_GROUP,
     HEADERS_GROUP,

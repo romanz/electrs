@@ -13,7 +13,10 @@ mod cache;
 mod chain;
 mod config;
 mod daemon;
+#[cfg(feature = "rocksdb")]
 mod db_rocksdb;
+#[cfg(feature = "sled")]
+mod db_sled;
 mod db_store;
 mod electrum;
 mod index;
