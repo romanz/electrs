@@ -11,7 +11,7 @@ The repository provides several significant advantages:
 * Prebuilt binaries save you a lot of time.
   The binary installation of all the components is under 3 minutes on common hardware.
   Building from source is much longer.
-* The repository contains some seurity hardening out-of-the-box - separate users for services, use of [btc-rpc-proxy](https://github.com/Kixunil/btc-rpc-proxy), etc.
+* The repository contains some security hardening out-of-the-box - separate users for services, use of [btc-rpc-proxy](https://github.com/Kixunil/btc-rpc-proxy), etc.
 
 And two disadvantages:
 
