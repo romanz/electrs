@@ -13,6 +13,8 @@ mod cache;
 mod chain;
 mod config;
 mod daemon;
+#[cfg(feature = "heed")]
+mod db_heed;
 #[cfg(feature = "lmdb-rkv")]
 mod db_lmdb_rkv;
 #[cfg(feature = "rocksdb")]

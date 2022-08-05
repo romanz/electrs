@@ -26,6 +26,14 @@ pub(crate) enum Error {
     NotReady,
 }
 
+#[cfg(feature = "heed")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_heed::HeedStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
 #[cfg(feature = "lmdb-rkv")]
 fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
     Ok(Box::new(crate::db_lmdb_rkv::LmdbStore::open(
@@ -50,7 +58,12 @@ fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'stat
     )?))
 }
 
-#[cfg(not(any(feature = "lmdb-rkv", feature = "sled", feature = "rocksdb")))]
+#[cfg(not(any(
+    feature = "heed",
+    feature = "lmdb-rkv",
+    feature = "sled",
+    feature = "rocksdb"
+)))]
 fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
     panic!("Must choose exactly one backing store in the features: rocksdb_store, sled_store");
 }

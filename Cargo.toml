@@ -13,7 +13,8 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["metrics", "lmdb-rkv"]
+default = ["metrics", "heed"]
+heed = ["dep:heed"]
 lmdb-rkv = ["dep:lmdb-rkv"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
@@ -32,6 +33,7 @@ crossbeam-channel = "0.5"
 dirs-next = "2.0"
 env_logger = "0.9"
 fs_extra = "1.2"
+heed = { version = "0.11.0", optional = true }
 lmdb-rkv = { version = "0.14.0", optional = true }
 log = "0.4"
 parking_lot = "0.11"
