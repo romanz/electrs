@@ -131,3 +131,8 @@ default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Ele
 name = "log_filters"
 type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"
+
+[[param]]
+name = "signet_magic"
+type = "u32"
+doc = "network magic for custom signet network (signet only)"
