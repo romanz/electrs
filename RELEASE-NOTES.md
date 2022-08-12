@@ -1,3 +1,8 @@
+# 0.9.8 (Jul 12 2022)
+
+* Update dependencies (`anyhow`, `crossbeam-channel`, `crossbeam-utils`, `regex`, `serde`, `serde from `, `serde_json`, `signal-hook`)
+* Don't log scripthash (#737)
+
 # 0.9.8 (Jun 3 2022)
 
 * Update dependencies (`serde_json`, `serde`, `bitcoin`, `bitcoincore-rpc`, `rayon`, `log`)
