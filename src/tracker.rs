@@ -42,6 +42,14 @@ fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'stat
     )?))
 }
 
+#[cfg(feature = "redb")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_redb::RedbStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
 #[cfg(feature = "rocksdb")]
 fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
     Ok(Box::new(crate::db_rocksdb::RocksDBStore::open(
@@ -61,8 +69,9 @@ fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'stat
 #[cfg(not(any(
     feature = "heed",
     feature = "lmdb-rkv",
+    feature = "redb",
+    feature = "rocksdb",
     feature = "sled",
-    feature = "rocksdb"
 )))]
 fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
     panic!("Must choose exactly one backing store in the features: rocksdb_store, sled_store");

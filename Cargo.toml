@@ -13,11 +13,12 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["metrics", "heed"]
+default = ["metrics", "redb"]
 heed = ["dep:heed"]
 lmdb-rkv = ["dep:lmdb-rkv"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+redb = ["dep:redb"]
 rocksdb = ["dep:electrs-rocksdb"]
 sled = ["dep:sled"]
 
@@ -39,6 +40,7 @@ log = "0.4"
 parking_lot = "0.11"
 prometheus = { version = "0.13", optional = true }
 rayon = "1.5"
+redb = { version = "0.5.0", optional = true }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
