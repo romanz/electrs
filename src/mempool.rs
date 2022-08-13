@@ -133,9 +133,9 @@ impl Mempool {
             self.add_entry(*txid, tx, entry);
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
-        for i in 1..FeeHistogram::BINS {
+        for i in 0..FeeHistogram::BINS {
             let bin_index = FeeHistogram::BINS - i - 1; // from 63 to 0
-            let limit = 1u64 << i;
+            let limit = 1u128 << i;
             let label = format!("[{:20.0}, {:20.0})", limit / 2, limit);
             self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
             self.count.set(&label, self.fees.count[bin_index] as f64);
