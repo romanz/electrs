@@ -128,6 +128,7 @@ impl Connection {
         network: Network,
         address: SocketAddr,
         metrics: &Metrics,
+        magic: u32,
     ) -> Result<Self> {
         let conn = Arc::new(
             TcpStream::connect(address)
@@ -186,7 +187,7 @@ impl Connection {
             send_duration.observe_duration("send", || {
                 trace!("send: {:?}", msg);
                 let raw_msg = message::RawNetworkMessage {
-                    magic: network.magic(),
+                    magic: magic,
                     payload: msg,
                 };
                 (&*stream)
@@ -212,7 +213,7 @@ impl Connection {
             }
             let raw_msg = match raw_msg {
                 Ok(raw_msg) => {
-                    assert_eq!(raw_msg.magic, network.magic());
+                    assert_eq!(raw_msg.magic, magic);
                     recv_size.observe(raw_msg.cmd.as_ref(), raw_msg.raw.len() as f64);
                     raw_msg
                 }
