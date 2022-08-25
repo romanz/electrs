@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use bitcoin::{
     consensus::encode::{deserialize, serialize, Decodable, Encodable},
-    hashes::{borrow_slice_impl, hash_newtype, hex_fmt_impl, index_impl, serde_impl, sha256, Hash},
+    hashes::{hash_newtype, sha256, Hash},
     BlockHeader, OutPoint, Script, Txid,
 };
 
@@ -14,23 +14,23 @@ macro_rules! impl_consensus_encoding {
     ($thing:ident, $($field:ident),+) => (
         impl Encodable for $thing {
             #[inline]
-            fn consensus_encode<S: ::std::io::Write>(
+            fn consensus_encode<S: ::std::io::Write + ?Sized>(
                 &self,
-                mut s: S,
+                s: &mut S,
             ) -> Result<usize, std::io::Error> {
                 let mut len = 0;
-                $(len += self.$field.consensus_encode(&mut s)?;)+
+                $(len += self.$field.consensus_encode(s)?;)+
                 Ok(len)
             }
         }
 
         impl Decodable for $thing {
             #[inline]
-            fn consensus_decode<D: ::std::io::Read>(
-                mut d: D,
+            fn consensus_decode<D: ::std::io::Read + ?Sized>(
+                d: &mut D,
             ) -> Result<$thing, bitcoin::consensus::encode::Error> {
                 Ok($thing {
-                    $($field: Decodable::consensus_decode(&mut d)?),+
+                    $($field: Decodable::consensus_decode(d)?),+
                 })
             }
         }

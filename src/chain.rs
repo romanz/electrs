@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use bitcoin::consensus::deserialize;
-use bitcoin::hashes::hex::FromHex;
 use bitcoin::network::constants;
 use bitcoin::{BlockHash, BlockHeader};
 
@@ -39,18 +37,11 @@ pub struct Chain {
 impl Chain {
     // create an empty chain
     pub fn new(network: constants::Network) -> Self {
-        let genesis_header_hex = match network {
-            constants::Network::Bitcoin => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
-            constants::Network::Testnet => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff001d1aa4ae18",
-            constants::Network::Regtest => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff7f2002000000",
-            constants::Network::Signet => "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a008f4d5fae77031e8ad22203",
-        };
-        let genesis_header_bytes = Vec::from_hex(genesis_header_hex).unwrap();
-        let genesis: BlockHeader = deserialize(&genesis_header_bytes).unwrap();
-        assert_eq!(genesis.prev_blockhash, BlockHash::default());
+        let genesis = bitcoin::blockdata::constants::genesis_block(network);
+        let genesis_hash = genesis.block_hash();
         Self {
-            headers: vec![(genesis.block_hash(), genesis)],
-            heights: std::iter::once((genesis.block_hash(), 0)).collect(), // genesis header @ zero height
+            headers: vec![(genesis_hash, genesis.header)],
+            heights: std::iter::once((genesis_hash, 0)).collect(), // genesis header @ zero height
         }
     }
 

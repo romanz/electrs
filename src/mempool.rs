@@ -214,7 +214,7 @@ impl FeeHistogram {
     fn new(items: impl Iterator<Item = (Amount, u64)>) -> Self {
         let mut result = FeeHistogram::default();
         for (fee, vsize) in items {
-            let fee_rate = fee.as_sat() / vsize;
+            let fee_rate = fee.to_sat() / vsize;
             let index = usize::try_from(fee_rate.leading_zeros()).unwrap();
             // skip transactions with too low fee rate (<1 sat/vB)
             if let Some(bin) = result.vsize.get_mut(index) {
