@@ -1,4 +1,4 @@
-# 0.9.8 (Jul 12 2022)
+# 0.9.9 (Jul 12 2022)
 
 * Update dependencies (`anyhow`, `crossbeam-channel`, `crossbeam-utils`, `regex`, `serde`, `serde from `, `serde_json`, `signal-hook`)
 * Don't log scripthash (#737)
