@@ -222,7 +222,7 @@ impl ScriptHashStatus {
     pub fn new(scripthash: ScriptHash) -> Self {
         Self {
             scripthash,
-            tip: BlockHash::default(),
+            tip: BlockHash::all_zeros(),
             confirmed: HashMap::new(),
             mempool: Vec::new(),
             history: Vec::new(),

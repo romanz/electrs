@@ -237,12 +237,12 @@ impl Rpc {
         Ok(self
             .daemon
             .estimate_fee(nblocks)?
-            .map(|fee_rate| json!(fee_rate.as_btc()))
+            .map(|fee_rate| json!(fee_rate.to_btc()))
             .unwrap_or_else(|| json!(UNKNOWN_FEE)))
     }
 
     fn relayfee(&self) -> Result<Value> {
-        Ok(json!(self.daemon.get_relay_fee()?.as_btc())) // [BTC/kB]
+        Ok(json!(self.daemon.get_relay_fee()?.to_btc())) // [BTC/kB]
     }
 
     fn scripthash_get_balance(
