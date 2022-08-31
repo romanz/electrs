@@ -18,6 +18,7 @@ heed-feat = ["heed"]
 lmdb-rkv-feat= ["lmdb-rkv"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+# Needs edition 2021. Override toolchain version: https://rust-lang.github.io/rustup/overrides.html
 redb-feat = ["redb"]
 rocksdb-feat = ["electrs-rocksdb"]
 sled-feat = ["sled"]

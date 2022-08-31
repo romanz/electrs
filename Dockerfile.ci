@@ -15,7 +15,7 @@ WORKDIR /build/electrs
 COPY . .
 ENV ROCKSDB_INCLUDE_DIR=/usr/include
 ENV ROCKSDB_LIB_DIR=/usr/lib
-RUN cargo install --locked --no-default-features --features --features metrics --features rocksdb-feat --path .
+RUN cargo install --locked --no-default-features --features metrics --features metrics_process --features rocksdb-feat --path .
 
 ### Bitcoin Core ###
 FROM base as bitcoin-build

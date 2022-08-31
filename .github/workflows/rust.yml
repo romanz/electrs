@@ -16,6 +16,62 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  build-redb:
+    name: Build redb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.61.0
+          profile: minimal
+          components: rustfmt, clippy
+
+      - name: Format
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: fmt
+          args: --all -- --check
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: build
+          args: --locked --all --no-default-features --features metrics --features redb-feat
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: test
+          args: --locked --all --no-default-features --features redb-feat
+
+      - name: Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: clippy
+          args: -- -D warnings
+
+      - name: Install cargo-bloat
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: install
+          args: cargo-bloat
+
+      - name: Run cargo-bloat
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.61.0
+          command: bloat
+          args: --locked --all --no-default-features --features redb-feat --release --crates --time
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -23,9 +79,9 @@ jobs:
       matrix:
         build-args:
           [
-            --locked --no-default-features,
-            --locked,
-            --locked --features metrics_process,
+            --features rocksdb-feat,
+            --features metrics --features rocksdb-feat,
+            --features metrics --features metrics_process --features rocksdb-feat
           ]
     steps:
       - name: Checkout sources
@@ -34,44 +90,19 @@ jobs:
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
-          components: rustfmt, clippy
           profile: minimal
-
-      - name: Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
 
       - name: Build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: ${{ matrix.build-args }} --all
+          args: --locked --all --no-default-features ${{ matrix.build-args }}
 
       - name: Test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --all
-
-      - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
-
-      - name: Install cargo-bloat
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-bloat
-
-      - name: Run cargo-bloat
-        uses: actions-rs/cargo@v1
-        with:
-          command: bloat
-          args: --locked --all --release --crates --time
+          args: --locked --all --no-default-features --features rocksdb-feat
 
   integration:
     name: Integration
