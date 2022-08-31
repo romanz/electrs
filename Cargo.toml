@@ -13,14 +13,14 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["metrics", "redb"]
-heed = ["dep:heed"]
-lmdb-rkv = ["dep:lmdb-rkv"]
+default = ["metrics", "redb-feat"]
+heed-feat = ["heed"]
+lmdb-rkv-feat= ["lmdb-rkv"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
-redb = ["dep:redb"]
-rocksdb = ["dep:electrs-rocksdb"]
-sled = ["dep:sled"]
+redb-feat = ["redb"]
+rocksdb-feat = ["electrs-rocksdb"]
+sled-feat = ["sled"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
