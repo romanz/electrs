@@ -144,6 +144,7 @@ pub struct Config {
     pub sync_once: bool,
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
+    pub signet_magic: u32,
     pub args: Vec<String>,
 }
 
@@ -229,6 +230,15 @@ impl Config {
             Network::Testnet => 14224,
             Network::Regtest => 24224,
             Network::Signet => 34224,
+        };
+
+        let magic = match (config.network, config.signet_magic) {
+            (Network::Signet, Some(magic)) => magic,
+            (network, None) => network.magic(),
+            (_, Some(_)) => {
+                eprintln!("Error: signet magic only available on signet");
+                std::process::exit(1);
+            }
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
@@ -323,6 +333,7 @@ impl Config {
             sync_once: config.sync_once,
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
+            signet_magic: magic,
             args: args.map(|a| a.into_string().unwrap()).collect(),
         };
         eprintln!(

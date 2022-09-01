@@ -137,6 +137,7 @@ impl Daemon {
             config.network,
             config.daemon_p2p_addr,
             metrics,
+            config.signet_magic,
         )?);
         Ok(Self { p2p, rpc })
     }
