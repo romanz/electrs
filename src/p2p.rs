@@ -187,7 +187,7 @@ impl Connection {
             send_duration.observe_duration("send", || {
                 trace!("send: {:?}", msg);
                 let raw_msg = message::RawNetworkMessage {
-                    magic: magic,
+                    magic,
                     payload: msg,
                 };
                 (&*stream)

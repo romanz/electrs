@@ -238,7 +238,7 @@ impl Config {
             (_, Some(_)) => {
                 eprintln!("Error: signet magic only available on signet");
                 std::process::exit(1);
-            },
+            }
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
