@@ -134,5 +134,5 @@ doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://
 
 [[param]]
 name = "signet_magic"
-type = "u32"
-doc = "network magic for custom signet network (signet only)"
+type = "String"
+doc = "network magic for custom signet network in hex format, as found in Bitcoin Core logs (signet only)"
