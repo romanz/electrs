@@ -4,7 +4,7 @@
 
 FROM debian:bullseye-slim as base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev=6.11.4-3 curl
+RUN apt-get install -qqy librocksdb-dev curl
 
 ### Electrum Rust Server ###
 FROM base as electrs-build
