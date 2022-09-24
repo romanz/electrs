@@ -234,7 +234,13 @@ impl Config {
 
         let magic = match (config.network, config.signet_magic) {
             (Network::Signet, Some(magic)) => u32::from_str_radix(&magic, 16)
-                .expect("Invalid signet hex magic")
+                .unwrap_or_else(|error| {
+                    eprintln!(
+                        "Error: signet magic '{}' is not a valid hex string: {}",
+                        magic, error
+                    );
+                    std::process::exit(1);
+                })
                 .swap_bytes(),
             (network, None) => network.magic(),
             (_, Some(_)) => {
