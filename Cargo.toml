@@ -13,9 +13,15 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["metrics"]
+default = ["metrics", "redb-feat"]
+heed-feat = ["heed"]
+lmdb-rkv-feat= ["lmdb-rkv"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+# Needs edition 2021. Override toolchain version: https://rust-lang.github.io/rustup/overrides.html
+redb-feat = ["redb"]
+rocksdb-feat = ["electrs-rocksdb"]
+sled-feat = ["sled"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -29,14 +35,18 @@ crossbeam-channel = "0.5"
 dirs-next = "2.0"
 env_logger = "0.9"
 fs_extra = "1.2"
+heed = { version = "0.11.0", optional = true }
+lmdb-rkv = { version = "0.14.0", optional = true }
 log = "0.4"
 parking_lot = "0.11"
 prometheus = { version = "0.13", optional = true }
 rayon = "1.5"
+redb = { version = "0.5.0", optional = true }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 signal-hook = "0.3"
+sled = { version = "0.34.7", features = ["compression"], optional = true }
 tiny_http = { version = "0.9", optional = true }
 
 [dependencies.electrs-rocksdb]
@@ -48,6 +58,7 @@ default-features = false
 # ZSTD is used for data compression
 # Snappy is only for checking old DB
 features = ["zstd", "snappy"]
+optional = true
 
 [build-dependencies]
 configure_me_codegen = "0.4.2"

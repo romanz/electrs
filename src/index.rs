@@ -5,7 +5,7 @@ use bitcoin::{Block, BlockHash, OutPoint, Txid};
 use crate::{
     chain::{Chain, NewHeader},
     daemon::Daemon,
-    db::{DBStore, Row, WriteBatch},
+    db_store::{DBStore, Row, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
     types::{HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
@@ -65,7 +65,7 @@ impl Stats {
         self.height.set("tip", chain.height() as f64);
     }
 
-    fn observe_db(&self, store: &DBStore) {
+    fn observe_db(&self, store: &dyn DBStore) {
         for (cf, name, value) in store.get_properties() {
             self.db_properties
                 .set(&format!("{}:{}", name, cf), value as f64);
@@ -98,7 +98,7 @@ impl IndexResult {
 
 /// Confirmed transactions' address index
 pub struct Index {
-    store: DBStore,
+    store: Box<dyn DBStore + Send + Sync + 'static>,
     batch_size: usize,
     lookup_limit: Option<usize>,
     chain: Chain,
@@ -108,7 +108,7 @@ pub struct Index {
 
 impl Index {
     pub(crate) fn load(
-        store: DBStore,
+        store: Box<dyn DBStore + Send + Sync + 'static>,
         mut chain: Chain,
         metrics: &Metrics,
         batch_size: usize,
@@ -127,7 +127,7 @@ impl Index {
         };
         let stats = Stats::new(metrics);
         stats.observe_chain(&chain);
-        stats.observe_db(&store);
+        stats.observe_db(&*store);
         Ok(Index {
             store,
             batch_size,
@@ -238,7 +238,7 @@ impl Index {
         self.stats.observe_batch(&batch);
         self.stats
             .observe_duration("write", || self.store.write(&batch));
-        self.stats.observe_db(&self.store);
+        self.stats.observe_db(&*self.store);
         Ok(())
     }
 

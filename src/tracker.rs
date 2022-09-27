@@ -6,7 +6,7 @@ use crate::{
     chain::Chain,
     config::Config,
     daemon::Daemon,
-    db::DBStore,
+    db_store::DBStore,
     index::Index,
     mempool::{FeeHistogram, Mempool},
     metrics::Metrics,
@@ -26,9 +26,61 @@ pub(crate) enum Error {
     NotReady,
 }
 
+#[cfg(feature = "heed")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_heed::HeedStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(feature = "lmdb-rkv")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_lmdb_rkv::LmdbStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(feature = "redb")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_redb::RedbStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(feature = "rocksdb")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_rocksdb::RocksDBStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(feature = "sled")]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    Ok(Box::new(crate::db_sled::SledStore::open(
+        &config.db_path,
+        config.auto_reindex,
+    )?))
+}
+
+#[cfg(not(any(
+    feature = "heed",
+    feature = "lmdb-rkv",
+    feature = "redb",
+    feature = "rocksdb",
+    feature = "sled",
+)))]
+fn get_db_store(config: &Config) -> Result<Box<dyn DBStore + Send + Sync + 'static>> {
+    panic!("Must choose exactly one backing store in the features: rocksdb_store, sled_store");
+}
+
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store = DBStore::open(&config.db_path, config.auto_reindex)?;
+        let store: Box<dyn DBStore + Send + Sync + 'static> = get_db_store(config)?;
+
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(
