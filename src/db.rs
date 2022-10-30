@@ -175,7 +175,7 @@ impl DBStore {
             );
             // close DB before deletion
             drop(store);
-            rocksdb::DB::destroy(&default_opts(), &path).with_context(|| {
+            rocksdb::DB::destroy(&default_opts(), path).with_context(|| {
                 format!(
                     "re-index required but the old database ({}) can not be deleted",
                     path.display()
