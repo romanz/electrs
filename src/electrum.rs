@@ -220,17 +220,20 @@ impl Rpc {
     fn block_headers(&self, (start_height, count): (usize, usize)) -> Result<Value> {
         let chain = self.tracker.chain();
         let max_count = 2016usize;
-
-        let count = std::cmp::min(
-            std::cmp::min(count, max_count),
-            chain.height() - start_height + 1,
+        // return only the available block headers
+        let end_height = std::cmp::min(
+            chain.height() + 1,
+            start_height + std::cmp::min(count, max_count),
         );
-        let heights = start_height..(start_height + count);
-        let hex_headers = String::from_iter(
-            heights.map(|height| serialize(chain.get_block_header(height).unwrap()).to_hex()),
-        );
+        let heights = start_height..end_height;
+        let count = heights.len();
+        let hex_headers = heights.filter_map(|height| {
+            chain
+                .get_block_header(height)
+                .map(|header| serialize(header).to_hex())
+        });
 
-        Ok(json!({"count": count, "hex": hex_headers, "max": max_count}))
+        Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
     }
 
     fn estimate_fee(&self, (nblocks,): (u16,)) -> Result<Value> {
