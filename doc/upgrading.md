@@ -34,7 +34,7 @@ Upgrading checklist:
 * If you use non-default P2P port (or address) for bitcoind adjust `electrs` configuration.
 * If you still didn't migrate `cookie` electrs option you have to now - see below.
 * Remove unsupported options from configuration (`blocks_dir`, `jsonrpc_import`, `bulk_index_threads`, `tx_cache_size_mb`, `blocktxids_cache_size_mb`)
-* Rename `txid_limit` to `index_lookup_limit` iif used
+* Rename `txid_limit` to `index_lookup_limit` if used
 * If you use `verbose = 4` (or `-vvvv` argument) lower it down to `2` (`-vv`) for production use.
   Keeping it would waste resources because we utilize it more now.
 * **After reindexing**, if you did **not** delete `mainnet` subdirectory within `db_dir` check that `electrs` works as expected and then *delete whole `mainnet` subdirectory*.
