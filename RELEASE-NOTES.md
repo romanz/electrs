@@ -1,3 +1,10 @@
+# 0.9.10 (Nov 3 2022)
+
+* Update dependencies (`bitcoin`, `bitcoincore-rpc`, `tiny_http`, `serde_json`, `env_logger`)
+* Fix mempool fee rate formatting (#761)
+* Allow configuring signet p2p magic (#762, #768)
+* Don't panic in case of an invalid block header height (#786)
+
 # 0.9.9 (Jul 12 2022)
 
 * Update dependencies (`anyhow`, `crossbeam-channel`, `crossbeam-utils`, `regex`, `serde`, `serde from `, `serde_json`, `signal-hook`)
