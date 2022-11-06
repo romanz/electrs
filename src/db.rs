@@ -96,6 +96,9 @@ impl Default for Config {
 }
 
 fn default_opts() -> rocksdb::Options {
+    let mut block_opts = rocksdb::BlockBasedOptions::default();
+    block_opts.set_checksum_type(rocksdb::ChecksumType::CRC32c);
+
     let mut opts = rocksdb::Options::default();
     opts.set_keep_log_file_num(10);
     opts.set_max_open_files(16);
@@ -106,6 +109,7 @@ fn default_opts() -> rocksdb::Options {
     opts.set_disable_auto_compactions(true); // for initial bulk load
     opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
+    opts.set_block_based_table_factory(&block_opts);
     opts
 }
 
@@ -233,7 +237,7 @@ impl DBStore {
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
         self.db
             .iterator_cf_opt(cf, opts, mode)
-            .map(|(key, _value)| key) // values are empty in prefix-scanned CFs
+            .map(|row| row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
     }
 
     pub(crate) fn read_headers(&self) -> Vec<Row> {
@@ -241,7 +245,7 @@ impl DBStore {
         opts.fill_cache(false);
         self.db
             .iterator_cf_opt(self.headers_cf(), opts, rocksdb::IteratorMode::Start)
-            .map(|(key, _)| key)
+            .map(|row| row.expect("header iterator failed").0) // extract key from row
             .filter(|key| &key[..] != TIP_KEY) // headers' rows are longer than TIP_KEY
             .collect()
     }
@@ -310,7 +314,7 @@ impl DBStore {
             DB_PROPERIES.iter().filter_map(move |property_name| {
                 let value = self
                     .db
-                    .property_int_value_cf(cf, property_name)
+                    .property_int_value_cf(cf, *property_name)
                     .expect("failed to get property");
                 Some((*cf_name, *property_name, value?))
             })

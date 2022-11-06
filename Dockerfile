@@ -2,7 +2,7 @@
 # The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
 # If you are not familiar with Docker either it's probably be safer to NOT use it.
 
-FROM debian:bullseye-slim as base
+FROM debian:testing-slim as base
 RUN apt-get update -qqy
 RUN apt-get install -qqy librocksdb-dev curl
 

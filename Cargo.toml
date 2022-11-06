@@ -9,7 +9,7 @@ repository = "https://github.com/romanz/electrs"
 keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 [features]
@@ -27,11 +27,11 @@ bitcoincore-rpc = "0.17.0"
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
-env_logger = "0.9"
+env_logger = "0.10"
 log = "0.4"
-parking_lot = "0.11"
+parking_lot = "0.12"
 prometheus = { version = "0.13", optional = true }
-rayon = "1.5"
+rayon = "1.7"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -40,17 +40,15 @@ tiny_http = { version = "0.12", optional = true }
 hex_lit = "0.1.1"
 
 [dependencies.electrs-rocksdb]
-# Workaround the following issues:
-# - https://github.com/romanz/electrs/issues/403 (support building on ARM 32-bit)
-# - https://github.com/romanz/electrs/issues/469 (dynamic linking on Debian 11)
-version = "0.15.0-e3"
+version = "0.19.0-e1"
+
 default-features = false
 # ZSTD is used for data compression
 # Snappy is only for checking old DB
 features = ["zstd", "snappy"]
 
 [build-dependencies]
-configure_me_codegen = { version = "0.4.3", default-features = false }
+configure_me_codegen = { version = "0.4.4", default-features = false }
 
 [dev-dependencies]
 tempfile = "3.5"
