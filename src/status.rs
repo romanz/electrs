@@ -376,9 +376,8 @@ impl ScriptHashStatus {
                 let sorted_entries = entries_map
                     .into_iter()
                     .collect::<BTreeMap<usize, TxEntry>>()
-                    .into_iter()
-                    .map(|(_pos, entry)| entry)
-                    .collect::<Vec<TxEntry>>();
+                    .into_values()
+                    .collect();
                 (blockhash, sorted_entries)
             })
             .collect())
@@ -415,7 +414,7 @@ impl ScriptHashStatus {
                 .spent = spent_outpoints;
             cache.add_tx(entry.txid, || entry.tx.clone());
         }
-        result.into_iter().map(|(_txid, entry)| entry).collect()
+        result.into_values().collect()
     }
 
     /// Sync with currently confirmed txs and mempool, downloading non-cached transactions via p2p protocol.
