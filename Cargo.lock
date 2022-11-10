@@ -329,9 +329,9 @@ dependencies = [
 
 [[package]]
 name = "electrs-librocksdb-sys"
-version = "6.11.4-e2"
+version = "6.11.4-e3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07be043bbfa5d4774941c4ee29952f5e2b6e34021cbddd4aba0bd2d1ef4b2f68"
+checksum = "9c06cbfab3edbe7071fbe74ceee37a62d826ae6ec326b817af9bd7f4d9f778a0"
 dependencies = [
  "bindgen",
  "cc",
@@ -341,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "electrs-rocksdb"
-version = "0.15.0-e2"
+version = "0.15.0-e3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eb5ab97b934ae8e1e597dd56f096e866b267b6b46285d996b722776e8024571"
+checksum = "f7bb0248e38368eef3496bea45e894d75e803860fa09c145d61325018d09db7a"
 dependencies = [
  "electrs-librocksdb-sys",
  "libc",
