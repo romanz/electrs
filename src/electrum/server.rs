@@ -22,7 +22,7 @@ use crate::config::Config;
 use crate::electrum::{get_electrum_height, ProtocolVersion};
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
-use crate::new_index::Query;
+use crate::new_index::{Query, Utxo};
 use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
 use crate::util::{
     create_socket, full_hash, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry,
@@ -312,16 +312,28 @@ impl Connection {
     fn blockchain_scripthash_listunspent(&self, params: &[Value]) -> Result<Value> {
         let script_hash = hash_from_value(params.get(0)).chain_err(|| "bad script_hash")?;
         let utxos = self.query.utxo(&script_hash[..])?;
+
+        let to_json = |utxo: Utxo| {
+            let json = json!({
+                "height": utxo.confirmed.map_or(0, |b| b.height),
+                "tx_pos": utxo.vout,
+                "tx_hash": utxo.txid,
+                "value": utxo.value,
+            });
+
+            #[cfg(feature = "liquid")]
+            let json = {
+                let mut json = json;
+                json["asset"] = json!(utxo.asset);
+                json["nonce"] = json!(utxo.nonce);
+                json
+            };
+
+            json
+        };
+
         Ok(json!(Value::Array(
-            utxos
-                .into_iter()
-                .map(|utxo| json!({
-                    "height": utxo.confirmed.map_or(0, |b| b.height),
-                    "tx_pos": utxo.vout,
-                    "tx_hash": utxo.txid,
-                    "value": utxo.value,
-                }))
-                .collect()
+            utxos.into_iter().map(to_json).collect()
         )))
     }
 
