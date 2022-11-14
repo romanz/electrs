@@ -89,13 +89,13 @@ $ sudo apt update
 If you use `cargo` from the repository
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
 ```
 
 If you use Rustup:
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64
 $ rustup target add aarch64-unknown-linux-gnu
 ```
 
@@ -104,6 +104,66 @@ If you decided to use the system rocksdb (recommended if the target OS supports 
 ```bash
 $ sudo apt install librocksdb-dev:arm64
 ```
+
+#### Preparing for cross compilation on a different (Debian-based) OS distribution/version
+
+If your build system runs on a different OS distribution and/or release than the target system electrs is going to run on, you may run into `GLIBC` version issues like:
+```
+$ ./electrs --help
+./electrs: /lib/arm-linux-gnueabihf/libm.so.6: version `GLIBC_2.29' not found (required by ./electrs)
+```
+
+To cross-compile electrs for a different (Debian based) target distribution you can use a [debootstrap](https://wiki.debian.org/Debootstrap) based approach. For example your build system may be a 64-bit Debian `stable` (bullseye) system and you want to cross-compile for an armv7l (32-bit) Debian `oldstable` (buster) target, like an Odroid HC1/HC2.
+
+Install and setup debootstrap:
+
+```
+sudo apt install debootstrap
+```
+
+Next, create working directory for a `buster` based system and set it up:
+```
+mkdir debootstrap-buster
+sudo debootstrap buster debootstrap-buster http://deb.debian.org/debian/
+```
+(This takes a while to download.)
+
+Next, mount proc, sys and dev to the target system:
+```
+sudo mount -t proc /proc debootstrap-buster/proc
+sudo mount --rbind /sys debootstrap-buster/sys
+sudo mount --rbind /dev debootstrap-buster/dev
+```
+
+If you have checked out the electrs git reposity somewhere already and don't want to have a duplicate copy inside the debootstrap working directory, just mount bind the exiting directory into the chroot:
+```
+sudo mkdir -p debootstrap-buster/mnt/electrs
+sudo mount --rbind ./electrs debootstrap-buster/mnt/electrs
+```
+
+chroot into the `buster` system and install the required dependencies to build electrs with a statically linked rocksdb:
+```
+sudo chroot debootstrap-buster /bin/bash
+
+apt install curl
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+apt install clang cmake build-essential
+
+# install target specific cross compiler (armhf/gnueabihf)
+apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross
+rustup target add arm-unknown-linux-gnueabihf
+```
+
+Cross-compile `electrs` release with a statically linked rocksdb for armv7l (armhf) with libatomic inside `buster` chroot: *(bindgen needs an include path to the sources (header files) provided by the libc6-dev-armhf-cross package)*
+```
+cd /mnt/electrs/
+BINDGEN_EXTRA_CLANG_ARGS="-target arm-linux-gnueabihf -I/usr/arm-linux-gnueabihf/include/"\
+RUSTFLAGS="-C linker=arm-linux-gnueabihf-gcc -C linker-args=-latomic"\
+cargo build --locked --release --target arm-unknown-linux-gnueabihf
+```
+
+The built electrs binary will be in `/mnt/electrs/target/arm-unknown-linux-gnueabihf/release` within the chroot or can be accessed from outside the chroot respectively.
 
 #### Preparing man page generation (optional)
 
