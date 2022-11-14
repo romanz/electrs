@@ -89,13 +89,13 @@ $ sudo apt update
 If you use `cargo` from the repository
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
 ```
 
 If you use Rustup:
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64
 $ rustup target add aarch64-unknown-linux-gnu
 ```
 
