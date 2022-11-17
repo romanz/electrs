@@ -16,10 +16,7 @@ pub const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on IPv4 localhost
 
 mod internal {
-    #![allow(clippy::cognitive_complexity)]
     #![allow(clippy::enum_variant_names)]
-    #![allow(clippy::unnecessary_lazy_evaluations)]
-    #![allow(clippy::useless_conversion)]
 
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
