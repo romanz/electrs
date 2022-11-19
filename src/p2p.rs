@@ -4,7 +4,7 @@ use bitcoin::{
         encode::{self, ReadExt, VarInt},
         Decodable,
     },
-    hashes::Hash,
+    hashes::{hex::ToHex, Hash},
     network::{
         address, constants,
         message::{self, CommandString, NetworkMessage},
@@ -248,8 +248,10 @@ impl Connection {
                     };
 
                     let label = format!("parse_{}", raw_msg.cmd.as_ref());
-                    let msg = parse_duration
-                        .observe_duration(&label, || raw_msg.parse().expect("invalid message"));
+                    let msg = match parse_duration.observe_duration(&label, || raw_msg.parse()) {
+                        Ok(msg) => msg,
+                        Err(err) => bail!("failed to parse '{}({})': {}", raw_msg.cmd, raw_msg.raw.to_hex(), err),
+                    };
                     trace!("recv: {:?}", msg);
 
                     match msg {
@@ -338,7 +340,7 @@ struct RawNetworkMessage {
 }
 
 impl RawNetworkMessage {
-    fn parse(self) -> Result<NetworkMessage, encode::Error> {
+    fn parse(&self) -> Result<NetworkMessage> {
         let mut raw: &[u8] = &self.raw;
         let payload = match self.cmd.as_ref() {
             "version" => NetworkMessage::Version(Decodable::consensus_decode(&mut raw)?),
@@ -359,10 +361,11 @@ impl RawNetworkMessage {
             "reject" => NetworkMessage::Reject(Decodable::consensus_decode(&mut raw)?),
             "alert" => NetworkMessage::Alert(Decodable::consensus_decode(&mut raw)?),
             "addr" => NetworkMessage::Addr(Decodable::consensus_decode(&mut raw)?),
-            _ => NetworkMessage::Unknown {
-                command: self.cmd,
-                payload: self.raw,
-            },
+            _ => bail!(
+                "unsupported message: command={}, payload={}",
+                self.cmd,
+                self.raw.to_hex()
+            ),
         };
         Ok(payload)
     }
