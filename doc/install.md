@@ -89,13 +89,13 @@ $ sudo apt update
 If you use `cargo` from the repository
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64 libstd-rust-dev:arm64
 ```
 
 If you use Rustup:
 
 ```bash
-$ sudo apt install gcc-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev:arm64
+$ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev:arm64
 $ rustup target add aarch64-unknown-linux-gnu
 ```
 
@@ -106,6 +106,7 @@ $ sudo apt install librocksdb-dev:arm64
 ```
 
 #### Preparing for cross compilation on a different (Debian-based) OS distribution/version
+*Note: Unless you run into the below mentioned libc (GLIBC) version issue, avoiding the approach described in this section is faster and requires less disk space on the build host. You may want to try the above cross compilation approach first and only use this one here as the last resort.*
 
 If your build system runs on a different OS distribution and/or release than the target system electrs is going to run on, you may run into `GLIBC` version issues like:
 ```
