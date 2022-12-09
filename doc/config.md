@@ -76,6 +76,7 @@ Please read upgrade notes if you're upgrading to a newer version.
 
 In order to use a secure connection, you can also use [NGINX as an SSL endpoint](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-tcp/#)
 by placing the following block in `nginx.conf`.
+Notice that while electrs doesn't use HTTP the configuration below uses raw TCP stream which works.
 
 ```nginx
 stream {
