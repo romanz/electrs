@@ -1,3 +1,8 @@
+# 0.9.11 (Jan 5 2023)
+
+* Update dependencies (`secp256k1`, `serde_json`, `configure_me_codegen`, `env_logger`, `electrs-rocksdb`)
+* Improve error logging in case of p2p error (#807)
+
 # 0.9.10 (Nov 3 2022)
 
 * Update dependencies (`bitcoin`, `bitcoincore-rpc`, `tiny_http`, `serde_json`, `env_logger`)
