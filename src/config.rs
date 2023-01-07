@@ -1,4 +1,4 @@
-use bitcoin::network::constants::Network;
+use bitcoin::network::constants::{Magic, Network};
 use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
 
@@ -142,7 +142,7 @@ pub struct Config {
     pub sync_once: bool,
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
-    pub signet_magic: bitcoin::network::Magic,
+    pub signet_magic: Magic,
     pub args: Vec<String>,
 }
 
