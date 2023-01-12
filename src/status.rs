@@ -124,7 +124,7 @@ impl HistoryEntry {
 
 /// ScriptHash subscription status
 pub struct ScriptHashStatus {
-    scripthash: ScriptHash, // specfic scripthash to be queried
+    scripthash: ScriptHash, // specific scripthash to be queried
     tip: BlockHash,         // used for skipping confirmed entries' sync
     confirmed: HashMap<BlockHash, Vec<TxEntry>>, // confirmed entries, partitioned per block (may contain stale blocks)
     mempool: Vec<TxEntry>,                       // unconfirmed entries

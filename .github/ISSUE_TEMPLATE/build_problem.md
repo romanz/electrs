@@ -46,5 +46,5 @@ Linking: static/dynamic
 Cross compilation: yes/no
 Target architecture: (uname -m on Linux if not cross-compiling)
 
-**Aditional context**
+**Additional context**
 Any additional information that seems to be relevant.

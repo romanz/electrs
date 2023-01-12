@@ -16,7 +16,7 @@ It's the most [secure](https://github.com/Kixunil/security_writings/blob/master/
 Set `rpccookiefile` option of `bitcoind` to a file within an existing directory which it can access.
 You can skip it if you're running both daemons under the same user and with the default directories.
 
-`electrs` will wait for `bitcoind` to sync, however, you will be unabe to use it until the syncing is done.
+`electrs` will wait for `bitcoind` to sync, however, you will be unable to use it until the syncing is done.
 
 Example command for running `bitcoind` (assuming same user, default dirs):
 
@@ -50,10 +50,10 @@ It is a good practice to use these special arguments at the beginning of the com
 
 **Naming convention**
 
-For each command line argument an **environment variable** of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hypens exists
+For each command line argument an **environment variable** of the same name with `ELECTRS_` prefix, upper case letters and underscores instead of hyphens exists
 (e.g. you can use `ELECTRS_ELECTRUM_RPC_ADDR` instead of `--electrum-rpc-addr`).
 
-Similarly, for each such argument an option in config file exists with underscores instead of hypens (e.g. `electrum_rpc_addr`).
+Similarly, for each such argument an option in config file exists with underscores instead of hyphens (e.g. `electrum_rpc_addr`).
 
 You need to use `true` value in case of flags (e.g. `timestamp = true`).
 

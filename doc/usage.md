@@ -59,7 +59,7 @@ Config { network: Bitcoin, db_path: "./db/bitcoin", daemon_dir: "/home/user/.bit
 You can specify options via command-line parameters, environment variables or using config files.
 See the documentation above.
 
-Note that the final DB size should be ~10% of the `blk*.dat` files, but it may increase to ~20% at the end of the inital sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
+Note that the final DB size should be ~10% of the `blk*.dat` files, but it may increase to ~20% at the end of the initial sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
 
 It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the command above.
 
