@@ -4,7 +4,7 @@
 
 As of 0.8.8 the `cookie` option is deprecated and it will be removed.
 A new `auth` option was added.
-If you don't use the `cookie` otpion, you're not affected and don't need to read this.
+If you don't use the `cookie` option, you're not affected and don't need to read this.
 Note that this is different from `cookie_file`.
 
 ## Why?

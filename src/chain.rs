@@ -56,7 +56,7 @@ impl Chain {
         ))])
     }
 
-    /// Load the chain from a collecion of headers, up to the given tip
+    /// Load the chain from a collection of headers, up to the given tip
     pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
         let genesis_hash = self.headers[0].0;
 

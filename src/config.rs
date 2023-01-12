@@ -291,7 +291,7 @@ impl Config {
                 Auth::UserPass(parts[0].to_owned(), parts[1].to_owned())
             }
             (Some(_), Some(_)) => {
-                eprintln!("Error: ambigous configuration - auth and cookie_file can't be specified at the same time");
+                eprintln!("Error: ambiguous configuration - auth and cookie_file can't be specified at the same time");
                 std::process::exit(1);
             }
         });
