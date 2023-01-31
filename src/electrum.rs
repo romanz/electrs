@@ -312,6 +312,15 @@ impl Rpc {
             .unwrap()
     }
 
+    fn scripthash_unsubscribe(
+        &self,
+        client: &mut Client,
+        (scripthash,): &(ScriptHash,),
+    ) -> Result<Value> {
+        let removed = client.scripthashes.remove(scripthash).is_some();
+        Ok(json!(removed))
+    }
+
     fn scripthashes_subscribe<'a>(
         &self,
         client: &'a mut Client,
@@ -532,6 +541,7 @@ impl Rpc {
                 Params::ScriptHashGetHistory(args) => self.scripthash_get_history(client, args),
                 Params::ScriptHashListUnspent(args) => self.scripthash_list_unspent(client, args),
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
+                Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
@@ -560,6 +570,7 @@ enum Params {
     ScriptHashGetHistory((ScriptHash,)),
     ScriptHashListUnspent((ScriptHash,)),
     ScriptHashSubscribe((ScriptHash,)),
+    ScriptHashUnsubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
     Version((String, Version)),
@@ -577,6 +588,7 @@ impl Params {
             "blockchain.scripthash.get_history" => Params::ScriptHashGetHistory(convert(params)?),
             "blockchain.scripthash.listunspent" => Params::ScriptHashListUnspent(convert(params)?),
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
+            "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
