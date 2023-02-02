@@ -16,7 +16,7 @@ use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
-    merkle::Proof,
+    merkle::{Proof, self},
     metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
@@ -401,6 +401,33 @@ impl Rpc {
         }
     }
 
+    fn transaction_from_pos(&self, (height, tx_pos, merkle): &(usize, usize, bool)) -> Result<Value> {
+        let chain = self.tracker.chain();
+        let blockhash = match chain.get_block_hash(*height) {
+            None => bail!("missing block at {}", height),
+            Some(blockhash) => blockhash,
+        };
+        let txids = self.daemon.get_block_txids(blockhash)?;
+        let tx = txids[tx_pos];
+        if *merkle {
+            match txids.iter().position(|current_txid| *current_txid == *txid) {
+                None => bail!("missing txid {} in block {}", txid, blockhash),
+                Some(position) => {
+                    let proof = Proof::create(&txids, position);
+                    Ok(json!({
+                        "tx_id": tx,
+                        "merkle": proof.to_hex(),
+                    }))
+                }
+            }
+        }
+        else {
+            Ok(json!({
+                "tx_id": tx,
+            }))
+        }
+    }
+
     fn get_fee_histogram(&self) -> Result<Value> {
         Ok(json!(self.tracker.fees_histogram()))
     }
@@ -535,6 +562,7 @@ impl Rpc {
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
+                Params::TransactionFromPosition(args) => self.transaction_from_pos(args),
                 Params::Version(args) => self.version(args),
             };
             call.response(result)
@@ -562,6 +590,7 @@ enum Params {
     ScriptHashSubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
+    TransactionFromPosition((usize, usize, bool)),
     Version((String, Version)),
 }
 
@@ -580,6 +609,7 @@ impl Params {
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
+            "blockchain.transaction.id_from_pos" => Params::TransactionFromPosition(convert(params)?),
             "mempool.get_fee_histogram" => Params::MempoolFeeHistogram,
             "server.banner" => Params::Banner,
             "server.donation_address" => Params::Donation,
