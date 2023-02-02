@@ -59,6 +59,9 @@ You may be able to find a fork of electrs that does support them, look around or
 
 The database schema is described [here](doc/schema.md).
 
+## Contributing
+
+All contributions to this project are welcome. Please refer to the [Contributing Guildlines](CONTRIBUTING.md) for more details.
 
 ## Logo
 
