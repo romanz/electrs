@@ -16,7 +16,7 @@ use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
-    merkle::{Proof},
+    merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
@@ -401,14 +401,17 @@ impl Rpc {
         }
     }
 
-    fn transaction_from_pos(&self, (height, tx_pos, merkle): &(usize, usize, bool)) -> Result<Value> {
+    fn transaction_from_pos(
+        &self,
+        (height, tx_pos, merkle): &(usize, usize, bool),
+    ) -> Result<Value> {
         let chain = self.tracker.chain();
         let blockhash = match chain.get_block_hash(*height) {
             None => bail!("missing block at {}", height),
             Some(blockhash) => blockhash,
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
-        let txid:Txid = txids[*tx_pos];
+        let txid: Txid = txids[*tx_pos];
         if *merkle {
             match txids.iter().position(|current_txid| *current_txid == txid) {
                 None => bail!("missing txid {} in block {}", txid, blockhash),
@@ -420,8 +423,7 @@ impl Rpc {
                     }))
                 }
             }
-        }
-        else {
+        } else {
             Ok(json!({
                 "tx_id": txid,
             }))
@@ -609,7 +611,9 @@ impl Params {
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
-            "blockchain.transaction.id_from_pos" => Params::TransactionFromPosition(convert(params)?),
+            "blockchain.transaction.id_from_pos" => {
+                Params::TransactionFromPosition(convert(params)?)
+            }
             "mempool.get_fee_histogram" => Params::MempoolFeeHistogram,
             "server.banner" => Params::Banner,
             "server.donation_address" => Params::Donation,
