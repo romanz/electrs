@@ -411,6 +411,9 @@ impl Rpc {
             Some(blockhash) => blockhash,
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
+        if *tx_pos >= txids.len() {
+            bail!("invalid tx_pos {} in block at height {}", tx_pos, height);
+        }
         let txid: Txid = txids[*tx_pos];
         if *merkle {
             match txids.iter().position(|current_txid| *current_txid == txid) {
