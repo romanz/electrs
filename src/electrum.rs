@@ -16,7 +16,7 @@ use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
-    merkle::{Proof, self},
+    merkle::{Proof},
     metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
@@ -408,14 +408,14 @@ impl Rpc {
             Some(blockhash) => blockhash,
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
-        let tx = txids[tx_pos];
+        let txid:Txid = txids[*tx_pos];
         if *merkle {
-            match txids.iter().position(|current_txid| *current_txid == *txid) {
+            match txids.iter().position(|current_txid| *current_txid == txid) {
                 None => bail!("missing txid {} in block {}", txid, blockhash),
                 Some(position) => {
                     let proof = Proof::create(&txids, position);
                     Ok(json!({
-                        "tx_id": tx,
+                        "tx_id": txid,
                         "merkle": proof.to_hex(),
                     }))
                 }
@@ -423,7 +423,7 @@ impl Rpc {
         }
         else {
             Ok(json!({
-                "tx_id": tx,
+                "tx_id": txid,
             }))
         }
     }
