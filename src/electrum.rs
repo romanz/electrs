@@ -403,33 +403,23 @@ impl Rpc {
 
     fn transaction_from_pos(
         &self,
-        (height, tx_pos, merkle): &(usize, usize, bool),
+        (height, tx_pos, merkle): (usize, usize, bool),
     ) -> Result<Value> {
         let chain = self.tracker.chain();
-        let blockhash = match chain.get_block_hash(*height) {
+        let blockhash = match chain.get_block_hash(height) {
             None => bail!("missing block at {}", height),
             Some(blockhash) => blockhash,
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
-        if *tx_pos >= txids.len() {
+        if tx_pos >= txids.len() {
             bail!("invalid tx_pos {} in block at height {}", tx_pos, height);
         }
-        let txid: Txid = txids[*tx_pos];
-        if *merkle {
-            match txids.iter().position(|current_txid| *current_txid == txid) {
-                None => bail!("missing txid {} in block {}", txid, blockhash),
-                Some(position) => {
-                    let proof = Proof::create(&txids, position);
-                    Ok(json!({
-                        "tx_id": txid,
-                        "merkle": proof.to_hex(),
-                    }))
-                }
-            }
+        let txid: Txid = txids[tx_pos];
+        if merkle {
+            let proof = Proof::create(&txids, tx_pos);
+            Ok(json!({"tx_id": txid, "merkle": proof.to_hex()}))
         } else {
-            Ok(json!({
-                "tx_id": txid,
-            }))
+            Ok(json!({ "tx_id": txid }))
         }
     }
 
@@ -567,7 +557,7 @@ impl Rpc {
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
-                Params::TransactionFromPosition(args) => self.transaction_from_pos(args),
+                Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
                 Params::Version(args) => self.version(args),
             };
             call.response(result)
