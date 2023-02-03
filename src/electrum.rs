@@ -410,6 +410,28 @@ impl Rpc {
         }
     }
 
+    fn transaction_from_pos(
+        &self,
+        (height, tx_pos, merkle): (usize, usize, bool),
+    ) -> Result<Value> {
+        let chain = self.tracker.chain();
+        let blockhash = match chain.get_block_hash(height) {
+            None => bail!("missing block at {}", height),
+            Some(blockhash) => blockhash,
+        };
+        let txids = self.daemon.get_block_txids(blockhash)?;
+        if tx_pos >= txids.len() {
+            bail!("invalid tx_pos {} in block at height {}", tx_pos, height);
+        }
+        let txid: Txid = txids[tx_pos];
+        if merkle {
+            let proof = Proof::create(&txids, tx_pos);
+            Ok(json!({"tx_id": txid, "merkle": proof.to_hex()}))
+        } else {
+            Ok(json!({ "tx_id": txid }))
+        }
+    }
+
     fn get_fee_histogram(&self) -> Result<Value> {
         Ok(json!(self.tracker.fees_histogram()))
     }
@@ -545,6 +567,7 @@ impl Rpc {
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
+                Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
                 Params::Version(args) => self.version(args),
             };
             call.response(result)
@@ -573,6 +596,7 @@ enum Params {
     ScriptHashUnsubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
+    TransactionFromPosition((usize, usize, bool)),
     Version((String, Version)),
 }
 
@@ -592,6 +616,9 @@ impl Params {
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
+            "blockchain.transaction.id_from_pos" => {
+                Params::TransactionFromPosition(convert(params)?)
+            }
             "mempool.get_fee_histogram" => Params::MempoolFeeHistogram,
             "server.banner" => Params::Banner,
             "server.donation_address" => Params::Donation,
