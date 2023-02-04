@@ -128,8 +128,8 @@ pub struct ScriptHashStatus {
     tip: BlockHash,         // used for skipping confirmed entries' sync
     pub confirmed: HashMap<BlockHash, Vec<TxEntry>>, // confirmed entries, partitioned per block (may contain stale blocks)
     pub mempool: Vec<TxEntry>,                       // unconfirmed entries
-    history: Vec<HistoryEntry>,                  // computed from confirmed and mempool entries
-    statushash: Option<StatusHash>,              // computed from history
+    history: Vec<HistoryEntry>,                      // computed from confirmed and mempool entries
+    statushash: Option<StatusHash>,                  // computed from history
 }
 
 /// Specific scripthash balance

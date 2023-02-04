@@ -19,7 +19,7 @@ use crate::{
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
-    status::{ScriptHashStatus},
+    status::ScriptHashStatus,
     tracker::Tracker,
     types::ScriptHash,
 };
@@ -296,7 +296,7 @@ impl Rpc {
             fee: u32,
         }
 
-        let mut mempool: Vec<TxnObject> = Vec::new(); 
+        let mut mempool: Vec<TxnObject> = Vec::new();
         let scripthash_status = match client.scripthashes.get(scripthash) {
             Some(status) => status,
             None => {
@@ -309,15 +309,23 @@ impl Rpc {
         };
 
         scripthash_status.mempool.iter().for_each(|tx_entry| {
-            mempool.push(TxnObject { height: -1, tx_hash: tx_entry.txid, fee: 123 });
+            mempool.push(TxnObject {
+                height: -1,
+                tx_hash: tx_entry.txid,
+                fee: 123,
+            });
         });
 
-        for (_,tx_entries) in &scripthash_status.confirmed {
+        for tx_entries in scripthash_status.confirmed.values() {
             tx_entries.iter().for_each(|tx_entry| {
-                mempool.push(TxnObject { height: 0, tx_hash: tx_entry.txid, fee: 123 });
+                mempool.push(TxnObject {
+                    height: 0,
+                    tx_hash: tx_entry.txid,
+                    fee: 123,
+                });
             });
         }
-    
+
         Ok(json!(mempool))
     }
 
