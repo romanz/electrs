@@ -19,7 +19,7 @@ use crate::{
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
-    status::ScriptHashStatus,
+    status::{ScriptHashStatus},
     tracker::Tracker,
     types::ScriptHash,
 };
@@ -282,6 +282,43 @@ impl Rpc {
             }
         };
         Ok(history_entries)
+    }
+
+    fn scripthash_get_mempool(
+        &self,
+        client: &Client,
+        (scripthash,): &(ScriptHash,),
+    ) -> Result<Value> {
+        #[derive(Serialize)]
+        struct TxnObject {
+            height: i32,
+            tx_hash: Txid,
+            fee: u32,
+        }
+
+        let mut mempool: Vec<TxnObject> = Vec::new(); 
+        let scripthash_status = match client.scripthashes.get(scripthash) {
+            Some(status) => status,
+            None => {
+                info!(
+                    "{} blockchain.scripthash.mempool called for unsubscribed scripthash",
+                    UNSUBSCRIBED_QUERY_MESSAGE
+                );
+                bail!("Error: blockchain.scripthash.mempool called for unsubscribed scripthash");
+            }
+        };
+
+        scripthash_status.mempool.iter().for_each(|tx_entry| {
+            mempool.push(TxnObject { height: -1, tx_hash: tx_entry.txid, fee: 123 });
+        });
+
+        for (_,tx_entries) in &scripthash_status.confirmed {
+            tx_entries.iter().for_each(|tx_entry| {
+                mempool.push(TxnObject { height: 0, tx_hash: tx_entry.txid, fee: 123 });
+            });
+        }
+    
+        Ok(json!(mempool))
     }
 
     fn scripthash_list_unspent(
@@ -561,6 +598,7 @@ impl Rpc {
                 Params::RelayFee => self.relayfee(),
                 Params::ScriptHashGetBalance(args) => self.scripthash_get_balance(client, args),
                 Params::ScriptHashGetHistory(args) => self.scripthash_get_history(client, args),
+                Params::ScriptHashGetMempool(args) => self.scripthash_get_mempool(client, args),
                 Params::ScriptHashListUnspent(args) => self.scripthash_list_unspent(client, args),
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
@@ -591,6 +629,7 @@ enum Params {
     RelayFee,
     ScriptHashGetBalance((ScriptHash,)),
     ScriptHashGetHistory((ScriptHash,)),
+    ScriptHashGetMempool((ScriptHash,)),
     ScriptHashListUnspent((ScriptHash,)),
     ScriptHashSubscribe((ScriptHash,)),
     ScriptHashUnsubscribe((ScriptHash,)),
@@ -610,6 +649,7 @@ impl Params {
             "blockchain.relayfee" => Params::RelayFee,
             "blockchain.scripthash.get_balance" => Params::ScriptHashGetBalance(convert(params)?),
             "blockchain.scripthash.get_history" => Params::ScriptHashGetHistory(convert(params)?),
+            "blockchain.scripthash.get_mempool" => Params::ScriptHashGetMempool(convert(params)?),
             "blockchain.scripthash.listunspent" => Params::ScriptHashListUnspent(convert(params)?),
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
             "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),

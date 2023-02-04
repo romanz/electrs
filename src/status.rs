@@ -19,8 +19,8 @@ use crate::{
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
-struct TxEntry {
-    txid: Txid,
+pub struct TxEntry {
+    pub txid: Txid,
     outputs: Vec<TxOutput>, // relevant funded outputs and their amounts
     spent: Vec<OutPoint>,   // relevant spent outpoints
 }
@@ -126,8 +126,8 @@ impl HistoryEntry {
 pub struct ScriptHashStatus {
     scripthash: ScriptHash, // specific scripthash to be queried
     tip: BlockHash,         // used for skipping confirmed entries' sync
-    confirmed: HashMap<BlockHash, Vec<TxEntry>>, // confirmed entries, partitioned per block (may contain stale blocks)
-    mempool: Vec<TxEntry>,                       // unconfirmed entries
+    pub confirmed: HashMap<BlockHash, Vec<TxEntry>>, // confirmed entries, partitioned per block (may contain stale blocks)
+    pub mempool: Vec<TxEntry>,                       // unconfirmed entries
     history: Vec<HistoryEntry>,                  // computed from confirmed and mempool entries
     statushash: Option<StatusHash>,              // computed from history
 }
