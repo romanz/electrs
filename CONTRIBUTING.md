@@ -67,7 +67,7 @@ PR authors may also find it useful to run the following script locally in order
 to check that their code satisfies all the requirements of the GitHub workflows and doesn't fail
 automated build.
 
-You can run the following command from the root of the project: 
+You can run the following command from the root of the project:
 ```
 ./contrib/testChanges.sh
 ```
