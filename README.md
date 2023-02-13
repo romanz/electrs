@@ -30,11 +30,11 @@ It's a bad idea to run it publicly as it'd expose you to DoS and maybe also othe
 If you want to run a public server you may be interested in the [Blockstream fork of electrs](https://github.com/Blockstream/electrs)
 which is better optimized for public usage at the cost of consuming *significantly* more resources.
 
- * [Installation from source](doc/install.md) 
- * [Pre-built binaries](doc/binaries.md) (No official binaries available but a beta repository is available for installation) 
- * [Configuration](doc/config.md) 
- * [Usage](doc/usage.md) 
- * [Monitoring](doc/monitoring.md) 
+ * [Installation from source](doc/install.md)
+ * [Pre-built binaries](doc/binaries.md) (No official binaries available but a beta repository is available for installation)
+ * [Configuration](doc/config.md)
+ * [Usage](doc/usage.md)
+ * [Monitoring](doc/monitoring.md)
  * [Upgrading](doc/upgrading.md) - **contains information about important changes from older versions**
 
 ## Features
@@ -61,7 +61,7 @@ The database schema is described [here](doc/schema.md).
 
 ## Contributing
 
-All contributions to this project are welcome. Please refer to the [Contributing Guildlines](CONTRIBUTING.md) for more details.
+All contributions to this project are welcome. Please refer to the [Contributing Guidelines](CONTRIBUTING.md) for more details.
 
 ## Logo
 
