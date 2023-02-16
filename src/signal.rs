@@ -1,7 +1,7 @@
 use crossbeam_channel as channel;
 use crossbeam_channel::RecvTimeoutError;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};
 
@@ -34,14 +34,21 @@ impl Waiter {
             ]),
         }
     }
+
     pub fn wait(&self, duration: Duration, accept_sigusr: bool) -> Result<()> {
-        match self.receiver.recv_timeout(duration) {
+        // Determine the deadline time based on the duration, so that it doesn't
+        // get pushed back when wait_deadline() recurses
+        self.wait_deadline(Instant::now() + duration, accept_sigusr)
+    }
+
+    fn wait_deadline(&self, deadline: Instant, accept_sigusr: bool) -> Result<()> {
+        match self.receiver.recv_deadline(deadline) {
             Ok(sig) if sig == SIGUSR1 => {
                 trace!("notified via SIGUSR1");
                 if accept_sigusr {
                     Ok(())
                 } else {
-                    self.wait(duration, accept_sigusr)
+                    self.wait_deadline(deadline, accept_sigusr)
                 }
             }
             Ok(sig) => bail!(ErrorKind::Interrupt(sig)),
