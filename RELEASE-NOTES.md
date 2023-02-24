@@ -1,3 +1,11 @@
+# 0.9.12 (Feb 25 2023)
+
+* Update dependencies (`serde_json`, `signal-hook`, `electrs-bitcoincore-rpc`, `electrs-rocksdb`)
+* Add `CONTRIBUTING.md` (#838)
+* Add `blockchain.transaction.id_from_pos` RPC (#836)
+* Add `blockchain.scripthash.unsubscribe` RPC (#833)
+* Support IPv6 connections (#792)
+
 # 0.9.11 (Jan 5 2023)
 
 * Update dependencies (`secp256k1`, `serde_json`, `configure_me_codegen`, `env_logger`, `electrs-rocksdb`)
