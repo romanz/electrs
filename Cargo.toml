@@ -54,4 +54,4 @@ features = ["zstd", "snappy"]
 configure_me_codegen = "0.4.3"
 
 [dev-dependencies]
-tempfile = "3.3"
+tempfile = "3.4"
