@@ -71,9 +71,9 @@ impl Connection {
             .context("failed to get new headers")?;
 
         debug!("got {} new headers", headers.len());
-        let prev_blockhash = match headers.first().map(|h| h.prev_blockhash) {
+        let prev_blockhash = match headers.first() {
             None => return Ok(vec![]),
-            Some(prev_blockhash) => prev_blockhash,
+            Some(first) => first.prev_blockhash,
         };
         let new_heights = match chain.get_block_height(&prev_blockhash) {
             Some(last_height) => (last_height + 1)..,
