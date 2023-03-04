@@ -60,12 +60,12 @@ impl Chain {
     pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
         let genesis_hash = self.headers[0].0;
 
-        let mut header_map: HashMap<BlockHash, BlockHeader> =
+        let header_map: HashMap<BlockHash, BlockHeader> =
             headers.into_iter().map(|h| (h.block_hash(), h)).collect();
         let mut blockhash = tip;
-        let mut new_headers = Vec::with_capacity(header_map.len());
+        let mut new_headers: Vec<&BlockHeader> = Vec::with_capacity(header_map.len());
         while blockhash != genesis_hash {
-            let header = match header_map.remove(&blockhash) {
+            let header = match header_map.get(&blockhash) {
                 Some(header) => header,
                 None => panic!("missing header {} while loading from DB", blockhash),
             };
@@ -73,7 +73,7 @@ impl Chain {
             new_headers.push(header);
         }
         info!("loading {} headers, tip={}", new_headers.len(), tip);
-        let new_headers = new_headers.into_iter().rev(); // order by height
+        let new_headers = new_headers.into_iter().rev().copied(); // order by height
         self.update(new_headers.zip(1..).map(NewHeader::from).collect())
     }
 
