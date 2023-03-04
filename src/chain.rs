@@ -63,7 +63,7 @@ impl Chain {
         let mut header_map: HashMap<BlockHash, BlockHeader> =
             headers.into_iter().map(|h| (h.block_hash(), h)).collect();
         let mut blockhash = tip;
-        let mut new_headers = vec![];
+        let mut new_headers = Vec::with_capacity(header_map.len());
         while blockhash != genesis_hash {
             let header = match header_map.remove(&blockhash) {
                 Some(header) => header,
