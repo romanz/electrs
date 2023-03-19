@@ -214,8 +214,10 @@ impl Connection {
             }
             let raw_msg = match raw_msg {
                 Ok(raw_msg) => {
-                    assert_eq!(raw_msg.magic, magic);
                     recv_size.observe(raw_msg.cmd.as_ref(), raw_msg.raw.len() as f64);
+                    if raw_msg.magic != magic {
+                        bail!("unexpected magic {} (instead of {})", raw_msg.magic, magic)
+                    }
                     raw_msg
                 }
                 Err(encode::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
