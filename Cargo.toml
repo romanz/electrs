@@ -51,7 +51,7 @@ default-features = false
 features = ["zstd", "snappy"]
 
 [build-dependencies]
-configure_me_codegen = "0.4.3"
+configure_me_codegen = "0.4.4"
 
 [dev-dependencies]
 tempfile = "3.4"
