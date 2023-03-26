@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
+use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
     consensus::{
         encode::{self, ReadExt, VarInt},
         Decodable,
     },
-    hashes::{hex::ToHex, Hash},
+    hashes::Hash,
     network::{
         address, constants,
         message::{self, CommandString, NetworkMessage},
@@ -12,7 +13,7 @@ use bitcoin::{
         message_network,
     },
     secp256k1::{self, rand::Rng},
-    Block, BlockHash, BlockHeader, Network,
+    Block, BlockHash, Network,
 };
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
@@ -129,7 +130,7 @@ impl Connection {
         network: Network,
         address: SocketAddr,
         metrics: &Metrics,
-        magic: u32,
+        magic: bitcoin::network::Magic,
     ) -> Result<Self> {
         let conn = Arc::new(
             TcpStream::connect(address)
@@ -250,7 +251,7 @@ impl Connection {
                     let label = format!("parse_{}", raw_msg.cmd.as_ref());
                     let msg = match parse_duration.observe_duration(&label, || raw_msg.parse()) {
                         Ok(msg) => msg,
-                        Err(err) => bail!("failed to parse '{}({})': {}", raw_msg.cmd, raw_msg.raw.to_hex(), err),
+                        Err(err) => bail!("failed to parse '{}({:?})': {}", raw_msg.cmd, raw_msg.raw, err),
                     };
                     trace!("recv: {:?}", msg);
 
@@ -334,7 +335,7 @@ fn build_version_message() -> NetworkMessage {
 }
 
 struct RawNetworkMessage {
-    magic: u32,
+    magic: bitcoin::network::Magic,
     cmd: CommandString,
     raw: Vec<u8>,
 }
@@ -362,9 +363,9 @@ impl RawNetworkMessage {
             "alert" => NetworkMessage::Alert(Decodable::consensus_decode(&mut raw)?),
             "addr" => NetworkMessage::Addr(Decodable::consensus_decode(&mut raw)?),
             _ => bail!(
-                "unsupported message: command={}, payload={}",
+                "unsupported message: command={}, payload={:?}",
                 self.cmd,
-                self.raw.to_hex()
+                self.raw
             ),
         };
         Ok(payload)

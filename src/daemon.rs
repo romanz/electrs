@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 
-use bitcoin::{
-    consensus::serialize, hashes::hex::ToHex, Amount, Block, BlockHash, Transaction, Txid,
-};
+use bitcoin::{Amount, Block, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
@@ -183,8 +181,13 @@ impl Daemon {
         txid: &Txid,
         blockhash: Option<BlockHash>,
     ) -> Result<Value> {
+        use bitcoin::consensus::serde::{hex::Lower, Hex, With};
+
         let tx = self.get_transaction(txid, blockhash)?;
-        Ok(json!(serialize(&tx).to_hex()))
+        #[derive(serde::Serialize)]
+        #[serde(transparent)]
+        struct TxAsHex(#[serde(with = "With::<Hex<Lower>>")] Transaction);
+        serde_json::to_value(&TxAsHex(tx)).map_err(Into::into)
     }
 
     pub(crate) fn get_transaction(

@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use bitcoin::{
-    consensus::{deserialize, serialize},
-    hashes::hex::{FromHex, ToHex},
+    consensus::{deserialize, encode::serialize_hex},
+    hashes::hex::FromHex,
     BlockHash, Txid,
 };
 use crossbeam_channel::Receiver;
@@ -193,7 +193,7 @@ impl Rpc {
                 let header = chain.get_block_header(height).unwrap();
                 notifications.push(notification(
                     "blockchain.headers.subscribe",
-                    &[json!({"hex": serialize(&header).to_hex(), "height": height})],
+                    &[json!({"hex": serialize_hex(&header), "height": height})],
                 ));
             }
         }
@@ -205,7 +205,7 @@ impl Rpc {
         client.tip = Some(chain.tip());
         let height = chain.height();
         let header = chain.get_block_header(height).unwrap();
-        Ok(json!({"hex": serialize(header).to_hex(), "height": height}))
+        Ok(json!({"hex": serialize_hex(header), "height": height}))
     }
 
     fn block_header(&self, (height,): (usize,)) -> Result<Value> {
@@ -214,7 +214,7 @@ impl Rpc {
             None => bail!("no header at {}", height),
             Some(header) => header,
         };
-        Ok(json!(serialize(header).to_hex()))
+        Ok(json!(serialize_hex(header)))
     }
 
     fn block_headers(&self, (start_height, count): (usize, usize)) -> Result<Value> {
@@ -230,7 +230,7 @@ impl Rpc {
         let hex_headers = heights.filter_map(|height| {
             chain
                 .get_block_header(height)
-                .map(|header| serialize(header).to_hex())
+                .map(|header| serialize_hex(header))
         });
 
         Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
@@ -374,8 +374,8 @@ impl Rpc {
                 .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
-        if let Some(tx) = self.cache.get_tx(&txid, |tx| serialize(tx)) {
-            return Ok(json!(tx.to_hex()));
+        if let Some(tx) = self.cache.get_tx(&txid, |tx| serialize_hex(tx)) {
+            return Ok(json!(tx));
         }
         debug!("tx cache miss: txid={}", txid);
         // use internal index to load confirmed transaction without an RPC
@@ -384,7 +384,7 @@ impl Rpc {
             .lookup_transaction(&self.daemon, txid)?
             .map(|(_blockhash, tx)| tx)
         {
-            return Ok(json!(serialize(&tx).to_hex()));
+            return Ok(json!(serialize_hex(&tx)));
         }
         // load unconfirmed transaction via RPC
         Ok(json!(self.daemon.get_transaction_hex(&txid, None)?))

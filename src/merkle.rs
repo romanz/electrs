@@ -1,7 +1,4 @@
-use bitcoin::{
-    hashes::{hex::ToHex, Hash},
-    TxMerkleNode, Txid,
-};
+use bitcoin::{hash_types::TxMerkleNode, hashes::Hash, Txid};
 
 pub(crate) struct Proof {
     proof: Vec<TxMerkleNode>,
@@ -14,7 +11,7 @@ impl Proof {
         let mut offset = position;
         let mut hashes: Vec<TxMerkleNode> = txids
             .iter()
-            .map(|txid| TxMerkleNode::from_hash(txid.as_hash()))
+            .map(|txid| TxMerkleNode::from_raw_hash(txid.to_raw_hash()))
             .collect();
 
         let mut proof = vec![];
@@ -44,7 +41,10 @@ impl Proof {
     }
 
     pub(crate) fn to_hex(&self) -> Vec<String> {
-        self.proof.iter().map(|node| node.to_hex()).collect()
+        self.proof
+            .iter()
+            .map(|node| format!("{:x}", node))
+            .collect()
     }
 
     pub(crate) fn position(&self) -> usize {

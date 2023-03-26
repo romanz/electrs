@@ -92,7 +92,7 @@ pub(crate) struct HistoryEntry {
     height: Height,
     #[serde(
         skip_serializing_if = "Option::is_none",
-        with = "bitcoin::util::amount::serde::as_sat::opt"
+        with = "bitcoin::amount::serde::as_sat::opt"
     )]
     fee: Option<Amount>,
 }
@@ -135,9 +135,9 @@ pub struct ScriptHashStatus {
 /// Specific scripthash balance
 #[derive(Default, Eq, PartialEq, Serialize)]
 pub(crate) struct Balance {
-    #[serde(with = "bitcoin::util::amount::serde::as_sat", rename = "confirmed")]
+    #[serde(with = "bitcoin::amount::serde::as_sat", rename = "confirmed")]
     confirmed_balance: Amount,
-    #[serde(with = "bitcoin::util::amount::serde::as_sat", rename = "unconfirmed")]
+    #[serde(with = "bitcoin::amount::serde::as_sat", rename = "unconfirmed")]
     mempool_delta: SignedAmount,
 }
 
@@ -148,7 +148,7 @@ pub(crate) struct UnspentEntry {
     height: usize, // 0 = mempool entry
     tx_hash: Txid,
     tx_pos: u32,
-    #[serde(with = "bitcoin::util::amount::serde::as_sat")]
+    #[serde(with = "bitcoin::amount::serde::as_sat")]
     value: Amount,
 }
 
@@ -542,14 +542,14 @@ fn filter_block_txs<T: Send>(
 #[cfg(test)]
 mod tests {
     use super::HistoryEntry;
-    use bitcoin::{hashes::hex::FromHex, Amount, Txid};
+    use bitcoin::Amount;
     use serde_json::json;
 
     #[test]
     fn test_txinfo_json() {
-        let txid =
-            Txid::from_hex("5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b")
-                .unwrap();
+        let txid = "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b"
+            .parse()
+            .unwrap();
         assert_eq!(
             json!(HistoryEntry::confirmed(txid, 123456)),
             json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 123456})
