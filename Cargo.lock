@@ -312,8 +312,9 @@ dependencies = [
 
 [[package]]
 name = "electrs-bitcoincore-rpc"
-version = "0.17.0-e1"
-source = "git+https://github.com/Kixunil/rust-bitcoincore-rpc?branch=electrs-upgrade-bitcoind#3df5fa751f6e9585b0e3e8f6b6f13df5687f892e"
+version = "0.17.0-e3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaf7b2057d11c3e4313cd0934f71383956f33433828e8a3cd0c8284b4a61fdd8"
 dependencies = [
  "bitcoin-private",
  "electrs-bitcoincore-rpc-json",
@@ -325,8 +326,9 @@ dependencies = [
 
 [[package]]
 name = "electrs-bitcoincore-rpc-json"
-version = "0.17.0-e1"
-source = "git+https://github.com/Kixunil/rust-bitcoincore-rpc?branch=electrs-upgrade-bitcoind#3df5fa751f6e9585b0e3e8f6b6f13df5687f892e"
+version = "0.17.0-e3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49a4aae914a774c9b5dcff9c21bdb39557e61e7970f56729db1de5002eb83085"
 dependencies = [
  "bitcoin",
  "bitcoin-private",

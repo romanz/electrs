@@ -39,7 +39,7 @@ tiny_http = { version = "0.12", optional = true }
 hex_lit = "0.1.1"
 
 [dependencies.electrs-bitcoincore-rpc]
-version = "0.17.0-e1"
+version = "0.17.0-e3"
 
 [dependencies.electrs-rocksdb]
 # Workaround the following issues:
@@ -56,11 +56,3 @@ configure_me_codegen = { version = "0.4.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3.4"
-
-[patch.crates-io.electrs-bitcoincore-rpc]
-git = "https://github.com/Kixunil/rust-bitcoincore-rpc"
-branch = "electrs-upgrade-bitcoind"
-
-[patch.crates-io.electrs-bitcoincore-rpc-json]
-git = "https://github.com/Kixunil/rust-bitcoincore-rpc"
-branch = "electrs-upgrade-bitcoind"
