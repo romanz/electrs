@@ -2,10 +2,11 @@ use anyhow::Result;
 
 use std::convert::TryFrom;
 
+use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
     consensus::encode::{deserialize, serialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
-    BlockHeader, OutPoint, Script, Txid,
+    OutPoint, Script, Txid,
 };
 
 use crate::db;
@@ -64,17 +65,15 @@ impl HashPrefixRow {
 
 impl_consensus_encoding!(HashPrefixRow, prefix, height);
 
-hash_newtype!(
-    ScriptHash,
-    sha256::Hash,
-    32,
-    doc = "https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes",
-    true
-);
+hash_newtype! {
+    /// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes
+    #[hash_newtype(backward)]
+    pub struct ScriptHash(sha256::Hash);
+}
 
 impl ScriptHash {
     pub fn new(script: &Script) -> Self {
-        ScriptHash::hash(&script[..])
+        ScriptHash::hash(script.as_bytes())
     }
 
     fn prefix(&self) -> HashPrefix {
@@ -101,13 +100,10 @@ impl ScriptHashRow {
 
 // ***************************************************************************
 
-hash_newtype!(
-    StatusHash,
-    sha256::Hash,
-    32,
-    doc = "https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#status",
-    false
-);
+hash_newtype! {
+    /// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#status
+    pub struct StatusHash(sha256::Hash);
+}
 
 // ***************************************************************************
 
@@ -182,7 +178,8 @@ impl HeaderRow {
 #[cfg(test)]
 mod tests {
     use crate::types::{spending_prefix, HashPrefixRow, ScriptHash, ScriptHashRow, TxidRow};
-    use bitcoin::{hashes::hex::ToHex, Address, OutPoint, Txid};
+    use bitcoin::{Address, OutPoint, Txid};
+    use hex_lit::hex;
     use serde_json::{from_str, json};
 
     use std::str::FromStr;
@@ -201,18 +198,22 @@ mod tests {
         let scripthash: ScriptHash = from_str(&hex).unwrap();
         let row1 = ScriptHashRow::row(scripthash, 123456);
         let db_row = row1.to_db_row();
-        assert_eq!(db_row[..].to_hex(), "a384491d38929fcc40e20100");
+        assert_eq!(&*db_row, &hex!("a384491d38929fcc40e20100"));
         let row2 = HashPrefixRow::from_db_row(&db_row);
         assert_eq!(row1, row2);
     }
 
     #[test]
     fn test_scripthash() {
-        let addr = Address::from_str("1KVNjD3AAnQ3gTMqoTKcWFeqSFujq9gTBT").unwrap();
+        let addr = Address::from_str("1KVNjD3AAnQ3gTMqoTKcWFeqSFujq9gTBT")
+            .unwrap()
+            .assume_checked();
         let scripthash = ScriptHash::new(&addr.script_pubkey());
         assert_eq!(
-            scripthash.to_hex(),
+            scripthash,
             "00dfb264221d07712a144bda338e89237d1abd2db4086057573895ea2659766a"
+                .parse()
+                .unwrap()
         );
     }
 
@@ -225,8 +226,8 @@ mod tests {
         let row1 = TxidRow::row(txid, 91812);
         let row2 = TxidRow::row(txid, 91842);
 
-        assert_eq!(row1.to_db_row().to_hex(), "9985d82954e10f22a4660100");
-        assert_eq!(row2.to_db_row().to_hex(), "9985d82954e10f22c2660100");
+        assert_eq!(&*row1.to_db_row(), &hex!("9985d82954e10f22a4660100"));
+        assert_eq!(&*row2.to_db_row(), &hex!("9985d82954e10f22c2660100"));
     }
 
     #[test]
@@ -239,14 +240,15 @@ mod tests {
         let row2 = TxidRow::row(txid, 91880);
 
         // low-endian encoding => rows should be sorted according to block height
-        assert_eq!(row1.to_db_row().to_hex(), "68b45f58b674e94e4a660100");
-        assert_eq!(row2.to_db_row().to_hex(), "68b45f58b674e94ee8660100");
+        assert_eq!(&*row1.to_db_row(), &hex!("68b45f58b674e94e4a660100"));
+        assert_eq!(&*row2.to_db_row(), &hex!("68b45f58b674e94ee8660100"));
     }
 
     #[test]
     fn test_spending_prefix() {
-        let hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
-        let txid = Txid::from_str(hex).unwrap();
+        let txid = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            .parse()
+            .unwrap();
 
         assert_eq!(
             spending_prefix(OutPoint { txid, vout: 0 }),

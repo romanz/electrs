@@ -38,12 +38,12 @@ pub(crate) struct Mempool {
 
 // Smallest possible txid
 fn txid_min() -> Txid {
-    Txid::from_inner([0x00; 32])
+    Txid::all_zeros()
 }
 
 // Largest possible txid
 fn txid_max() -> Txid {
-    Txid::from_inner([0xFF; 32])
+    Txid::from_byte_array([0xFF; 32])
 }
 
 impl Mempool {
