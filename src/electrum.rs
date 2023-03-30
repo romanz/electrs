@@ -227,11 +227,8 @@ impl Rpc {
         );
         let heights = start_height..end_height;
         let count = heights.len();
-        let hex_headers = heights.filter_map(|height| {
-            chain
-                .get_block_header(height)
-                .map(|header| serialize_hex(header))
-        });
+        let hex_headers =
+            heights.filter_map(|height| chain.get_block_header(height).map(serialize_hex));
 
         Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
     }
