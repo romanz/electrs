@@ -7,7 +7,8 @@ use bitcoin::{
     },
     hashes::Hash,
     network::{
-        address, constants,
+        address,
+        constants::{self, Magic},
         message::{self, CommandString, NetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network,
@@ -130,7 +131,7 @@ impl Connection {
         network: Network,
         address: SocketAddr,
         metrics: &Metrics,
-        magic: bitcoin::network::Magic,
+        magic: Magic,
     ) -> Result<Self> {
         let conn = Arc::new(
             TcpStream::connect(address)
@@ -337,7 +338,7 @@ fn build_version_message() -> NetworkMessage {
 }
 
 struct RawNetworkMessage {
-    magic: bitcoin::network::Magic,
+    magic: Magic,
     cmd: CommandString,
     raw: Vec<u8>,
 }
