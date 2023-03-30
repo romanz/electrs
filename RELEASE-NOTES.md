@@ -1,3 +1,9 @@
+# 0.9.13 (Mar 31 2023)
+
+* Upgrade dependencies (`bitcoin` & `bitcoincore-rpc` #865, `crossbeam-channel` #854, `serde_json` #855, `tempfile` #850)
+* Don't panic on unexpected magic (#861)
+* contrib: rename xpub into get_balance (#627)
+
 # 0.9.12 (Feb 25 2023)
 
 * Update dependencies (`serde_json`, `signal-hook`, `electrs-bitcoincore-rpc`, `electrs-rocksdb`)
