@@ -23,6 +23,7 @@ spec = "internal/config_specification.toml"
 [dependencies]
 anyhow = "1.0"
 bitcoin = { version = "0.30.0", features = ["serde", "rand-std"] }
+bitcoincore-rpc = "0.17.0"
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
@@ -37,9 +38,6 @@ serde_json = "1.0"
 signal-hook = "0.3"
 tiny_http = { version = "0.12", optional = true }
 hex_lit = "0.1.1"
-
-[dependencies.electrs-bitcoincore-rpc]
-version = "0.17.0-e3"
 
 [dependencies.electrs-rocksdb]
 # Workaround the following issues:
