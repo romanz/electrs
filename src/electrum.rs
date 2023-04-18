@@ -137,9 +137,9 @@ impl Rpc {
             metrics::default_duration_buckets(),
         );
 
-        let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
-        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
+        let daemon = Daemon::connect(config, signal.exit_flag(), &metrics)?;
+        let tracker = Tracker::new(config, metrics, daemon.txindex_enabled())?;
         let cache = Cache::new(tracker.metrics());
         Ok(Self {
             tracker,
@@ -368,7 +368,7 @@ impl Rpc {
             let blockhash = self
                 .tracker
                 .lookup_transaction(&self.daemon, txid)?
-                .map(|(blockhash, _tx)| blockhash);
+                .and_then(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
         if let Some(tx) = self.cache.get_tx(&txid, |tx| serialize_hex(tx)) {
@@ -536,6 +536,7 @@ impl Rpc {
         self.rpc_duration.observe_duration(&call.method, || {
             if self.tracker.status().is_err() {
                 // Allow only a few RPC (for sync status notification) not requiring index DB being compacted.
+                // TODO 'partially indexed' without txid and txindex?
                 match &call.params {
                     Params::BlockHeader(_)
                     | Params::BlockHeaders(_)

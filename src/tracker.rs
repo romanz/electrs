@@ -27,8 +27,8 @@ pub(crate) enum Error {
 }
 
 impl Tracker {
-    pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store = DBStore::open(&config.db_path, config.auto_reindex)?;
+    pub fn new(config: &Config, metrics: Metrics, no_txid: bool) -> Result<Self> {
+        let store = DBStore::open(&config.db_path, config.auto_reindex, no_txid)?;
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(
@@ -97,21 +97,25 @@ impl Tracker {
         &self,
         daemon: &Daemon,
         txid: Txid,
-    ) -> Result<Option<(BlockHash, Transaction)>> {
-        // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
-        let blockhashes = self.index.filter_by_txid(txid);
-        let mut result = None;
-        daemon.for_blocks(blockhashes, |blockhash, block| {
-            for tx in block.txdata {
-                if result.is_some() {
-                    return;
+    ) -> Result<Option<(Option<BlockHash>, Transaction)>> {
+        Ok(if daemon.txindex_enabled() {
+            Some((None, daemon.get_transaction(&txid, None)?))
+        } else {
+            // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
+            let blockhashes = self.index.filter_by_txid(txid);
+            let mut result = None;
+            daemon.for_blocks(blockhashes, |blockhash, block| {
+                for tx in block.txdata {
+                    if result.is_some() {
+                        return;
+                    }
+                    if tx.txid() == txid {
+                        result = Some((Some(blockhash), tx));
+                        return;
+                    }
                 }
-                if tx.txid() == txid {
-                    result = Some((blockhash, tx));
-                    return;
-                }
-            }
-        })?;
-        Ok(result)
+            })?;
+            result
+        })
     }
 }
