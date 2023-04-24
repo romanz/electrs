@@ -54,7 +54,7 @@ pub(crate) struct Signal {
 
 impl Signal {
     pub fn new() -> Signal {
-        let ids = [
+        let ids = vec![
             SIGINT, SIGTERM,
             SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
         ];
@@ -65,7 +65,7 @@ impl Signal {
         };
 
         let exit_flag = result.exit.clone();
-        let mut signals = Signals::new(&ids).expect("failed to register signal hook");
+        let mut signals = Signals::new(ids).expect("failed to register signal hook");
         spawn("signal", move || {
             for id in &mut signals {
                 info!("notified via SIG{}", id);

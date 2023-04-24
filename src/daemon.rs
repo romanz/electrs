@@ -187,7 +187,7 @@ impl Daemon {
         #[derive(serde::Serialize)]
         #[serde(transparent)]
         struct TxAsHex(#[serde(with = "With::<Hex<Lower>>")] Transaction);
-        serde_json::to_value(&TxAsHex(tx)).map_err(Into::into)
+        serde_json::to_value(TxAsHex(tx)).map_err(Into::into)
     }
 
     pub(crate) fn get_transaction(
