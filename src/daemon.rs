@@ -9,6 +9,7 @@ use base64;
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use glob;
 use hex;
+use itertools::Itertools;
 use serde_json::{from_str, from_value, Value};
 
 #[cfg(not(feature = "liquid"))]
@@ -378,19 +379,24 @@ impl Daemon {
 
     fn handle_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
         let id = self.message_id.next();
-        let reqs = params_list
+        let chunks = params_list
             .iter()
             .map(|params| json!({"method": method, "params": params, "id": id}))
-            .collect();
+            .chunks(50_000); // Max Amount of batched requests
         let mut results = vec![];
-        let mut replies = self.call_jsonrpc(method, &reqs)?;
-        if let Some(replies_vec) = replies.as_array_mut() {
-            for reply in replies_vec {
-                results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
+        for chunk in &chunks {
+            let reqs = chunk.collect();
+            let mut replies = self.call_jsonrpc(method, &reqs)?;
+            if let Some(replies_vec) = replies.as_array_mut() {
+                for reply in replies_vec {
+                    results.push(parse_jsonrpc_reply(reply.take(), method, id)?)
+                }
+            } else {
+                bail!("non-array replies: {:?}", replies);
             }
-            return Ok(results);
         }
-        bail!("non-array replies: {:?}", replies);
+
+        Ok(results)
     }
 
     fn retry_request_batch(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
