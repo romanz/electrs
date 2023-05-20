@@ -9,7 +9,9 @@ on:
 jobs:
   build:
     name: Build
+
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         build-args:
@@ -18,47 +20,37 @@ jobs:
             --locked,
             --locked --features metrics_process,
           ]
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
 
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          profile: minimal
+
+      - name: Install Rust
+        run: rustup component add rustfmt clippy
 
       - name: Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.build-args }} --all
+        run: cargo build ${{ matrix.build-args }} --all
 
       - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all
+        run: cargo test  ${{ matrix.build-args }} --all
 
       - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+        run: cargo clippy -- -D warnings
 
   integration:
     name: Integration
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
       - name: Build
         run: docker build -f Dockerfile.ci . --rm -t electrs:tests
+
       - name: Test
         run: docker run -v $PWD/contrib/:/contrib -v $PWD/tests/:/tests --rm electrs:tests bash /tests/run.sh
