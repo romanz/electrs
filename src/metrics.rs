@@ -26,8 +26,13 @@ mod metrics_impl {
 
             let result = Self { reg };
             let reg = result.reg.clone();
+
+            let server = match Server::http(addr) {
+                Ok(server) => server,
+                Err(err) => bail!("failed to start HTTP server on {}: {}", addr, err),
+            };
+
             spawn("metrics", move || {
-                let server = Server::http(addr).unwrap();
                 for request in server.incoming_requests() {
                     let mut buffer = vec![];
                     prometheus::TextEncoder::new()
