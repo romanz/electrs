@@ -172,6 +172,14 @@ TimeoutSec=60
 Restart=always
 RestartSec=60
 
+Environment="RUST_BACKTRACE=1"
+
+# Hardening measures
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+MemoryDenyWriteExecute=true
+
 [Install]
 WantedBy=multi-user.target
 ```
