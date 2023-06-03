@@ -224,7 +224,7 @@ impl Index {
         daemon.for_blocks(blockhashes, |_blockhash, block| {
             let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
-                index_single_block(block, height).extend(&mut batch)
+                index_single_block(block, height, daemon.txindex_enabled()).extend(&mut batch)
             });
             self.stats.height.set("tip", height as f64);
         })?;
@@ -251,13 +251,15 @@ fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
-fn index_single_block(block: Block, height: usize) -> IndexResult {
+fn index_single_block(block: Block, height: usize, no_txid: bool) -> IndexResult {
     let mut funding_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.output.len()).sum());
     let mut spending_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.input.len()).sum());
-    let mut txid_rows = Vec::with_capacity(block.txdata.len());
+    let mut txid_rows = Vec::with_capacity(block.txdata.len()); // capacity to 0 if no_txid?
 
     for tx in &block.txdata {
-        txid_rows.push(TxidRow::row(tx.txid(), height));
+        if !no_txid {
+            txid_rows.push(TxidRow::row(tx.txid(), height));
+        }
 
         funding_rows.extend(
             tx.output

@@ -94,6 +94,7 @@ fn rpc_connect(config: &Config) -> Result<Client> {
 pub struct Daemon {
     p2p: Mutex<Connection>,
     rpc: Client,
+    txindex_enabled: bool,
 }
 
 impl Daemon {
@@ -131,13 +132,23 @@ impl Daemon {
             bail!("electrs requires non-pruned bitcoind node");
         }
 
+        let txindex_enabled = rpc.get_index_info()?.txindex.is_some();
+
         let p2p = Mutex::new(Connection::connect(
             config.network,
             config.daemon_p2p_addr,
             metrics,
             config.signet_magic,
         )?);
-        Ok(Self { p2p, rpc })
+        Ok(Self {
+            p2p,
+            rpc,
+            txindex_enabled,
+        })
+    }
+
+    pub fn txindex_enabled(&self) -> bool {
+        self.txindex_enabled
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {

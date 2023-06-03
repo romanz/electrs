@@ -82,6 +82,8 @@ const DB_PROPERIES: &[&str] = &[
 struct Config {
     compacted: bool,
     format: u64,
+    #[serde(default)]
+    no_txid: bool,
 }
 
 const CURRENT_FORMAT: u64 = 0;
@@ -91,11 +93,15 @@ impl Default for Config {
         Config {
             compacted: false,
             format: CURRENT_FORMAT,
+            no_txid: false,
         }
     }
 }
 
 fn default_opts() -> rocksdb::Options {
+    let mut block_opts = rocksdb::BlockBasedOptions::default();
+    block_opts.set_checksum_type(rocksdb::ChecksumType::CRC32c);
+
     let mut opts = rocksdb::Options::default();
     opts.set_keep_log_file_num(10);
     opts.set_max_open_files(16);
@@ -106,6 +112,7 @@ fn default_opts() -> rocksdb::Options {
     opts.set_disable_auto_compactions(true); // for initial bulk load
     opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
+    opts.set_block_based_table_factory(&block_opts);
     opts
 }
 
@@ -148,7 +155,7 @@ impl DBStore {
     }
 
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
+    pub fn open(path: &Path, auto_reindex: bool, no_txid: bool) -> Result<Self> {
         let mut store = Self::open_internal(path)?;
         let config = store.get_config();
         debug!("DB {:?}", config);
@@ -161,10 +168,12 @@ impl DBStore {
                 "unsupported format {} != {}",
                 config.format, CURRENT_FORMAT
             ))
+        } else if config.no_txid && !no_txid {
+            Some("txid column family needed if bitcoind has no txindex".to_owned())
         } else {
             None
         };
-        if let Some(cause) = reindex_cause {
+        if let Some(cause) = &reindex_cause {
             if !auto_reindex {
                 bail!("re-index required due to {}", cause);
             }
@@ -183,9 +192,30 @@ impl DBStore {
             })?;
             store = Self::open_internal(path)?;
             config = Config::default(); // re-init config after dropping DB
+            config.no_txid = no_txid;
         }
         if config.compacted {
             store.start_compactions();
+        }
+        if no_txid != config.no_txid {
+            if no_txid {
+                if reindex_cause.is_none() {
+                    info!("Because Bitcoin Core's txindex was enabled, parts of the database are not needed anymore and will be removed");
+                    info!("The DB will shrink by about 25%");
+                }
+                // TODO 'partially indexed' store separate txid tip and 'other' tip?
+                store.db.drop_cf(TXID_CF)?;
+                store.db.create_cf(TXID_CF, &default_opts())?;
+            } /* else {
+                  if reindex_cause.is_none() {
+                      // TODO this path is currently unreachable
+                      // The whole database will be reindexed instead of only 'txid'
+                      info!("Because Bitcoin Core's txindex was disabled, blocks need to be partially reindexed");
+                      info!("The DB will grow by about 33%");
+                  }
+                  // todo!("reindex txid");
+              } */
+            config.no_txid = no_txid;
         }
         store.set_config(config);
         Ok(store)
@@ -233,7 +263,7 @@ impl DBStore {
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
         self.db
             .iterator_cf_opt(cf, opts, mode)
-            .map(|(key, _value)| key) // values are empty in prefix-scanned CFs
+            .map(|row| row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
     }
 
     pub(crate) fn read_headers(&self) -> Vec<Row> {
@@ -241,7 +271,7 @@ impl DBStore {
         opts.fill_cache(false);
         self.db
             .iterator_cf_opt(self.headers_cf(), opts, rocksdb::IteratorMode::Start)
-            .map(|(key, _)| key)
+            .map(|row| row.expect("header iterator failed").0) // extract key from row
             .filter(|key| &key[..] != TIP_KEY) // headers' rows are longer than TIP_KEY
             .collect()
     }
@@ -310,7 +340,7 @@ impl DBStore {
             DB_PROPERIES.iter().filter_map(move |property_name| {
                 let value = self
                     .db
-                    .property_int_value_cf(cf, property_name)
+                    .property_int_value_cf(cf, *property_name)
                     .expect("failed to get property");
                 Some((*cf_name, *property_name, value?))
             })
@@ -360,13 +390,16 @@ mod tests {
     fn test_reindex_new_format() {
         let dir = tempfile::tempdir().unwrap();
         {
-            let store = DBStore::open(dir.path(), false).unwrap();
+            let store = DBStore::open(dir.path(), false, false).unwrap();
             let mut config = store.get_config().unwrap();
             config.format += 1;
             store.set_config(config);
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            DBStore::open(dir.path(), false, false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!(
                 "re-index required due to unsupported format {} != {}",
                 CURRENT_FORMAT + 1,
@@ -374,7 +407,7 @@ mod tests {
             )
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = DBStore::open(dir.path(), true, false).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -392,11 +425,14 @@ mod tests {
             db.put(b"F", b"").unwrap(); // insert legacy DB compaction marker (in 'default' column family)
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            DBStore::open(dir.path(), false, false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!("re-index required due to legacy format",)
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = DBStore::open(dir.path(), true, false).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -406,7 +442,7 @@ mod tests {
     #[test]
     fn test_db_prefix_scan() {
         let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), true).unwrap();
+        let store = DBStore::open(dir.path(), true, false).unwrap();
 
         let items: &[&[u8]] = &[
             b"ab",
