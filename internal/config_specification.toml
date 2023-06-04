@@ -106,6 +106,10 @@ name = "sync_once"
 doc = "Exit after the initial sync is over (don't start Electrum server)."
 
 [[switch]]
+name = "skip_block_download_wait"
+doc = "Don't wait for block download to finish before starting sync."
+
+[[switch]]
 name = "version"
 doc = "Print out the program version."
 

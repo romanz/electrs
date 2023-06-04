@@ -23,9 +23,13 @@ enum PollResult {
     Retry,
 }
 
-fn rpc_poll(client: &mut Client) -> PollResult {
+fn rpc_poll(client: &mut Client, skip_block_download_wait: bool) -> PollResult {
     match client.get_blockchain_info() {
         Ok(info) => {
+            if skip_block_download_wait {
+                // bitcoind RPC is available, don't wait for block download to finish
+                return PollResult::Done(Ok(()));
+            }
             let left_blocks = info.headers - info.blocks;
             if info.initial_block_download || left_blocks > 0 {
                 info!(
@@ -108,7 +112,7 @@ impl Daemon {
             exit_flag
                 .poll()
                 .context("bitcoin RPC polling interrupted")?;
-            match rpc_poll(&mut rpc) {
+            match rpc_poll(&mut rpc, config.skip_block_download_wait) {
                 PollResult::Done(result) => {
                     result.context("bitcoind RPC polling failed")?;
                     break; // on success, finish polling
