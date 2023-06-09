@@ -1,3 +1,14 @@
+# 0.9.14 (Jun 10 2023)
+
+* Fix 'server.version' support for version range (#887)
+* Allow not waiting for block download before sync (#888)
+* Fix typo in config_specification.toml (#883)
+* Bump bitcoind version used in CI (#882)
+* Prefix Prometheus metrics with 'electrs_' (#881)
+* Fixup error handling in Prometheus HTTP server (#880)
+* Add address->scripthash conversion tool
+* Update dependencies (crossbeam-channel, jsonrpc, bitcoincore-rpc, serde_json, tempfile)
+
 # 0.9.13 (Mar 31 2023)
 
 * Upgrade dependencies (`bitcoin` & `bitcoincore-rpc` #865, `crossbeam-channel` #854, `serde_json` #855, `tempfile` #850)
