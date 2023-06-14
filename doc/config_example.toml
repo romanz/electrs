@@ -29,3 +29,6 @@ electrum_rpc_addr = "127.0.0.1:50001"
 
 # How much information about internal workings should electrs print. Increase before reporting a bug.
 log_filters = "INFO"
+
+# Where the log should be stored
+log_file = "./test_dir/test.log"

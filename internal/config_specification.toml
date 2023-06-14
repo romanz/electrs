@@ -140,3 +140,9 @@ doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://
 name = "signet_magic"
 type = "String"
 doc = "network magic for custom signet network in hex format, as found in Bitcoin Core logs (signet only)"
+
+[[param]]
+name = "log_file"
+type = "String"
+doc = "File used to store the logs. If not defined, the log will not be stored (Ex: ./debug.log)"
+

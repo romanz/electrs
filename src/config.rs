@@ -311,6 +311,7 @@ impl Config {
             std::process::exit(1);
         }
         let log_filters = config.log_filters;
+        let log_file = config.log_file;
 
         let index_lookup_limit = match config.index_lookup_limit {
             0 => None,
@@ -357,13 +358,32 @@ impl Config {
             "Starting electrs {} on {} {} with {:?}",
             ELECTRS_VERSION, ARCH, OS, config
         );
-        let mut builder = env_logger::Builder::from_default_env();
-        builder.default_format().format_timestamp_millis();
-        if let Some(log_filters) = &log_filters {
-            builder.parse_filters(log_filters);
-        }
-        builder.init();
 
+        let logger_builder = if let Some(log_filters) = log_filters {
+            flexi_logger::Logger::try_with_str(log_filters).unwrap()
+        } else {
+            flexi_logger::Logger::try_with_env().unwrap()
+        };
+
+        let logger_builder = if let Some(log_file) = log_file {
+            logger_builder
+                .log_to_file(flexi_logger::FileSpec::try_from(log_file).unwrap())
+                .duplicate_to_stdout(flexi_logger::Duplicate::All)
+                .format_for_files(flexi_logger::detailed_format)
+        } else {
+            logger_builder.log_to_stdout()
+        };
+
+        logger_builder
+            .format_for_stdout(flexi_logger::colored_detailed_format)
+            .start()
+            .unwrap();
+        // let mut builder = env_logger::Builder::from_default_env();
+        // builder.default_format().format_timestamp_millis();
+        // if let Some(log_filters) = &log_filters {
+        //     builder.parse_filters(log_filters);
+        // }
+        // builder.init();
         config
     }
 }
