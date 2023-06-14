@@ -370,6 +370,11 @@ impl Config {
                 .log_to_file(flexi_logger::FileSpec::try_from(log_file).unwrap())
                 .duplicate_to_stdout(flexi_logger::Duplicate::All)
                 .format_for_files(flexi_logger::detailed_format)
+                .rotate(
+                    flexi_logger::Criterion::Size(10 * 1024 * 1024),
+                    flexi_logger::Naming::Numbers,
+                    flexi_logger::Cleanup::KeepLogFiles(2),
+                )
         } else {
             logger_builder.log_to_stdout()
         };
