@@ -1,3 +1,9 @@
+# 0.10.0-rc.1 (TBD)
+
+* Bump MSRV to 1.63.0 and update Rust edition to 2021 (#773)
+* Update dependencies (`anyhow`, `configure_me_codegen`, `electrs-rocksdb`, `env_logger`, `parking_lot`, `prometheus`, `rayon`, `serde`, `serde_derive`, `serde_json`)
+  - Please note that [dynamic linking with RocksDB](doc/install.md) now requires [RocksDB 7.8.3](https://packages.debian.org/bookworm/librocksdb-dev) (instead of 6.11.4)!
+
 # 0.9.14 (Jun 10 2023)
 
 * Fix 'server.version' support for version range (#887)
