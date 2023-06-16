@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn test_scripthash_serde() {
         let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
-        let scripthash: ScriptHash = from_str(&hex).unwrap();
+        let scripthash: ScriptHash = from_str(hex).unwrap();
         assert_eq!(format!("\"{}\"", scripthash), hex);
         assert_eq!(json!(scripthash).to_string(), hex);
     }
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn test_scripthash_row() {
         let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
-        let scripthash: ScriptHash = from_str(&hex).unwrap();
+        let scripthash: ScriptHash = from_str(hex).unwrap();
         let row1 = ScriptHashRow::row(scripthash, 123456);
         let db_row = row1.to_db_row();
         assert_eq!(&*db_row, &hex!("a384491d38929fcc40e20100"));
