@@ -382,7 +382,7 @@ mod tests {
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
-            assert_eq!(store.is_legacy_format(), false);
+            assert!(!store.is_legacy_format());
         }
     }
 
@@ -423,9 +423,10 @@ mod tests {
             b"c",
         ];
 
-        let mut batch = WriteBatch::default();
-        batch.txid_rows = to_rows(&items);
-        store.write(&batch);
+        store.write(&WriteBatch {
+            txid_rows: to_rows(items),
+            ..Default::default()
+        });
 
         let rows = store.iter_txid(b"abcdefgh".to_vec().into_boxed_slice());
         assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
