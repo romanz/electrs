@@ -1,4 +1,4 @@
-# 0.10.0-rc.1 (TBD)
+# 0.10.0-rc.1 (Jun 21 2023)
 
 * Bump MSRV to 1.63.0 and update Rust edition to 2021 (#773)
 * Update dependencies (`anyhow`, `configure_me_codegen`, `electrs-rocksdb`, `env_logger`, `parking_lot`, `prometheus`, `rayon`, `serde`, `serde_derive`, `serde_json`)
