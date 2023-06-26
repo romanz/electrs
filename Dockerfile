@@ -4,11 +4,11 @@
 
 FROM debian:bookworm-slim as base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev curl
+RUN apt-get install -qqy librocksdb-dev
 
 ### Electrum Rust Server ###
 FROM base as electrs-build
-RUN apt-get install -qqy cargo clang cmake build-essential
+RUN apt-get install -qqy cargo clang cmake
 
 # Install electrs
 WORKDIR /build/electrs

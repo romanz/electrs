@@ -1,0 +1,42 @@
+# task:
+#   name: test [x86]
+#   container:
+#     image: rust:1.63.0
+#     cpu: 8
+#     memory: 15G
+#   registry_cache:
+#     folder: $CARGO_HOME/registry
+#     fingerprint_script: cat Cargo.lock
+#   target_cache:
+#     folder: target
+#     fingerprint_script:
+#       - rustc --version
+#       - cat Cargo.lock
+#   build_script:
+#     - apt-get update
+#     - apt-get install -qqy clang
+#     - rustup component add clippy rustfmt
+#     - cargo build --all --locked
+#   test_script:
+#     - cargo test --all --locked
+#     - cargo clippy -- -D warnings
+#     - cargo fmt --all -- --check
+#   before_cache_script: rm -rf $CARGO_HOME/registry/index
+
+task:
+  name: integration [ARM]
+  arm_container:
+    dockerfile: Dockerfile.ci
+    docker_arguments:
+      ARCH: aarch64
+  test_script:
+    tests/run.sh
+
+task:
+  name: integration [x86]
+  container:
+    dockerfile: Dockerfile.ci
+    docker_arguments:
+      ARCH: x86_64
+  test_script:
+    tests/run.sh
