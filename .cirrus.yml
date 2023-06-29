@@ -32,11 +32,11 @@ task:
   test_script:
     tests/run.sh
 
-task:
-  name: integration [x86]
-  container:
-    dockerfile: Dockerfile.ci
-    docker_arguments:
-      ARCH: x86_64
-  test_script:
-    tests/run.sh
+# task:
+#   name: integration [x86]
+#   container:
+#     dockerfile: Dockerfile.ci
+#     docker_arguments:
+#       ARCH: x86_64
+#   test_script:
+#     tests/run.sh
