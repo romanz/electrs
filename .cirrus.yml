@@ -2,7 +2,7 @@ task:
   name: test [ARM]
   arm_container:
     image: rust:1.63.0
-    cpu: 8
+    cpu: 4
     memory: 8G
   registry_cache:
     folder: $CARGO_HOME/registry
@@ -23,3 +23,21 @@ task:
     - cargo clippy -- -D warnings
     - cargo fmt --all -- --check
   before_cache_script: rm -rf $CARGO_HOME/registry/index
+
+
+task:
+  compute_engine_instance:
+    image_project: cirrus-images
+    image: family/docker-builder-arm64
+    architecture: arm64
+    platform: linux
+    cpu: 2
+    memory: 4G
+
+  name: integration [ARM]
+  env:
+    CIRRUS_ARCH: arm64
+  build_script:
+    - docker build --build-arg=ARCH=aarch64 -f Dockerfile.ci . --rm -t electrs:tests
+  test_script:
+    - docker run -v $PWD/contrib/:/contrib -v $PWD/tests/:/tests --rm electrs:tests bash /tests/run.sh
