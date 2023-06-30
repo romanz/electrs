@@ -14,7 +14,6 @@ assignees: ''
 
 	If you use electrs integrated into other project report the bug to their project
 	(unless you are the project author who found the bug is in electrs itself)!
-	If electrs is crashing due to low memory try with jsonrpc-import first!
 -->
 
 **Describe the bug**
