@@ -290,7 +290,7 @@ checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
 name = "electrs"
-version = "0.10.0-rc.1"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "bitcoin",

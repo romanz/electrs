@@ -1,3 +1,7 @@
+# 0.10.0 (Jul 22 2023)
+
+* Add ARM build and integration tests in Cirrus CI
+
 # 0.10.0-rc.1 (Jun 21 2023)
 
 * Bump MSRV to 1.63.0 and update Rust edition to 2021 (#773)
