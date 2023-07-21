@@ -73,26 +73,28 @@ impl Stats {
     }
 }
 
-struct IndexResult {
-    header_row: HeaderRow,
-    funding_rows: Vec<HashPrefixRow>,
-    spending_rows: Vec<HashPrefixRow>,
-    txid_rows: Vec<HashPrefixRow>,
+pub(crate) struct IndexResult {
+    pub(crate) funding_rows: Vec<HashPrefixRow>,
+    pub(crate) spending_rows: Vec<HashPrefixRow>,
+    pub(crate) txid_rows: Vec<HashPrefixRow>,
 }
 
 impl IndexResult {
-    fn extend(&self, batch: &mut WriteBatch) {
+    fn extend(&mut self, header_row: HeaderRow, batch: &mut WriteBatch) {
         let funding_rows = self.funding_rows.iter().map(HashPrefixRow::to_db_row);
         batch.funding_rows.extend(funding_rows);
+        self.funding_rows.clear();
 
         let spending_rows = self.spending_rows.iter().map(HashPrefixRow::to_db_row);
         batch.spending_rows.extend(spending_rows);
+        self.spending_rows.clear();
 
         let txid_rows = self.txid_rows.iter().map(HashPrefixRow::to_db_row);
         batch.txid_rows.extend(txid_rows);
+        self.txid_rows.clear();
 
-        batch.header_rows.push(self.header_row.to_db_row());
-        batch.tip_row = serialize(&self.header_row.header.block_hash()).into_boxed_slice();
+        batch.header_rows.push(header_row.to_db_row());
+        batch.tip_row = serialize(&header_row.header.block_hash()).into_boxed_slice();
     }
 }
 
@@ -221,10 +223,13 @@ impl Index {
         let mut heights = chunk.iter().map(|h| h.height());
 
         let mut batch = WriteBatch::default();
+        let mut index = IndexResult { funding_rows: vec!(), spending_rows: vec!(), txid_rows: vec!() };
+
         daemon.for_blocks(blockhashes, |_blockhash, block| {
             let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
-                index_single_block(block, height).extend(&mut batch)
+                let header_row = index_single_block(block, height, &mut index);
+                index.extend(header_row, &mut batch)
             });
             self.stats.height.set("tip", height as f64);
         })?;
@@ -251,15 +256,12 @@ fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
-fn index_single_block(block: Block, height: usize) -> IndexResult {
-    let mut funding_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.output.len()).sum());
-    let mut spending_rows = Vec::with_capacity(block.txdata.iter().map(|tx| tx.input.len()).sum());
-    let mut txid_rows = Vec::with_capacity(block.txdata.len());
+fn index_single_block(block: Block, height: usize, index: &mut IndexResult) -> HeaderRow {
 
     for tx in &block.txdata {
-        txid_rows.push(TxidRow::row(tx.txid(), height));
+        index.txid_rows.push(TxidRow::row(tx.txid(), height));
 
-        funding_rows.extend(
+        index.funding_rows.extend(
             tx.output
                 .iter()
                 .filter(|txo| !txo.script_pubkey.is_provably_unspendable())
@@ -272,16 +274,11 @@ fn index_single_block(block: Block, height: usize) -> IndexResult {
         if tx.is_coin_base() {
             continue; // coinbase doesn't have inputs
         }
-        spending_rows.extend(
+        index.spending_rows.extend(
             tx.input
                 .iter()
                 .map(|txin| SpendingPrefixRow::row(txin.previous_output, height)),
         );
     }
-    IndexResult {
-        funding_rows,
-        spending_rows,
-        txid_rows,
-        header_row: HeaderRow::new(block.header),
-    }
+    HeaderRow::new(block.header)
 }
