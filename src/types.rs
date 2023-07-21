@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
-    consensus::encode::{deserialize, serialize, Decodable, Encodable},
+    consensus::encode::{deserialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
     OutPoint, Script, Txid,
 };
@@ -170,7 +170,10 @@ impl HeaderRow {
     }
 
     pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
+        let mut vec = Vec::with_capacity(80);
+        let len = self.consensus_encode(&mut vec).expect("in-memory writers don't error");
+        debug_assert_eq!(len, 80);
+        vec.into_boxed_slice()
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
