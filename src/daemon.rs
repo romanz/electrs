@@ -48,7 +48,7 @@ fn rpc_poll(client: &mut Client, skip_block_download_wait: bool) -> PollResult {
         Err(err) => {
             if let Some(e) = extract_bitcoind_error(&err) {
                 if e.code == -28 {
-                    info!("waiting for RPC warmup: {}", e.message);
+                    debug!("waiting for RPC warmup: {}", e.message);
                     return PollResult::Retry;
                 }
             }
