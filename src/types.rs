@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
-    consensus::encode::{deserialize, serialize, Decodable, Encodable},
+    consensus::encode::{deserialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
     OutPoint, Script, Txid,
 };
@@ -39,6 +39,7 @@ macro_rules! impl_consensus_encoding {
 }
 
 const HASH_PREFIX_LEN: usize = 8;
+const HEIGHT_SIZE: usize = 4;
 
 type HashPrefix = [u8; HASH_PREFIX_LEN];
 type Height = u32;
@@ -49,9 +50,16 @@ pub(crate) struct HashPrefixRow {
     height: Height, // transaction confirmed height
 }
 
+const HASH_PREFIX_ROW_SIZE: usize = HASH_PREFIX_LEN + HEIGHT_SIZE;
+
 impl HashPrefixRow {
     pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
+        let mut vec = Vec::with_capacity(HASH_PREFIX_ROW_SIZE);
+        let len = self
+            .consensus_encode(&mut vec)
+            .expect("in-memory writers don't error");
+        debug_assert_eq!(len, HASH_PREFIX_ROW_SIZE);
+        vec.into_boxed_slice()
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
@@ -159,6 +167,8 @@ pub(crate) struct HeaderRow {
     pub(crate) header: BlockHeader,
 }
 
+const HEADER_ROW_SIZE: usize = 80;
+
 impl_consensus_encoding!(HeaderRow, header);
 
 impl HeaderRow {
@@ -167,7 +177,12 @@ impl HeaderRow {
     }
 
     pub(crate) fn to_db_row(&self) -> db::Row {
-        serialize(self).into_boxed_slice()
+        let mut vec = Vec::with_capacity(HEADER_ROW_SIZE);
+        let len = self
+            .consensus_encode(&mut vec)
+            .expect("in-memory writers don't error");
+        debug_assert_eq!(len, HEADER_ROW_SIZE);
+        vec.into_boxed_slice()
     }
 
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
