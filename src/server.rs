@@ -7,6 +7,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     iter::once,
     net::{Shutdown, TcpListener, TcpStream},
+    sync::Arc,
 };
 
 use crate::{
@@ -16,6 +17,9 @@ use crate::{
     signals::ExitError,
     thread::spawn,
 };
+
+#[cfg(feature = "http")]
+use crate::rest;
 
 struct Peer {
     id: usize,
@@ -61,7 +65,7 @@ pub fn run() -> Result<()> {
 }
 
 fn serve() -> Result<()> {
-    let config = Config::from_args();
+    let config = Arc::new(Config::from_args());
     let metrics = Metrics::new(config.monitoring_addr)?;
 
     let (server_tx, server_rx) = unbounded();
@@ -87,6 +91,10 @@ fn serve() -> Result<()> {
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
+
+    #[cfg(feature = "http")]
+    tokio::task::spawn(rest::serve(config.clone()));
+
     loop {
         // initial sync and compaction may take a few hours
         while server_rx.is_empty() {

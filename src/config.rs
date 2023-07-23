@@ -131,6 +131,8 @@ pub struct Config {
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_p2p_addr: SocketAddr,
     pub electrum_rpc_addr: SocketAddr,
+    #[cfg(feature = "http")]
+    pub http_addr: SocketAddr,
     pub monitoring_addr: SocketAddr,
     pub wait_duration: Duration,
     pub jsonrpc_timeout: Duration,
@@ -233,6 +235,14 @@ impl Config {
             Network::Signet => 60601,
             unsupported => unsupported_network(unsupported),
         };
+        #[cfg(feature = "http")]
+        let default_http_port = match config.network {
+            Network::Bitcoin => 3000,
+            Network::Testnet => 3001,
+            Network::Regtest => 3002,
+            Network::Signet => 3003,
+            unsupported => unsupported_network(unsupported),
+        };
         let default_monitoring_port = match config.network {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
@@ -266,6 +276,11 @@ impl Config {
         );
         let electrum_rpc_addr: SocketAddr = config.electrum_rpc_addr.map_or(
             (DEFAULT_SERVER_ADDRESS, default_electrum_port).into(),
+            ResolvAddr::resolve_or_exit,
+        );
+        #[cfg(feature = "http")]
+        let http_addr: SocketAddr = config.http_addr.map_or(
+            (DEFAULT_SERVER_ADDRESS, default_http_port).into(),
             ResolvAddr::resolve_or_exit,
         );
         #[cfg(not(feature = "metrics"))]
@@ -338,6 +353,8 @@ impl Config {
             daemon_rpc_addr,
             daemon_p2p_addr,
             electrum_rpc_addr,
+            #[cfg(feature = "http")]
+            http_addr,
             monitoring_addr,
             wait_duration: Duration::from_secs(config.wait_duration_secs),
             jsonrpc_timeout: Duration::from_secs(config.jsonrpc_timeout_secs),

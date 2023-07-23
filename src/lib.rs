@@ -20,6 +20,8 @@ mod mempool;
 mod merkle;
 mod metrics;
 mod p2p;
+#[cfg(feature = "http")]
+mod rest;
 mod server;
 mod signals;
 mod status;
