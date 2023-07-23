@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use bitcoin::blockdata::block::Header as BlockHeader;
+use bitcoin::consensus::Encodable;
 use bitcoin::{
     consensus::{
         encode::{self, ReadExt, VarInt},
@@ -173,6 +174,7 @@ impl Connection {
         );
 
         let stream = Arc::clone(&conn);
+        let mut buffer = vec![];
         crate::thread::spawn("p2p_send", move || loop {
             use std::net::Shutdown;
             let msg = match send_duration.observe_duration("wait", || tx_recv.recv()) {
@@ -193,8 +195,12 @@ impl Connection {
                     magic,
                     payload: msg,
                 };
+                buffer.clear();
+                raw_msg
+                    .consensus_encode(&mut buffer)
+                    .expect("in-memory writers don't error");
                 (&*stream)
-                    .write_all(encode::serialize(&raw_msg).as_slice())
+                    .write_all(buffer.as_slice())
                     .context("p2p failed to send")
             })?;
         });
