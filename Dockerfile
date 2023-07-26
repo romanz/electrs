@@ -4,7 +4,7 @@
 
 FROM debian:bookworm-slim as base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev
+RUN apt-get install -qqy librocksdb-dev curl
 
 ### Electrum Rust Server ###
 FROM base as electrs-build
