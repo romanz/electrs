@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bitcoin::{
+    consensus::Decodable,
     hashes::{sha256, Hash, HashEngine},
     Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
@@ -15,7 +16,7 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    types::{ScriptHash, StatusHash},
+    types::{ScriptHash, SerBlock, StatusHash},
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
@@ -306,7 +307,7 @@ impl ScriptHashStatus {
     fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, SerBlock),
     {
         daemon.for_blocks(
             blockhashes
@@ -514,9 +515,12 @@ struct FilteredTx<T> {
 }
 
 fn filter_block_txs<T: Send>(
-    block: Block,
+    block: SerBlock,
     map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
 ) -> impl Iterator<Item = FilteredTx<T>> {
+    // TODO convert into visitor
+    let block = Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
+
     block
         .txdata
         .into_par_iter()

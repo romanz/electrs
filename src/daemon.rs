@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use bitcoin::{Amount, Block, BlockHash, Transaction, Txid};
+use bitcoin::{Amount, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
@@ -16,6 +16,7 @@ use crate::{
     metrics::Metrics,
     p2p::Connection,
     signals::ExitFlag,
+    types::SerBlock,
 };
 
 enum PollResult {
@@ -231,7 +232,7 @@ impl Daemon {
     pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, SerBlock),
     {
         self.p2p.lock().for_blocks(blockhashes, func)
     }

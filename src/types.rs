@@ -43,6 +43,7 @@ const HEIGHT_SIZE: usize = 4;
 
 type HashPrefix = [u8; HASH_PREFIX_LEN];
 type Height = u32;
+pub(crate) type SerBlock = Vec<u8>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {

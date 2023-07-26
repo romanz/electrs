@@ -17,6 +17,7 @@ use bitcoin::{
     secp256k1::{self, rand::Rng},
     Block, BlockHash, Network,
 };
+use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::{self, ErrorKind, Write};
@@ -24,6 +25,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::types::SerBlock;
 use crate::{
     chain::{Chain, NewHeader},
     config::ELECTRS_VERSION,
@@ -55,7 +57,7 @@ impl Request {
 
 pub(crate) struct Connection {
     req_send: Sender<Request>,
-    blocks_recv: Receiver<Block>,
+    blocks_recv: Receiver<SerBlock>,
     headers_recv: Receiver<Vec<BlockHeader>>,
     new_block_recv: Receiver<()>,
 
@@ -95,7 +97,7 @@ impl Connection {
     pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, SerBlock),
     {
         self.blocks_duration.observe_duration("total", || {
             let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
@@ -113,7 +115,13 @@ impl Connection {
                         .blocks_recv
                         .recv()
                         .with_context(|| format!("failed to get block {}", hash))?;
-                    ensure!(block.block_hash() == hash, "got unexpected block");
+                    let header = bsl::BlockHeader::parse(&block[..])
+                        .expect("core returned invalid blockheader")
+                        .parsed_owned();
+                    ensure!(
+                        &header.block_hash_sha2()[..] == hash.as_byte_array(),
+                        "got unexpected block"
+                    );
                     Ok(block)
                 })?;
                 self.blocks_duration
@@ -239,7 +247,7 @@ impl Connection {
         });
 
         let (req_send, req_recv) = bounded::<Request>(1);
-        let (blocks_send, blocks_recv) = bounded::<Block>(10);
+        let (blocks_send, blocks_recv) = bounded::<SerBlock>(10);
         let (headers_send, headers_recv) = bounded::<Vec<BlockHeader>>(1);
         let (new_block_send, new_block_recv) = bounded::<()>(0);
         let (init_send, init_recv) = bounded::<()>(0);
@@ -260,7 +268,7 @@ impl Connection {
                     let label = format!("parse_{}", raw_msg.cmd.as_ref());
                     let msg = match parse_duration.observe_duration(&label, || raw_msg.parse()) {
                         Ok(msg) => msg,
-                        Err(err) => bail!("failed to parse '{}({:?})': {}", raw_msg.cmd, raw_msg.raw, err),
+                        Err(err) => bail!("failed to parse {err}"),
                     };
                     trace!("recv: {:?}", msg);
 
@@ -285,10 +293,15 @@ impl Connection {
                         NetworkMessage::Verack => {
                             init_send.send(())?; // peer acknowledged our version
                         }
-                        NetworkMessage::Block(block) => blocks_send.send(block)?,
+                        NetworkMessage::Block(_) => panic!("previously remapped"),
                         NetworkMessage::Headers(headers) => headers_send.send(headers)?,
                         NetworkMessage::Alert(_) => (),  // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
                         NetworkMessage::Addr(_) => (),   // unused
+                        NetworkMessage::Unknown { command, payload } => {
+                            if command.as_ref() == "block" {
+                                blocks_send.send(payload)?;
+                            }
+                        },
                         msg => warn!("unexpected message: {:?}", msg),
                     }
                 }
@@ -350,14 +363,17 @@ struct RawNetworkMessage {
 }
 
 impl RawNetworkMessage {
-    fn parse(&self) -> Result<NetworkMessage> {
+    fn parse(self) -> Result<NetworkMessage> {
         let mut raw: &[u8] = &self.raw;
         let payload = match self.cmd.as_ref() {
             "version" => NetworkMessage::Version(Decodable::consensus_decode(&mut raw)?),
             "verack" => NetworkMessage::Verack,
             "inv" => NetworkMessage::Inv(Decodable::consensus_decode(&mut raw)?),
             "notfound" => NetworkMessage::NotFound(Decodable::consensus_decode(&mut raw)?),
-            "block" => NetworkMessage::Block(Decodable::consensus_decode(&mut raw)?),
+            "block" => NetworkMessage::Unknown {
+                command: self.cmd.clone(),
+                payload: self.raw,
+            },
             "headers" => {
                 let len = VarInt::consensus_decode(&mut raw)?.0;
                 let mut headers = Vec::with_capacity(len as usize);
