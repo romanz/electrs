@@ -4,6 +4,7 @@ use bitcoin::{
     hashes::{sha256, Hash, HashEngine},
     Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
+use bitcoin_slices::{bsl, Visit, Visitor};
 use rayon::prelude::*;
 use serde::ser::{Serialize, Serializer};
 
@@ -518,28 +519,50 @@ fn filter_block_txs_outputs(
     block: SerBlock,
     scripthash: ScriptHash,
 ) -> impl Iterator<Item = FilteredTx<TxOutput>> {
-    // TODO convert into visitor
-    let block = Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
-
-    block
-        .txdata
-        .into_par_iter()
-        .enumerate()
-        .filter_map(|(pos, tx)| {
-            let result = filter_outputs(&tx, scripthash);
-            if result.is_empty() {
-                return None; // skip irrelevant transaction
+    struct FindOutputs {
+        scripthash: ScriptHash,
+        result: Vec<FilteredTx<TxOutput>>,
+        buffer: Vec<TxOutput>,
+        pos: usize,
+    }
+    impl Visitor for FindOutputs {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> core::ops::ControlFlow<()> {
+            if !self.buffer.is_empty() {
+                let result = std::mem::replace(&mut self.buffer, vec![]);
+                let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
+                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
+                    .expect("already validated");
+                self.result.push(FilteredTx::<TxOutput> {
+                    tx,
+                    txid,
+                    pos: self.pos,
+                    result,
+                });
             }
-            let txid = tx.txid();
-            Some(FilteredTx {
-                tx,
-                txid,
-                pos,
-                result,
-            })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            self.pos += 1;
+            core::ops::ControlFlow::Continue(())
+        }
+        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> core::ops::ControlFlow<()> {
+            let current = ScriptHash::hash(tx_out.script_pubkey());
+            if current == self.scripthash {
+                self.buffer.push(TxOutput {
+                    index: vout as u32,
+                    value: Amount::from_sat(tx_out.value()),
+                })
+            }
+            core::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut find_outputs = FindOutputs {
+        scripthash,
+        result: vec![],
+        buffer: vec![],
+        pos: 0,
+    };
+
+    bsl::Block::visit(&block, &mut find_outputs).expect("core returned invalid block");
+
+    find_outputs.result.into_iter()
 }
 
 fn filter_block_txs_inputs(
