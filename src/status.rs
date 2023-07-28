@@ -2,14 +2,17 @@ use anyhow::Result;
 use bitcoin::{
     consensus::Decodable,
     hashes::{sha256, Hash, HashEngine},
-    Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
+    Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
 use bitcoin_slices::{bsl, Visit, Visitor};
 use rayon::prelude::*;
 use serde::ser::{Serialize, Serializer};
 
-use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    ops::ControlFlow,
+};
 
 use crate::{
     cache::Cache,
@@ -569,28 +572,49 @@ fn filter_block_txs_inputs(
     block: SerBlock,
     outpoints: &HashSet<OutPoint>,
 ) -> impl Iterator<Item = FilteredTx<OutPoint>> {
-    // TODO convert into visitor
-    let block = Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
+    struct FindInputs<'a> {
+        outpoints: &'a HashSet<OutPoint>,
+        result: Vec<FilteredTx<OutPoint>>,
+        buffer: Vec<OutPoint>,
+        pos: usize,
+    }
 
-    block
-        .txdata
-        .into_par_iter()
-        .enumerate()
-        .filter_map(|(pos, tx)| {
-            let result = filter_inputs(&tx, outpoints);
-            if result.is_empty() {
-                return None; // skip irrelevant transaction
+    impl<'a> Visitor for FindInputs<'a> {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
+            if !self.buffer.is_empty() {
+                let result = std::mem::replace(&mut self.buffer, vec![]);
+                let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
+                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
+                    .expect("already validated");
+                self.result.push(FilteredTx::<OutPoint> {
+                    tx,
+                    txid,
+                    pos: self.pos,
+                    result,
+                });
             }
-            let txid = tx.txid();
-            Some(FilteredTx {
-                tx,
-                txid,
-                pos,
-                result,
-            })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            self.pos += 1;
+            core::ops::ControlFlow::Continue(())
+        }
+        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
+            let current: OutPoint = tx_in.prevout().into();
+            if self.outpoints.contains(&current) {
+                self.buffer.push(current);
+            }
+            core::ops::ControlFlow::Continue(())
+        }
+    }
+
+    let mut find_inputs = FindInputs {
+        outpoints,
+        result: vec![],
+        buffer: vec![],
+        pos: 0,
+    };
+
+    bsl::Block::visit(&block, &mut find_inputs).expect("core returned invalid block");
+
+    find_inputs.result.into_iter()
 }
 
 #[cfg(test)]
