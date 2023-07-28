@@ -595,7 +595,7 @@ fn filter_block_txs_inputs(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::HashSet, str::FromStr};
 
     use crate::types::ScriptHash;
 
@@ -646,5 +646,26 @@ mod tests {
         assert_eq!(result.pos, 8);
         assert_eq!(result.result[0].index, 0);
         assert_eq!(result.result[0].value.to_sat(), 709503);
+    }
+
+    #[test]
+    fn test_find_inputs() {
+        let block = mainnet_702861().to_vec();
+        let outpoint = bitcoin::OutPoint::from_str(
+            "cc135e792b37a9c4ffd784f696b1e38bd1197f8e67ae1f96c9f13e4618b91866:3",
+        )
+        .unwrap();
+        let mut outpoints = HashSet::new();
+        outpoints.insert(outpoint);
+
+        let result = super::filter_block_txs_inputs(block, &outpoints)
+            .next()
+            .unwrap();
+        assert_eq!(
+            result.txid.to_string(),
+            "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
+        );
+        assert_eq!(result.pos, 8);
+        assert_eq!(result.result[0], outpoint);
     }
 }
