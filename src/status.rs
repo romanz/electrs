@@ -572,8 +572,13 @@ fn filter_block_txs_inputs(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use crate::types::ScriptHash;
+
     use super::HistoryEntry;
-    use bitcoin::Amount;
+    use bitcoin::{Address, Amount};
+    use bitcoin_test_data::blocks::mainnet_702861;
     use serde_json::json;
 
     #[test]
@@ -597,5 +602,26 @@ mod tests {
             )),
             json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 0, "fee": 123})
         );
+    }
+
+    #[test]
+    fn test_find_outputs() {
+        let block = mainnet_702861().to_vec();
+
+        let addr = Address::from_str("1A9MXXG26vZVySrNNytQK1N8bX42ZuJ6Ax")
+            .unwrap()
+            .assume_checked();
+        let scripthash = ScriptHash::new(&addr.script_pubkey());
+
+        let result = super::filter_block_txs_outputs(block, scripthash)
+            .next()
+            .unwrap();
+        assert_eq!(
+            result.txid.to_string(),
+            "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
+        );
+        assert_eq!(result.pos, 8);
+        assert_eq!(result.result[0].index, 0);
+        assert_eq!(result.result[0].value.to_sat(), 709503);
     }
 }
