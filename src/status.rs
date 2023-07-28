@@ -332,7 +332,7 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(tx, scripthash)).for_each(
+            filter_block_txs_outputs(block, scripthash).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -354,7 +354,7 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(tx, outpoints)).for_each(
+            filter_block_txs_inputs(block, &outpoints).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -514,10 +514,10 @@ struct FilteredTx<T> {
     result: Vec<T>,
 }
 
-fn filter_block_txs<T: Send>(
+fn filter_block_txs_outputs(
     block: SerBlock,
-    map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
-) -> impl Iterator<Item = FilteredTx<T>> {
+    scripthash: ScriptHash,
+) -> impl Iterator<Item = FilteredTx<TxOutput>> {
     // TODO convert into visitor
     let block = Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
 
@@ -526,7 +526,35 @@ fn filter_block_txs<T: Send>(
         .into_par_iter()
         .enumerate()
         .filter_map(|(pos, tx)| {
-            let result = map_fn(&tx);
+            let result = filter_outputs(&tx, scripthash);
+            if result.is_empty() {
+                return None; // skip irrelevant transaction
+            }
+            let txid = tx.txid();
+            Some(FilteredTx {
+                tx,
+                txid,
+                pos,
+                result,
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+}
+
+fn filter_block_txs_inputs(
+    block: SerBlock,
+    outpoints: &HashSet<OutPoint>,
+) -> impl Iterator<Item = FilteredTx<OutPoint>> {
+    // TODO convert into visitor
+    let block = Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
+
+    block
+        .txdata
+        .into_par_iter()
+        .enumerate()
+        .filter_map(|(pos, tx)| {
+            let result = filter_inputs(&tx, outpoints);
             if result.is_empty() {
                 return None; // skip irrelevant transaction
             }
