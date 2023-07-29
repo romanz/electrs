@@ -358,7 +358,7 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs_inputs(block, &outpoints).for_each(
+            filter_block_txs_inputs(block, outpoints).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -531,7 +531,7 @@ fn filter_block_txs_outputs(
     impl Visitor for FindOutputs {
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> core::ops::ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::replace(&mut self.buffer, vec![]);
+                let result = std::mem::take(&mut self.buffer);
                 let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
                     .expect("already validated");
@@ -582,7 +582,7 @@ fn filter_block_txs_inputs(
     impl<'a> Visitor for FindInputs<'a> {
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::replace(&mut self.buffer, vec![]);
+                let result = std::mem::take(&mut self.buffer);
                 let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
                     .expect("already validated");
