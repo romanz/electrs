@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use crossbeam_channel::{select, unbounded, Sender};
 use rayon::prelude::*;
+#[cfg(feature = "http")]
+use tokio::runtime::Runtime;
 
 use std::{
     collections::hash_map::HashMap,
@@ -73,6 +75,32 @@ fn serve() -> Result<()> {
         let listener = TcpListener::bind(config.electrum_rpc_addr)?;
         info!("serving Electrum RPC on {}", listener.local_addr()?);
         spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
+
+        #[cfg(feature = "http")]
+        let config = config.clone();
+        #[cfg(feature = "http")]
+        {
+            use crossbeam_channel::bounded;
+
+            let (http_status_tx, http_status_rx) = bounded::<Option<String>>(1);
+
+            let rt = Runtime::new()?;
+            rt.spawn(async move {
+                match rest::serve(config.clone()).await {
+                    Ok(_) => {
+                        http_status_tx.send(None).unwrap();
+                    }
+                    Err(e) => {
+                        error!("error in http server: {}", e);
+                        http_status_tx.send(Some(e.to_string())).unwrap();
+                    }
+                }
+            });
+
+            if let Some(err) = http_status_rx.recv().unwrap() {
+                return Err(anyhow!(err));
+            }
+        }
     };
 
     let server_batch_size = metrics.histogram_vec(
@@ -91,9 +119,6 @@ fn serve() -> Result<()> {
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
-
-    #[cfg(feature = "http")]
-    tokio::task::spawn(rest::serve(config.clone()));
 
     loop {
         // initial sync and compaction may take a few hours
