@@ -377,10 +377,9 @@ pub fn lookup_asset(
     Ok(if let Some(row) = row {
         let reissuance_token = parse_asset_id(&row.reissuance_token);
 
-        let registry = registry.map(|r| r.read().unwrap());
         let meta = meta
-            .or_else(|| registry.as_ref().and_then(|r| r.get(asset_id)))
-            .cloned();
+            .cloned()
+            .or_else(|| registry.and_then(|r| r.read().unwrap().get(asset_id).cloned()));
         let stats = issued_asset_stats(query.chain(), &mempool, asset_id, &reissuance_token);
         let status = query.get_tx_status(&deserialize(&row.issuance_txid).unwrap());
 
