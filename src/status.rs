@@ -358,7 +358,7 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs_inputs(block, outpoints).for_each(
+            filter_block_txs_inputs(&block, outpoints).for_each(
                 |FilteredTx {
                      pos,
                      tx,
@@ -569,7 +569,7 @@ fn filter_block_txs_outputs(
 }
 
 fn filter_block_txs_inputs(
-    block: SerBlock,
+    block: &SerBlock,
     outpoints: &HashSet<OutPoint>,
 ) -> impl Iterator<Item = FilteredTx<OutPoint>> {
     struct FindInputs<'a> {
@@ -612,7 +612,7 @@ fn filter_block_txs_inputs(
         pos: 0,
     };
 
-    bsl::Block::visit(&block, &mut find_inputs).expect("core returned invalid block");
+    bsl::Block::visit(block, &mut find_inputs).expect("core returned invalid block");
 
     find_inputs.result.into_iter()
 }
@@ -682,7 +682,7 @@ mod tests {
         let mut outpoints = HashSet::new();
         outpoints.insert(outpoint);
 
-        let result = super::filter_block_txs_inputs(block, &outpoints)
+        let result = super::filter_block_txs_inputs(&block, &outpoints)
             .next()
             .unwrap();
         assert_eq!(

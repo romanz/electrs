@@ -371,7 +371,7 @@ impl RawNetworkMessage {
             "inv" => NetworkMessage::Inv(Decodable::consensus_decode(&mut raw)?),
             "notfound" => NetworkMessage::NotFound(Decodable::consensus_decode(&mut raw)?),
             "block" => NetworkMessage::Unknown {
-                command: self.cmd.clone(),
+                command: self.cmd,
                 payload: self.raw,
             },
             "headers" => {
