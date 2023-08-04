@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use bitcoin::{BlockHash, Transaction, Txid};
 use bitcoin_slices::{
     bsl::{self, FindTransaction},
+    Error::VisitBreak,
     Visit,
 };
 
@@ -107,7 +108,10 @@ impl Tracker {
         let mut result = None;
         daemon.for_blocks(blockhashes, |blockhash, block| {
             let mut visitor = FindTransaction::new(txid);
-            bsl::Block::visit(&block, &mut visitor).unwrap();
+            match bsl::Block::visit(&block, &mut visitor) {
+                Ok(_) | Err(VisitBreak) => (),
+                Err(e) => panic!("core returned invalid block: {:?}", e),
+            }
             if let Some(tx) = visitor.tx_found() {
                 result = Some((blockhash, tx));
             }
