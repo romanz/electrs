@@ -532,9 +532,10 @@ fn filter_block_txs_outputs(
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> core::ops::ControlFlow<()> {
             if !self.buffer.is_empty() {
                 let result = std::mem::take(&mut self.buffer);
-                let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
+                let txid =
+                    bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("invalid txid");
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("already validated");
+                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<TxOutput> {
                     tx,
                     txid,
@@ -583,9 +584,10 @@ fn filter_block_txs_inputs(
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
                 let result = std::mem::take(&mut self.buffer);
-                let txid = bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("32");
+                let txid =
+                    bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("invalid txid");
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("already validated");
+                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<OutPoint> {
                     tx,
                     txid,
