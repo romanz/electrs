@@ -273,36 +273,26 @@ impl Connection {
                     trace!("recv: {:?}", msg);
 
                     match msg {
-                        NetworkMessage::GetHeaders(_) => {
-                            tx_send.send(NetworkMessage::Headers(vec![]))?;
-                        }
-                        NetworkMessage::Version(version) => {
+                        ParsedNetworkMessage::Version(version) => {
                             debug!("peer version: {:?}", version);
                             tx_send.send(NetworkMessage::Verack)?;
                         }
-                        NetworkMessage::Inv(inventory) => {
+                        ParsedNetworkMessage::Inv(inventory) => {
                             debug!("peer inventory: {:?}", inventory);
                             if inventory.iter().any(|inv| matches!(inv, Inventory::Block(_))) {
                                 let _ = new_block_send.try_send(()); // best-effort notification
                             }
 
                         },
-                        NetworkMessage::Ping(nonce) => {
+                        ParsedNetworkMessage::Ping(nonce) => {
                             tx_send.send(NetworkMessage::Pong(nonce))?; // connection keep-alive
                         }
-                        NetworkMessage::Verack => {
+                        ParsedNetworkMessage::Verack => {
                             init_send.send(())?; // peer acknowledged our version
                         }
-                        NetworkMessage::Block(_) => panic!("previously remapped"),
-                        NetworkMessage::Headers(headers) => headers_send.send(headers)?,
-                        NetworkMessage::Alert(_) => (),  // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
-                        NetworkMessage::Addr(_) => (),   // unused
-                        NetworkMessage::Unknown { command, payload } => {
-                            if command.as_ref() == "block" {
-                                blocks_send.send(payload)?;
-                            }
-                        },
-                        msg => warn!("unexpected message: {:?}", msg),
+                        ParsedNetworkMessage::Block(block) => blocks_send.send(block)?,
+                        ParsedNetworkMessage::Headers(headers) => headers_send.send(headers)?,
+                        ParsedNetworkMessage::Ignored => (),
                     }
                 }
                 recv(req_recv) -> result => {
@@ -363,30 +353,25 @@ struct RawNetworkMessage {
 }
 
 impl RawNetworkMessage {
-    fn parse(self) -> Result<NetworkMessage> {
+    fn parse(self) -> Result<ParsedNetworkMessage> {
         let mut raw: &[u8] = &self.raw;
         let payload = match self.cmd.as_ref() {
-            "version" => NetworkMessage::Version(Decodable::consensus_decode(&mut raw)?),
-            "verack" => NetworkMessage::Verack,
-            "inv" => NetworkMessage::Inv(Decodable::consensus_decode(&mut raw)?),
-            "notfound" => NetworkMessage::NotFound(Decodable::consensus_decode(&mut raw)?),
-            "block" => NetworkMessage::Unknown {
-                command: self.cmd,
-                payload: self.raw,
-            },
+            "version" => ParsedNetworkMessage::Version(Decodable::consensus_decode(&mut raw)?),
+            "verack" => ParsedNetworkMessage::Verack,
+            "inv" => ParsedNetworkMessage::Inv(Decodable::consensus_decode(&mut raw)?),
+            "block" => ParsedNetworkMessage::Block(self.raw),
             "headers" => {
                 let len = VarInt::consensus_decode(&mut raw)?.0;
                 let mut headers = Vec::with_capacity(len as usize);
                 for _ in 0..len {
                     headers.push(Block::consensus_decode(&mut raw)?.header);
                 }
-                NetworkMessage::Headers(headers)
+                ParsedNetworkMessage::Headers(headers)
             }
-            "ping" => NetworkMessage::Ping(Decodable::consensus_decode(&mut raw)?),
-            "pong" => NetworkMessage::Pong(Decodable::consensus_decode(&mut raw)?),
-            "reject" => NetworkMessage::Reject(Decodable::consensus_decode(&mut raw)?),
-            "alert" => NetworkMessage::Alert(Decodable::consensus_decode(&mut raw)?),
-            "addr" => NetworkMessage::Addr(Decodable::consensus_decode(&mut raw)?),
+            "ping" => ParsedNetworkMessage::Ping(Decodable::consensus_decode(&mut raw)?),
+            "pong" => ParsedNetworkMessage::Ignored, // unused
+            "addr" => ParsedNetworkMessage::Ignored, // unused
+            "alert" => ParsedNetworkMessage::Ignored, // https://bitcoin.org/en/alert/2016-11-01-alert-retirement
             _ => bail!(
                 "unsupported message: command={}, payload={:?}",
                 self.cmd,
@@ -395,6 +380,17 @@ impl RawNetworkMessage {
         };
         Ok(payload)
     }
+}
+
+#[derive(Debug)]
+enum ParsedNetworkMessage {
+    Version(message_network::VersionMessage),
+    Verack,
+    Inv(Vec<Inventory>),
+    Ping(u64),
+    Headers(Vec<BlockHeader>),
+    Block(SerBlock),
+    Ignored,
 }
 
 impl Decodable for RawNetworkMessage {
