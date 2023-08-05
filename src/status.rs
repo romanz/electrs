@@ -20,7 +20,7 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    types::{ScriptHash, SerBlock, StatusHash},
+    types::{bsl_txid, ScriptHash, SerBlock, StatusHash},
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
@@ -529,11 +529,10 @@ fn filter_block_txs_outputs(
         pos: usize,
     }
     impl Visitor for FindOutputs {
-        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> core::ops::ControlFlow<()> {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
                 let result = std::mem::take(&mut self.buffer);
-                let txid =
-                    bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("invalid txid");
+                let txid = bsl_txid(tx);
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
                     .expect("transaction was already validated");
                 self.result.push(FilteredTx::<TxOutput> {
@@ -544,9 +543,9 @@ fn filter_block_txs_outputs(
                 });
             }
             self.pos += 1;
-            core::ops::ControlFlow::Continue(())
+            ControlFlow::Continue(())
         }
-        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> core::ops::ControlFlow<()> {
+        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             let current = ScriptHash::hash(tx_out.script_pubkey());
             if current == self.scripthash {
                 self.buffer.push(TxOutput {
@@ -554,7 +553,7 @@ fn filter_block_txs_outputs(
                     value: Amount::from_sat(tx_out.value()),
                 })
             }
-            core::ops::ControlFlow::Continue(())
+            ControlFlow::Continue(())
         }
     }
     let mut find_outputs = FindOutputs {
@@ -584,8 +583,7 @@ fn filter_block_txs_inputs(
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
                 let result = std::mem::take(&mut self.buffer);
-                let txid =
-                    bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("invalid txid");
+                let txid = bsl_txid(tx);
                 let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
                     .expect("transaction was already validated");
                 self.result.push(FilteredTx::<OutPoint> {
@@ -596,14 +594,14 @@ fn filter_block_txs_inputs(
                 });
             }
             self.pos += 1;
-            core::ops::ControlFlow::Continue(())
+            ControlFlow::Continue(())
         }
-        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> core::ops::ControlFlow<()> {
+        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
             let current: OutPoint = tx_in.prevout().into();
             if self.outpoints.contains(&current) {
                 self.buffer.push(current);
             }
-            core::ops::ControlFlow::Continue(())
+            ControlFlow::Continue(())
         }
     }
 
