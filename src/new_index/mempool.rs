@@ -56,7 +56,7 @@ pub struct Mempool {
 pub struct TxOverview {
     txid: Txid,
     fee: u64,
-    vsize: u32,
+    vsize: u64,
     #[cfg(not(feature = "liquid"))]
     value: u64,
 }
@@ -518,9 +518,9 @@ impl Mempool {
 #[derive(Serialize)]
 pub struct BacklogStats {
     pub count: u32,
-    pub vsize: u32,     // in virtual bytes (= weight/4)
+    pub vsize: u64,     // in virtual bytes (= weight/4)
     pub total_fee: u64, // in satoshis
-    pub fee_histogram: Vec<(f32, u32)>,
+    pub fee_histogram: Vec<(f64, u64)>,
 }
 
 impl BacklogStats {

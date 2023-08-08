@@ -1,23 +1,24 @@
 use crate::chain::{Network, Transaction, TxOut};
 use std::collections::HashMap;
 
-const VSIZE_BIN_WIDTH: u32 = 50_000; // in vbytes
+const VSIZE_BIN_WIDTH: u64 = 50_000; // in vbytes
 
 pub struct TxFeeInfo {
     pub fee: u64,   // in satoshis
-    pub vsize: u32, // in virtual bytes (= weight/4)
-    pub fee_per_vbyte: f32,
+    pub vsize: u64, // in virtual bytes (= weight/4)
+    pub fee_per_vbyte: f64,
 }
 
 impl TxFeeInfo {
     pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, network: Network) -> Self {
         let fee = get_tx_fee(tx, prevouts, network);
-        let vsize = tx.weight() / 4;
+        let vsize = tx.weight().to_vbytes_ceil();
+        let vsize_float = tx.weight().to_wu() as f64 / 4f64; // for more accurate sat/vB
 
         TxFeeInfo {
             fee,
-            vsize: vsize as u32,
-            fee_per_vbyte: fee as f32 / vsize as f32,
+            vsize,
+            fee_per_vbyte: fee as f64 / vsize_float,
         }
     }
 }
@@ -38,7 +39,7 @@ pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>, network: N
     tx.fee_in(*network.native_asset())
 }
 
-pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f32, u32)> {
+pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f64, u64)> {
     entries.sort_unstable_by(|e1, e2| e1.fee_per_vbyte.partial_cmp(&e2.fee_per_vbyte).unwrap());
 
     let mut histogram = vec![];

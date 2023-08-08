@@ -11,6 +11,13 @@ use time::OffsetDateTime as DateTime;
 
 const MTP_SPAN: usize = 11;
 
+lazy_static! {
+    pub static ref DEFAULT_BLOCKHASH: BlockHash =
+        "0000000000000000000000000000000000000000000000000000000000000000"
+            .parse()
+            .unwrap();
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockId {
     pub height: usize,
@@ -73,7 +80,7 @@ impl HeaderList {
         HeaderList {
             headers: vec![],
             heights: HashMap::new(),
-            tip: BlockHash::default(),
+            tip: *DEFAULT_BLOCKHASH,
         }
     }
 
@@ -89,9 +96,8 @@ impl HeaderList {
 
         let mut blockhash = tip_hash;
         let mut headers_chain: Vec<BlockHeader> = vec![];
-        let null_hash = BlockHash::default();
 
-        while blockhash != null_hash {
+        while blockhash != *DEFAULT_BLOCKHASH {
             let header = headers_map.remove(&blockhash).unwrap_or_else(|| {
                 panic!(
                     "missing expected blockhash in headers map: {:?}, pointed from: {:?}",
@@ -136,8 +142,7 @@ impl HeaderList {
             Some(h) => h.header.prev_blockhash,
             None => return vec![], // hashed_headers is empty
         };
-        let null_hash = BlockHash::default();
-        let new_height: usize = if prev_blockhash == null_hash {
+        let new_height: usize = if prev_blockhash == *DEFAULT_BLOCKHASH {
             0
         } else {
             self.header_by_blockhash(&prev_blockhash)
@@ -170,7 +175,7 @@ impl HeaderList {
                 let expected_prev_blockhash = if height > 0 {
                     *self.headers[height - 1].hash()
                 } else {
-                    BlockHash::default()
+                    *DEFAULT_BLOCKHASH
                 };
                 assert_eq!(entry.header().prev_blockhash, expected_prev_blockhash);
                 height
@@ -216,7 +221,10 @@ impl HeaderList {
     pub fn tip(&self) -> &BlockHash {
         assert_eq!(
             self.tip,
-            self.headers.last().map(|h| *h.hash()).unwrap_or_default()
+            self.headers
+                .last()
+                .map(|h| *h.hash())
+                .unwrap_or(*DEFAULT_BLOCKHASH)
         );
         &self.tip
     }
@@ -294,7 +302,10 @@ impl From<&BlockEntry> for BlockMeta {
     fn from(b: &BlockEntry) -> BlockMeta {
         BlockMeta {
             tx_count: b.block.txdata.len() as u32,
-            weight: b.block.weight() as u32,
+            // To retain DB compatibility, block weights are converted from the u64
+            // representation used as of rust-bitcoin v0.30 back to a u32. This is OK
+            // because u32::MAX is far above MAX_BLOCK_WEIGHT.
+            weight: b.block.weight().to_wu() as u32,
             size: b.size,
         }
     }

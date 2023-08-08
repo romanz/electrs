@@ -1,7 +1,7 @@
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
 pub use bitcoin::{
-    blockdata::script, consensus::deserialize, util::address, Block, BlockHash, BlockHeader,
-    OutPoint, Script, Transaction, TxIn, TxOut, Txid,
+    address, blockdata::block::Header as BlockHeader, blockdata::script, consensus::deserialize,
+    Block, BlockHash, OutPoint, ScriptBuf as Script, Transaction, TxIn, TxOut, Txid,
 };
 
 #[cfg(feature = "liquid")]
@@ -52,7 +52,7 @@ pub const LIQUID_TESTNET_PARAMS: address::AddressParams = address::AddressParams
 impl Network {
     #[cfg(not(feature = "liquid"))]
     pub fn magic(self) -> u32 {
-        BNetwork::from(self).magic()
+        u32::from_le_bytes(BNetwork::from(self).magic().to_bytes())
     }
 
     #[cfg(feature = "liquid")]
@@ -141,6 +141,7 @@ pub fn bitcoin_genesis_hash(network: BNetwork) -> bitcoin::BlockHash {
         BNetwork::Testnet => *TESTNET_GENESIS,
         BNetwork::Regtest => *REGTEST_GENESIS,
         BNetwork::Signet => *SIGNET_GENESIS,
+        _ => panic!("unknown network {:?}", network),
     }
 }
 
@@ -206,6 +207,7 @@ impl From<BNetwork> for Network {
             BNetwork::Testnet => Network::Testnet,
             BNetwork::Regtest => Network::Regtest,
             BNetwork::Signet => Network::Signet,
+            _ => panic!("unknown network {:?}", network),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use bitcoin::hashes::Hash;
+use bitcoin::hashes::{sha256d, Hash};
 pub use electrum_client::client::Client;
 pub use electrum_client::Error as ElectrumError;
 pub use electrum_client::ServerFeaturesRes;
@@ -14,13 +14,17 @@ use crate::errors::{Error, ResultExt};
 // the electrum-client's one doesn't support the "hosts" key.
 impl TryFrom<ServerFeaturesRes> for ServerFeatures {
     type Error = Error;
-    fn try_from(mut features: ServerFeaturesRes) -> Result<Self, Self::Error> {
-        features.genesis_hash.reverse();
+    fn try_from(features: ServerFeaturesRes) -> Result<Self, Self::Error> {
+        let genesis_hash = {
+            let mut genesis_hash = features.genesis_hash;
+            genesis_hash.reverse();
+            BlockHash::from_raw_hash(sha256d::Hash::from_byte_array(genesis_hash))
+        };
 
         Ok(ServerFeatures {
             // electrum-client doesn't retain the hosts map data, but we already have it from the add_peer request
             hosts: HashMap::new(),
-            genesis_hash: BlockHash::from_inner(features.genesis_hash),
+            genesis_hash,
             server_version: features.server_version,
             protocol_min: features
                 .protocol_min

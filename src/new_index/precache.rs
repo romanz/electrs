@@ -63,7 +63,9 @@ fn to_scripthash(script_type: &str, script_str: &str) -> Result<FullHash> {
 }
 
 fn address_to_scripthash(addr: &str) -> Result<FullHash> {
-    let addr = Address::from_str(addr).chain_err(|| "invalid address")?;
+    let addr = Address::from_str(addr)
+        .chain_err(|| "invalid address")?
+        .assume_checked();
     Ok(compute_script_hash(&addr.script_pubkey().as_bytes()))
 }
 

@@ -5,7 +5,9 @@ mod transaction;
 pub mod electrum_merkle;
 pub mod fees;
 
-pub use self::block::{BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, HeaderEntry, HeaderList};
+pub use self::block::{
+    BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, HeaderEntry, HeaderList, DEFAULT_BLOCKHASH,
+};
 pub use self::fees::get_tx_fee;
 pub use self::script::{get_innerscripts, ScriptToAddr, ScriptToAsm};
 pub use self::transaction::{
@@ -135,35 +137,34 @@ pub fn create_socket(addr: &SocketAddr) -> Socket {
 /// The module is compatible with the serde attribute.
 ///
 /// Copied from https://github.com/rust-bitcoin/rust-bitcoincore-rpc/blob/master/json/src/lib.rs
+
 pub mod serde_hex {
-    use bitcoin::hashes::hex::{FromHex, ToHex};
+    use bhex::{DisplayHex, FromHex};
     use serde::de::Error;
     use serde::{Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(b: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&b.to_hex())
+        s.serialize_str(&b.to_lower_hex_string())
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let hex_str: String = ::serde::Deserialize::deserialize(d)?;
-        Ok(FromHex::from_hex(&hex_str).map_err(D::Error::custom)?)
+        Ok(Vec::from_hex(&hex_str).map_err(D::Error::custom)?)
     }
 
     pub mod opt {
-        use bitcoin::hashes::hex::{FromHex, ToHex};
-        use serde::de::Error;
-        use serde::{Deserializer, Serializer};
+        use super::*;
 
         pub fn serialize<S: Serializer>(b: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
             match *b {
                 None => s.serialize_none(),
-                Some(ref b) => s.serialize_str(&b.to_hex()),
+                Some(ref b) => s.serialize_str(&b.to_lower_hex_string()),
             }
         }
 
         pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
             let hex_str: String = ::serde::Deserialize::deserialize(d)?;
-            Ok(Some(FromHex::from_hex(&hex_str).map_err(D::Error::custom)?))
+            Ok(Some(Vec::from_hex(&hex_str).map_err(D::Error::custom)?))
         }
     }
 }
