@@ -33,6 +33,7 @@ def main():
     parser.add_argument('--network', default='mainnet')
     parser.add_argument('address', nargs='+')
     parser.add_argument('--only-subscribe', action='store_true', default=False)
+    parser.add_argument('--no-merkle-proofs', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.network == 'regtest':
@@ -116,6 +117,9 @@ def main():
     timestamps = map(_parse_timestamp, headers)
     timestamps_map = dict(zip(heights, timestamps))
     log.info('loaded {} header timestamps', len(heights))
+
+    if args.no_merkle_proofs:
+        return
 
     proofs = conn.call(
         client.request('blockchain.transaction.get_merkle', txid, height)
