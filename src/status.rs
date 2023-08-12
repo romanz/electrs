@@ -336,21 +336,17 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs_outputs(block, scripthash).for_each(
-                |FilteredTx {
-                     pos,
-                     tx,
-                     txid,
-                     result: funding_outputs,
-                 }| {
-                    cache.add_tx(txid, move || tx);
-                    outpoints.extend(make_outpoints(txid, &funding_outputs));
-                    block_entries
-                        .entry(pos)
-                        .or_insert_with(|| TxEntry::new(txid))
-                        .outputs = funding_outputs;
-                },
-            );
+            for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
+                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
+                outpoints.extend(make_outpoints(
+                    filtered_outputs.txid,
+                    &filtered_outputs.result,
+                ));
+                block_entries
+                    .entry(filtered_outputs.pos)
+                    .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
+                    .outputs = filtered_outputs.result;
+            }
         })?;
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
@@ -358,20 +354,13 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs_inputs(&block, outpoints).for_each(
-                |FilteredTx {
-                     pos,
-                     tx,
-                     txid,
-                     result: spent_outpoints,
-                 }| {
-                    cache.add_tx(txid, move || tx);
-                    block_entries
-                        .entry(pos)
-                        .or_insert_with(|| TxEntry::new(txid))
-                        .spent = spent_outpoints;
-                },
-            );
+            for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
+                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                block_entries
+                    .entry(filtered_inputs.pos)
+                    .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
+                    .spent = filtered_inputs.result;
+            }
         })?;
 
         Ok(result
@@ -518,10 +507,7 @@ struct FilteredTx<T> {
     result: Vec<T>,
 }
 
-fn filter_block_txs_outputs(
-    block: SerBlock,
-    scripthash: ScriptHash,
-) -> impl Iterator<Item = FilteredTx<TxOutput>> {
+fn filter_block_txs_outputs(block: SerBlock, scripthash: ScriptHash) -> Vec<FilteredTx<TxOutput>> {
     struct FindOutputs {
         scripthash: ScriptHash,
         result: Vec<FilteredTx<TxOutput>>,
@@ -565,13 +551,13 @@ fn filter_block_txs_outputs(
 
     bsl::Block::visit(&block, &mut find_outputs).expect("core returned invalid block");
 
-    find_outputs.result.into_iter()
+    find_outputs.result
 }
 
 fn filter_block_txs_inputs(
     block: &SerBlock,
     outpoints: &HashSet<OutPoint>,
-) -> impl Iterator<Item = FilteredTx<OutPoint>> {
+) -> Vec<FilteredTx<OutPoint>> {
     struct FindInputs<'a> {
         outpoints: &'a HashSet<OutPoint>,
         result: Vec<FilteredTx<OutPoint>>,
@@ -614,7 +600,7 @@ fn filter_block_txs_inputs(
 
     bsl::Block::visit(block, &mut find_inputs).expect("core returned invalid block");
 
-    find_inputs.result.into_iter()
+    find_inputs.result
 }
 
 #[cfg(test)]
@@ -660,9 +646,7 @@ mod tests {
             .assume_checked();
         let scripthash = ScriptHash::new(&addr.script_pubkey());
 
-        let result = super::filter_block_txs_outputs(block, scripthash)
-            .next()
-            .unwrap();
+        let result = &super::filter_block_txs_outputs(block, scripthash)[0];
         assert_eq!(
             result.txid.to_string(),
             "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
@@ -682,9 +666,7 @@ mod tests {
         let mut outpoints = HashSet::new();
         outpoints.insert(outpoint);
 
-        let result = super::filter_block_txs_inputs(&block, &outpoints)
-            .next()
-            .unwrap();
+        let result = &super::filter_block_txs_inputs(&block, &outpoints)[0];
         assert_eq!(
             result.txid.to_string(),
             "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
