@@ -14,6 +14,7 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 use crate::{
     daemon::Daemon,
     metrics::{Gauge, Metrics},
+    signals::ExitFlag,
     types::ScriptHash,
 };
 
@@ -96,7 +97,7 @@ impl Mempool {
             .collect()
     }
 
-    pub fn sync(&mut self, daemon: &Daemon) {
+    pub fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) {
         let txids = match daemon.get_mempool_txids() {
             Ok(txids) => txids,
             Err(e) => {
@@ -116,21 +117,28 @@ impl Mempool {
         for txid in to_remove {
             self.remove_entry(txid);
         }
-        let entries: Vec<_> = to_add
-            .par_iter()
-            .filter_map(|txid| {
-                match (
-                    daemon.get_transaction(txid, None),
-                    daemon.get_mempool_entry(txid),
-                ) {
-                    (Ok(tx), Ok(entry)) => Some((txid, tx, entry)),
-                    _ => None,
-                }
-            })
-            .collect();
-        let added = entries.len();
-        for (txid, tx, entry) in entries {
-            self.add_entry(*txid, tx, entry);
+        let to_add: Vec<Txid> = to_add.into_iter().collect();
+        let mut added = 0;
+        for chunk in to_add.chunks(100) {
+            if exit_flag.poll().is_err() {
+                warn!("interrupted while syncing mempool");
+                return;
+            }
+            let entries: Vec<_> = chunk
+                .par_iter()
+                .filter_map(|txid| {
+                    let tx = daemon.get_transaction(txid, None);
+                    let entry = daemon.get_mempool_entry(txid);
+                    match (tx, entry) {
+                        (Ok(tx), Ok(entry)) => Some((txid, tx, entry)),
+                        _ => None, // skip missing mempool entries
+                    }
+                })
+                .collect();
+            added += entries.len();
+            for (txid, tx, entry) in entries {
+                self.add_entry(*txid, tx, entry);
+            }
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
         for i in 0..FeeHistogram::BINS {
