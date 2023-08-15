@@ -1,4 +1,7 @@
-use crate::chain::{address, BlockHash, Network, OutPoint, Script, Transaction, TxIn, TxOut, Txid};
+use crate::chain::{
+    address, AbsLockTime, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
+    Txid,
+};
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
@@ -9,17 +12,18 @@ use crate::util::{
 };
 
 #[cfg(not(feature = "liquid"))]
-use {bitcoin::consensus::encode, std::str::FromStr};
+use bitcoin::consensus::encode;
 
-use bitcoin::blockdata;
 use bitcoin::hashes::Error as HashError;
 use hex::{self, FromHexError};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
+use hyperlocal::UnixServerExt;
 use tokio::sync::oneshot;
 
-use hyperlocal::UnixServerExt;
 use std::fs;
+use std::str::FromStr;
+
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue},
@@ -85,7 +89,10 @@ impl BlockValue {
         BlockValue {
             id: header.block_hash().to_string(),
             height: blockhm.header_entry.height() as u32,
+            #[cfg(not(feature = "liquid"))]
             version: header.version.to_consensus() as u32,
+            #[cfg(feature = "liquid")]
+            version: header.version,
             timestamp: header.time,
             tx_count: blockhm.meta.tx_count,
             size: blockhm.meta.size,
@@ -111,11 +118,11 @@ impl BlockValue {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 struct TransactionValue {
     txid: Txid,
     version: u32,
-    locktime: bitcoin::absolute::LockTime,
+    locktime: AbsLockTime,
     vin: Vec<TxInValue>,
     vout: Vec<TxOutValue>,
     size: u32,
@@ -149,6 +156,10 @@ impl TransactionValue {
 
         let fee = get_tx_fee(&tx, &prevouts, config.network_type);
 
+        let weight = tx.weight();
+        #[cfg(not(feature = "liquid"))] // rust-bitcoin has a wrapper Weight type
+        let weight = weight.to_wu();
+
         TransactionValue {
             txid: tx.txid(),
             version: tx.version as u32,
@@ -156,14 +167,14 @@ impl TransactionValue {
             vin: vins,
             vout: vouts,
             size: tx.size() as u32,
-            weight: tx.weight().to_wu(),
+            weight: weight as u64,
             fee,
             status: Some(TransactionStatus::from(blockid)),
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Clone)]
 struct TxInValue {
     txid: Txid,
     vout: u32,
@@ -173,7 +184,7 @@ struct TxInValue {
     #[serde(skip_serializing_if = "Option::is_none")]
     witness: Option<Vec<String>>,
     is_coinbase: bool,
-    sequence: blockdata::transaction::Sequence,
+    sequence: Sequence,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     inner_redeemscript_asm: Option<String>,
@@ -235,7 +246,7 @@ impl TxInValue {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Clone)]
 struct TxOutValue {
     scriptpubkey: Script,
     scriptpubkey_asm: String,
@@ -420,7 +431,7 @@ impl From<Utxo> for UtxoValue {
             },
             #[cfg(feature = "liquid")]
             nonce: match utxo.nonce {
-                Nonce::Explicit(nonce) => Some(nonce.to_string()),
+                Nonce::Explicit(nonce) => Some(hex::encode(&nonce)),
                 _ => None,
             },
             #[cfg(feature = "liquid")]

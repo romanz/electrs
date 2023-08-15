@@ -1,7 +1,8 @@
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
 pub use bitcoin::{
-    address, blockdata::block::Header as BlockHeader, blockdata::script, consensus::deserialize,
-    Block, BlockHash, OutPoint, ScriptBuf as Script, Transaction, TxIn, TxOut, Txid,
+    absolute::LockTime as AbsLockTime, address, blockdata::block::Header as BlockHeader,
+    blockdata::script, consensus::deserialize, Block, BlockHash, OutPoint, ScriptBuf as Script,
+    Sequence, Transaction, TxIn, TxOut, Txid,
 };
 
 #[cfg(feature = "liquid")]
@@ -9,7 +10,8 @@ pub use {
     crate::elements::asset,
     elements::{
         address, confidential, encode::deserialize, script, Address, AssetId, Block, BlockHash,
-        BlockHeader, OutPoint, Script, Transaction, TxIn, TxOut, Txid,
+        BlockHeader, LockTime as AbsLockTime, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
+        Txid,
     },
 };
 
@@ -147,6 +149,8 @@ pub fn bitcoin_genesis_hash(network: BNetwork) -> bitcoin::BlockHash {
 
 #[cfg(feature = "liquid")]
 pub fn liquid_genesis_hash(network: Network) -> elements::BlockHash {
+    use crate::util::DEFAULT_BLOCKHASH;
+
     lazy_static! {
         static ref LIQUID_GENESIS: BlockHash =
             "1466275836220db2944ca059a3a10ef6fd2ea684b0688d2c379296888a206003"
@@ -159,7 +163,7 @@ pub fn liquid_genesis_hash(network: Network) -> elements::BlockHash {
         // The genesis block for liquid regtest chains varies based on the chain configuration.
         // This instead uses an all zeroed-out hash, which doesn't matter in practice because its
         // only used for Electrum server discovery, which isn't active on regtest.
-        _ => Default::default(),
+        _ => *DEFAULT_BLOCKHASH,
     }
 }
 

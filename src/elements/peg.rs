@@ -1,4 +1,3 @@
-use bitcoin::hashes::hex::ToHex;
 use elements::{confidential::Asset, PeginData, PegoutData, TxIn, TxOut};
 
 use crate::chain::{bitcoin_genesis_hash, BNetwork, Network};
@@ -8,7 +7,7 @@ pub fn get_pegin_data(txout: &TxIn, network: Network) -> Option<PeginData> {
     let pegged_asset_id = network.pegged_asset()?;
     txout
         .pegin_data()
-        .filter(|pegin| pegin.asset == Asset::Explicit(*pegged_asset_id))
+        .filter(|pegin| pegin.asset == *pegged_asset_id)
 }
 
 pub fn get_pegout_data(
@@ -23,14 +22,14 @@ pub fn get_pegout_data(
     })
 }
 
-// API representation of pegout data assocaited with an output
-#[derive(Serialize, Deserialize, Clone)]
+// API representation of pegout data associated with an output
+#[derive(Serialize, Clone)]
 pub struct PegoutValue {
-    pub genesis_hash: String,
-    pub scriptpubkey: bitcoin::Script,
+    pub genesis_hash: bitcoin::BlockHash,
+    pub scriptpubkey: bitcoin::ScriptBuf,
     pub scriptpubkey_asm: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scriptpubkey_address: Option<String>,
+    pub scriptpubkey_address: Option<bitcoin::Address>,
 }
 
 impl PegoutValue {
@@ -38,13 +37,13 @@ impl PegoutValue {
         let pegoutdata = get_pegout_data(txout, network, parent_network)?;
 
         // pending https://github.com/ElementsProject/rust-elements/pull/69 is merged
-        let scriptpubkey = bitcoin::Script::from(pegoutdata.script_pubkey.into_bytes());
-        let address = bitcoin::Address::from_script(&scriptpubkey, parent_network);
+        let scriptpubkey = pegoutdata.script_pubkey;
+        let address = bitcoin::Address::from_script(&scriptpubkey, parent_network).ok();
 
         Some(PegoutValue {
-            genesis_hash: pegoutdata.genesis_hash.to_hex(),
+            genesis_hash: pegoutdata.genesis_hash,
             scriptpubkey_asm: scriptpubkey.to_asm(),
-            scriptpubkey_address: address.map(|s| s.to_string()),
+            scriptpubkey_address: address,
             scriptpubkey,
         })
     }

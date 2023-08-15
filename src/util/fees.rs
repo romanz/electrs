@@ -4,20 +4,24 @@ use std::collections::HashMap;
 const VSIZE_BIN_WIDTH: u64 = 50_000; // in vbytes
 
 pub struct TxFeeInfo {
-    pub fee: u64,   // in satoshis
-    pub vsize: u64, // in virtual bytes (= weight/4)
-    pub fee_per_vbyte: f64,
+    pub fee: u64,           // in satoshis
+    pub vsize: u64,         // in virtual bytes (= weight/4)
+    pub fee_per_vbyte: f64, // in sat/vb
 }
 
 impl TxFeeInfo {
     pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, network: Network) -> Self {
         let fee = get_tx_fee(tx, prevouts, network);
-        let vsize = tx.weight().to_vbytes_ceil();
-        let vsize_float = tx.weight().to_wu() as f64 / 4f64; // for more accurate sat/vB
+
+        let weight = tx.weight();
+        #[cfg(not(feature = "liquid"))] // rust-bitcoin has a wrapper Weight type
+        let weight = weight.to_wu();
+
+        let vsize_float = weight as f64 / 4f64; // for more accurate sat/vB
 
         TxFeeInfo {
             fee,
-            vsize,
+            vsize: vsize_float.ceil() as u64,
             fee_per_vbyte: fee as f64 / vsize_float,
         }
     }

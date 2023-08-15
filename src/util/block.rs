@@ -300,12 +300,16 @@ pub struct BlockHeaderMeta {
 
 impl From<&BlockEntry> for BlockMeta {
     fn from(b: &BlockEntry) -> BlockMeta {
+        let weight = b.block.weight();
+        #[cfg(not(feature = "liquid"))] // rust-bitcoin has a wrapper Weight type
+        let weight = weight.to_wu();
+
         BlockMeta {
             tx_count: b.block.txdata.len() as u32,
             // To retain DB compatibility, block weights are converted from the u64
             // representation used as of rust-bitcoin v0.30 back to a u32. This is OK
             // because u32::MAX is far above MAX_BLOCK_WEIGHT.
-            weight: b.block.weight().to_wu() as u32,
+            weight: weight as u32,
             size: b.size,
         }
     }

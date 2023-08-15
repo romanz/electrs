@@ -1,4 +1,4 @@
-use bitcoin::hashes::{hex::ToHex, Hash};
+use bitcoin::hashes::{sha256, Hash};
 use elements::secp256k1_zkp::ZERO_TWEAK;
 use elements::{confidential::Value, encode::serialize, issuance::ContractHash, AssetId, TxIn};
 
@@ -12,13 +12,13 @@ pub use registry::{AssetRegistry, AssetSorting};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IssuanceValue {
-    pub asset_id: String,
+    pub asset_id: AssetId,
     pub is_reissuance: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub asset_blinding_nonce: Option<String>,
+    pub asset_blinding_nonce: Option<elements::secp256k1_zkp::Tweak>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub contract_hash: Option<String>,
-    pub asset_entropy: String,
+    pub contract_hash: Option<ContractHash>,
+    pub asset_entropy: sha256::Midstate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assetamount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,12 +44,12 @@ impl From<&TxIn> for IssuanceValue {
         };
 
         IssuanceValue {
-            asset_id: asset_id.to_hex(),
-            asset_entropy: asset_entropy.to_hex(),
-            contract_hash: contract_hash.map(|h| h.to_hex()),
+            asset_id,
+            asset_entropy,
+            contract_hash,
             is_reissuance,
             asset_blinding_nonce: if is_reissuance {
-                Some(hex::encode(issuance.asset_blinding_nonce.as_ref()))
+                Some(issuance.asset_blinding_nonce)
             } else {
                 None
             },

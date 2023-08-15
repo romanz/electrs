@@ -4,17 +4,18 @@ use crate::util::BlockId;
 use std::collections::HashMap;
 
 #[cfg(feature = "liquid")]
-use bitcoin::hashes::hex::FromHex;
-
-#[cfg(feature = "liquid")]
 lazy_static! {
     static ref REGTEST_INITIAL_ISSUANCE_PREVOUT: Txid =
-        Txid::from_hex("50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5").unwrap();
+        "50cdc410c9d0d61eeacc531f52d2c70af741da33af127c364e52ac1ee7c030a5"
+            .parse()
+            .unwrap();
     static ref TESTNET_INITIAL_ISSUANCE_PREVOUT: Txid =
-        Txid::from_hex("0c52d2526a5c9f00e9fb74afd15dd3caaf17c823159a514f929ae25193a43a52").unwrap();
+        "0c52d2526a5c9f00e9fb74afd15dd3caaf17c823159a514f929ae25193a43a52"
+            .parse()
+            .unwrap();
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionStatus {
     pub confirmed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
