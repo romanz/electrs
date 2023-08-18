@@ -1,21 +1,21 @@
 use crate::chain::{
-    address, AbsLockTime, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
-    Txid,
+    address, AbsLockTime, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn,
+    TxMerkleNode, TxOut, Txid,
 };
 use crate::config::Config;
 use crate::errors;
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
-    create_socket, electrum_merkle, extract_tx_prevouts, full_hash, get_innerscripts, get_tx_fee,
-    has_prevout, is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm,
-    TransactionStatus, DEFAULT_BLOCKHASH,
+    create_socket, electrum_merkle, extract_tx_prevouts, get_innerscripts, get_tx_fee, has_prevout,
+    is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm, TransactionStatus,
+    DEFAULT_BLOCKHASH,
 };
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
 
 use bitcoin::hashes::Error as HashError;
-use hex::{self, FromHexError};
+use hex::{DisplayHex, FromHex, HexToBytesError};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
 use hyperlocal::UnixServerExt;
@@ -27,10 +27,7 @@ use std::str::FromStr;
 #[cfg(feature = "liquid")]
 use {
     crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue},
-    elements::{
-        confidential::{Asset, Nonce, Value},
-        encode, AssetId,
-    },
+    elements::{encode, secp256k1_zkp as zkp, AssetId},
 };
 
 use serde::Serialize;
@@ -59,15 +56,15 @@ const CONF_FINAL: usize = 10; // reorgs deeper than this are considered unlikely
 
 #[derive(Serialize, Deserialize)]
 struct BlockValue {
-    id: String,
+    id: BlockHash,
     height: u32,
     version: u32,
     timestamp: u32,
     tx_count: u32,
     size: u32,
     weight: u64,
-    merkle_root: String,
-    previousblockhash: Option<String>,
+    merkle_root: TxMerkleNode,
+    previousblockhash: Option<BlockHash>,
     mediantime: u32,
 
     #[cfg(not(feature = "liquid"))]
@@ -79,7 +76,7 @@ struct BlockValue {
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    ext: Option<serde_json::Value>,
+    ext: Option<elements::BlockExtData>,
 }
 
 impl BlockValue {
@@ -87,7 +84,7 @@ impl BlockValue {
     fn new(blockhm: BlockHeaderMeta) -> Self {
         let header = blockhm.header_entry.header();
         BlockValue {
-            id: header.block_hash().to_string(),
+            id: header.block_hash(),
             height: blockhm.header_entry.height() as u32,
             #[cfg(not(feature = "liquid"))]
             version: header.version.to_consensus() as u32,
@@ -97,9 +94,9 @@ impl BlockValue {
             tx_count: blockhm.meta.tx_count,
             size: blockhm.meta.size,
             weight: blockhm.meta.weight as u64,
-            merkle_root: header.merkle_root.to_string(),
+            merkle_root: header.merkle_root,
             previousblockhash: if header.prev_blockhash != *DEFAULT_BLOCKHASH {
-                Some(header.prev_blockhash.to_string())
+                Some(header.prev_blockhash)
             } else {
                 None
             },
@@ -113,7 +110,7 @@ impl BlockValue {
             difficulty: header.difficulty(),
 
             #[cfg(feature = "liquid")]
-            ext: Some(json!(header.ext)),
+            ext: Some(header.ext.clone()),
         }
     }
 }
@@ -205,7 +202,12 @@ impl TxInValue {
         let witness = &witness.script_witness;
 
         let witness = if !witness.is_empty() {
-            Some(witness.iter().map(hex::encode).collect())
+            Some(
+                witness
+                    .iter()
+                    .map(DisplayHex::to_lower_hex_string)
+                    .collect(),
+            )
         } else {
             None
         };
@@ -264,15 +266,15 @@ struct TxOutValue {
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    valuecommitment: Option<String>,
+    valuecommitment: Option<zkp::PedersenCommitment>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    asset: Option<String>,
+    asset: Option<AssetId>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    assetcommitment: Option<String>,
+    assetcommitment: Option<zkp::Generator>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -283,25 +285,8 @@ impl TxOutValue {
     fn new(txout: &TxOut, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let value = txout.value;
-
         #[cfg(feature = "liquid")]
         let value = txout.value.explicit();
-        #[cfg(feature = "liquid")]
-        let valuecommitment = match txout.value {
-            Value::Confidential(..) => Some(hex::encode(encode::serialize(&txout.value))),
-            _ => None,
-        };
-
-        #[cfg(feature = "liquid")]
-        let asset = match txout.asset {
-            Asset::Explicit(value) => Some(value.to_string()),
-            _ => None,
-        };
-        #[cfg(feature = "liquid")]
-        let assetcommitment = match txout.asset {
-            Asset::Confidential(..) => Some(hex::encode(encode::serialize(&txout.asset))),
-            _ => None,
-        };
 
         #[cfg(not(feature = "liquid"))]
         let is_fee = false;
@@ -347,11 +332,11 @@ impl TxOutValue {
             scriptpubkey_type: script_type.to_string(),
             value,
             #[cfg(feature = "liquid")]
-            valuecommitment,
+            valuecommitment: txout.value.commitment(),
             #[cfg(feature = "liquid")]
-            asset,
+            asset: txout.asset.explicit(),
             #[cfg(feature = "liquid")]
-            assetcommitment,
+            assetcommitment: txout.asset.commitment(),
             #[cfg(feature = "liquid")]
             pegout,
         }
@@ -373,31 +358,28 @@ struct UtxoValue {
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    valuecommitment: Option<String>,
+    valuecommitment: Option<zkp::PedersenCommitment>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    asset: Option<String>,
+    asset: Option<AssetId>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    assetcommitment: Option<String>,
+    assetcommitment: Option<zkp::Generator>,
+
+    // nonces are never explicit
+    #[cfg(feature = "liquid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    noncecommitment: Option<zkp::PublicKey>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    nonce: Option<String>,
+    surjection_proof: Option<zkp::SurjectionProof>,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    noncecommitment: Option<String>,
-
-    #[cfg(feature = "liquid")]
-    #[serde(skip_serializing_if = "Vec::is_empty", with = "crate::util::serde_hex")]
-    surjection_proof: Vec<u8>,
-
-    #[cfg(feature = "liquid")]
-    #[serde(skip_serializing_if = "Vec::is_empty", with = "crate::util::serde_hex")]
-    range_proof: Vec<u8>,
+    range_proof: Option<zkp::RangeProof>,
 }
 impl From<Utxo> for UtxoValue {
     fn from(utxo: Utxo) -> Self {
@@ -410,42 +392,19 @@ impl From<Utxo> for UtxoValue {
             value: utxo.value,
 
             #[cfg(feature = "liquid")]
-            value: match utxo.value {
-                Value::Explicit(value) => Some(value),
-                _ => None,
-            },
+            value: utxo.value.explicit(),
             #[cfg(feature = "liquid")]
-            valuecommitment: match utxo.value {
-                Value::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.value))),
-                _ => None,
-            },
+            valuecommitment: utxo.value.commitment(),
             #[cfg(feature = "liquid")]
-            asset: match utxo.asset {
-                Asset::Explicit(asset) => Some(asset.to_string()),
-                _ => None,
-            },
+            asset: utxo.asset.explicit(),
             #[cfg(feature = "liquid")]
-            assetcommitment: match utxo.asset {
-                Asset::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.asset))),
-                _ => None,
-            },
+            assetcommitment: utxo.asset.commitment(),
             #[cfg(feature = "liquid")]
-            nonce: match utxo.nonce {
-                Nonce::Explicit(nonce) => Some(hex::encode(&nonce)),
-                _ => None,
-            },
+            noncecommitment: utxo.nonce.commitment(),
             #[cfg(feature = "liquid")]
-            noncecommitment: match utxo.nonce {
-                Nonce::Confidential(..) => Some(hex::encode(encode::serialize(&utxo.nonce))),
-                _ => None,
-            },
+            surjection_proof: utxo.witness.surjection_proof.map(|p| *p),
             #[cfg(feature = "liquid")]
-            surjection_proof: utxo
-                .witness
-                .surjection_proof
-                .map_or(vec![], |p| (*p).serialize()),
-            #[cfg(feature = "liquid")]
-            range_proof: utxo.witness.rangeproof.map_or(vec![], |p| (*p).serialize()),
+            range_proof: utxo.witness.rangeproof.map(|p| *p),
         }
     }
 }
@@ -697,7 +656,7 @@ fn handle_request(
                 .get_block_header(&hash)
                 .ok_or_else(|| HttpError::not_found("Block not found".to_string()))?;
 
-            let header_hex = hex::encode(encode::serialize(&header));
+            let header_hex = encode::serialize_hex(&header);
             http_message(StatusCode::OK, header_hex, TTL_LONG)
         }
         (&Method::GET, Some(&"block"), Some(hash), Some(&"raw"), None, None) => {
@@ -931,7 +890,7 @@ fn handle_request(
 
             let (content_type, body) = match *out_type {
                 "raw" => ("application/octet-stream", Body::from(rawtx)),
-                "hex" => ("text/plain", Body::from(hex::encode(rawtx))),
+                "hex" => ("text/plain", Body::from(rawtx.to_lower_hex_string())),
                 _ => unreachable!(),
             };
             let ttl = ttl_by_depth(query.get_tx_status(&hash).block_height, query);
@@ -978,7 +937,7 @@ fn handle_request(
 
             http_message(
                 StatusCode::OK,
-                hex::encode(encode::serialize(&merkleblock)),
+                encode::serialize_hex(&merkleblock),
                 ttl_by_depth(height, query),
             )
         }
@@ -1263,12 +1222,7 @@ fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpE
 }
 
 fn parse_scripthash(scripthash: &str) -> Result<FullHash, HttpError> {
-    let bytes = hex::decode(scripthash)?;
-    if bytes.len() != 32 {
-        Err(HttpError::from("Invalid scripthash".to_string()))
-    } else {
-        Ok(full_hash(&bytes))
-    }
+    FullHash::from_hex(scripthash).map_err(|_| HttpError::from("Invalid scripthash".to_string()))
 }
 
 #[derive(Debug)]
@@ -1297,8 +1251,8 @@ impl From<HashError> for HttpError {
         HttpError::from("Invalid hash string".to_string())
     }
 }
-impl From<FromHexError> for HttpError {
-    fn from(_e: FromHexError) -> Self {
+impl From<HexToBytesError> for HttpError {
+    fn from(_e: HexToBytesError) -> Self {
         //HttpError::from(e.description().to_string())
         HttpError::from("Invalid hex string".to_string())
     }

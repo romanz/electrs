@@ -368,7 +368,6 @@ dependencies = [
  "elements",
  "error-chain",
  "glob",
- "hex",
  "hex-conservative",
  "hyper",
  "hyperlocal",

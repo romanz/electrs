@@ -8,14 +8,14 @@ use std::time::Duration;
 
 use base64;
 use glob;
-use hex;
+use hex::FromHex;
 use itertools::Itertools;
 use serde_json::{from_str, from_value, Value};
 
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::consensus::encode::{deserialize, serialize_hex};
 #[cfg(feature = "liquid")]
-use elements::encode::{deserialize, serialize};
+use elements::encode::{deserialize, serialize_hex};
 
 use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
@@ -41,7 +41,7 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
     let header_hex = value
         .as_str()
         .chain_err(|| format!("non-string header: {}", value))?;
-    let header_bytes = hex::decode(header_hex).chain_err(|| "non-hex header")?;
+    let header_bytes = Vec::from_hex(header_hex).chain_err(|| "non-hex header")?;
     Ok(
         deserialize(&header_bytes)
             .chain_err(|| format!("failed to parse header {}", header_hex))?,
@@ -50,13 +50,13 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
 
 fn block_from_value(value: Value) -> Result<Block> {
     let block_hex = value.as_str().chain_err(|| "non-string block")?;
-    let block_bytes = hex::decode(block_hex).chain_err(|| "non-hex block")?;
+    let block_bytes = Vec::from_hex(block_hex).chain_err(|| "non-hex block")?;
     Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
 }
 
 fn tx_from_value(value: Value) -> Result<Transaction> {
     let tx_hex = value.as_str().chain_err(|| "non-string tx")?;
-    let tx_bytes = hex::decode(tx_hex).chain_err(|| "non-hex tx")?;
+    let tx_bytes = Vec::from_hex(tx_hex).chain_err(|| "non-hex tx")?;
     Ok(deserialize(&tx_bytes).chain_err(|| format!("failed to parse tx {}", tx_hex))?)
 }
 
@@ -518,7 +518,7 @@ impl Daemon {
     }
 
     pub fn broadcast(&self, tx: &Transaction) -> Result<Txid> {
-        self.broadcast_raw(&hex::encode(serialize(tx)))
+        self.broadcast_raw(&serialize_hex(tx))
     }
 
     pub fn broadcast_raw(&self, txhex: &str) -> Result<Txid> {

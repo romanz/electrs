@@ -1,13 +1,13 @@
 use crate::chain::address::Address;
 use crate::errors::*;
 use crate::new_index::ChainQuery;
-use crate::util::{full_hash, FullHash};
+use crate::util::FullHash;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use rayon::prelude::*;
 
-use hex;
+use hex::FromHex;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -52,11 +52,9 @@ pub fn scripthashes_from_file(path: String) -> Result<Vec<FullHash>> {
 fn to_scripthash(script_type: &str, script_str: &str) -> Result<FullHash> {
     match script_type {
         "address" => address_to_scripthash(script_str),
-        "scripthash" => Ok(full_hash(
-            &hex::decode(script_str).chain_err(|| "invalid hex")?,
-        )),
+        "scripthash" => Ok(FullHash::from_hex(script_str).chain_err(|| "invalid hex")?),
         "scriptpubkey" => Ok(compute_script_hash(
-            &hex::decode(script_str).chain_err(|| "invalid hex")?,
+            &Vec::from_hex(script_str).chain_err(|| "invalid hex")?,
         )),
         _ => bail!("Invalid script type".to_string()),
     }

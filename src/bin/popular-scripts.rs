@@ -5,6 +5,7 @@ use electrs::{
     config::Config,
     new_index::{Store, TxHistoryKey},
 };
+use hex::DisplayHex;
 
 fn main() {
     let config = Config::from_args();
@@ -30,7 +31,11 @@ fn main() {
 
         if curr_scripthash != entry.hash {
             if total_entries > 100 {
-                println!("{} {}", hex::encode(&curr_scripthash), total_entries);
+                println!(
+                    "{} {}",
+                    curr_scripthash.to_lower_hex_string(),
+                    total_entries
+                );
             }
 
             curr_scripthash = entry.hash;
@@ -45,7 +50,7 @@ fn main() {
     if total_entries >= 4000 {
         println!(
             "scripthash,{},{}",
-            hex::encode(&curr_scripthash),
+            curr_scripthash.to_lower_hex_string(),
             total_entries
         );
     }

@@ -1,8 +1,8 @@
 #[cfg(not(feature = "liquid"))] // use regular Bitcoin data structures
 pub use bitcoin::{
     absolute::LockTime as AbsLockTime, address, blockdata::block::Header as BlockHeader,
-    blockdata::script, consensus::deserialize, Block, BlockHash, OutPoint, ScriptBuf as Script,
-    Sequence, Transaction, TxIn, TxOut, Txid,
+    blockdata::script, consensus::deserialize, hash_types::TxMerkleNode, Block, BlockHash,
+    OutPoint, ScriptBuf as Script, Sequence, Transaction, TxIn, TxOut, Txid,
 };
 
 #[cfg(feature = "liquid")]
@@ -10,8 +10,8 @@ pub use {
     crate::elements::asset,
     elements::{
         address, confidential, encode::deserialize, script, Address, AssetId, Block, BlockHash,
-        BlockHeader, LockTime as AbsLockTime, OutPoint, Script, Sequence, Transaction, TxIn, TxOut,
-        Txid,
+        BlockHeader, LockTime as AbsLockTime, OutPoint, Script, Sequence, Transaction, TxIn,
+        TxMerkleNode, TxOut, Txid,
     },
 };
 

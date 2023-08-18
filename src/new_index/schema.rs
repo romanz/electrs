@@ -4,6 +4,7 @@ use bitcoin::merkle_tree::MerkleBlock;
 use bitcoin::VarInt;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use hex::FromHex;
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -402,8 +403,9 @@ impl ChainQuery {
         let _timer = self.start_timer("get_block_raw");
 
         if self.light_mode {
-            let blockhex = self.daemon.getblock_raw(hash, 0).ok()?;
-            Some(hex::decode(blockhex.as_str().unwrap()).unwrap())
+            let blockval = self.daemon.getblock_raw(hash, 0).ok()?;
+            let blockhex = blockval.as_str().expect("valid block from bitcoind");
+            Some(Vec::from_hex(blockhex).expect("valid block from bitcoind"))
         } else {
             let entry = self.header_by_hash(hash)?;
             let meta = self.get_block_meta(hash)?;
@@ -833,11 +835,12 @@ impl ChainQuery {
                 blockhash.map_or_else(|| self.tx_confirming_block(txid).map(|b| b.hash), |_| None);
             let blockhash = blockhash.or_else(|| queried_blockhash.as_ref())?;
             // TODO fetch transaction as binary from REST API instead of as hex
-            let txhex = self
+            let txval = self
                 .daemon
                 .gettransaction_raw(txid, blockhash, false)
                 .ok()?;
-            Some(hex::decode(txhex.as_str().unwrap()).unwrap())
+            let txhex = txval.as_str().expect("valid tx from bitcoind");
+            Some(Bytes::from_hex(txhex).expect("valid tx from bitcoind"))
         } else {
             self.store.txstore_db.get(&TxRow::key(&txid[..]))
         }

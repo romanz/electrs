@@ -9,13 +9,13 @@ use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use error_chain::ChainedError;
-use hex;
+use hex::{self, DisplayHex};
 use serde_json::{from_str, Value};
 
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::serialize;
+use bitcoin::consensus::encode::serialize_hex;
 #[cfg(feature = "liquid")]
-use elements::encode::serialize;
+use elements::encode::serialize_hex;
 
 use crate::chain::Txid;
 use crate::config::Config;
@@ -25,8 +25,7 @@ use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{Query, Utxo};
 use crate::util::electrum_merkle::{get_header_merkle_proof, get_id_from_pos, get_tx_merkle_proof};
 use crate::util::{
-    create_socket, full_hash, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry,
-    SyncChannel,
+    create_socket, spawn_thread, BlockId, BoolThen, Channel, FullHash, HeaderEntry, SyncChannel,
 };
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -129,7 +128,7 @@ impl Connection {
 
     fn blockchain_headers_subscribe(&mut self) -> Result<Value> {
         let entry = self.query.chain().best_header();
-        let hex_header = hex::encode(serialize(entry.header()));
+        let hex_header = serialize_hex(entry.header());
         let result = json!({"hex": hex_header, "height": entry.height()});
         self.last_header_entry = Some(entry);
         Ok(result)
@@ -201,7 +200,7 @@ impl Connection {
             .query
             .chain()
             .header_by_height(height)
-            .map(|entry| hex::encode(&serialize(entry.header())))
+            .map(|entry| serialize_hex(entry.header()))
             .chain_err(|| "missing header")?;
 
         if cp_height == 0 {
@@ -227,7 +226,7 @@ impl Connection {
                 self.query
                     .chain()
                     .header_by_height(height)
-                    .map(|entry| hex::encode(&serialize(entry.header())))
+                    .map(|entry| serialize_hex(entry.header()))
             })
             .collect();
 
@@ -272,7 +271,7 @@ impl Connection {
 
         let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
         let status_hash = get_status_hash(history_txids, &self.query)
-            .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
+            .map_or(Value::Null, |h| json!(h.to_lower_hex_string()));
 
         if let None = self.status_hashes.insert(script_hash, status_hash.clone()) {
             self.stats.subscriptions.inc();
@@ -359,11 +358,11 @@ impl Connection {
             bail!("verbose transactions are currently unsupported");
         }
 
-        let tx = self
+        let rawtx = self
             .query
             .lookup_raw_txn(&tx_hash)
             .chain_err(|| "missing transaction")?;
-        Ok(json!(hex::encode(tx)))
+        Ok(json!(rawtx.to_lower_hex_string()))
     }
 
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
@@ -466,7 +465,7 @@ impl Connection {
             let entry = self.query.chain().best_header();
             if *last_entry != entry {
                 *last_entry = entry;
-                let hex_header = hex::encode(serialize(last_entry.header()));
+                let hex_header = serialize_hex(last_entry.header());
                 let header = json!({"hex": hex_header, "height": last_entry.height()});
                 result.push(json!({
                     "jsonrpc": "2.0",
@@ -477,7 +476,7 @@ impl Connection {
         for (script_hash, status_hash) in self.status_hashes.iter_mut() {
             let history_txids = get_history(&self.query, &script_hash[..], self.txs_limit)?;
             let new_status_hash = get_status_hash(history_txids, &self.query)
-                .map_or(Value::Null, |h| json!(hex::encode(full_hash(&h[..]))));
+                .map_or(Value::Null, |h| json!(h.to_lower_hex_string()));
             if new_status_hash == *status_hash {
                 continue;
             }
