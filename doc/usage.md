@@ -15,46 +15,44 @@ $ electrs --log-filters=INFO --db-dir ./db --daemon-dir ~/.bitcoin --network bit
 
 ## Usage
 
-First index sync should take ~4 hours for ~336GB @ August 2021 (on a dual core Intel CPU @ 3.3 GHz, 8 GB RAM, 1TB WD Blue HDD):
+First index sync should take ~6.5 hours for ~504GB @ August 2023 (on a dual core Intel CPU @ 3.3 GHz, 8 GB RAM, 1TB WD Blue HDD):
 ```bash
 $ du -ch ~/.bitcoin/blocks/blk*.dat | tail -n1
 336G  total
 
-$ ./target/release/electrs --log-filters INFO --db-dir ./db --electrum-rpc-addr="127.0.0.1:50001"
-Config { network: Bitcoin, db_path: "./db/bitcoin", daemon_dir: "/home/user/.bitcoin", daemon_auth: CookieFile("/home/user/.bitcoin/.cookie"), daemon_rpc_addr: V4(127.0.0.1:8332), daemon_p2p_addr: V4(127.0.0.1:8333), electrum_rpc_addr: V4(127.0.0.1:50001), monitoring_addr: V4(127.0.0.1:4224), wait_duration: 10s, index_batch_size: 10, index_lookup_limit: 100, ignore_mempool: false, server_banner: "Welcome to electrs 0.9.0 (Electrum Rust Server)!", args: [] }
-[2021-08-17T18:48:40.054Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224
-[2021-08-17T18:48:40.944Z INFO  electrs::db] "./db/bitcoin": 0 SST files, 0 GB, 0 Grows
-[2021-08-17T18:48:41.075Z INFO  electrs::index] indexing 2000 blocks: [1..2000]
-[2021-08-17T18:48:41.610Z INFO  electrs::chain] chain updated: tip=00000000dfd5d65c9d8561b4b8f60a63018fe3933ecb131fb37f905f87da951a, height=2000
-[2021-08-17T18:48:41.623Z INFO  electrs::index] indexing 2000 blocks: [2001..4000]
-[2021-08-17T18:48:42.178Z INFO  electrs::chain] chain updated: tip=00000000922e2aa9e84a474350a3555f49f06061fd49df50a9352f156692a842, height=4000
-[2021-08-17T18:48:42.188Z INFO  electrs::index] indexing 2000 blocks: [4001..6000]
-[2021-08-17T18:48:42.714Z INFO  electrs::chain] chain updated: tip=00000000dbbb79792303bdd1c6c4d7ab9c21bba0667213c2eca955e11230c5a5, height=6000
-[2021-08-17T18:48:42.723Z INFO  electrs::index] indexing 2000 blocks: [6001..8000]
-[2021-08-17T18:48:43.235Z INFO  electrs::chain] chain updated: tip=0000000094fbacdffec05aea9847000522a258c269ae37a74a818afb96fc27d9, height=8000
-[2021-08-17T18:48:43.246Z INFO  electrs::index] indexing 2000 blocks: [8001..10000]
-[2021-08-17T18:48:43.768Z INFO  electrs::chain] chain updated: tip=0000000099c744455f58e6c6e98b671e1bf7f37346bfd4cf5d0274ad8ee660cb, height=10000
+$ ./target/release/electrs --network bitcoin --db-dir ./db --daemon-dir /home/user/.bitcoin
+Starting electrs 0.10.0 on x86_64 linux with Config { network: Bitcoin, db_path: "./db/bitcoin", daemon_dir: "/home/user/.bitcoin", daemon_auth: CookieFile("/home/user/.bitcoin/.cookie"), daemon_rpc_addr: 127.0.0.1:8332, daemon_p2p_addr: 127.0.0.1:8333, electrum_rpc_addr: 127.0.0.1:50001, monitoring_addr: 127.0.0.1:4224, wait_duration: 10s, jsonrpc_timeout: 15s, index_batch_size: 10, index_lookup_limit: None, reindex_last_blocks: 0, auto_reindex: true, ignore_mempool: false, sync_once: false, skip_block_download_wait: false, disable_electrum_rpc: false, server_banner: "Welcome to electrs 0.10.0 (Electrum Rust Server)!", signet_magic: f9beb4d9, args: [] }
+[2023-08-16T19:17:11.193Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224
+[2023-08-16T19:17:11.193Z INFO  electrs::server] serving Electrum RPC on 127.0.0.1:50001
+[2023-08-16T19:17:12.355Z INFO  electrs::db] "./db/bitcoin": 0 SST files, 0 GB, 0 Grows
+[2023-08-16T19:17:12.446Z INFO  electrs::index] indexing 2000 blocks: [1..2000]
+[2023-08-16T19:17:12.866Z INFO  electrs::chain] chain updated: tip=00000000dfd5d65c9d8561b4b8f60a63018fe3933ecb131fb37f905f87da951a, height=2000
+[2023-08-16T19:17:12.879Z INFO  electrs::index] indexing 2000 blocks: [2001..4000]
+[2023-08-16T19:17:13.227Z INFO  electrs::chain] chain updated: tip=00000000922e2aa9e84a474350a3555f49f06061fd49df50a9352f156692a842, height=4000
+[2023-08-16T19:17:13.238Z INFO  electrs::index] indexing 2000 blocks: [4001..6000]
+[2023-08-16T19:17:13.587Z INFO  electrs::chain] chain updated: tip=00000000dbbb79792303bdd1c6c4d7ab9c21bba0667213c2eca955e11230c5a5, height=6000
+[2023-08-16T19:17:13.598Z INFO  electrs::index] indexing 2000 blocks: [6001..8000]
+[2023-08-16T19:17:13.950Z INFO  electrs::chain] chain updated: tip=0000000094fbacdffec05aea9847000522a258c269ae37a74a818afb96fc27d9, height=8000
+[2023-08-16T19:17:13.961Z INFO  electrs::index] indexing 2000 blocks: [8001..10000]
 <...>
-[2021-08-17T22:11:20.139Z INFO  electrs::chain] chain updated: tip=00000000000000000002a23d6df20eecec15b21d32c75833cce28f113de888b7, height=690000
-[2021-08-17T22:11:20.157Z INFO  electrs::index] indexing 2000 blocks: [690001..692000]
-[2021-08-17T22:12:16.944Z INFO  electrs::chain] chain updated: tip=000000000000000000054dab4b85860fcee5808ab7357eb2bb45114a25b77380, height=692000
-[2021-08-17T22:12:16.957Z INFO  electrs::index] indexing 2000 blocks: [692001..694000]
-[2021-08-17T22:13:11.764Z INFO  electrs::chain] chain updated: tip=00000000000000000003f5acb5ec81df7c98c16bc8d89bdaadd4e8965729c018, height=694000
-[2021-08-17T22:13:11.777Z INFO  electrs::index] indexing 2000 blocks: [694001..696000]
-[2021-08-17T22:14:05.852Z INFO  electrs::chain] chain updated: tip=0000000000000000000dfc81671ac5a22d8751f9c1506689d3eaceaef26470b9, height=696000
-[2021-08-17T22:14:05.855Z INFO  electrs::index] indexing 295 blocks: [696001..696295]
-[2021-08-17T22:14:15.557Z INFO  electrs::chain] chain updated: tip=0000000000000000000eceb67a01c81c65b538a7b3729f879c6c1e248bb6577a, height=696295
-[2021-08-17T22:14:21.578Z INFO  electrs::db] starting config compaction
-[2021-08-17T22:14:21.623Z INFO  electrs::db] starting headers compaction
-[2021-08-17T22:14:21.667Z INFO  electrs::db] starting txid compaction
-[2021-08-17T22:22:27.009Z INFO  electrs::db] starting funding compaction
-[2021-08-17T22:38:17.104Z INFO  electrs::db] starting spending compaction
-[2021-08-17T22:55:11.785Z INFO  electrs::db] finished full compaction
-[2021-08-17T22:55:15.835Z INFO  electrs::server] serving Electrum RPC on 127.0.0.1:50001
-[2021-08-17T22:55:25.837Z INFO  electrs::index] indexing 7 blocks: [696296..696302]
-[2021-08-17T22:55:26.120Z INFO  electrs::chain] chain updated: tip=0000000000000000000059e97dea0b0b9ebf4ac1fd66726b339fe1c9683de656, height=696302
-[2021-08-17T23:02:03.453Z INFO  electrs::index] indexing 1 blocks: [696303..696303]
-[2021-08-17T23:02:03.691Z INFO  electrs::chain] chain updated: tip=000000000000000000088107c337bf315e2db1e406c50566bd765f04a7e459b6, height=696303
+[2023-08-17T00:13:16.443Z INFO  electrs::index] indexing 2000 blocks: [798001..800000]
+[2023-08-17T00:14:58.310Z INFO  electrs::chain] chain updated: tip=00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054, height=800000
+[2023-08-17T00:14:58.325Z INFO  electrs::index] indexing 2000 blocks: [800001..802000]
+[2023-08-17T00:16:36.425Z INFO  electrs::chain] chain updated: tip=0000000000000000000311b41f1d611f977b024b947568c1dd760704360f148a, height=802000
+[2023-08-17T00:16:36.437Z INFO  electrs::index] indexing 1534 blocks: [802001..803534]
+[2023-08-17T00:17:51.338Z INFO  electrs::chain] chain updated: tip=00000000000000000003c0cd1b62ed8bb502e24bcbfeee16e81d6ea33d026263, height=803534
+[2023-08-17T00:18:00.592Z INFO  electrs::db] starting config compaction
+[2023-08-17T00:18:00.778Z INFO  electrs::db] starting headers compaction
+[2023-08-17T00:18:00.870Z INFO  electrs::db] starting txid compaction
+[2023-08-17T00:33:34.370Z INFO  electrs::db] starting funding compaction
+[2023-08-17T01:03:56.784Z INFO  electrs::db] starting spending compaction
+[2023-08-17T01:35:05.983Z INFO  electrs::db] finished full compaction
+[2023-08-17T01:36:23.300Z INFO  electrs::index] indexing 5 blocks: [803535..803539]
+[2023-08-17T01:36:23.646Z INFO  electrs::chain] chain updated: tip=000000000000000000006a3aaddd4b643607b33e000f1200d35005c330ecfa88, height=803539
+[2023-08-17T01:41:26.009Z INFO  electrs::index] indexing 1 blocks: [803540..803540]
+[2023-08-17T01:41:26.143Z INFO  electrs::chain] chain updated: tip=00000000000000000003266d31db92629b64241eef7ce708244f6d6283b080b4, height=803540
+[2023-08-17T01:42:42.999Z INFO  electrs::index] indexing 1 blocks: [803541..803541]
+[2023-08-17T01:42:43.153Z INFO  electrs::chain] chain updated: tip=00000000000000000000884a77c8b8ad2fb0c25510a3251bf5ef57f0db275146, height=803541
 ```
 You can specify options via command-line parameters, environment variables or using config files.
 See the documentation above.
@@ -66,7 +64,7 @@ It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 w
 The index database is stored here:
 ```bash
 $ du db/
-30G db/mainnet/
+42G db/mainnet/
 ```
 
 See [extra configuration suggestions](config.md#extra-configuration-suggestions) that you might want to consider.
