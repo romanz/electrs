@@ -72,7 +72,7 @@ struct BlockValue {
     #[cfg(not(feature = "liquid"))]
     bits: bitcoin::pow::CompactTarget,
     #[cfg(not(feature = "liquid"))]
-    difficulty: u128,
+    difficulty: f64,
 
     #[cfg(feature = "liquid")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,7 +107,7 @@ impl BlockValue {
             #[cfg(not(feature = "liquid"))]
             nonce: header.nonce,
             #[cfg(not(feature = "liquid"))]
-            difficulty: header.difficulty(),
+            difficulty: header.difficulty_float(),
 
             #[cfg(feature = "liquid")]
             ext: Some(header.ext.clone()),
