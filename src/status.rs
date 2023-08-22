@@ -1,13 +1,18 @@
 use anyhow::Result;
 use bitcoin::{
+    consensus::Decodable,
     hashes::{sha256, Hash, HashEngine},
-    Amount, Block, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
+    Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
+use bitcoin_slices::{bsl, Visit, Visitor};
 use rayon::prelude::*;
 use serde::ser::{Serialize, Serializer};
 
-use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    ops::ControlFlow,
+};
 
 use crate::{
     cache::Cache,
@@ -15,7 +20,7 @@ use crate::{
     daemon::Daemon,
     index::Index,
     mempool::Mempool,
-    types::{ScriptHash, StatusHash},
+    types::{bsl_txid, ScriptHash, SerBlock, StatusHash},
 };
 
 /// Given a scripthash, store relevant inputs and outputs of a specific transaction
@@ -306,7 +311,7 @@ impl ScriptHashStatus {
     fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, Block),
+        F: FnMut(BlockHash, SerBlock),
     {
         daemon.for_blocks(
             blockhashes
@@ -331,21 +336,17 @@ impl ScriptHashStatus {
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_outputs(tx, scripthash)).for_each(
-                |FilteredTx {
-                     pos,
-                     tx,
-                     txid,
-                     result: funding_outputs,
-                 }| {
-                    cache.add_tx(txid, move || tx);
-                    outpoints.extend(make_outpoints(txid, &funding_outputs));
-                    block_entries
-                        .entry(pos)
-                        .or_insert_with(|| TxEntry::new(txid))
-                        .outputs = funding_outputs;
-                },
-            );
+            for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
+                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
+                outpoints.extend(make_outpoints(
+                    filtered_outputs.txid,
+                    &filtered_outputs.result,
+                ));
+                block_entries
+                    .entry(filtered_outputs.pos)
+                    .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
+                    .outputs = filtered_outputs.result;
+            }
         })?;
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
@@ -353,20 +354,13 @@ impl ScriptHashStatus {
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
-            filter_block_txs(block, |tx| filter_inputs(tx, outpoints)).for_each(
-                |FilteredTx {
-                     pos,
-                     tx,
-                     txid,
-                     result: spent_outpoints,
-                 }| {
-                    cache.add_tx(txid, move || tx);
-                    block_entries
-                        .entry(pos)
-                        .or_insert_with(|| TxEntry::new(txid))
-                        .spent = spent_outpoints;
-                },
-            );
+            for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
+                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                block_entries
+                    .entry(filtered_inputs.pos)
+                    .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
+                    .spent = filtered_inputs.result;
+            }
         })?;
 
         Ok(result
@@ -513,35 +507,111 @@ struct FilteredTx<T> {
     result: Vec<T>,
 }
 
-fn filter_block_txs<T: Send>(
-    block: Block,
-    map_fn: impl Fn(&Transaction) -> Vec<T> + Sync,
-) -> impl Iterator<Item = FilteredTx<T>> {
-    block
-        .txdata
-        .into_par_iter()
-        .enumerate()
-        .filter_map(|(pos, tx)| {
-            let result = map_fn(&tx);
-            if result.is_empty() {
-                return None; // skip irrelevant transaction
+fn filter_block_txs_outputs(block: SerBlock, scripthash: ScriptHash) -> Vec<FilteredTx<TxOutput>> {
+    struct FindOutputs {
+        scripthash: ScriptHash,
+        result: Vec<FilteredTx<TxOutput>>,
+        buffer: Vec<TxOutput>,
+        pos: usize,
+    }
+    impl Visitor for FindOutputs {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
+            if !self.buffer.is_empty() {
+                let result = std::mem::take(&mut self.buffer);
+                let txid = bsl_txid(tx);
+                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
+                    .expect("transaction was already validated");
+                self.result.push(FilteredTx::<TxOutput> {
+                    tx,
+                    txid,
+                    pos: self.pos,
+                    result,
+                });
             }
-            let txid = tx.txid();
-            Some(FilteredTx {
-                tx,
-                txid,
-                pos,
-                result,
-            })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            self.pos += 1;
+            ControlFlow::Continue(())
+        }
+        fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
+            let current = ScriptHash::hash(tx_out.script_pubkey());
+            if current == self.scripthash {
+                self.buffer.push(TxOutput {
+                    index: vout as u32,
+                    value: Amount::from_sat(tx_out.value()),
+                })
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut find_outputs = FindOutputs {
+        scripthash,
+        result: vec![],
+        buffer: vec![],
+        pos: 0,
+    };
+
+    bsl::Block::visit(&block, &mut find_outputs).expect("core returned invalid block");
+
+    find_outputs.result
+}
+
+fn filter_block_txs_inputs(
+    block: &SerBlock,
+    outpoints: &HashSet<OutPoint>,
+) -> Vec<FilteredTx<OutPoint>> {
+    struct FindInputs<'a> {
+        outpoints: &'a HashSet<OutPoint>,
+        result: Vec<FilteredTx<OutPoint>>,
+        buffer: Vec<OutPoint>,
+        pos: usize,
+    }
+
+    impl<'a> Visitor for FindInputs<'a> {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
+            if !self.buffer.is_empty() {
+                let result = std::mem::take(&mut self.buffer);
+                let txid = bsl_txid(tx);
+                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
+                    .expect("transaction was already validated");
+                self.result.push(FilteredTx::<OutPoint> {
+                    tx,
+                    txid,
+                    pos: self.pos,
+                    result,
+                });
+            }
+            self.pos += 1;
+            ControlFlow::Continue(())
+        }
+        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
+            let current: OutPoint = tx_in.prevout().into();
+            if self.outpoints.contains(&current) {
+                self.buffer.push(current);
+            }
+            ControlFlow::Continue(())
+        }
+    }
+
+    let mut find_inputs = FindInputs {
+        outpoints,
+        result: vec![],
+        buffer: vec![],
+        pos: 0,
+    };
+
+    bsl::Block::visit(block, &mut find_inputs).expect("core returned invalid block");
+
+    find_inputs.result
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashSet, str::FromStr};
+
+    use crate::types::ScriptHash;
+
     use super::HistoryEntry;
-    use bitcoin::Amount;
+    use bitcoin::{Address, Amount};
+    use bitcoin_test_data::blocks::mainnet_702861;
     use serde_json::json;
 
     #[test]
@@ -565,5 +635,43 @@ mod tests {
             )),
             json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 0, "fee": 123})
         );
+    }
+
+    #[test]
+    fn test_find_outputs() {
+        let block = mainnet_702861().to_vec();
+
+        let addr = Address::from_str("1A9MXXG26vZVySrNNytQK1N8bX42ZuJ6Ax")
+            .unwrap()
+            .assume_checked();
+        let scripthash = ScriptHash::new(&addr.script_pubkey());
+
+        let result = &super::filter_block_txs_outputs(block, scripthash)[0];
+        assert_eq!(
+            result.txid.to_string(),
+            "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
+        );
+        assert_eq!(result.pos, 8);
+        assert_eq!(result.result[0].index, 0);
+        assert_eq!(result.result[0].value.to_sat(), 709503);
+    }
+
+    #[test]
+    fn test_find_inputs() {
+        let block = mainnet_702861().to_vec();
+        let outpoint = bitcoin::OutPoint::from_str(
+            "cc135e792b37a9c4ffd784f696b1e38bd1197f8e67ae1f96c9f13e4618b91866:3",
+        )
+        .unwrap();
+        let mut outpoints = HashSet::new();
+        outpoints.insert(outpoint);
+
+        let result = &super::filter_block_txs_inputs(&block, &outpoints)[0];
+        assert_eq!(
+            result.txid.to_string(),
+            "7bcdcb44422da5a99daad47d6ba1c3d6f2e48f961a75e42c4fa75029d4b0ef49"
+        );
+        assert_eq!(result.pos, 8);
+        assert_eq!(result.result[0], outpoint);
     }
 }

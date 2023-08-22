@@ -8,6 +8,7 @@ use bitcoin::{
     hashes::{hash_newtype, sha256, Hash},
     OutPoint, Script, Txid,
 };
+use bitcoin_slices::bsl;
 
 use crate::db;
 
@@ -43,6 +44,7 @@ const HEIGHT_SIZE: usize = 4;
 
 type HashPrefix = [u8; HASH_PREFIX_LEN];
 type Height = u32;
+pub(crate) type SerBlock = Vec<u8>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {
@@ -188,6 +190,10 @@ impl HeaderRow {
     pub(crate) fn from_db_row(row: &[u8]) -> Self {
         deserialize(row).expect("bad HeaderRow")
     }
+}
+
+pub(crate) fn bsl_txid(tx: &bsl::Transaction) -> Txid {
+    bitcoin::Txid::from_slice(tx.txid_sha2().as_slice()).expect("invalid txid")
 }
 
 #[cfg(test)]

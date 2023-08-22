@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::{Block, BlockHash, OutPoint, Txid};
 
 use crate::{
@@ -202,6 +202,8 @@ impl Index {
         daemon.for_blocks(blockhashes, |blockhash, block| {
             let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
+                let block =
+                    Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
                 index_single_block(blockhash, block, height, &mut batch);
             });
             self.stats.height.set("tip", height as f64);
