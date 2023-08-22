@@ -1,5 +1,10 @@
 use anyhow::{Context, Result};
 use bitcoin::{BlockHash, Transaction, Txid};
+use bitcoin_slices::{
+    bsl::{self, FindTransaction},
+    Error::VisitBreak,
+    Visit,
+};
 
 use crate::{
     cache::Cache,
@@ -102,14 +107,13 @@ impl Tracker {
         let blockhashes = self.index.filter_by_txid(txid);
         let mut result = None;
         daemon.for_blocks(blockhashes, |blockhash, block| {
-            for tx in block.txdata {
-                if result.is_some() {
-                    return;
-                }
-                if tx.txid() == txid {
-                    result = Some((blockhash, tx));
-                    return;
-                }
+            let mut visitor = FindTransaction::new(txid);
+            match bsl::Block::visit(&block, &mut visitor) {
+                Ok(_) | Err(VisitBreak) => (),
+                Err(e) => panic!("core returned invalid block: {:?}", e),
+            }
+            if let Some(tx) = visitor.tx_found() {
+                result = Some((blockhash, tx));
             }
         })?;
         Ok(result)
