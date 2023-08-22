@@ -10,6 +10,7 @@ use serde_json::{json, value::RawValue, Value};
 
 use std::fs::File;
 use std::io::Read;
+use std::ops::ControlFlow;
 use std::path::Path;
 
 use crate::{
@@ -275,10 +276,10 @@ impl Daemon {
         self.p2p.lock().get_new_headers(chain)
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
+    pub(crate) fn for_blocks<B, F, R>(&self, blockhashes: B, func: F) -> Result<ControlFlow<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: FnMut(BlockHash, SerBlock) -> ControlFlow<R>,
     {
         self.p2p.lock().for_blocks(blockhashes, func)
     }
