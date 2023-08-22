@@ -5,6 +5,7 @@ use bitcoin_slices::{
     Error::VisitBreak,
     Visit,
 };
+use std::ops::ControlFlow;
 
 use crate::{
     cache::Cache,
@@ -105,17 +106,25 @@ impl Tracker {
     ) -> Result<Option<(BlockHash, Transaction)>> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         let blockhashes = self.index.filter_by_txid(txid);
-        let mut result = None;
-        daemon.for_blocks(blockhashes, |blockhash, block| {
-            if result.is_some() {
-                return; // keep first matching transaction
-            }
+        let result = daemon.for_blocks(blockhashes, |blockhash, block| {
             let mut visitor = FindTransaction::new(txid);
-            result = match bsl::Block::visit(&block, &mut visitor) {
-                Ok(_) | Err(VisitBreak) => visitor.tx_found().map(|tx| (blockhash, tx)),
+            match bsl::Block::visit(&block, &mut visitor) {
+                Ok(_) | Err(VisitBreak) => (),
                 Err(e) => panic!("core returned invalid block: {:?}", e),
-            };
+            }
+            match visitor.tx_found() {
+                Some(tx) => ControlFlow::Break((blockhash, tx)),
+                None => ControlFlow::Continue(()),
+            }
         })?;
-        Ok(result)
+        Ok(control_flow_break_value(result))
+    }
+}
+
+/// See unstable ControlFlow::break_value (https://github.com/rust-lang/rust/issues/75744)
+fn control_flow_break_value<B, C>(value: ControlFlow<B, C>) -> Option<B> {
+    match value {
+        ControlFlow::Continue(..) => None,
+        ControlFlow::Break(x) => Some(x),
     }
 }

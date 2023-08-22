@@ -210,6 +210,7 @@ impl Index {
                 index_single_block(blockhash, block, height, &mut batch);
             });
             self.stats.height.set("tip", height as f64);
+            ControlFlow::Continue::<()>(())
         })?;
         let heights: Vec<_> = heights.collect();
         assert!(
