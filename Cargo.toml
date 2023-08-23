@@ -61,8 +61,8 @@ electrum-client = { version = "0.8", optional = true }
 
 
 [dev-dependencies]
-bitcoind = { version = "0.20.0", features = [ "22_0" ] }
-elementsd = { version = "0.4.0", features = [ "0_21_0" ] }
+bitcoind = { version = "0.32.0", features = [ "25_0" ] }
+elementsd = { version = "0.8.0", features = [ "22_1_1" ] }
 electrumd = { version = "0.1.0", features = [ "4_1_5" ] }
 ureq = { version = "2.4", default-features = false, features = [ "json" ] }
 tempfile = "3.0"

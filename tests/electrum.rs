@@ -7,6 +7,9 @@ use electrumd::ElectrumD;
 
 use electrs::chain::Address;
 
+#[cfg(not(feature = "liquid"))]
+use bitcoin::address;
+
 /// Test the Electrum RPC server using an headless Electrum wallet
 /// This only runs on Bitcoin (non-Liquid) mode.
 #[cfg_attr(not(feature = "liquid"), test)]
@@ -47,13 +50,23 @@ fn test_electrum() -> Result<()> {
     };
 
     let newaddress = || -> Address {
-        electrum_wallet
+        #[cfg(not(feature = "liquid"))]
+        type ParseAddrType = Address<address::NetworkUnchecked>;
+        #[cfg(feature = "liquid")]
+        type ParseAddrType = Address;
+
+        let addr = electrum_wallet
             .call("createnewaddress", &json!([]))
             .unwrap()
             .as_str()
             .expect("missing address")
-            .parse()
-            .expect("invalid address")
+            .parse::<ParseAddrType>()
+            .expect("invalid address");
+
+        #[cfg(not(feature = "liquid"))]
+        let addr = addr.assume_checked();
+
+        addr
     };
 
     log::info!(

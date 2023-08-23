@@ -4,7 +4,9 @@ use std::{env, net};
 use stderrlog::StdErrLog;
 use tempfile::TempDir;
 
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(feature = "liquid")]
+use serde_json::Value;
 
 #[cfg(not(feature = "liquid"))]
 use bitcoind::{self as noded, BitcoinD as NodeD};
@@ -14,8 +16,8 @@ use elementsd::{self as noded, ElementsD as NodeD};
 use noded::bitcoincore_rpc::{self, RpcApi};
 
 use electrs::{
-    chain::{self, Address, BlockHash, Network, Txid},
-    config::{self, Config},
+    chain::{Address, BlockHash, Network, Txid},
+    config::Config,
     daemon::Daemon,
     electrum::RPC as ElectrumRPC,
     metrics::Metrics,
@@ -76,9 +78,9 @@ impl TestRunner {
         #[cfg(feature = "liquid")]
         let network_type = Network::LiquidRegtest;
 
-        let daemon_subdir = params
-            .datadir
-            .join(config::get_network_subdir(network_type).unwrap());
+        let mut daemon_subdir = params.cookie_file.clone();
+        // drop `.cookie` filename, leaving just the network subdirectory
+        daemon_subdir.pop();
 
         let electrsdb = tempfile::tempdir().unwrap();
 
@@ -107,7 +109,7 @@ impl TestRunner {
             #[cfg(feature = "liquid")]
             asset_db_path: None, // XXX
             #[cfg(feature = "liquid")]
-            parent_network: chain::BNetwork::Regtest,
+            parent_network: bitcoin::Network::Regtest,
             //#[cfg(feature = "electrum-discovery")]
             //electrum_public_hosts: Option<crate::electrum::ServerHosts>,
             //#[cfg(feature = "electrum-discovery")]
@@ -205,9 +207,10 @@ impl TestRunner {
     }
 
     pub fn send(&mut self, addr: &Address, amount: bitcoin::Amount) -> Result<Txid> {
+        // Must use raw call() because send_to_address() expects a bitcoin::Address and not an elements::Address
         let txid = self.node_client().call(
             "sendtoaddress",
-            &[addr.to_string().into(), json!(amount.as_btc())],
+            &[addr.to_string().into(), json!(amount.to_btc())],
         )?;
         self.sync()?;
         Ok(txid)
@@ -224,7 +227,7 @@ impl TestRunner {
             "sendtoaddress",
             &[
                 addr.to_string().into(),
-                json!(amount.as_btc()),
+                json!(amount.to_btc()),
                 Value::Null,
                 Value::Null,
                 Value::Null,
@@ -239,21 +242,20 @@ impl TestRunner {
         Ok(txid)
     }
 
+    /// Generate and return a new address.
+    /// Returns the unconfidential address in Liquid mode, to make it interchangeable with Bitcoin addresses in tests.
     pub fn newaddress(&self) -> Result<Address> {
         #[cfg(not(feature = "liquid"))]
-        return Ok(self.node_client().get_new_address(None, None)?);
+        return Ok(raw_new_address(self.node_client())?);
 
-        // Return the unconfidential address on Liquid, so that the Bitcoin tests using
-        // newaddress() can work on Liquid too. The confidential address can be obtained
-        // by calling ct_newaddress()
         #[cfg(feature = "liquid")]
         return Ok(self.ct_newaddress()?.1);
     }
-
+    /// Generate a new address, returning both the confidential and non-confidential versions
     #[cfg(feature = "liquid")]
     pub fn ct_newaddress(&self) -> Result<(Address, Address)> {
         let client = self.node_client();
-        let c_addr = client.call::<Address>("getnewaddress", &[])?;
+        let c_addr = raw_new_address(client)?;
         let mut info = client.call::<Value>("getaddressinfo", &[c_addr.to_string().into()])?;
         let uc_addr = serde_json::from_value(info["unconfidential"].take())?;
         Ok((c_addr, uc_addr))
@@ -280,11 +282,25 @@ pub fn init_electrum_tester() -> Result<(ElectrumRPC, net::SocketAddr, TestRunne
     Ok((electrum_server, tester.config.electrum_rpc_addr, tester))
 }
 
+#[cfg(not(feature = "liquid"))]
+fn raw_new_address(
+    client: &bitcoincore_rpc::Client,
+) -> bitcoincore_rpc::Result<Address<bitcoin::address::NetworkChecked>> {
+    Ok(client.get_new_address(None, None)?.assume_checked())
+}
+
+// Returns the confidential address
+#[cfg(feature = "liquid")]
+fn raw_new_address(client: &bitcoincore_rpc::Client) -> bitcoincore_rpc::Result<Address> {
+    // Must use raw call() because get_new_address() returns a bitcoin::Address and not an elements::Address
+    Ok(client.call::<Address>("getnewaddress", &[])?)
+}
+
 fn generate(
     client: &bitcoincore_rpc::Client,
     num_blocks: u32,
 ) -> bitcoincore_rpc::Result<Vec<BlockHash>> {
-    let addr = client.call::<Address>("getnewaddress", &[])?;
+    let addr = raw_new_address(client)?;
     client.call(
         "generatetoaddress",
         &[num_blocks.into(), addr.to_string().into()],

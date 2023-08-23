@@ -1,9 +1,8 @@
-use bitcoin::hashes::{sha256, Hash};
-use bitcoind::bitcoincore_rpc::{self, RpcApi};
+use bitcoind::bitcoincore_rpc::RpcApi;
 use serde_json::Value;
 use std::collections::HashSet;
 
-use electrs::chain::{Address, Txid};
+use electrs::chain::Txid;
 
 pub mod common;
 
@@ -193,6 +192,7 @@ fn test_rest() -> Result<()> {
 
         // Test blinded asset issuance
         {
+            use bitcoin::hashes::{sha256, Hash};
             let contract_hash = sha256::Hash::hash(&[0x11, 0x22, 0x33, 0x44]).to_string();
             let contract_hash = contract_hash.as_str();
             let issuance = tester.node_client().call::<Value>(
