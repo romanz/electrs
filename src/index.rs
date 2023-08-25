@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use bitcoin::consensus::{deserialize, serialize, Decodable};
-use bitcoin::{Block, BlockHash, OutPoint, Txid};
+use bitcoin::{BlockHash, OutPoint, Txid};
+use bitcoin_slices::{bsl, Visit, Visitor};
+use std::ops::ControlFlow;
 
 use crate::{
     chain::{Chain, NewHeader},
@@ -8,7 +10,10 @@ use crate::{
     db::{DBStore, Row, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
-    types::{HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SpendingPrefixRow, TxidRow},
+    types::{
+        bsl_txid, HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SerBlock, SpendingPrefixRow,
+        TxidRow,
+    },
 };
 
 #[derive(Clone)]
@@ -202,8 +207,6 @@ impl Index {
         daemon.for_blocks(blockhashes, |blockhash, block| {
             let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
-                let block =
-                    Block::consensus_decode(&mut &block[..]).expect("core returned invalid block");
                 index_single_block(blockhash, block, height, &mut batch);
             });
             self.stats.height.set("tip", height as f64);
@@ -231,33 +234,57 @@ fn db_rows_size(rows: &[Row]) -> usize {
     rows.iter().map(|key| key.len()).sum()
 }
 
-fn index_single_block(block_hash: BlockHash, block: Block, height: usize, batch: &mut WriteBatch) {
-    for tx in &block.txdata {
-        batch
-            .txid_rows
-            .push(TxidRow::row(tx.txid(), height).to_db_row());
-
-        batch.funding_rows.extend(
-            tx.output
-                .iter()
-                .filter(|txo| !txo.script_pubkey.is_provably_unspendable())
-                .map(|txo| {
-                    let scripthash = ScriptHash::new(&txo.script_pubkey);
-                    ScriptHashRow::row(scripthash, height).to_db_row()
-                }),
-        );
-
-        if tx.is_coin_base() {
-            continue; // coinbase doesn't have inputs
-        }
-        batch.spending_rows.extend(
-            tx.input
-                .iter()
-                .map(|txin| SpendingPrefixRow::row(txin.previous_output, height).to_db_row()),
-        );
+fn index_single_block(
+    block_hash: BlockHash,
+    block: SerBlock,
+    height: usize,
+    batch: &mut WriteBatch,
+) {
+    struct IndexBlockVisitor<'a> {
+        batch: &'a mut WriteBatch,
+        height: usize,
     }
-    batch
-        .header_rows
-        .push(HeaderRow::new(block.header).to_db_row());
+
+    impl<'a> Visitor for IndexBlockVisitor<'a> {
+        fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
+            let txid = bsl_txid(tx);
+            self.batch
+                .txid_rows
+                .push(TxidRow::row(txid, self.height).to_db_row());
+            ControlFlow::Continue(())
+        }
+
+        fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
+            let script = bitcoin::Script::from_bytes(tx_out.script_pubkey());
+            // skip indexing unspendable outputs
+            if !script.is_provably_unspendable() {
+                let row = ScriptHashRow::row(ScriptHash::new(script), self.height);
+                self.batch.funding_rows.push(row.to_db_row());
+            }
+            ControlFlow::Continue(())
+        }
+
+        fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
+            let prevout: OutPoint = tx_in.prevout().into();
+            // skip indexing coinbase transactions' input
+            if !prevout.is_null() {
+                let row = SpendingPrefixRow::row(prevout, self.height);
+                self.batch.spending_rows.push(row.to_db_row());
+            }
+            ControlFlow::Continue(())
+        }
+
+        fn visit_block_header(&mut self, header: &bsl::BlockHeader) -> ControlFlow<()> {
+            let header = bitcoin::block::Header::consensus_decode(&mut header.as_ref())
+                .expect("block header was already validated");
+            self.batch
+                .header_rows
+                .push(HeaderRow::new(header).to_db_row());
+            ControlFlow::Continue(())
+        }
+    }
+
+    let mut index_block = IndexBlockVisitor { batch, height };
+    bsl::Block::visit(&block, &mut index_block).expect("core returned invalid block");
     batch.tip_row = serialize(&block_hash).into_boxed_slice();
 }
