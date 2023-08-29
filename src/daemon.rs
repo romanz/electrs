@@ -229,10 +229,11 @@ impl Daemon {
         self.p2p.lock().get_new_headers(chain)
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
+    pub(crate) fn for_blocks<B, F, R>(&self, blockhashes: B, func: F) -> Result<Vec<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: Fn(BlockHash, SerBlock) -> R + Send + Sync,
+        R: Send + Sync,
     {
         self.p2p.lock().for_blocks(blockhashes, func)
     }

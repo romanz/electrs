@@ -18,6 +18,8 @@ use bitcoin::{
 };
 use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
+use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelIterator;
 
 use std::io::{self, ErrorKind, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
@@ -90,18 +92,20 @@ impl Connection {
             .collect())
     }
 
-    /// Request and process the specified blocks (in the specified order).
+    /// Request and process the specified blocks.
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    pub(crate) fn for_blocks<B, F, R>(&mut self, blockhashes: B, func: F) -> Result<Vec<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: Fn(BlockHash, SerBlock) -> R + Send + Sync,
+        R: Send + Sync,
     {
         self.blocks_duration.observe_duration("total", || {
+            let mut result = vec![];
             let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
             if blockhashes.is_empty() {
-                return Ok(());
+                return Ok(vec![]);
             }
             self.blocks_duration.observe_duration("request", || {
                 debug!("loading {} blocks", blockhashes.len());
@@ -123,10 +127,16 @@ impl Connection {
                     );
                     Ok(block)
                 })?;
-                self.blocks_duration
-                    .observe_duration("process", || func(hash, block));
+                result.push((hash, block));
             }
-            Ok(())
+
+            Ok(result
+                .into_par_iter()
+                .map(|(hash, block)| {
+                    self.blocks_duration
+                        .observe_duration("process", || func(hash, block))
+                })
+                .collect())
         })
     }
 

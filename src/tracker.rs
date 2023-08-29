@@ -105,17 +105,18 @@ impl Tracker {
     ) -> Result<Option<(BlockHash, Transaction)>> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         let blockhashes = self.index.filter_by_txid(txid);
-        let mut result = None;
-        daemon.for_blocks(blockhashes, |blockhash, block| {
-            if result.is_some() {
-                return; // keep first matching transaction
-            }
-            let mut visitor = FindTransaction::new(txid);
-            result = match bsl::Block::visit(&block, &mut visitor) {
-                Ok(_) | Err(VisitBreak) => visitor.tx_found().map(|tx| (blockhash, tx)),
-                Err(e) => panic!("core returned invalid block: {:?}", e),
-            };
-        })?;
+        let result = daemon
+            .for_blocks(blockhashes, |blockhash, block| {
+                let mut visitor = FindTransaction::new(txid);
+                match bsl::Block::visit(&block, &mut visitor) {
+                    Ok(_) | Err(VisitBreak) => (),
+                    Err(e) => panic!("core returned invalid block: {:?}", e),
+                }
+                visitor.tx_found().map(|tx| (blockhash, tx))
+            })?
+            .first()
+            .cloned()
+            .flatten();
         Ok(result)
     }
 }

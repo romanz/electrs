@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use bitcoin::consensus::{deserialize, serialize, Decodable};
 use bitcoin::{BlockHash, OutPoint, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 
 use crate::{
@@ -199,29 +200,33 @@ impl Index {
     }
 
     fn sync_blocks(&mut self, daemon: &Daemon, chunk: &[NewHeader]) -> Result<()> {
-        let blockhashes: Vec<BlockHash> = chunk.iter().map(|h| h.hash()).collect();
-        let mut heights = chunk.iter().map(|h| h.height());
+        let hash_height: HashMap<_, _> = chunk.iter().map(|h| (h.hash(), h.height())).collect();
 
-        let mut batch = WriteBatch::default();
+        let batches = daemon.for_blocks(hash_height.keys().cloned(), |blockhash, block| {
+            let height = *hash_height.get(&blockhash).expect("some by construnction");
+            let mut batch = WriteBatch::default();
 
-        daemon.for_blocks(blockhashes, |blockhash, block| {
-            let height = heights.next().expect("unexpected block");
             self.stats.observe_duration("block", || {
                 index_single_block(blockhash, block, height, &mut batch);
             });
             self.stats.height.set("tip", height as f64);
+            batch
         })?;
-        let heights: Vec<_> = heights.collect();
-        assert!(
-            heights.is_empty(),
-            "some blocks were not indexed: {:?}",
-            heights
+        assert_eq!(
+            hash_height.len(),
+            batches.len(),
+            "some blocks were not indexed",
         );
+        let mut batch = batches
+            .into_iter()
+            .fold(WriteBatch::default(), |a, b| a.merge(b));
+
         batch.sort();
         self.stats.observe_batch(&batch);
         self.stats
             .observe_duration("write", || self.store.write(&batch));
         self.stats.observe_db(&self.store);
+
         Ok(())
     }
 
@@ -287,4 +292,5 @@ fn index_single_block(
     let mut index_block = IndexBlockVisitor { batch, height };
     bsl::Block::visit(&block, &mut index_block).expect("core returned invalid block");
     batch.tip_row = serialize(&block_hash).into_boxed_slice();
+    batch.height = height;
 }

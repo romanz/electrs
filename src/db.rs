@@ -8,6 +8,7 @@ pub(crate) type Row = Box<[u8]>;
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
+    pub(crate) height: usize,
     pub(crate) tip_row: Row,
     pub(crate) header_rows: Vec<Row>,
     pub(crate) funding_rows: Vec<Row>,
@@ -21,6 +22,16 @@ impl WriteBatch {
         self.funding_rows.sort_unstable();
         self.spending_rows.sort_unstable();
         self.txid_rows.sort_unstable();
+    }
+    pub(crate) fn merge(mut self, other: WriteBatch) -> Self {
+        self.header_rows.extend(other.header_rows.into_iter());
+        self.funding_rows.extend(other.funding_rows.into_iter());
+        self.spending_rows.extend(other.spending_rows.into_iter());
+        self.txid_rows.extend(other.txid_rows.into_iter());
+        if self.height < other.height {
+            self.tip_row = other.tip_row
+        }
+        self
     }
 }
 
