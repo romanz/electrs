@@ -1,6 +1,6 @@
 use crate::chain::{
-    address, AbsLockTime, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn,
-    TxMerkleNode, TxOut, Txid,
+    address, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxMerkleNode,
+    TxOut, Txid,
 };
 use crate::config::Config;
 use crate::errors;
@@ -119,7 +119,7 @@ impl BlockValue {
 struct TransactionValue {
     txid: Txid,
     version: u32,
-    locktime: AbsLockTime,
+    locktime: u32,
     vin: Vec<TxInValue>,
     vout: Vec<TxOutValue>,
     size: u32,
@@ -160,7 +160,7 @@ impl TransactionValue {
         TransactionValue {
             txid: tx.txid(),
             version: tx.version as u32,
-            locktime: tx.lock_time,
+            locktime: tx.lock_time.to_consensus_u32(),
             vin: vins,
             vout: vouts,
             size: tx.size() as u32,
