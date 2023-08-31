@@ -107,14 +107,14 @@ impl Tracker {
         let blockhashes = self.index.filter_by_txid(txid);
         let mut result = None;
         daemon.for_blocks(blockhashes, |blockhash, block| {
+            if result.is_some() {
+                return; // keep first matching transaction
+            }
             let mut visitor = FindTransaction::new(txid);
-            match bsl::Block::visit(&block, &mut visitor) {
-                Ok(_) | Err(VisitBreak) => (),
+            result = match bsl::Block::visit(&block, &mut visitor) {
+                Ok(_) | Err(VisitBreak) => visitor.tx_found().map(|tx| (blockhash, tx)),
                 Err(e) => panic!("core returned invalid block: {:?}", e),
-            }
-            if let Some(tx) = visitor.tx_found() {
-                result = Some((blockhash, tx));
-            }
+            };
         })?;
         Ok(result)
     }
