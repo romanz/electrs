@@ -676,6 +676,9 @@ impl ChainQuery {
             .map(TxHistoryRow::from_row)
             .filter_map(|history| {
                 self.tx_confirming_block(&history.get_txid())
+                    // drop history entries that were previously confirmed in a re-orged block and later
+                    // confirmed again at a different height
+                    .filter(|blockid| blockid.height == history.key.confirmed_height as usize)
                     .map(|blockid| (history, blockid))
             });
 
