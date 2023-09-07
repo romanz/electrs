@@ -6,8 +6,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use base64;
-use glob;
+use base64::prelude::{Engine, BASE64_STANDARD};
 use hex::FromHex;
 use itertools::Itertools;
 use serde_json::{from_str, from_value, Value};
@@ -169,7 +168,7 @@ impl Connection {
         let cookie = &self.cookie_getter.get()?;
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
-            base64::encode(cookie),
+            BASE64_STANDARD.encode(cookie),
             request.len(),
             request,
         );
