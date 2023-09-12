@@ -70,6 +70,14 @@ allowing this server to use bitcoind JSONRPC interface.
 Note: there was a `cookie` option in the version 0.8.7 and below, it's now deprecated - do **not** use, it will be removed.
 Please read upgrade notes if you're upgrading to a newer version.
 
+## Connecting an Electrum client ##
+
+By default, Electrs will listen on `127.0.0.1:50001` which means it will only serve clients in the local machine. If you wish to connect from another machine, you need to specify `0.0.0.0` instead of `127.0.0.1`.
+
+When using Electrum, you will notice that most default servers use the `50002` port, which is for SSL connections. Electrs serves on `50001` and does not provide SSL out of the box. So you would need to either use a webserver to provide SSL (see _SSL connection_ below) or connect without SSL. 
+
+To tell Electrum to connect to your server without SSL, you need to add `:t` after the port (ie: `localhost:50001:t`). Please note that this is not secure and therefore recommended only for local connections.
+
 ## Extra configuration suggestions
 
 ### SSL connection
