@@ -53,4 +53,4 @@ configure_me_codegen = { version = "0.4.4", default-features = false }
 [dev-dependencies]
 bitcoin-test-data = "0.2.0"
 hex_lit = "0.1.1"
-tempfile = "3.5"
+tempfile = "3.8"
