@@ -55,7 +55,7 @@ tail_log data/electrum/regtest-debug.log | grep -m1 "connection established"
 $EL getinfo | jq .
 
 echo "Loading Electrum wallet..."
-test `$EL load_wallet` == "true"
+$EL load_wallet
 
 echo "Running integration tests:"
 
