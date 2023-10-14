@@ -29,7 +29,8 @@ impl WriteBatch {
         self.spending_rows.extend(other.spending_rows.into_iter());
         self.txid_rows.extend(other.txid_rows.into_iter());
         if self.height < other.height {
-            self.tip_row = other.tip_row
+            self.tip_row = other.tip_row;
+            self.height = other.height;
         }
         self
     }
