@@ -2,7 +2,7 @@ task:
   name: test [ARM]
   arm_container:
     image: rust:1.63.0
-    cpu: 4
+    cpu: 2
     memory: 8G
   registry_cache:
     folder: $CARGO_HOME/registry
