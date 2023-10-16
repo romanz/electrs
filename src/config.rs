@@ -1,4 +1,5 @@
-use bitcoin::network::constants::{Magic, Network};
+use bitcoin::p2p::Magic;
+use bitcoin::Network;
 use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
 

@@ -7,12 +7,11 @@ use bitcoin::{
         Decodable,
     },
     hashes::Hash,
-    network::{
-        address,
-        constants::{self, Magic},
+    p2p::{
+        self, address,
         message::{self, CommandString, NetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
-        message_network,
+        message_network, Magic,
     },
     secp256k1::{self, rand::Rng},
     Block, BlockHash, Network,
@@ -199,10 +198,7 @@ impl Connection {
             };
             send_duration.observe_duration("send", || {
                 trace!("send: {:?}", msg);
-                let raw_msg = message::RawNetworkMessage {
-                    magic,
-                    payload: msg,
-                };
+                let raw_msg = message::RawNetworkMessage::new(magic, msg);
                 buffer.clear();
                 raw_msg
                     .consensus_encode(&mut buffer)
@@ -331,10 +327,10 @@ fn build_version_message() -> NetworkMessage {
         .expect("Time error")
         .as_secs() as i64;
 
-    let services = constants::ServiceFlags::NONE;
+    let services = p2p::ServiceFlags::NONE;
 
     NetworkMessage::Version(message_network::VersionMessage {
-        version: constants::PROTOCOL_VERSION,
+        version: p2p::PROTOCOL_VERSION,
         services,
         timestamp,
         receiver: address::Address::new(&addr, services),

@@ -22,9 +22,9 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.30.0", features = ["serde", "rand-std"] }
-bitcoin_slices = { version = "0.6", features =["bitcoin", "sha2"] }
-bitcoincore-rpc = "0.17.0"
+bitcoin = { version = "0.31.0", features = ["serde", "rand-std"] }
+bitcoin_slices = { version = "0.7", features = ["bitcoin", "sha2"] }
+bitcoincore-rpc = { version = "0.18" }
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"

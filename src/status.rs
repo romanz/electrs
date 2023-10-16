@@ -467,7 +467,7 @@ fn filter_outputs(tx: &Transaction, scripthash: ScriptHash) -> Vec<TxOutput> {
             if ScriptHash::new(&txo.script_pubkey) == scripthash {
                 Some(TxOutput {
                     index: vout,
-                    value: Amount::from_sat(txo.value),
+                    value: txo.value,
                 })
             } else {
                 None

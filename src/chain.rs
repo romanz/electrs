@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use bitcoin::blockdata::block::Header as BlockHeader;
-use bitcoin::network::constants;
-use bitcoin::BlockHash;
+use bitcoin::{BlockHash, Network};
 
 /// A new header found, to be added to the chain at specific height
 pub(crate) struct NewHeader {
@@ -37,7 +36,7 @@ pub struct Chain {
 
 impl Chain {
     // create an empty chain
-    pub fn new(network: constants::Network) -> Self {
+    pub fn new(network: Network) -> Self {
         let genesis = bitcoin::blockdata::constants::genesis_block(network);
         let genesis_hash = genesis.block_hash();
         Self {
@@ -148,7 +147,7 @@ mod tests {
     use super::{Chain, NewHeader};
     use bitcoin::blockdata::block::Header as BlockHeader;
     use bitcoin::consensus::deserialize;
-    use bitcoin::network::constants::Network::Regtest;
+    use bitcoin::Network::Regtest;
     use hex_lit::hex;
 
     #[test]
