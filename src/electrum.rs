@@ -17,7 +17,7 @@ use std::str::FromStr;
 use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
-    daemon::{self, extract_bitcoind_error, Daemon},
+    daemon::{self, extract_bitcoind_error, CoreRPCErrorCode, Daemon},
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
@@ -624,6 +624,17 @@ impl Params {
             }
         })
     }
+    fn parse_rpc_error_code(&self, code: i32) -> Option<RpcError> {
+        match self {
+            Params::TransactionGet(_) => match CoreRPCErrorCode::from_error_code(code) {
+                Some(CoreRPCErrorCode::RpcInvalidAddressOrKey) => {
+                    Some(RpcError::BadRequest(anyhow!("Transaction not found")))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 struct Call {
@@ -653,7 +664,10 @@ impl Call {
                     .downcast_ref::<bitcoincore_rpc::Error>()
                     .and_then(extract_bitcoind_error)
                 {
-                    Some(e) => error_msg(&self.id, RpcError::DaemonError(e.clone())),
+                    Some(e) => match self.params.parse_rpc_error_code(e.code) {
+                        Some(err) => error_msg(&self.id, err),
+                        None => error_msg(&self.id, RpcError::DaemonError(e.clone())),
+                    },
                     None => error_msg(&self.id, RpcError::BadRequest(err)),
                 }
             }
