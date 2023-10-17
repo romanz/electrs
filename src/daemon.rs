@@ -325,3 +325,113 @@ where
         Err(err) => bail!("batch {} request failed: {}", name, err),
     }
 }
+
+macro_rules! define_error_codes {
+    ($($(#[doc = $doc:expr])* $name:ident = $value:expr,)*) => {
+        /// Bitcoin Core RPC error codes
+        /// * https://github.com/bitcoin/bitcoin/blob/master/src/rpc/protocol.h
+        #[derive(Debug, Clone, Copy)]
+        #[repr(i32)]
+        pub(crate) enum CoreRPCErrorCode {
+            $(
+                $(#[doc = $doc])*
+                $name = $value,
+            )*
+        }
+
+        impl CoreRPCErrorCode {
+            pub(crate) fn from_error_code(code: i32) -> Option<Self> {
+                Some(match code {
+                    $(
+                        $value => Self::$name,
+                    )*
+                    _ => return None,
+                })
+            }
+        }
+    }
+}
+
+define_error_codes! {
+    /// RpcInvalidRequest is mapped to HTTP_BAD_REQUEST (400).
+    /// It is not used for application-layer errors
+    RpcInvalidRequest = -32600,
+    /// RpcMethodNotFound is mapped to HTTP_NOT_FOUND (404).
+    /// It is not be used for application-layer errors.
+    RpcMethodNotFound = -32601,
+    RpcInvalidParams = -32602,
+    /// RpcInternalError is used for genuine errors in bitcoind
+    RpcInternalError = -32603,
+    RpcParseError = -32700,
+
+    /// std::exception thrown in command handling
+    RpcMiscError = -1,
+    /// Unexpected type was passed as parameter
+    RpcTypeError = -3,
+    /// Invalid address or key
+    RpcInvalidAddressOrKey = -5,
+    /// Ran out of memory during operation
+    RpcOutOfMemory = -7,
+    /// Invalid, missing or duplicate parameter
+    RpcInvalidParameter = -8,
+    /// Database error
+    RpcDatabaseError = -20,
+    /// Error parsing or validating structure in raw format
+    RpcDeserializationError = -22,
+    /// General error during transaction or block submission
+    RpcVerifyError = -25,
+    /// Transaction or block was rejected by network rules
+    RpcVerifyRejected = -26,
+    /// Transaction already in chain
+    RpcVerifyAlreadyInChain = -27,
+    /// Client still warming up
+    RpcInWarmup = -28,
+    /// RPC method is deprecated
+    RpcMethodDeprecated = -32,
+
+    /// Bitcoin is not connected
+    RpcClientNotConnected = -9,
+    /// Still downloading initial blocks
+    RpcClientInInitialDownload = -10,
+    /// Node is already added
+    RpcClientNodeAlreadyAdded = -23,
+    /// Node has not been added before
+    RpcClientNodeNotAdded = -24,
+    /// Node to disconnect not found in connected nodes
+    RpcClientNodeNotConnected = -29,
+    /// Invalid IP/Subnet
+    RpcClientInvalidIpOrSubnet = -30,
+    /// No valid connection manager instance found
+    RpcClientP2pDisabled = -31,
+    /// Max number of outbound or block-relay connections already open
+    RpcClientNodeCapacityReached = -34,
+    /// No mempool instance found
+    RpcClientMempoolDisabled = -33,
+
+    /// Unspecified problem with wallet (key not found etc.)
+    RpcWalletError = -4,
+    /// Not enough funds in wallet or account
+    RpcWalletInsufficientFunds = -6,
+    /// Invalid label name
+    RpcWalletInvalidLabelName = -11,
+    /// Keypool ran out, call keypoolrefill first
+    RpcWalletKeypoolRanOut = -12,
+    /// Enter the wallet passphrase with walletpassphrase
+    RpcWalletUnlockNeeded = -13,
+    /// The wallet passphrase entered was incorrect
+    RpcWalletPassphraseIncorrect = -14,
+    /// Command given in wrong wallet encryption state (encrypting an encrypted wallet etc.)
+    RpcWalletWrongEncState = -15,
+    /// Failed to encrypt the wallet
+    RpcWalletEncryptionFailed = -16,
+    /// Wallet is already unlocked
+    RpcWalletAlreadyUnlocked = -17,
+    /// Invalid wallet specified
+    RpcWalletNotFound = -18,
+    /// No wallet specified (error when there are multiple wallets loaded)
+    RpcWalletNotSpecified = -19,
+    /// This same wallet is already loaded
+    RpcWalletAlreadyLoaded = -35,
+    /// There is already a wallet with the same name
+    RpcWalletAlreadyExisits = -36,
+}
