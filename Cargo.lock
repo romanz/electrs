@@ -99,11 +99,12 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_slices"
-version = "0.6.0"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c03df40e62cef35166f0ddf8268917142f38de88955fcc0721b28820160704"
+checksum = "df6bcb852d9bbd32230b600e2633cdd23d6dcdab3116ab53285dc45075b9ce51"
 dependencies = [
  "bitcoin",
+ "bitcoin_hashes",
  "sha2",
 ]
 
