@@ -1,3 +1,22 @@
+# 0.10.1 (Nov 01 2023)
+
+* Fix build failure on Raspberry Pi 4 (32bit) (#940)
+* Return first txid-matching transaction (#933)
+* Add txid collision scanner (#928)
+* Optimize indexing via `bitcoin_slices` (#927)
+* Optimize index querying via `bitcoin_slices` (#913)
+* Avoid precompiled 'serde_derive' >=1.0.172 (#924)
+* Allow exiting mempool sync on SIGINT (#917)
+* Allow skipping merkle proof downloads in `history.py` (#915)
+* Remove IndexResult and index into db::WriteBatch (#914)
+* Dockerfile: re-add curl for the second time, so it can be used for docker health checks (#912)
+* Reuse buffer in p2p handling (#910)
+* Preallocate serialized vector of HashPrefixRow (#909)
+* Less verbose logging when bitcoind is warming up (#908)
+* Drop Cirrus CI due to flakiness (#948)
+* Update dependencies (`anyhow`, `bitcoin`, `electrs-rocksdb`, `rayon`, `rustix`, `serde`, `serde_derive`, `serde_json`, `signal-hook`, `syn`, `tempfile`)
+
+
 # 0.10.0 (Jul 22 2023)
 
 * Add ARM build and integration tests in Cirrus CI
