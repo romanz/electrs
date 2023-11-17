@@ -121,7 +121,7 @@ impl Mempool {
         let mut added = 0;
         for chunk in to_add.chunks(100) {
             if exit_flag.poll().is_err() {
-                warn!("interrupted while syncing mempool");
+                info!("interrupted while syncing mempool");
                 return;
             }
             let entries: Vec<_> = chunk
