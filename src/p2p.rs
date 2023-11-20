@@ -131,11 +131,14 @@ impl Connection {
                     let func = &func;
                     let blocks_duration = &self.blocks_duration;
                     let send = send.clone();
+                    debug!("spawning task for {}", hash);
                     s.spawn(move |_| {
+                        debug!("processing {}", hash);
                         let r = blocks_duration.observe_duration("process", || func(hash, block));
                         let _ = send.send(r);
                     });
                 }
+                debug!("waiting for {} blocks", blockhashes_len);
                 let result: Result<Vec<_>, std::sync::mpsc::RecvError> =
                     (0..blockhashes_len).map(|_| receive.recv()).collect();
 
