@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-rm -rf data/
+rm -rf data/{bitcoin,electrum,electrs}
 mkdir -p data/{bitcoin,electrum,electrs}
 
 cleanup() {
