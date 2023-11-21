@@ -40,6 +40,7 @@ echo `$BTC getblockchaininfo | jq -r '"Generated \(.blocks) regtest blocks (\(.s
 TIP=`$BTC getbestblockhash`
 
 export RUST_LOG=electrs=debug
+export RAYON_NUM_THREADS=4
 electrs \
   --db-dir=data/electrs \
   --daemon-dir=data/bitcoin \
