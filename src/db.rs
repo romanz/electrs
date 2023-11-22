@@ -281,6 +281,7 @@ impl DBStore {
     }
 
     pub(crate) fn flush(&self) {
+        debug!("flushing DB column families");
         let mut config = self.get_config().unwrap_or_default();
         for name in COLUMN_FAMILIES {
             let cf = self.db.cf_handle(name).expect("missing CF");

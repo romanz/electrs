@@ -86,6 +86,7 @@ pub struct Index {
     chain: Chain,
     stats: Stats,
     is_ready: bool,
+    flush_needed: bool,
 }
 
 impl Index {
@@ -117,6 +118,7 @@ impl Index {
             chain,
             stats,
             is_ready: false,
+            flush_needed: false,
         })
     }
 
@@ -179,7 +181,10 @@ impl Index {
                 );
             }
             _ => {
-                self.store.flush(); // full compaction is performed on the first flush call
+                if self.flush_needed {
+                    self.store.flush(); // full compaction is performed on the first flush call
+                    self.flush_needed = false;
+                }
                 self.is_ready = true;
                 return Ok(true); // no more blocks to index (done for now)
             }
@@ -195,6 +200,7 @@ impl Index {
         }
         self.chain.update(new_headers);
         self.stats.observe_chain(&self.chain);
+        self.flush_needed = true;
         Ok(false) // sync is not done
     }
 
