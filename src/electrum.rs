@@ -373,7 +373,7 @@ impl Rpc {
                 .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
-        if let Some(tx) = self.cache.get_tx(&txid, |tx| serialize_hex(tx)) {
+        if let Some(tx) = self.cache.get_tx(&txid, serialize_hex) {
             return Ok(json!(tx));
         }
         debug!("tx cache miss: txid={}", txid);
