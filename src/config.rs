@@ -127,6 +127,7 @@ pub struct Config {
     // See below for the documentation of each field:
     pub network: Network,
     pub db_path: PathBuf,
+    pub db_log_dir: PathBuf,
     pub daemon_dir: PathBuf,
     pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,
@@ -334,6 +335,7 @@ impl Config {
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
+            db_log_dir: config.db_log_dir,
             daemon_dir: config.daemon_dir,
             daemon_auth,
             daemon_rpc_addr,

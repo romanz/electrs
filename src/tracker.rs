@@ -33,7 +33,7 @@ pub(crate) enum Error {
 
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store = DBStore::open(&config.db_path, config.auto_reindex)?;
+        let store = DBStore::open(&config.db_path, &config.db_log_dir, config.auto_reindex)?;
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(

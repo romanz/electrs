@@ -121,10 +121,11 @@ impl DBStore {
             .collect()
     }
 
-    fn open_internal(path: &Path) -> Result<Self> {
+    fn open_internal(path: &Path, log_dir: &Path) -> Result<Self> {
         let mut db_opts = default_opts();
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
+        db_opts.set_db_log_dir(log_dir);
 
         let db = rocksdb::DB::open_cf_descriptors(&db_opts, path, Self::create_cf_descriptors())
             .with_context(|| format!("failed to open DB: {}", path.display()))?;
@@ -152,8 +153,8 @@ impl DBStore {
     }
 
     /// Opens a new RocksDB at the specified location.
-    pub fn open(path: &Path, auto_reindex: bool) -> Result<Self> {
-        let mut store = Self::open_internal(path)?;
+    pub fn open(path: &Path, log_dir: &Path, auto_reindex: bool) -> Result<Self> {
+        let mut store = Self::open_internal(path, log_dir)?;
         let config = store.get_config();
         debug!("DB {:?}", config);
         let mut config = config.unwrap_or_default(); // use default config when DB is empty
@@ -185,7 +186,7 @@ impl DBStore {
                     path.display()
                 )
             })?;
-            store = Self::open_internal(path)?;
+            store = Self::open_internal(path, log_dir)?;
             config = Config::default(); // re-init config after dropping DB
         }
         if config.compacted {
@@ -359,18 +360,23 @@ impl Drop for DBStore {
 #[cfg(test)]
 mod tests {
     use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use std::ffi::{OsStr, OsString};
+    use std::path::Path;
 
     #[test]
     fn test_reindex_new_format() {
         let dir = tempfile::tempdir().unwrap();
         {
-            let store = DBStore::open(dir.path(), false).unwrap();
+            let store = DBStore::open(dir.path(), dir.path(), false).unwrap();
             let mut config = store.get_config().unwrap();
             config.format += 1;
             store.set_config(config);
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            DBStore::open(dir.path(), dir.path(), false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!(
                 "re-index required due to unsupported format {} != {}",
                 CURRENT_FORMAT + 1,
@@ -378,7 +384,7 @@ mod tests {
             )
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = DBStore::open(dir.path(), dir.path(), true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -396,11 +402,14 @@ mod tests {
             db.put(b"F", b"").unwrap(); // insert legacy DB compaction marker (in 'default' column family)
         };
         assert_eq!(
-            DBStore::open(dir.path(), false).err().unwrap().to_string(),
+            DBStore::open(dir.path(), dir.path(), false)
+                .err()
+                .unwrap()
+                .to_string(),
             format!("re-index required due to legacy format",)
         );
         {
-            let store = DBStore::open(dir.path(), true).unwrap();
+            let store = DBStore::open(dir.path(), dir.path(), true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -410,7 +419,7 @@ mod tests {
     #[test]
     fn test_db_prefix_scan() {
         let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), true).unwrap();
+        let store = DBStore::open(dir.path(), dir.path(), true).unwrap();
 
         let items: &[&[u8]] = &[
             b"ab",
@@ -436,6 +445,37 @@ mod tests {
         values
             .iter()
             .map(|v| v.to_vec().into_boxed_slice())
+            .collect()
+    }
+
+    #[test]
+    fn test_db_log_in_same_dir() {
+        let dir1 = tempfile::tempdir().unwrap();
+        let empty = Path::new("");
+        let _store = DBStore::open(dir1.path(), &empty, true).unwrap();
+
+        // LOG file is created in dir1
+        let dir_files = list_log_files(dir1.path());
+        assert_eq!(dir_files, vec![OsStr::new("LOG")]);
+
+        let dir2 = tempfile::tempdir().unwrap();
+        let dir3 = tempfile::tempdir().unwrap();
+        let _store = DBStore::open(dir2.path(), dir3.path(), true).unwrap();
+
+        // *_LOG file is not created in dir2, but in dir3
+        let dir_files = list_log_files(dir2.path());
+        assert_eq!(dir_files, Vec::<OsString>::new());
+
+        let dir_files = list_log_files(dir3.path());
+        assert_eq!(dir_files.len(), 1);
+        assert!(dir_files[0].to_str().unwrap().ends_with("_LOG"));
+    }
+
+    fn list_log_files(path: &Path) -> Vec<OsString> {
+        path.read_dir()
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|e| e.to_str().unwrap().contains("LOG"))
             .collect()
     }
 }
