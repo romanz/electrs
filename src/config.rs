@@ -127,7 +127,7 @@ pub struct Config {
     // See below for the documentation of each field:
     pub network: Network,
     pub db_path: PathBuf,
-    pub db_log_dir: PathBuf,
+    pub db_log_dir: Option<PathBuf>,
     pub daemon_dir: PathBuf,
     pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,

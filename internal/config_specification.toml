@@ -33,7 +33,6 @@ default = "\"./db\".into()"
 name = "db_log_dir"
 type = "std::path::PathBuf"
 doc = "Directory to store index database internal log (default: same as specified by `db_dir`)"
-default = "\"\".into()"
 
 [[param]]
 name = "daemon_dir"
