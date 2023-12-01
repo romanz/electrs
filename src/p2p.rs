@@ -21,7 +21,7 @@ use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::{self, ErrorKind, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::types::SerBlock;
@@ -101,23 +101,22 @@ impl Connection {
     {
         self.blocks_duration.observe_duration("total", || {
             let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
-            let blockhashes_len = blockhashes.len();
             if blockhashes.is_empty() {
                 return Ok(vec![]);
             }
+
+            let blockhashes_len = blockhashes.len();
             self.blocks_duration.observe_duration("request", || {
                 debug!("loading {} blocks", blockhashes.len());
                 self.req_send.send(Request::get_blocks(&blockhashes))
             })?;
 
-            let mut result = Vec::with_capacity(blockhashes_len);
-            for _ in 0..blockhashes_len {
-                // TODO use `OnceLock<R>` instead of `Mutex<Option<R>>` once MSRV 1.70
-                result.push(Mutex::new(None));
+            let mut results = Vec::<Result<R>>::with_capacity(blockhashes_len);
+            for (i, hash) in blockhashes.iter().enumerate() {
+                results.push(Err(anyhow!("missing block #{} hash={}", i, hash)));
             }
-
             rayon::scope(|s| {
-                for (i, hash) in blockhashes.iter().enumerate() {
+                for (hash, result) in blockhashes.into_iter().zip(results.iter_mut()) {
                     let block_result = self.blocks_duration.observe_duration("response", || {
                         let block = self
                             .blocks_recv
@@ -132,36 +131,22 @@ impl Connection {
                         );
                         Ok(block)
                     });
-                    if let Ok(block) = block_result {
-                        let func = &func;
-                        let blocks_duration = &self.blocks_duration;
-                        let hash = *hash;
-                        let result = &result;
+                    match block_result {
+                        Ok(block) => {
+                            let func = &func;
+                            let blocks_duration = &self.blocks_duration;
 
-                        s.spawn(move |_| {
-                            let r =
-                                blocks_duration.observe_duration("process", || func(hash, block));
-                            *result[i]
-                                .lock()
-                                .expect("I am the only user of this mutex until the scope ends") =
-                                Some(r);
-                        });
+                            s.spawn(move |_| {
+                                blocks_duration.observe_duration("process", || {
+                                    *result = Ok(func(hash, block))
+                                });
+                            });
+                        }
+                        Err(e) => *result = Err(e),
                     }
                 }
             });
-
-            let result: Option<Vec<_>> = result
-                .into_iter()
-                .map(|e| {
-                    e.into_inner()
-                        .expect("spawn cannot panic and the scope ensure all the threads ended")
-                })
-                .collect();
-
-            match result {
-                Some(r) => Ok(r),
-                None => bail!("One or more of the jobs in for_blocks failed"),
-            }
+            results.into_iter().collect::<Result<Vec<R>>>()
         })
     }
 
