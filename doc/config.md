@@ -25,6 +25,8 @@ $ bitcoind -server=1 -txindex=0 -prune=0
 ```
 ### Electrs configuration
 
+**Note:** this documentation may occasionally become stale. We recommend running `electrs --help` to get an up-to-date list of options.
+
 Electrs can be configured using command line, environment variables and configuration files (or their combination).
 It is highly recommended to use configuration files for any non-trivial setups since it's easier to manage.
 If you're setting password manually instead of cookie files, configuration file is the only way to set it due to security reasons.
@@ -38,6 +40,7 @@ can lead to serious problems! Currently the *only* permitted operation is *delet
 The Toml-formatted config files ([an example here](config_example.toml)) are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
 
 The options in highest-priority config files override options set in lowest-priority config files.
+If loading these files is undesirable (common in case of protected systemd services), use the `--skip-default-conf-files` argument to prevent it.
 
 **Environment variables** override options in config files and finally **arguments** override everythig else.
 
