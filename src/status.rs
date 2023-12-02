@@ -10,7 +10,7 @@ use serde::ser::{Serialize, Serializer};
 
 use std::convert::TryFrom;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{hash_map, BTreeMap, HashMap, HashSet},
     ops::ControlFlow,
 };
 
@@ -334,41 +334,48 @@ impl ScriptHashStatus {
         let scripthash = self.scripthash;
 
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
-        let outputs_filtering =
+        let funding_results =
             self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-                let mut block_entries: HashMap<usize, TxEntry> = HashMap::new();
-                let mut outpoints = vec![];
+                let mut block_entries = HashMap::<usize, TxEntry>::new();
+                let mut block_outpoints = Vec::<OutPoint>::new();
                 for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
                     cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
-                    outpoints.extend(make_outpoints(
+                    block_outpoints.extend(make_outpoints(
                         filtered_outputs.txid,
                         &filtered_outputs.result,
                     ));
+                    // Each block has a map of {tx position: [funding output]}
                     block_entries
                         .entry(filtered_outputs.pos)
                         .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
                         .outputs = filtered_outputs.result;
                 }
-                (blockhash, outpoints, block_entries)
+                ((blockhash, block_entries), block_outpoints) // to be collected separately
             })?;
 
-        outpoints.extend(outputs_filtering.iter().flat_map(|(_, o, _)| o).cloned());
+        // Collect all funding outpoints to a single hash set
+        for (_, block_outpoints) in &funding_results {
+            outpoints.extend(block_outpoints);
+        }
 
-        let mut result: HashMap<_, _> = outputs_filtering
+        // Collect per-block funding transaction information
+        let mut result: HashMap<BlockHash, HashMap<usize, TxEntry>> = funding_results
             .into_iter()
-            .map(|(a, _, b)| (a, b))
+            .map(|(entries, _)| entries)
             .collect();
 
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
-        let inputs_filtering =
+
+        let spending_results =
             self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
                 let mut block_entries: HashMap<usize, TxEntry> = HashMap::new();
 
                 for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
                     cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                    // Each block has a map of {tx position: [spending inputs]}
                     block_entries
                         .entry(filtered_inputs.pos)
                         .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
@@ -376,9 +383,25 @@ impl ScriptHashStatus {
                 }
                 (blockhash, block_entries)
             })?;
-        for (b, h) in inputs_filtering {
-            let e = result.entry(b).or_default();
-            e.extend(h);
+
+        // Update per-block spending transaction information
+        for (blockhash, block_entries) in spending_results {
+            let map: &mut HashMap<usize, TxEntry> = result.entry(blockhash).or_default();
+            for (tx_pos, tx_entry) in block_entries {
+                // Allow merging spending TxEntry into a possibly existing funding one
+                match map.entry(tx_pos) {
+                    hash_map::Entry::Occupied(mut e) => {
+                        let entry: &mut TxEntry = e.get_mut();
+                        assert_eq!(entry.txid, tx_entry.txid);
+                        assert!(entry.spent.is_empty());
+                        entry.spent = tx_entry.spent;
+                    }
+                    hash_map::Entry::Vacant(e) => {
+                        e.insert(tx_entry);
+                    }
+                }
+            }
+            // entry.extend(block_entries);
         }
 
         Ok(result
