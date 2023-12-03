@@ -38,6 +38,7 @@ can lead to serious problems! Currently the *only* permitted operation is *delet
 #### Configuration files and priorities
 
 The Toml-formatted config files ([an example here](config_example.toml)) are (from lowest priority to highest): `/etc/electrs/config.toml`, `~/.electrs/config.toml`, `./electrs.toml`.
+They are loaded if they *exist* and ignored if not however, to aid debugging, any other error when opening them such as permission error will make electrs exit with error.
 
 The options in highest-priority config files override options set in lowest-priority config files.
 If loading these files is undesirable (common in case of protected systemd services), use the `--skip-default-conf-files` argument to prevent it.
