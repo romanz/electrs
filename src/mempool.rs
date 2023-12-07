@@ -7,7 +7,6 @@ use std::ops::Bound;
 
 use bitcoin::hashes::Hash;
 use bitcoin::{Amount, OutPoint, Transaction, Txid};
-use bitcoincore_rpc::json;
 use rayon::prelude::*;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
@@ -124,20 +123,25 @@ impl Mempool {
                 info!("interrupted while syncing mempool");
                 return;
             }
-            let entries: Vec<_> = chunk
+            let entries: Vec<Entry> = chunk
                 .par_iter()
                 .filter_map(|txid| {
-                    let tx = daemon.get_transaction(txid, None);
-                    let entry = daemon.get_mempool_entry(txid);
-                    match (tx, entry) {
-                        (Ok(tx), Ok(entry)) => Some((txid, tx, entry)),
-                        _ => None, // skip missing mempool entries
-                    }
+                    // skip missing mempool entries
+                    let tx = daemon.get_transaction(txid, None).ok()?;
+                    let entry = daemon.get_mempool_entry(txid).ok()?;
+
+                    Some(Entry {
+                        txid: *txid,
+                        tx,
+                        vsize: entry.vsize,
+                        fee: entry.fees.base,
+                        has_unconfirmed_inputs: !entry.depends.is_empty(),
+                    })
                 })
                 .collect();
             added += entries.len();
-            for (txid, tx, entry) in entries {
-                self.add_entry(*txid, tx, entry);
+            for entry in entries {
+                self.add_entry(entry);
             }
         }
         self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
@@ -156,23 +160,17 @@ impl Mempool {
         );
     }
 
-    fn add_entry(&mut self, txid: Txid, tx: Transaction, entry: json::GetMempoolEntryResult) {
-        for txi in &tx.input {
-            self.by_spending.insert((txi.previous_output, txid));
+    fn add_entry(&mut self, entry: Entry) {
+        for txi in &entry.tx.input {
+            self.by_spending.insert((txi.previous_output, entry.txid));
         }
-        for txo in &tx.output {
+        for txo in &entry.tx.output {
             let scripthash = ScriptHash::new(&txo.script_pubkey);
-            self.by_funding.insert((scripthash, txid)); // may have duplicates
+            self.by_funding.insert((scripthash, entry.txid)); // may have duplicates
         }
-        let entry = Entry {
-            txid,
-            tx,
-            vsize: entry.vsize,
-            fee: entry.fees.base,
-            has_unconfirmed_inputs: !entry.depends.is_empty(),
-        };
+
         assert!(
-            self.entries.insert(txid, entry).is_none(),
+            self.entries.insert(entry.txid, entry).is_none(),
             "duplicate mempool txid"
         );
     }
