@@ -1,19 +1,23 @@
 use anyhow::{Context, Result};
-use crossbeam_channel::{select, unbounded, Sender};
+use bitcoin::Txid;
+use crossbeam_channel::{bounded, select, unbounded, Receiver, Sender};
 use rayon::prelude::*;
 
 use std::{
-    collections::hash_map::HashMap,
+    collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Write},
     iter::once,
     net::{Shutdown, TcpListener, TcpStream},
+    sync::Arc,
 };
 
 use crate::{
     config::Config,
+    daemon::Daemon,
     electrum::{Client, Rpc},
+    mempool::MempoolSyncUpdate,
     metrics::{self, Metrics},
-    signals::ExitError,
+    signals::{ExitError, ExitFlag},
     thread::spawn,
 };
 
@@ -87,19 +91,58 @@ fn serve() -> Result<()> {
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
+
+    let (mempool_update_tx, mempool_update_rx) = bounded(0);
+    let (mempool_run_tx, mempool_run_rx) = bounded(0);
+
+    let daemon = Arc::clone(rpc.daemon());
+    let exit_flag = rpc.signal().exit_flag().clone();
+    if !config.ignore_mempool {
+        spawn("mempool_sync", move || {
+            mempool_sync_loop(daemon, mempool_update_tx, mempool_run_rx, exit_flag)
+        });
+    }
+
     loop {
         // initial sync and compaction may take a few hours
         while server_rx.is_empty() {
-            let done = duration.observe_duration("sync", || rpc.sync().context("sync failed"))?; // sync a batch of blocks
+            let done =
+                duration.observe_duration("sync", || rpc.sync_chain().context("sync failed"))?; // sync a batch of blocks
             peers = duration.observe_duration("notify", || notify_peers(&rpc, peers)); // peers are disconnected on error
             if !done {
                 continue; // more blocks to sync
             }
+
             if config.sync_once {
                 return Ok(()); // exit after initial sync is done
             }
+
             break;
         }
+
+        select! {
+            // Start an asynchronous scan of the mempool if we aren't already doing so.
+            // You'd expect this might cause unneeded allocations copying mempool TXIDs, but
+            // `rpc.mempool_txids()` is only evaluated if the channel send is doesn't block.
+            send(mempool_run_tx, rpc.mempool_txids()) -> res => {
+                match res {
+                    Ok(_) => (),
+                    Err(_) => warn!("disconnected from mempool scan thread"),
+                };
+            }
+
+            // Received an update to the mempool state. Apply it.
+            recv(mempool_update_rx) -> res => {
+                match res {
+                    Ok(sync_update) => rpc.mempool_apply(sync_update),
+                    Err(_) => warn!("disconnected from mempool scan thread"),
+                };
+            }
+
+            // Mempool scanning in progress, or `ignore_mempool` is true.
+            default => {}
+        };
+
         duration.observe_duration("select", || -> Result<()> {
             select! {
                 // Handle signals for graceful shutdown
@@ -245,5 +288,26 @@ fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Re
     debug!("{}: disconnected", peer_id);
     let msg = Message::Done;
     server_tx.send(Event { peer_id, msg })?;
+    Ok(())
+}
+
+fn mempool_sync_loop(
+    daemon: Arc<Daemon>,
+    mempool_update_tx: Sender<MempoolSyncUpdate>,
+    mempool_run_rx: Receiver<HashSet<Txid>>,
+    exit_flag: ExitFlag,
+) -> Result<()> {
+    while let Ok(old_txids) = mempool_run_rx.recv() {
+        match MempoolSyncUpdate::poll(&daemon, old_txids, &exit_flag) {
+            Ok(sync_update) => {
+                let _ = mempool_update_tx.send(sync_update);
+            }
+            Err(e) => {
+                warn!("mempool sync failed: {}", e);
+                continue;
+            }
+        };
+    }
+    debug!("mempool sync thread exiting");
     Ok(())
 }

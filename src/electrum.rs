@@ -9,15 +9,17 @@ use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
 
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
 use std::iter::FromIterator;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
+    mempool::MempoolSyncUpdate,
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
@@ -123,7 +125,7 @@ pub struct Rpc {
     tracker: Tracker,
     cache: Cache,
     rpc_duration: Histogram,
-    daemon: Daemon,
+    daemon: Arc<Daemon>,
     signal: Signal,
     banner: String,
     port: u16,
@@ -147,7 +149,7 @@ impl Rpc {
             tracker,
             cache,
             rpc_duration,
-            daemon,
+            daemon: Arc::new(daemon),
             signal,
             banner: config.server_banner.clone(),
             port: config.electrum_rpc_addr.port(),
@@ -158,12 +160,25 @@ impl Rpc {
         &self.signal
     }
 
+    pub(crate) fn daemon(&self) -> &Arc<Daemon> {
+        &self.daemon
+    }
+
     pub fn new_block_notification(&self) -> Receiver<()> {
         self.daemon.new_block_notification()
     }
 
-    pub fn sync(&mut self) -> Result<bool> {
-        self.tracker.sync(&self.daemon, self.signal.exit_flag())
+    pub fn sync_chain(&mut self) -> Result<bool> {
+        self.tracker
+            .sync_chain(&self.daemon, self.signal.exit_flag())
+    }
+
+    pub(crate) fn mempool_txids(&self) -> HashSet<Txid> {
+        self.tracker.mempool.all_txids()
+    }
+
+    pub(crate) fn mempool_apply(&mut self, sync_update: MempoolSyncUpdate) {
+        self.tracker.mempool.apply_sync_update(sync_update)
     }
 
     pub fn update_client(&self, client: &mut Client) -> Result<Vec<String>> {
@@ -432,7 +447,7 @@ impl Rpc {
     }
 
     fn get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!(self.tracker.fees_histogram()))
+        Ok(json!(self.tracker.mempool.fees_histogram()))
     }
 
     fn server_id(&self) -> String {
