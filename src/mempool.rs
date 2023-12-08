@@ -127,6 +127,10 @@ impl Mempool {
         &self.fees
     }
 
+    pub(crate) fn all_txids(&self) -> HashSet<Txid> {
+        HashSet::<Txid>::from_iter(self.entries.keys().copied())
+    }
+
     pub(crate) fn get(&self, txid: &Txid) -> Option<&Entry> {
         self.entries.get(txid)
     }
@@ -184,22 +188,6 @@ impl Mempool {
             self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
             self.count.set(&label, self.fees.count[bin_index] as f64);
         }
-    }
-
-    pub fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) {
-        let old_txids = HashSet::<Txid>::from_iter(self.entries.keys().copied());
-
-        let poll_result = MempoolSyncUpdate::poll(daemon, old_txids, exit_flag);
-
-        let sync_update = match poll_result {
-            Ok(sync_update) => sync_update,
-            Err(e) => {
-                warn!("mempool sync failed: {}", e);
-                return;
-            }
-        };
-
-        self.apply_sync_update(sync_update);
     }
 
     /// Add a transaction entry to the mempool and update the fee histogram.
