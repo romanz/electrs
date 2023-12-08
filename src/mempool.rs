@@ -144,20 +144,25 @@ impl Mempool {
                 self.add_entry(entry);
             }
         }
-        self.fees = FeeHistogram::new(self.entries.values().map(|e| (e.fee, e.vsize)));
-        for i in 0..FeeHistogram::BINS {
-            let bin_index = FeeHistogram::BINS - i - 1; // from 63 to 0
-            let limit = 1u128 << i;
-            let label = format!("[{:20.0}, {:20.0})", limit / 2, limit);
-            self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
-            self.count.set(&label, self.fees.count[bin_index] as f64);
-        }
+
+        self.update_metrics();
+
         debug!(
             "{} mempool txs: {} added, {} removed",
             self.entries.len(),
             added,
             removed,
         );
+    }
+
+    fn update_metrics(&mut self) {
+        for i in 0..FeeHistogram::BINS {
+            let bin_index = FeeHistogram::BINS - i - 1; // from 63 to 0
+            let (lower, upper) = FeeHistogram::bin_range(bin_index);
+            let label = format!("[{:20.0}, {:20.0})", lower, upper);
+            self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
+            self.count.set(&label, self.fees.count[bin_index] as f64);
+        }
     }
 
     fn add_entry(&mut self, entry: Entry) {
@@ -168,6 +173,8 @@ impl Mempool {
             let scripthash = ScriptHash::new(&txo.script_pubkey);
             self.by_funding.insert((scripthash, entry.txid)); // may have duplicates
         }
+
+        self.modify_fee_histogram(entry.fee, entry.vsize as i64);
 
         assert!(
             self.entries.insert(entry.txid, entry).is_none(),
@@ -183,6 +190,22 @@ impl Mempool {
         for txo in entry.tx.output {
             let scripthash = ScriptHash::new(&txo.script_pubkey);
             self.by_funding.remove(&(scripthash, txid)); // may have misses
+        }
+
+        self.modify_fee_histogram(entry.fee, -(entry.vsize as i64));
+    }
+
+    /// Apply a change to the fee histogram. Used when transactions are added or
+    /// removed from the mempool. If `vsize_change` is positive, we increase
+    /// the histogram vsize and TX count in the appropriate bin. If negative,
+    /// we decrease them.
+    fn modify_fee_histogram(&mut self, fee: Amount, vsize_change: i64) {
+        let vsize = vsize_change.unsigned_abs();
+        let bin_index = FeeHistogram::bin_index(fee, vsize);
+        if vsize_change >= 0 {
+            self.fees.insert(bin_index, vsize);
+        } else {
+            self.fees.remove(bin_index, vsize);
         }
     }
 }
@@ -217,20 +240,49 @@ impl FeeHistogram {
         Self::new(std::iter::empty())
     }
 
+    fn bin_index(fee: Amount, vsize: u64) -> usize {
+        let fee_rate = fee.to_sat() / vsize;
+        usize::try_from(fee_rate.leading_zeros()).unwrap()
+    }
+
+    fn bin_range(bin_index: usize) -> (u128, u128) {
+        let limit = 1u128 << (FeeHistogram::BINS - bin_index - 1);
+        (limit / 2, limit)
+    }
+
     fn new(items: impl Iterator<Item = (Amount, u64)>) -> Self {
-        let mut result = FeeHistogram::default();
+        let mut histogram = FeeHistogram::default();
         for (fee, vsize) in items {
-            let fee_rate = fee.to_sat() / vsize;
-            let index = usize::try_from(fee_rate.leading_zeros()).unwrap();
-            // skip transactions with too low fee rate (<1 sat/vB)
-            if let Some(bin) = result.vsize.get_mut(index) {
-                *bin += vsize
-            }
-            if let Some(bin) = result.count.get_mut(index) {
-                *bin += 1
-            }
+            let bin_index = FeeHistogram::bin_index(fee, vsize);
+            histogram.insert(bin_index, vsize);
         }
-        result
+        histogram
+    }
+
+    fn insert(&mut self, bin_index: usize, vsize: u64) {
+        // skip transactions with too low fee rate (<1 sat/vB)
+        if let Some(bin) = self.vsize.get_mut(bin_index) {
+            *bin += vsize
+        }
+        if let Some(bin) = self.count.get_mut(bin_index) {
+            *bin += 1
+        }
+    }
+
+    fn remove(&mut self, bin_index: usize, vsize: u64) {
+        // skip transactions with too low fee rate (<1 sat/vB)
+        if let Some(bin) = self.vsize.get_mut(bin_index) {
+            *bin = bin.checked_sub(vsize).unwrap_or_else(|| {
+                warn!("removing TX from mempool caused bin count to unexpectedly drop below zero");
+                0
+            });
+        }
+        if let Some(bin) = self.count.get_mut(bin_index) {
+            *bin = bin.checked_sub(1).unwrap_or_else(|| {
+                warn!("removing TX from mempool caused bin vsize to unexpectedly drop below zero");
+                0
+            });
+        }
     }
 }
 
@@ -270,10 +322,46 @@ mod tests {
             (Amount::from_sat(80), 10),
             (Amount::from_sat(1), 100),
         ];
-        let hist = FeeHistogram::new(items.into_iter());
+        let mut hist = FeeHistogram::new(items.into_iter());
         assert_eq!(
             json!(hist),
             json!([[15, 10], [7, 40], [3, 20], [1, 10], [0, 100]])
         );
+
+        {
+            let bin_index = FeeHistogram::bin_index(Amount::from_sat(5), 1); // 5 sat/byte
+            hist.remove(bin_index, 11);
+            assert_eq!(
+                json!(hist),
+                json!([[15, 10], [7, 29], [3, 20], [1, 10], [0, 100]])
+            );
+        }
+
+        {
+            let bin_index = FeeHistogram::bin_index(Amount::from_sat(13), 1); // 13 sat/byte
+            hist.insert(bin_index, 80);
+            assert_eq!(
+                json!(hist),
+                json!([[15, 90], [7, 29], [3, 20], [1, 10], [0, 100]])
+            );
+        }
+
+        {
+            let bin_index = FeeHistogram::bin_index(Amount::from_sat(99), 1); // 99 sat/byte
+            hist.insert(bin_index, 15);
+            assert_eq!(
+                json!(hist),
+                json!([
+                    [127, 15],
+                    [63, 0],
+                    [31, 0],
+                    [15, 90],
+                    [7, 29],
+                    [3, 20],
+                    [1, 10],
+                    [0, 100]
+                ])
+            );
+        }
     }
 }
