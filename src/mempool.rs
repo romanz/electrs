@@ -52,7 +52,7 @@ impl Mempool {
             entries: Default::default(),
             by_funding: Default::default(),
             by_spending: Default::default(),
-            fees: FeeHistogram::empty(),
+            fees: FeeHistogram::default(),
             vsize: metrics.gauge(
                 "mempool_txs_vsize",
                 "Total vsize of mempool transactions (in bytes)",
@@ -236,10 +236,6 @@ impl Default for FeeHistogram {
 impl FeeHistogram {
     const BINS: usize = 65; // 0..=64
 
-    fn empty() -> Self {
-        Self::new(std::iter::empty())
-    }
-
     fn bin_index(fee: Amount, vsize: u64) -> usize {
         let fee_rate = fee.to_sat() / vsize;
         usize::try_from(fee_rate.leading_zeros()).unwrap()
@@ -248,15 +244,6 @@ impl FeeHistogram {
     fn bin_range(bin_index: usize) -> (u128, u128) {
         let limit = 1u128 << (FeeHistogram::BINS - bin_index - 1);
         (limit / 2, limit)
-    }
-
-    fn new(items: impl Iterator<Item = (Amount, u64)>) -> Self {
-        let mut histogram = FeeHistogram::default();
-        for (fee, vsize) in items {
-            let bin_index = FeeHistogram::bin_index(fee, vsize);
-            histogram.insert(bin_index, vsize);
-        }
-        histogram
     }
 
     fn insert(&mut self, bin_index: usize, vsize: u64) {
@@ -322,7 +309,11 @@ mod tests {
             (Amount::from_sat(80), 10),
             (Amount::from_sat(1), 100),
         ];
-        let mut hist = FeeHistogram::new(items.into_iter());
+        let mut hist = FeeHistogram::default();
+        for (amount, vsize) in items {
+            let bin_index = FeeHistogram::bin_index(amount, vsize);
+            hist.insert(bin_index, vsize);
+        }
         assert_eq!(
             json!(hist),
             json!([[15, 10], [7, 40], [3, 20], [1, 10], [0, 100]])
