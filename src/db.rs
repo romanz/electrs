@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use electrs_rocksdb as rocksdb;
 
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(crate) type Row = Box<[u8]>;
@@ -95,6 +96,22 @@ impl Default for Config {
     }
 }
 
+fn get_write_buffer_size() -> usize {
+    const VAR_NAME: &str = "ELECTRS_ROCKSDB_WRITE_BUFFER_SIZE";
+
+    if let Ok(var) = std::env::var(VAR_NAME) {
+        let size = FromStr::from_str(&var)
+            .with_context(|| format!("Could not parse {VAR_NAME}"))
+            .expect("Invalid write buffer size");
+
+        info!("Using custom write buffer size: {size}");
+
+        size
+    } else {
+        256 << 20
+    }
+}
+
 fn default_opts() -> rocksdb::Options {
     let mut block_opts = rocksdb::BlockBasedOptions::default();
     block_opts.set_checksum_type(rocksdb::ChecksumType::CRC32c);
@@ -104,8 +121,9 @@ fn default_opts() -> rocksdb::Options {
     opts.set_max_open_files(16);
     opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
-    opts.set_target_file_size_base(256 << 20);
-    opts.set_write_buffer_size(256 << 20);
+    let file_size = get_write_buffer_size();
+    opts.set_target_file_size_base(file_size as u64);
+    opts.set_write_buffer_size(file_size);
     opts.set_disable_auto_compactions(true); // for initial bulk load
     opts.set_advise_random_on_open(false); // bulk load uses sequential I/O
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
