@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use bitcoin::{consensus::deserialize, hashes::hex::FromHex};
 use bitcoin::{Amount, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
@@ -219,10 +220,59 @@ impl Daemon {
             .context("failed to get mempool txids")
     }
 
-    pub(crate) fn get_mempool_entry(&self, txid: &Txid) -> Result<json::GetMempoolEntryResult> {
-        self.rpc
-            .get_mempool_entry(txid)
-            .context("failed to get mempool entry")
+    pub(crate) fn get_mempool_entries(
+        &self,
+        txids: &[Txid],
+    ) -> Result<Vec<Result<json::GetMempoolEntryResult>>> {
+        let client = self.rpc.get_jsonrpc_client();
+        debug!("getting {} mempool entries", txids.len());
+        let args: Vec<_> = txids
+            .iter()
+            .map(|txid| vec![serde_json::value::to_raw_value(txid).unwrap()])
+            .collect();
+        let reqs: Vec<_> = args
+            .iter()
+            .map(|a| client.build_request("getmempoolentry", a))
+            .collect();
+        let res = client.send_batch(&reqs).context("batch request failed")?;
+        debug!("got {} mempool entries", res.len());
+        Ok(res
+            .into_iter()
+            .map(|r| {
+                r.context("missing response")?
+                    .result::<json::GetMempoolEntryResult>()
+                    .context("invalid response")
+            })
+            .collect())
+    }
+
+    pub(crate) fn get_mempool_transactions(
+        &self,
+        txids: &[Txid],
+    ) -> Result<Vec<Result<Transaction>>> {
+        let client = self.rpc.get_jsonrpc_client();
+        debug!("getting {} transactions", txids.len());
+        let args: Vec<_> = txids
+            .iter()
+            .map(|txid| vec![serde_json::value::to_raw_value(txid).unwrap()])
+            .collect();
+        let reqs: Vec<_> = args
+            .iter()
+            .map(|a| client.build_request("getrawtransaction", a))
+            .collect();
+        let res = client.send_batch(&reqs).context("batch request failed")?;
+        debug!("got {} mempool transactions", res.len());
+        Ok(res
+            .into_iter()
+            .map(|r| -> Result<Transaction> {
+                let tx_hex = r
+                    .context("missing response")?
+                    .result::<String>()
+                    .context("invalid response")?;
+                let tx_bytes = Vec::from_hex(&tx_hex).context("non-hex transaction")?;
+                deserialize(&tx_bytes).context("invalid transaction")
+            })
+            .collect())
     }
 
     pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {

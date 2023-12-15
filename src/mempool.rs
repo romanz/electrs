@@ -7,7 +7,6 @@ use std::ops::Bound;
 
 use bitcoin::hashes::Hash;
 use bitcoin::{Amount, OutPoint, Transaction, Txid};
-use rayon::prelude::*;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::{
@@ -63,15 +62,28 @@ impl MempoolSyncUpdate {
         let to_add: Vec<Txid> = to_add.into_iter().collect();
         let mut new_entries = Vec::with_capacity(to_add.len());
 
-        for chunk in to_add.chunks(100) {
+        for txids_chunk in to_add.chunks(1000) {
             exit_flag.poll().context("mempool update interrupted")?;
-            let chunk_entries: Vec<Entry> = chunk
-                .par_iter()
-                .filter_map(|txid| -> Option<Entry> {
-                    // skip missing mempool entries
-                    let tx = daemon.get_transaction(txid, None).ok()?;
-                    let entry = daemon.get_mempool_entry(txid).ok()?;
-
+            let entries = daemon.get_mempool_entries(txids_chunk)?;
+            ensure!(
+                txids_chunk.len() == entries.len(),
+                "got {} mempools entries, expected {}",
+                entries.len(),
+                txids_chunk.len()
+            );
+            let txs = daemon.get_mempool_transactions(txids_chunk)?;
+            ensure!(
+                txids_chunk.len() == txs.len(),
+                "got {} mempools transactions, expected {}",
+                txs.len(),
+                txids_chunk.len()
+            );
+            let chunk_entries: Vec<Entry> = txids_chunk
+                .iter()
+                .zip(entries.into_iter().zip(txs.into_iter()))
+                .filter_map(|(txid, (entry, tx))| {
+                    let tx = tx.ok()?;
+                    let entry = entry.ok()?;
                     Some(Entry {
                         txid: *txid,
                         tx,
