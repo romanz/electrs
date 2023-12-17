@@ -164,7 +164,7 @@ fn serve() -> Result<()> {
                     let rest = server_rx.iter().take(server_rx.len());
                     let events: Vec<Event> = first.chain(rest).collect();
                     server_batch_size.observe("recv", events.len() as f64);
-                    duration.observe_duration("handle", || handle_events(&rpc, &mut peers, events));
+                    duration.observe_duration("handle", || handle_events(&mut rpc, &mut peers, events));
                 },
                 default(config.wait_duration) => (), // sync and update
             };
@@ -206,7 +206,7 @@ enum Message {
     Done,
 }
 
-fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
+fn handle_events(rpc: &mut Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
     let mut events_by_peer = HashMap::<usize, Vec<Message>>::new();
     events
         .into_iter()
@@ -217,7 +217,7 @@ fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>
 }
 
 fn handle_peer_events(
-    rpc: &Rpc,
+    rpc: &mut Rpc,
     peers: &mut HashMap<usize, Peer>,
     peer_id: usize,
     messages: Vec<Message>,
