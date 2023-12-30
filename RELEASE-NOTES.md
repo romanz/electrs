@@ -1,3 +1,13 @@
+# 0.10.2 (Dec 31 2023)
+
+* Use batched RPC to fetch mempool entries & transactions (#979)
+* Avoid redundant recomputation of fee histogram bins (#971)
+* Explain behavior of config file loading (#964)
+* Don't flush when nothing is written to DB (#958)
+* Allow setting RocksDB log directory (#959)
+* Upgrade `bitcoin` to 0.31.0 (#941)
+* Update dependencies (#953, #951, #980)
+
 # 0.10.1 (Nov 01 2023)
 
 * Fix build failure on Raspberry Pi 4 (32bit) (#940)
