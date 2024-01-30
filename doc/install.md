@@ -136,7 +136,7 @@ sudo mount --rbind /sys debootstrap-buster/sys
 sudo mount --rbind /dev debootstrap-buster/dev
 ```
 
-If you have checked out the electrs git reposity somewhere already and don't want to have a duplicate copy inside the debootstrap working directory, just mount bind the exiting directory into the chroot:
+If you have checked out the electrs git repository somewhere already and don't want to have a duplicate copy inside the debootstrap working directory, just mount bind the exiting directory into the chroot:
 ```
 sudo mkdir -p debootstrap-buster/mnt/electrs
 sudo mount --rbind ./electrs debootstrap-buster/mnt/electrs

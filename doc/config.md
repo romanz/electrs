@@ -43,7 +43,7 @@ They are loaded if they *exist* and ignored if not however, to aid debugging, an
 The options in highest-priority config files override options set in lowest-priority config files.
 If loading these files is undesirable (common in case of protected systemd services), use the `--skip-default-conf-files` argument to prevent it.
 
-**Environment variables** override options in config files and finally **arguments** override everythig else.
+**Environment variables** override options in config files and finally **arguments** override everything else.
 
 There are two special arguments `--conf` which reads the specified file and `--conf-dir`, which read all the files in the specified directory.
 
