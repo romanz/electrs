@@ -42,4 +42,4 @@ services:
       - 50001:50001
     volumes:
       - ./db:/electrs/db
-      - ./electrs.toml:/electrs/electrs.toml
+      - ./conf.toml:/electrs/electrs.toml
