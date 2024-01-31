@@ -21,4 +21,9 @@ FROM base as result
 # Copy the binaries
 COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
 
-WORKDIR /
+WORKDIR /electrs
+
+# Copy config file
+COPY ./electrs.toml.example ./electrs.toml
+
+CMD ["/usr/bin/electrs", "--conf=/electrs/electrs.toml"]
