@@ -5,8 +5,8 @@
 
 ```bash
 $ sudo apt update
-$ sudo apt install -y clang cmake build-essential git cargo 
-$ git clone https://github.com/romanz/electrs 
+$ sudo apt install -y clang cmake build-essential git cargo
+$ git clone https://github.com/romanz/electrs
 $ cd electrs
 $ cargo build --locked --release
 $ ./target/release/electrs --version  # should print the latest version
@@ -231,36 +231,3 @@ It's a bit long but sufficient! You will find the resulting binary in `target/aa
 #### Generating man pages
 
 If you installed `cfg_me` to generate man page, you can run `cfg_me man` to see it right away or `cfg_me -o electrs.1 man` to save it into a file (`electrs.1`).
-
-## Docker-based installation from source
-
-**Important**: The `Dockerfile` is provided for demonstration purposes and may NOT be suitable for production use.
-The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
-If you are not familiar with Docker either it's probably be safer to NOT use it.
-
-Note: currently Docker installation links statically
-
-Note: health check only works if Prometheus is running on port 4224 inside container
-
-```bash
-$ docker build -t electrs-app .
-$ mkdir db
-$ docker run --network host \
-             --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
-             --volume $PWD/db:/home/user/db \
-             --env ELECTRS_DB_DIR=/home/user/db \
-             --rm -i -t electrs-app
-```
-
-If not using the host-network, you probably want to expose the ports for electrs and Prometheus like so:
-
-```bash
-$ docker run --volume $HOME/.bitcoin:/home/user/.bitcoin:ro \
-             --volume $PWD/db:/home/user/db \
-             --env ELECTRS_DB_DIR=/home/user/db \
-             --env ELECTRS_ELECTRUM_RPC_ADDR=0.0.0.0:50001 \
-             --env ELECTRS_MONITORING_ADDR=0.0.0.0:4224 \
-             --rm -i -t electrs-app
-```
-
-To access the server from outside Docker, add `-p 50001:50001 -p 4224:4224` but be aware of the security risks. Good practice is to group containers that needs access to the server inside the same Docker network and not expose the ports to the outside world.

@@ -1,0 +1,42 @@
+version: "3"
+services:
+  bitcoind:
+    container_name: bitcoind
+    privileged: true
+    image: oneforalonee/bitcoind:v26.0
+    restart: on-failure
+    hostname: bitcoind
+    stop_grace_period: 5m
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    command: >-
+      bitcoind -server=1 -chain=main
+      -debug=1 -zmqpubrawblock=tcp://0.0.0.0:28332
+      -zmqpubrawtx=tcp://0.0.0.0:28333 -zmqpubhashblock=tcp://0.0.0.0:28334
+      -txindex=1 -dnsseed=0 -upnp=0 -rpcbind=0.0.0.0 -rpcallowip=0.0.0.0/0
+      -rpcport=8332 -rest -listen=1 -listenonion=0
+    expose:
+      - 8332
+    ports:
+      - 8332:8332
+    volumes:
+      - ./bitcoind:/home/bitcoin/.bitcoin
+
+  electrs:
+    depends_on:
+      - bitcoind
+    links:
+      - bitcoind
+    container_name: electrs
+    privileged: true
+    image: oneforalonee/electrs:latest
+    restart: on-failure
+    hostname: electrs
+    expose:
+      - 50001
+    ports:
+      - 50001:50001
+    volumes:
+      - ./electrs_db:/electrs/db
+      - ./electrs.toml:/electrs/electrs.toml
