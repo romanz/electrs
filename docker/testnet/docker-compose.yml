@@ -22,7 +22,7 @@ services:
     ports:
       - 8332:8332
     volumes:
-      - ./:/home/bitcoin/.bitcoin
+      - ./bitcoind:/home/bitcoin/.bitcoin
 
   electrs:
     depends_on:
@@ -34,6 +34,8 @@ services:
     image: oneforalonee/electrs:latest
     restart: on-failure
     hostname: electrs
+    command: >-
+      /usr/bin/electrs --conf=/electrs/electrs.toml
     expose:
       - 50001
     ports:

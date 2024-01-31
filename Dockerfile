@@ -24,6 +24,6 @@ COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
 WORKDIR /electrs
 
 # Copy config file
-COPY ./electrs.toml.example ./electrs.toml
+COPY ./doc/config_example.toml ./electrs.toml
 
 CMD ["/usr/bin/electrs", "--conf=/electrs/electrs.toml"]

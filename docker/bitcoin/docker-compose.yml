@@ -33,6 +33,8 @@ services:
     image: oneforalonee/electrs:latest
     restart: on-failure
     hostname: electrs
+    command: >-
+      /usr/bin/electrs --conf=/electrs/electrs.toml
     expose:
       - 50001
     ports:
