@@ -18,9 +18,9 @@ services:
       -rpcport=18332 -rest -listen=1 -listenonion=0
       -rpcauth=alice:128f22494cc2208ea8376a3d0b45a131$9cc0187c0e49f35454a3ed1250e40ecaef420cfcd294d3ac22496adbe64f04b9
     expose:
-      - 8332
+      - 18332
     ports:
-      - 8332:8332
+      - 18332:18332
     volumes:
       - ./bitcoind:/home/bitcoin/.bitcoin
 
@@ -37,9 +37,9 @@ services:
     command: >-
       /usr/bin/electrs --conf=/electrs/electrs.toml
     expose:
-      - 50001
+      - 50002
     ports:
-      - 50001:50001
+      - 50002:50002
     volumes:
       - ./db:/electrs/db
       - ./conf.toml:/electrs/electrs.toml
