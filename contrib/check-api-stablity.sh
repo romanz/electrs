@@ -19,7 +19,8 @@ check() {
     local res2=$(curl -f -s "$ELECTRS2_URL$1" || echo "Request to ELECTRS2 failed")
     { if [[ "$res1" = "{"* || "$res1" = "["* ]]; then
         # Use `jq` for canonicalized ordering and to display a diff of beautified JSON
-        diff -u1 <(jq --sort-keys <<< $res1) <(jq --sort-keys <<< $res2)
+        local sort_arr='walk(if type == "array" then sort else . end)'
+        diff -u1 <(jq --sort-keys "$sort_arr" <<< $res1) <(jq --sort-keys "$sort_arr" <<< $res2)
     else
         diff -u1 <(echo "$res1") <(echo "$res2")
     fi } && echo OK || echo No match
