@@ -87,4 +87,7 @@ if [[ -n $ELEMENTS_CHAIN ]]; then
     check /tx/$i_uc_txid
     check /address/$uc_address
     check /address/$uc_address/utxo
+
+    # Test issuance with no reissuance tokens
+    check_asset "$(cli issueasset 10 0 false && sync)"
 fi
