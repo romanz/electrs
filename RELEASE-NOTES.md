@@ -1,3 +1,8 @@
+# 0.10.3 (Feb 10 2024)
+
+* Update dependencies (`serde_json`, `tempfile`, `env_logger`, `rayon`, `bitcoin`, `crossbeam-channel`, `shlex`)
+* Fix build on Debian 12 (#1001)
+
 # 0.10.2 (Dec 31 2023)
 
 * Use batched RPC to fetch mempool entries & transactions (#979)
