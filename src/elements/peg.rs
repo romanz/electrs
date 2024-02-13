@@ -36,7 +36,6 @@ impl PegoutValue {
     pub fn from_txout(txout: &TxOut, network: Network, parent_network: BNetwork) -> Option<Self> {
         let pegoutdata = get_pegout_data(txout, network, parent_network)?;
 
-        // pending https://github.com/ElementsProject/rust-elements/pull/69 is merged
         let scriptpubkey = pegoutdata.script_pubkey;
         let address = bitcoin::Address::from_script(&scriptpubkey, parent_network).ok();
 

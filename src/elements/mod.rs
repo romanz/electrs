@@ -60,3 +60,38 @@ impl From<&TxIn> for IssuanceValue {
         }
     }
 }
+
+// Traits to make rust-elements' types compatible with the changes made in rust-bitcoin v0.31
+// Should hopefully eventually make its way into rust-elements itself.
+pub mod ebcompact {
+    pub trait SizeMethod {
+        fn total_size(&self) -> usize;
+    }
+    impl SizeMethod for elements::Block {
+        fn total_size(&self) -> usize {
+            self.size()
+        }
+    }
+    impl SizeMethod for elements::Transaction {
+        fn total_size(&self) -> usize {
+            self.size()
+        }
+    }
+
+    pub trait ScriptMethods {
+        fn is_p2wpkh(&self) -> bool;
+        fn is_p2wsh(&self) -> bool;
+        fn is_p2tr(&self) -> bool;
+    }
+    impl ScriptMethods for elements::Script {
+        fn is_p2wpkh(&self) -> bool {
+            self.is_v0_p2wpkh()
+        }
+        fn is_p2wsh(&self) -> bool {
+            self.is_v0_p2wsh()
+        }
+        fn is_p2tr(&self) -> bool {
+            self.is_v1_p2tr()
+        }
+    }
+}

@@ -17,8 +17,8 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{GaugeVec, HistogramOpts, HistogramVec, MetricOpts, Metrics};
 use crate::new_index::{
-    compute_script_hash, schema::FullHash, ChainQuery, FundingInfo, ScriptStats, SpendingInfo,
-    SpendingInput, TxHistoryInfo, Utxo,
+    compute_script_hash, schema::FullHash, ChainQuery, FundingInfo, GetAmountVal, ScriptStats,
+    SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
 use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
@@ -380,7 +380,7 @@ impl Mempool {
                         vin: input_index as u16,
                         prev_txid: full_hash(&txi.previous_output.txid[..]),
                         prev_vout: txi.previous_output.vout as u16,
-                        value: prevout.value.to_sat(),
+                        value: prevout.value.amount_value(),
                     }),
                 )
             });
@@ -399,7 +399,7 @@ impl Mempool {
                         TxHistoryInfo::Funding(FundingInfo {
                             txid: txid_bytes,
                             vout: index as u16,
-                            value: txo.value.to_sat(),
+                            value: txo.value.amount_value(),
                         }),
                     )
                 });

@@ -12,6 +12,7 @@ use rayon::prelude::*;
 use bitcoin::consensus::encode::{deserialize, serialize};
 #[cfg(feature = "liquid")]
 use elements::{
+    confidential,
     encode::{deserialize, serialize},
     AssetId,
 };
@@ -112,9 +113,9 @@ pub struct Utxo {
     pub value: Value,
 
     #[cfg(feature = "liquid")]
-    pub asset: elements::confidential::Asset,
+    pub asset: confidential::Asset,
     #[cfg(feature = "liquid")]
-    pub nonce: elements::confidential::Nonce,
+    pub nonce: confidential::Nonce,
     #[cfg(feature = "liquid")]
     pub witness: elements::TxOutWitness,
 }
@@ -1104,7 +1105,7 @@ fn index_transaction(
                 TxHistoryInfo::Funding(FundingInfo {
                     txid,
                     vout: txo_index as u16,
-                    value: txo.value.to_sat(),
+                    value: txo.value.amount_value(),
                 }),
             );
             rows.push(history.into_row());
@@ -1132,7 +1133,7 @@ fn index_transaction(
                 vin: txi_index as u16,
                 prev_txid: full_hash(&txi.previous_output.txid[..]),
                 prev_vout: txi.previous_output.vout as u16,
-                value: prev_txo.value.to_sat(),
+                value: prev_txo.value.amount_value(),
             }),
         );
         rows.push(history.into_row());
@@ -1641,4 +1642,26 @@ fn from_utxo_cache(utxos_cache: CachedUtxoMap, chain: &ChainQuery) -> UtxoMap {
             (outpoint, (blockid, value))
         })
         .collect()
+}
+
+// Get the amount value as gets stored in the DB and mempool tracker.
+// For bitcoin it is the Amount's inner u64, for elements it is the confidential::Value itself.
+pub trait GetAmountVal {
+    #[cfg(not(feature = "liquid"))]
+    fn amount_value(self) -> u64;
+    #[cfg(feature = "liquid")]
+    fn amount_value(self) -> confidential::Value;
+}
+
+#[cfg(not(feature = "liquid"))]
+impl GetAmountVal for bitcoin::Amount {
+    fn amount_value(self) -> u64 {
+        self.to_sat()
+    }
+}
+#[cfg(feature = "liquid")]
+impl GetAmountVal for confidential::Value {
+    fn amount_value(self) -> confidential::Value {
+        self
+    }
 }

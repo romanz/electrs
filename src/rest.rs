@@ -26,7 +26,7 @@ use std::str::FromStr;
 
 #[cfg(feature = "liquid")]
 use {
-    crate::elements::{peg::PegoutValue, AssetSorting, IssuanceValue},
+    crate::elements::{ebcompact::*, peg::PegoutValue, AssetSorting, IssuanceValue},
     elements::{encode, secp256k1_zkp as zkp, AssetId},
 };
 
@@ -159,7 +159,10 @@ impl TransactionValue {
 
         TransactionValue {
             txid: tx.txid(),
+            #[cfg(not(feature = "liquid"))]
             version: tx.version.0 as u32,
+            #[cfg(feature = "liquid")]
+            version: tx.version as u32,
             locktime: tx.lock_time.to_consensus_u32(),
             vin: vins,
             vout: vouts,
@@ -284,7 +287,7 @@ struct TxOutValue {
 impl TxOutValue {
     fn new(txout: &TxOut, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
-        let value = txout.value;
+        let value = txout.value.to_sat();
         #[cfg(feature = "liquid")]
         let value = txout.value.explicit();
 
@@ -330,7 +333,7 @@ impl TxOutValue {
             scriptpubkey_asm: script_asm,
             scriptpubkey_address: script_addr,
             scriptpubkey_type: script_type.to_string(),
-            value: value.to_sat(),
+            value,
             #[cfg(feature = "liquid")]
             valuecommitment: txout.value.commitment(),
             #[cfg(feature = "liquid")]
@@ -1296,6 +1299,7 @@ impl From<std::string::FromUtf8Error> for HttpError {
     }
 }
 
+#[cfg(not(feature = "liquid"))]
 impl From<address::ParseError> for HttpError {
     fn from(e: address::ParseError) -> Self {
         HttpError::from(e.to_string())

@@ -1,4 +1,6 @@
 #[cfg(feature = "liquid")]
+use crate::elements::ebcompact::*;
+#[cfg(feature = "liquid")]
 use elements::address as elements_address;
 
 use crate::chain::{script, Network, Script, TxIn, TxOut};

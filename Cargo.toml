@@ -24,7 +24,7 @@ bitcoin = { version = "0.31", features = [ "serde" ] }
 clap = "2.33.3"
 crossbeam-channel = "0.5.0"
 dirs = "5.0.1"
-elements = { version = "0.23.0", features = [ "serde" ], optional = true }
+elements = { version = "0.24", features = [ "serde" ], optional = true }
 error-chain = "0.12.4"
 glob = "0.3"
 hex = { package = "hex-conservative", version = "0.1.1" }
@@ -59,7 +59,7 @@ electrum-client = { version = "0.8", optional = true }
 
 [dev-dependencies]
 bitcoind = { version = "0.34", features = [ "25_0" ] }
-elementsd = { version = "0.8.0", features = [ "22_1_1" ] }
+elementsd = { version = "0.9", features = [ "22_1_1" ] }
 electrumd = { version = "0.1.0", features = [ "4_1_5" ] }
 ureq = { version = "2.9", default-features = false, features = [ "json" ] }
 tempfile = "3.10"
