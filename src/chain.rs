@@ -15,7 +15,7 @@ pub use {
 };
 
 use bitcoin::blockdata::constants::genesis_block;
-pub use bitcoin::network::constants::Network as BNetwork;
+pub use bitcoin::network::Network as BNetwork;
 
 #[cfg(not(feature = "liquid"))]
 pub type Value = u64;

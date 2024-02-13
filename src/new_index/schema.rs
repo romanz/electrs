@@ -1104,7 +1104,7 @@ fn index_transaction(
                 TxHistoryInfo::Funding(FundingInfo {
                     txid,
                     vout: txo_index as u16,
-                    value: txo.value,
+                    value: txo.value.to_sat(),
                 }),
             );
             rows.push(history.into_row());
@@ -1132,7 +1132,7 @@ fn index_transaction(
                 vin: txi_index as u16,
                 prev_txid: full_hash(&txi.previous_output.txid[..]),
                 prev_vout: txi.previous_output.vout as u16,
-                value: prev_txo.value,
+                value: prev_txo.value.to_sat(),
             }),
         );
         rows.push(history.into_row());

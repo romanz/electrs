@@ -70,7 +70,7 @@ fn main() {
             continue;
         }
         // skip coinbase txs
-        if tx.is_coin_base() {
+        if tx.is_coinbase() {
             continue;
         }
 
@@ -90,12 +90,26 @@ fn main() {
                 .collect(),
         );
 
-        let total_out: u64 = tx.output.iter().map(|out| out.value).sum();
-        let small_out = tx.output.iter().map(|out| out.value).min().unwrap();
-        let large_out = tx.output.iter().map(|out| out.value).max().unwrap();
+        let total_out: u64 = tx.output.iter().map(|out| out.value.to_sat()).sum();
+        let small_out = tx
+            .output
+            .iter()
+            .map(|out| out.value.to_sat())
+            .min()
+            .unwrap();
+        let large_out = tx
+            .output
+            .iter()
+            .map(|out| out.value.to_sat())
+            .max()
+            .unwrap();
 
-        let total_in: u64 = prevouts.values().map(|out| out.value).sum();
-        let smallest_in = prevouts.values().map(|out| out.value).min().unwrap();
+        let total_in: u64 = prevouts.values().map(|out| out.value.to_sat()).sum();
+        let smallest_in = prevouts
+            .values()
+            .map(|out| out.value.to_sat())
+            .min()
+            .unwrap();
 
         let fee = total_in - total_out;
 

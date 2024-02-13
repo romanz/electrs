@@ -20,7 +20,7 @@ arraydeque = "0.5.1"
 arrayref = "0.3.6"
 base64 = "0.21.3"
 bincode = "1.3.1"
-bitcoin = { version = "0.30.1", features = [ "serde" ] }
+bitcoin = { version = "0.31", features = [ "serde" ] }
 clap = "2.33.3"
 crossbeam-channel = "0.5.0"
 dirs = "5.0.1"
@@ -58,7 +58,7 @@ electrum-client = { version = "0.8", optional = true }
 
 
 [dev-dependencies]
-bitcoind = { version = "0.32.0", features = [ "25_0" ] }
+bitcoind = { version = "0.34", features = [ "25_0" ] }
 elementsd = { version = "0.8.0", features = [ "22_1_1" ] }
 electrumd = { version = "0.1.0", features = [ "4_1_5" ] }
 ureq = { version = "2.9", default-features = false, features = [ "json" ] }

@@ -14,8 +14,8 @@ use crate::util::{
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
 
-use bitcoin::hashes::Error as HashError;
-use hex::{DisplayHex, FromHex, HexToBytesError};
+use bitcoin::hashes::FromSliceError as HashError;
+use hex::{DisplayHex, FromHex};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
 use hyperlocal::UnixServerExt;
@@ -159,11 +159,11 @@ impl TransactionValue {
 
         TransactionValue {
             txid: tx.txid(),
-            version: tx.version as u32,
+            version: tx.version.0 as u32,
             locktime: tx.lock_time.to_consensus_u32(),
             vin: vins,
             vout: vouts,
-            size: tx.size() as u32,
+            size: tx.total_size() as u32,
             weight: weight as u64,
             fee,
             status: Some(TransactionStatus::from(blockid)),
@@ -310,11 +310,11 @@ impl TxOutValue {
             "p2pkh"
         } else if script.is_p2sh() {
             "p2sh"
-        } else if script.is_v0_p2wpkh() {
+        } else if script.is_p2wpkh() {
             "v0_p2wpkh"
-        } else if script.is_v0_p2wsh() {
+        } else if script.is_p2wsh() {
             "v0_p2wsh"
-        } else if script.is_v1_p2tr() {
+        } else if script.is_p2tr() {
             "v1_p2tr"
         } else if script.is_provably_unspendable() {
             "provably_unspendable"
@@ -330,7 +330,7 @@ impl TxOutValue {
             scriptpubkey_asm: script_asm,
             scriptpubkey_address: script_addr,
             scriptpubkey_type: script_type.to_string(),
-            value,
+            value: value.to_sat(),
             #[cfg(feature = "liquid")]
             valuecommitment: txout.value.commitment(),
             #[cfg(feature = "liquid")]
@@ -1251,14 +1251,14 @@ impl From<HashError> for HttpError {
         HttpError::from("Invalid hash string".to_string())
     }
 }
-impl From<HexToBytesError> for HttpError {
-    fn from(_e: HexToBytesError) -> Self {
+impl From<hex::HexToBytesError> for HttpError {
+    fn from(_e: hex::HexToBytesError) -> Self {
         //HttpError::from(e.description().to_string())
         HttpError::from("Invalid hex string".to_string())
     }
 }
-impl From<bitcoin::hashes::hex::Error> for HttpError {
-    fn from(_e: bitcoin::hashes::hex::Error) -> Self {
+impl From<hex::HexToArrayError> for HttpError {
+    fn from(_e: hex::HexToArrayError) -> Self {
         //HttpError::from(e.description().to_string())
         HttpError::from("Invalid hex string".to_string())
     }
@@ -1295,6 +1295,13 @@ impl From<std::string::FromUtf8Error> for HttpError {
         HttpError::from(e.to_string())
     }
 }
+
+impl From<address::ParseError> for HttpError {
+    fn from(e: address::ParseError) -> Self {
+        HttpError::from(e.to_string())
+    }
+}
+
 #[cfg(feature = "liquid")]
 impl From<address::AddressError> for HttpError {
     fn from(e: address::AddressError) -> Self {
