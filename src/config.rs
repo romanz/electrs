@@ -39,6 +39,7 @@ pub struct Config {
     pub utxos_limit: usize,
     pub electrum_txs_limit: usize,
     pub electrum_banner: String,
+    pub electrum_rpc_logging: Option<RpcLogging>,
 
     #[cfg(feature = "liquid")]
     pub parent_network: BNetwork,
@@ -65,6 +66,10 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
 impl Config {
     pub fn from_args() -> Config {
         let network_help = format!("Select network type ({})", Network::names().join(", "));
+        let rpc_logging_help = format!(
+            "Select RPC logging option ({})",
+            RpcLogging::options().join(", ")
+        );
 
         let args = App::new("Electrum Rust Server")
             .version(crate_version!())
@@ -181,6 +186,11 @@ impl Config {
                     .long("electrum-banner")
                     .help("Welcome banner for the Electrum server, shown in the console to clients.")
                     .takes_value(true)
+            ).arg(
+                Arg::with_name("electrum_rpc_logging")
+                    .long("electrum-rpc-logging")
+                    .help(&rpc_logging_help)
+                    .takes_value(true),
             );
 
         #[cfg(unix)]
@@ -381,6 +391,9 @@ impl Config {
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,
+            electrum_rpc_logging: m
+                .value_of("electrum_rpc_logging")
+                .map(|option| RpcLogging::from(option)),
             http_addr,
             http_socket_file,
             monitoring_addr,
@@ -416,6 +429,29 @@ impl Config {
             Arc::new(CookieFile {
                 daemon_dir: self.daemon_dir.clone(),
             })
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum RpcLogging {
+    Full,
+    NoParams,
+}
+
+impl RpcLogging {
+    pub fn options() -> Vec<String> {
+        return vec!["full".to_string(), "no-params".to_string()];
+    }
+}
+
+impl From<&str> for RpcLogging {
+    fn from(option: &str) -> Self {
+        match option {
+            "full" => RpcLogging::Full,
+            "no-params" => RpcLogging::NoParams,
+
+            _ => panic!("unsupported RPC logging option: {:?}", option),
         }
     }
 }

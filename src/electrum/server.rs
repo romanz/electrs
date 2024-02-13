@@ -4,6 +4,7 @@ use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use crypto::digest::Digest;
@@ -18,7 +19,7 @@ use bitcoin::consensus::encode::serialize_hex;
 use elements::encode::serialize_hex;
 
 use crate::chain::Txid;
-use crate::config::Config;
+use crate::config::{Config, RpcLogging};
 use crate::electrum::{get_electrum_height, ProtocolVersion};
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramVec, MetricOpts, Metrics};
@@ -90,6 +91,14 @@ fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<F
     }
 }
 
+macro_rules! conditionally_log_rpc_event {
+    ($self:ident, $event:expr) => {
+        if $self.rpc_logging.is_some() {
+            $self.log_rpc_event($event);
+        }
+    };
+}
+
 struct Connection {
     query: Arc<Query>,
     last_header_entry: Option<HeaderEntry>,
@@ -101,6 +110,7 @@ struct Connection {
     txs_limit: usize,
     #[cfg(feature = "electrum-discovery")]
     discovery: Option<Arc<DiscoveryManager>>,
+    rpc_logging: Option<RpcLogging>,
 }
 
 impl Connection {
@@ -111,6 +121,7 @@ impl Connection {
         stats: Arc<Stats>,
         txs_limit: usize,
         #[cfg(feature = "electrum-discovery")] discovery: Option<Arc<DiscoveryManager>>,
+        rpc_logging: Option<RpcLogging>,
     ) -> Connection {
         Connection {
             query,
@@ -123,6 +134,7 @@ impl Connection {
             txs_limit,
             #[cfg(feature = "electrum-discovery")]
             discovery,
+            rpc_logging,
         }
     }
 
@@ -490,6 +502,17 @@ impl Connection {
         Ok(result)
     }
 
+    fn log_rpc_event(&self, mut log: Value) {
+        log.as_object_mut().unwrap().insert(
+            "source".into(),
+            json!({
+                "ip": self.addr.ip().to_string(),
+                "port": self.addr.port(),
+            }),
+        );
+        println!("ELECTRUM-RPC-LOGGER: {}", log);
+    }
+
     fn send_values(&mut self, values: &[Value]) -> Result<()> {
         for value in values {
             let line = value.to_string() + "\n";
@@ -508,7 +531,7 @@ impl Connection {
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    let reply = match (
+                    match (
                         cmd.get("method"),
                         cmd.get("params").unwrap_or_else(|| &empty_params),
                         cmd.get("id"),
@@ -517,10 +540,41 @@ impl Connection {
                             Some(&Value::String(ref method)),
                             &Value::Array(ref params),
                             Some(ref id),
-                        ) => self.handle_command(method, params, id)?,
-                        _ => bail!("invalid command: {}", cmd),
-                    };
-                    self.send_values(&[reply])?
+                        ) => {
+                            conditionally_log_rpc_event!(
+                                self,
+                                json!({
+                                    "event": "rpc request",
+                                    "id": id,
+                                    "method": method,
+                                    "params": if let Some(RpcLogging::Full) = self.rpc_logging {
+                                        json!(params)
+                                    } else {
+                                        Value::Null
+                                    }
+                                })
+                            );
+
+                            let start_time = Instant::now();
+                            let reply = self.handle_command(method, params, id)?;
+
+                            conditionally_log_rpc_event!(
+                                self,
+                                json!({
+                                    "event": "rpc response",
+                                    "method": method,
+                                    "payload_size": reply.to_string().as_bytes().len(),
+                                    "duration_µs": start_time.elapsed().as_micros(),
+                                    "id": id,
+                                })
+                            );
+
+                            self.send_values(&[reply])?
+                        }
+                        _ => {
+                            bail!("invalid command: {}", cmd)
+                        }
+                    }
                 }
                 Message::PeriodicUpdate => {
                     let values = self
@@ -563,6 +617,8 @@ impl Connection {
 
     pub fn run(mut self) {
         self.stats.clients.inc();
+        conditionally_log_rpc_event!(self, json!({ "event": "connection established" }));
+
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         let tx = self.chan.sender();
         let child = spawn_thread("reader", || Connection::handle_requests(reader, tx));
@@ -579,6 +635,8 @@ impl Connection {
             .sub(self.status_hashes.len() as i64);
 
         debug!("[{}] shutting down connection", self.addr);
+        conditionally_log_rpc_event!(self, json!({ "event": "connection closed" }));
+
         let _ = self.stream.shutdown(Shutdown::Both);
         if let Err(err) = child.join().expect("receiver panicked") {
             error!("[{}] receiver failed: {}", self.addr, err);
@@ -741,6 +799,7 @@ impl RPC {
                     let garbage_sender = garbage_sender.clone();
                     #[cfg(feature = "electrum-discovery")]
                     let discovery = discovery.clone();
+                    let rpc_logging = config.electrum_rpc_logging.clone();
 
                     let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
@@ -752,6 +811,7 @@ impl RPC {
                             txs_limit,
                             #[cfg(feature = "electrum-discovery")]
                             discovery,
+                            rpc_logging,
                         );
                         senders.lock().unwrap().push(conn.chan.sender());
                         conn.run();
