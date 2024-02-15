@@ -29,8 +29,8 @@ use crate::daemon::Daemon;
 use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use crate::util::{
-    full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta, BlockStatus, Bytes,
-    HeaderEntry, HeaderList, ScriptToAddr,
+    bincode, full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta,
+    BlockStatus, Bytes, HeaderEntry, HeaderList, ScriptToAddr,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -386,7 +386,7 @@ impl ChainQuery {
             self.store
                 .txstore_db
                 .get(&BlockRow::txids_key(full_hash(&hash[..])))
-                .map(|val| bincode::deserialize(&val).expect("failed to parse block txids"))
+                .map(|val| bincode::deserialize_little(&val).expect("failed to parse block txids"))
         }
     }
 
@@ -400,7 +400,7 @@ impl ChainQuery {
             self.store
                 .txstore_db
                 .get(&BlockRow::meta_key(full_hash(&hash[..])))
-                .map(|val| bincode::deserialize(&val).expect("failed to parse BlockMeta"))
+                .map(|val| bincode::deserialize_little(&val).expect("failed to parse BlockMeta"))
         }
     }
 
@@ -534,7 +534,7 @@ impl ChainQuery {
             .store
             .cache_db
             .get(&UtxoCacheRow::key(scripthash))
-            .map(|c| bincode::deserialize(&c).unwrap())
+            .map(|c| bincode::deserialize_little(&c).unwrap())
             .and_then(|(utxos_cache, blockhash)| {
                 self.height_by_hash(&blockhash)
                     .map(|height| (utxos_cache, height))
@@ -639,7 +639,7 @@ impl ChainQuery {
             .store
             .cache_db
             .get(&StatsCacheRow::key(scripthash))
-            .map(|c| bincode::deserialize(&c).unwrap())
+            .map(|c| bincode::deserialize_little(&c).unwrap())
             .and_then(|(stats, blockhash)| {
                 self.height_by_hash(&blockhash)
                     .map(|height| (stats, height))
@@ -1214,7 +1214,7 @@ impl TxRow {
     fn into_row(self) -> DBRow {
         let TxRow { key, value } = self;
         DBRow {
-            key: bincode::serialize(&key).unwrap(),
+            key: bincode::serialize_little(&key).unwrap(),
             value,
         }
     }
@@ -1249,14 +1249,14 @@ impl TxConfRow {
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: vec![],
         }
     }
 
     fn from_row(row: DBRow) -> Self {
         TxConfRow {
-            key: bincode::deserialize(&row.key).expect("failed to parse TxConfKey"),
+            key: bincode::deserialize_little(&row.key).expect("failed to parse TxConfKey"),
         }
     }
 }
@@ -1285,7 +1285,7 @@ impl TxOutRow {
         }
     }
     fn key(outpoint: &OutPoint) -> Bytes {
-        bincode::serialize(&TxOutKey {
+        bincode::serialize_little(&TxOutKey {
             code: b'O',
             txid: full_hash(&outpoint.txid[..]),
             vout: outpoint.vout as u16,
@@ -1295,7 +1295,7 @@ impl TxOutRow {
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: self.value,
         }
     }
@@ -1326,14 +1326,14 @@ impl BlockRow {
     fn new_txids(hash: FullHash, txids: &[Txid]) -> BlockRow {
         BlockRow {
             key: BlockKey { code: b'X', hash },
-            value: bincode::serialize(txids).unwrap(),
+            value: bincode::serialize_little(txids).unwrap(),
         }
     }
 
     fn new_meta(hash: FullHash, meta: &BlockMeta) -> BlockRow {
         BlockRow {
             key: BlockKey { code: b'M', hash },
-            value: bincode::serialize(meta).unwrap(),
+            value: bincode::serialize_little(meta).unwrap(),
         }
     }
 
@@ -1362,14 +1362,14 @@ impl BlockRow {
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: self.value,
         }
     }
 
     fn from_row(row: DBRow) -> Self {
         BlockRow {
-            key: bincode::deserialize(&row.key).unwrap(),
+            key: bincode::deserialize_little(&row.key).unwrap(),
             value: row.value,
         }
     }
@@ -1450,28 +1450,22 @@ impl TxHistoryRow {
     }
 
     fn prefix_end(code: u8, hash: &[u8]) -> Bytes {
-        bincode::serialize(&(code, full_hash(&hash[..]), std::u32::MAX)).unwrap()
+        bincode::serialize_big(&(code, full_hash(&hash[..]), std::u32::MAX)).unwrap()
     }
 
     fn prefix_height(code: u8, hash: &[u8], height: u32) -> Bytes {
-        bincode::config()
-            .big_endian()
-            .serialize(&(code, full_hash(&hash[..]), height))
-            .unwrap()
+        bincode::serialize_big(&(code, full_hash(&hash[..]), height)).unwrap()
     }
 
     pub fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::config().big_endian().serialize(&self.key).unwrap(),
+            key: bincode::serialize_big(&self.key).unwrap(),
             value: vec![],
         }
     }
 
     pub fn from_row(row: DBRow) -> Self {
-        let key = bincode::config()
-            .big_endian()
-            .deserialize(&row.key)
-            .expect("failed to deserialize TxHistoryKey");
+        let key = bincode::deserialize_big(&row.key).expect("failed to deserialize TxHistoryKey");
         TxHistoryRow { key }
     }
 
@@ -1537,19 +1531,20 @@ impl TxEdgeRow {
 
     fn filter(outpoint: &OutPoint) -> Bytes {
         // TODO build key without using bincode? [ b"S", &outpoint.txid[..], outpoint.vout?? ].concat()
-        bincode::serialize(&(b'S', full_hash(&outpoint.txid[..]), outpoint.vout as u16)).unwrap()
+        bincode::serialize_little(&(b'S', full_hash(&outpoint.txid[..]), outpoint.vout as u16))
+            .unwrap()
     }
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: vec![],
         }
     }
 
     fn from_row(row: DBRow) -> Self {
         TxEdgeRow {
-            key: bincode::deserialize(&row.key).expect("failed to deserialize TxEdgeKey"),
+            key: bincode::deserialize_little(&row.key).expect("failed to deserialize TxEdgeKey"),
         }
     }
 }
@@ -1572,7 +1567,7 @@ impl StatsCacheRow {
                 code: b'A',
                 scripthash: full_hash(scripthash),
             },
-            value: bincode::serialize(&(stats, blockhash)).unwrap(),
+            value: bincode::serialize_little(&(stats, blockhash)).unwrap(),
         }
     }
 
@@ -1582,7 +1577,7 @@ impl StatsCacheRow {
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: self.value,
         }
     }
@@ -1604,7 +1599,7 @@ impl UtxoCacheRow {
                 code: b'U',
                 scripthash: full_hash(scripthash),
             },
-            value: bincode::serialize(&(utxos_cache, blockhash)).unwrap(),
+            value: bincode::serialize_little(&(utxos_cache, blockhash)).unwrap(),
         }
     }
 
@@ -1614,7 +1609,7 @@ impl UtxoCacheRow {
 
     fn into_row(self) -> DBRow {
         DBRow {
-            key: bincode::serialize(&self.key).unwrap(),
+            key: bincode::serialize_little(&self.key).unwrap(),
             value: self.value,
         }
     }

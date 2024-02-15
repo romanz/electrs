@@ -2,6 +2,7 @@ mod block;
 mod script;
 mod transaction;
 
+pub mod bincode;
 pub mod electrum_merkle;
 pub mod fees;
 
