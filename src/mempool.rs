@@ -82,8 +82,20 @@ impl MempoolSyncUpdate {
                 .iter()
                 .zip(entries.into_iter().zip(txs.into_iter()))
                 .filter_map(|(txid, (entry, tx))| {
-                    let tx = tx.ok()?;
-                    let entry = entry.ok()?;
+                    let entry = match entry {
+                        Some(entry) => entry,
+                        None => {
+                            warn!("missing mempool entry: {}", txid);
+                            return None;
+                        }
+                    };
+                    let tx = match tx {
+                        Some(tx) => tx,
+                        None => {
+                            warn!("missing mempool tx: {}", txid);
+                            return None;
+                        }
+                    };
                     Some(Entry {
                         txid: *txid,
                         tx,
