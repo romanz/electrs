@@ -510,7 +510,7 @@ impl Connection {
                 "port": self.addr.port(),
             }),
         );
-        println!("ELECTRUM-RPC-LOGGER: {}", log);
+        println!("{}", log);
     }
 
     fn send_values(&mut self, values: &[Value]) -> Result<()> {
