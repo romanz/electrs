@@ -42,7 +42,7 @@ const CONFIG_KEY: &str = "C";
 const TIP_KEY: &[u8] = b"T";
 
 // Taken from https://github.com/facebook/rocksdb/blob/master/include/rocksdb/db.h#L654-L689
-const DB_PROPERIES: &[&str] = &[
+const DB_PROPERTIES: &[&str] = &[
     "rocksdb.num-immutable-mem-table",
     "rocksdb.mem-table-flush-pending",
     "rocksdb.compaction-pending",
@@ -315,7 +315,7 @@ impl DBStore {
     ) -> impl Iterator<Item = (&'static str, &'static str, u64)> + '_ {
         COLUMN_FAMILIES.iter().flat_map(move |cf_name| {
             let cf = self.db.cf_handle(cf_name).expect("missing CF");
-            DB_PROPERIES.iter().filter_map(move |property_name| {
+            DB_PROPERTIES.iter().filter_map(move |property_name| {
                 let value = self
                     .db
                     .property_int_value_cf(cf, *property_name)
