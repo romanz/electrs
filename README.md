@@ -27,7 +27,7 @@ If you can't use our guide, please ask about what you don't understand or consid
 Note that this implementation of Electrum server is optimized for **personal/small-scale (family/friends) usage**.
 It's a bad idea to run it publicly as it'd expose you to DoS and maybe also other attacks.
 If you want to run a public server you may be interested in the [Blockstream fork of electrs](https://github.com/Blockstream/electrs)
-which is better optimized for public usage at the cost of consuming _significantly_ more resources.
+which is better optimized for public usage at the cost of consuming *significantly* more resources.
 
 - [Installation from source](doc/install.md)
 - [Pre-built binaries](doc/binaries.md) (No official binaries available but a beta repository is available for installation)
