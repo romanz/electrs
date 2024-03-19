@@ -21,7 +21,7 @@ use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::{self, ErrorKind, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::types::SerBlock;
@@ -90,43 +90,78 @@ impl Connection {
             .collect())
     }
 
-    /// Request and process the specified blocks (in the specified order).
+    /// Request and process the specified blocks.
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    pub(crate) fn for_blocks<B, F, R>(&mut self, blockhashes: B, func: F) -> Result<Vec<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: Fn(BlockHash, SerBlock) -> R + Send + Sync,
+        R: Send + Sync,
     {
         self.blocks_duration.observe_duration("total", || {
             let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
+            let blockhashes_len = blockhashes.len();
             if blockhashes.is_empty() {
-                return Ok(());
+                return Ok(vec![]);
             }
             self.blocks_duration.observe_duration("request", || {
                 debug!("loading {} blocks", blockhashes.len());
                 self.req_send.send(Request::get_blocks(&blockhashes))
             })?;
 
-            for hash in blockhashes {
-                let block = self.blocks_duration.observe_duration("response", || {
-                    let block = self
-                        .blocks_recv
-                        .recv()
-                        .with_context(|| format!("failed to get block {}", hash))?;
-                    let header = bsl::BlockHeader::parse(&block[..])
-                        .expect("core returned invalid blockheader")
-                        .parsed_owned();
-                    ensure!(
-                        &header.block_hash_sha2()[..] == hash.as_byte_array(),
-                        "got unexpected block"
-                    );
-                    Ok(block)
-                })?;
-                self.blocks_duration
-                    .observe_duration("process", || func(hash, block));
+            let mut result = Vec::with_capacity(blockhashes_len);
+            for _ in 0..blockhashes_len {
+                // TODO use `OnceLock<R>` instead of `Mutex<Option<R>>` once MSRV 1.70
+                result.push(Mutex::new(None));
             }
-            Ok(())
+
+            rayon::scope(|s| {
+                for (i, hash) in blockhashes.iter().enumerate() {
+                    let block_result = self.blocks_duration.observe_duration("response", || {
+                        let block = self
+                            .blocks_recv
+                            .recv()
+                            .with_context(|| format!("failed to get block {}", hash))?;
+                        let header = bsl::BlockHeader::parse(&block[..])
+                            .expect("core returned invalid blockheader")
+                            .parsed_owned();
+                        ensure!(
+                            &header.block_hash_sha2()[..] == hash.as_byte_array(),
+                            "got unexpected block"
+                        );
+                        Ok(block)
+                    });
+                    if let Ok(block) = block_result {
+                        let func = &func;
+                        let blocks_duration = &self.blocks_duration;
+                        let hash = *hash;
+                        let result = &result;
+
+                        s.spawn(move |_| {
+                            let r =
+                                blocks_duration.observe_duration("process", || func(hash, block));
+                            *result[i]
+                                .lock()
+                                .expect("I am the only user of this mutex until the scope ends") =
+                                Some(r);
+                        });
+                    }
+                }
+            });
+
+            let result: Option<Vec<_>> = result
+                .into_iter()
+                .map(|e| {
+                    e.into_inner()
+                        .expect("spawn cannot panic and the scope ensure all the threads ended")
+                })
+                .collect();
+
+            match result {
+                Some(r) => Ok(r),
+                None => bail!("One or more of the jobs in for_blocks failed"),
+            }
         })
     }
 
