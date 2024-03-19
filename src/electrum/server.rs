@@ -527,6 +527,7 @@ impl Connection {
         let empty_params = json!([]);
         loop {
             let msg = self.chan.receiver().recv().chain_err(|| "channel closed")?;
+            let start_time = Instant::now();
             trace!("RPC {:?}", msg);
             match msg {
                 Message::Request(line) => {
@@ -555,7 +556,6 @@ impl Connection {
                                 })
                             );
 
-                            let start_time = Instant::now();
                             let reply = self.handle_command(method, params, id)?;
 
                             conditionally_log_rpc_event!(
@@ -564,7 +564,7 @@ impl Connection {
                                     "event": "rpc response",
                                     "method": method,
                                     "payload_size": reply.to_string().as_bytes().len(),
-                                    "duration_µs": start_time.elapsed().as_micros(),
+                                    "duration_micros": start_time.elapsed().as_micros(),
                                     "id": id,
                                 })
                             );
