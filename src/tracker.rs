@@ -13,7 +13,7 @@ use crate::{
     daemon::Daemon,
     db::DBStore,
     index::Index,
-    mempool::{FeeHistogram, Mempool},
+    mempool::Mempool,
     metrics::Metrics,
     signals::ExitFlag,
     status::{Balance, ScriptHashStatus, UnspentEntry},
@@ -21,10 +21,9 @@ use crate::{
 
 /// Electrum protocol subscriptions' tracker
 pub struct Tracker {
+    pub(crate) mempool: Mempool,
     index: Index,
-    mempool: Mempool,
     metrics: Metrics,
-    ignore_mempool: bool,
 }
 
 pub(crate) enum Error {
@@ -51,16 +50,11 @@ impl Tracker {
             .context("failed to open index")?,
             mempool: Mempool::new(&metrics),
             metrics,
-            ignore_mempool: config.ignore_mempool,
         })
     }
 
     pub(crate) fn chain(&self) -> &Chain {
         self.index.chain()
-    }
-
-    pub(crate) fn fees_histogram(&self) -> &FeeHistogram {
-        self.mempool.fees_histogram()
     }
 
     pub(crate) fn metrics(&self) -> &Metrics {
@@ -71,12 +65,8 @@ impl Tracker {
         status.get_unspent(self.index.chain())
     }
 
-    pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<bool> {
+    pub(crate) fn sync_chain(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<bool> {
         let done = self.index.sync(daemon, exit_flag)?;
-        if done && !self.ignore_mempool {
-            self.mempool.sync(daemon, exit_flag);
-            // TODO: double check tip - and retry on diff
-        }
         Ok(done)
     }
 
