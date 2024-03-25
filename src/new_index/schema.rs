@@ -1038,26 +1038,19 @@ fn lookup_txos(
     outpoints: &BTreeSet<OutPoint>,
     allow_missing: bool,
 ) -> HashMap<OutPoint, TxOut> {
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(16) // we need to saturate SSD IOPS
-        .thread_name(|i| format!("lookup-txo-{}", i))
-        .build()
-        .unwrap();
-    pool.install(|| {
-        outpoints
-            .par_iter()
-            .filter_map(|outpoint| {
-                lookup_txo(&txstore_db, &outpoint)
-                    .or_else(|| {
-                        if !allow_missing {
-                            panic!("missing txo {} in {:?}", outpoint, txstore_db);
-                        }
-                        None
-                    })
-                    .map(|txo| (*outpoint, txo))
-            })
-            .collect()
-    })
+    let mut remain_outpoints = outpoints.iter();
+    txstore_db
+        .multi_get(outpoints.iter().map(TxOutRow::key))
+        .into_iter()
+        .filter_map(|res| {
+            let outpoint = remain_outpoints.next().unwrap();
+            match res.unwrap() {
+                Some(txo) => Some((*outpoint, deserialize(&txo).expect("failed to parse TxOut"))),
+                None if allow_missing => None,
+                None => panic!("missing txo {}", outpoint),
+            }
+        })
+        .collect()
 }
 
 fn lookup_txo(txstore_db: &DB, outpoint: &OutPoint) -> Option<TxOut> {

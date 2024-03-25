@@ -196,6 +196,14 @@ impl DB {
         self.db.get(key).unwrap().map(|v| v.to_vec())
     }
 
+    pub fn multi_get<K, I>(&self, keys: I) -> Vec<Result<Option<Vec<u8>>, rocksdb::Error>>
+    where
+        K: AsRef<[u8]>,
+        I: IntoIterator<Item = K>,
+    {
+        self.db.multi_get(keys)
+    }
+
     fn verify_compatibility(&self, config: &Config) {
         let mut compatibility_bytes = bincode::serialize_little(&DB_VERSION).unwrap();
 
