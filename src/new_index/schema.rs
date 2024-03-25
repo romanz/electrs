@@ -327,7 +327,7 @@ impl Indexer {
     fn index(&self, blocks: &[BlockEntry]) {
         let previous_txos_map = {
             let _timer = self.start_timer("index_lookup");
-            lookup_txos(&self.store.txstore_db, &get_previous_txos(blocks), false)
+            lookup_txos(&self.store.txstore_db, get_previous_txos(blocks)).unwrap()
         };
         let rows = {
             let _timer = self.start_timer("index_process");
@@ -859,14 +859,9 @@ impl ChainQuery {
         lookup_txo(&self.store.txstore_db, outpoint)
     }
 
-    pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
+    pub fn lookup_txos(&self, outpoints: BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
         let _timer = self.start_timer("lookup_txos");
-        lookup_txos(&self.store.txstore_db, outpoints, false)
-    }
-
-    pub fn lookup_avail_txos(&self, outpoints: &BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
-        let _timer = self.start_timer("lookup_available_txos");
-        lookup_txos(&self.store.txstore_db, outpoints, true)
+        lookup_txos(&self.store.txstore_db, outpoints)
     }
 
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
@@ -1033,21 +1028,17 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
         .collect()
 }
 
-fn lookup_txos(
-    txstore_db: &DB,
-    outpoints: &BTreeSet<OutPoint>,
-    allow_missing: bool,
-) -> HashMap<OutPoint, TxOut> {
-    let mut remain_outpoints = outpoints.iter();
+fn lookup_txos(txstore_db: &DB, outpoints: BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
+    let keys = outpoints.iter().map(TxOutRow::key).collect::<Vec<_>>();
+    let mut remain_outpoints = outpoints.into_iter();
     txstore_db
-        .multi_get(outpoints.iter().map(TxOutRow::key))
+        .multi_get(keys)
         .into_iter()
-        .filter_map(|res| {
+        .map(|res| {
             let outpoint = remain_outpoints.next().unwrap();
             match res.unwrap() {
-                Some(txo) => Some((*outpoint, deserialize(&txo).expect("failed to parse TxOut"))),
-                None if allow_missing => None,
-                None => panic!("missing txo {}", outpoint),
+                Some(txo) => Ok((outpoint, deserialize(&txo).expect("failed to parse TxOut"))),
+                None => Err(format!("missing txo {}", outpoint).into()),
             }
         })
         .collect()

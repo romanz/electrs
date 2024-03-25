@@ -468,7 +468,7 @@ fn prepare_txs(
         })
         .collect();
 
-    let prevouts = query.lookup_txos(&outpoints);
+    let prevouts = query.lookup_txos(outpoints);
 
     txs.into_iter()
         .map(|(tx, blockid)| TransactionValue::new(tx, blockid, &prevouts, config))

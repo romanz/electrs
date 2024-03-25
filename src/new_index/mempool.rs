@@ -1,5 +1,5 @@
 use arraydeque::{ArrayDeque, Wrapping};
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize;
@@ -310,7 +310,7 @@ impl Mempool {
             self.txstore.insert(txid, tx);
         }
         // Phase 2: index history and spend edges (can fail if some txos cannot be found)
-        let txos = match self.lookup_txos(&self.get_prevouts(&txids)) {
+        let txos = match self.lookup_txos(self.get_prevouts(&txids)) {
             Ok(txos) => txos,
             Err(err) => {
                 warn!("lookup txouts failed: {}", err);
@@ -397,34 +397,29 @@ impl Mempool {
         }
     }
 
-    pub fn lookup_txo(&self, outpoint: &OutPoint) -> Result<TxOut> {
-        let mut outpoints = BTreeSet::new();
-        outpoints.insert(*outpoint);
-        Ok(self.lookup_txos(&outpoints)?.remove(outpoint).unwrap())
+    fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
+        self.txstore
+            .get(&outpoint.txid)
+            .and_then(|tx| tx.output.get(outpoint.vout as usize).cloned())
     }
 
-    pub fn lookup_txos(&self, outpoints: &BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
+    pub fn lookup_txos(&self, outpoints: BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
         let _timer = self
             .latency
             .with_label_values(&["lookup_txos"])
             .start_timer();
 
-        let confirmed_txos = self.chain.lookup_avail_txos(outpoints);
+        // Get the txos available in the mempool, skipping over (and collecting) missing ones
+        let (mut txos, remain_outpoints): (HashMap<_, _>, _) = outpoints
+            .into_iter()
+            .partition_map(|outpoint| match self.lookup_txo(&outpoint) {
+                Some(txout) => Either::Left((outpoint, txout)),
+                None => Either::Right(outpoint),
+            });
 
-        let mempool_txos = outpoints
-            .iter()
-            .filter(|outpoint| !confirmed_txos.contains_key(outpoint))
-            .map(|outpoint| {
-                self.txstore
-                    .get(&outpoint.txid)
-                    .and_then(|tx| tx.output.get(outpoint.vout as usize).cloned())
-                    .map(|txout| (*outpoint, txout))
-                    .chain_err(|| format!("missing outpoint {:?}", outpoint))
-            })
-            .collect::<Result<HashMap<OutPoint, TxOut>>>()?;
+        // Get the remaining txos from the chain (fails if any are missing)
+        txos.extend(self.chain.lookup_txos(remain_outpoints)?);
 
-        let mut txos = confirmed_txos;
-        txos.extend(mempool_txos);
         Ok(txos)
     }
 

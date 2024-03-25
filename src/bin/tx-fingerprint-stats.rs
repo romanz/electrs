@@ -83,12 +83,12 @@ fn main() {
         //info!("{:?},{:?}", txid, blockid);
 
         let prevouts = chain.lookup_txos(
-            &tx.input
+            tx.input
                 .iter()
                 .filter(|txin| has_prevout(txin))
                 .map(|txin| txin.previous_output)
                 .collect(),
-        );
+        ).unwrap();
 
         let total_out: u64 = tx.output.iter().map(|out| out.value.to_sat()).sum();
         let small_out = tx
