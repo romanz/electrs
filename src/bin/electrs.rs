@@ -5,9 +5,12 @@ extern crate log;
 extern crate electrs;
 
 use error_chain::ChainedError;
+use std::collections::HashSet;
 use std::process;
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use bitcoin::Txid;
+use serde_json::json;
 
 use electrs::{
     config::Config,
@@ -117,8 +120,29 @@ fn run_server(config: Arc<Config>) -> Result<()> {
             tip = current_tip;
         };
 
+        // FIXME(jamesdorfman): couldn't figure out how to import it from util
+        let log_fn_duration = |fn_name: &str, duration: u128| {
+            let log = json!({
+                "fn_name": fn_name,
+                "duration_micros": duration,
+            });
+            println!("{}", log);
+        };
+
         // Update mempool
-        mempool.write().unwrap().update(&daemon)?;
+
+        let t = Instant::now();
+
+        let old_txids = mempool.read().unwrap().old_txids();
+        let new_txids = daemon
+            .getmempooltxids()
+            .chain_err(|| "failed to update mempool from daemon")?;
+        let old_mempool_txs: HashSet<&Txid> = old_txids.difference(&new_txids).collect();
+
+        log_fn_duration("mempool::paratial_tx_fetch", t.elapsed().as_micros());
+
+        let new_mempool_txs = Mempool::download_new_mempool_txs(&daemon, &old_txids, &new_txids);
+        mempool.write().unwrap().update_quick( &new_mempool_txs, &old_mempool_txs)?;
 
         // Update subscribed clients
         electrum_server.notify();

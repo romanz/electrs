@@ -276,6 +276,48 @@ impl Mempool {
         &self.backlog_stats.0
     }
 
+    pub fn old_txids(&self) -> HashSet<Txid> {
+        return HashSet::from_iter(self.txstore.keys().cloned());
+    }
+
+    pub fn download_new_mempool_txs(daemon: &Daemon, old_txids: &HashSet<Txid>, new_txids: &HashSet<Txid>) -> Vec<Transaction> {
+        let t = Instant::now();
+
+        let txids: Vec<&Txid> = (*new_txids).difference(old_txids).collect();
+        let tranactions = match daemon.gettransactions(&txids) {
+            Ok(txs) => txs,
+            Err(err) => {
+                warn!("failed to get {} transactions: {}", txids.len(), err); // e.g. new block or RBF
+                vec![] // return an empty vector if there's an error
+            }
+        };
+
+        log_fn_duration("mempool::download_new_mempool_txs", t.elapsed().as_micros());
+        return tranactions;
+    }
+
+    pub fn update_quick(&mut self, to_add: &Vec<Transaction>, to_remove: &HashSet<&Txid>) -> Result<()> {
+        let t = Instant::now();
+        let _timer = self.latency.with_label_values(&["update"]).start_timer();
+
+        // Add new transactions
+        self.add(to_add.clone());
+        // Remove missing transactions
+        self.remove(to_remove.clone());
+
+        self.count
+            .with_label_values(&["txs"])
+            .set(self.txstore.len() as f64);
+
+        // Update cached backlog stats (if expired)
+        if self.backlog_stats.1.elapsed() > Duration::from_secs(BACKLOG_STATS_TTL) {
+            self.update_backlog_stats();
+        }
+
+        log_fn_duration("mempool::update_quick", t.elapsed().as_micros());
+        Ok(())
+    }
+
     pub fn update(&mut self, daemon: &Daemon) -> Result<()> {
         let _timer = self.latency.with_label_values(&["update"]).start_timer();
         let new_txids = daemon
