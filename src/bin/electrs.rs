@@ -5,12 +5,9 @@ extern crate log;
 extern crate electrs;
 
 use error_chain::ChainedError;
-use std::collections::HashSet;
 use std::process;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use bitcoin::Txid;
-use serde_json::json;
+use std::time::Duration;
 
 use electrs::{
     config::Config,
@@ -83,7 +80,15 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         &metrics,
         Arc::clone(&config),
     )));
-    mempool.write().unwrap().update(&daemon)?;
+    loop {
+        match Mempool::update(&mempool, &daemon) {
+            Ok(_) => break,
+            Err(e) => {
+                warn!("Error performing initial mempool update, trying again in 5 seconds: {}", e.display_chain());
+                signal.wait(Duration::from_secs(5), false)?;
+            },
+        }
+    }
 
     #[cfg(feature = "liquid")]
     let asset_db = config.asset_db_path.as_ref().map(|db_dir| {
@@ -120,29 +125,11 @@ fn run_server(config: Arc<Config>) -> Result<()> {
             tip = current_tip;
         };
 
-        // FIXME(jamesdorfman): couldn't figure out how to import it from util
-        let log_fn_duration = |fn_name: &str, duration: u128| {
-            let log = json!({
-                "fn_name": fn_name,
-                "duration_micros": duration,
-            });
-            println!("{}", log);
-        };
-
         // Update mempool
-
-        let t = Instant::now();
-
-        let old_txids = mempool.read().unwrap().old_txids();
-        let new_txids = daemon
-            .getmempooltxids()
-            .chain_err(|| "failed to update mempool from daemon")?;
-        let old_mempool_txs: HashSet<&Txid> = old_txids.difference(&new_txids).collect();
-
-        log_fn_duration("mempool::paratial_tx_fetch", t.elapsed().as_micros());
-
-        let new_mempool_txs = Mempool::download_new_mempool_txs(&daemon, &old_txids, &new_txids);
-        mempool.write().unwrap().update_quick( &new_mempool_txs, &old_mempool_txs)?;
+        if let Err(e) = Mempool::update(&mempool, &daemon) {
+            // Log the error if the result is an Err
+            warn!("Error updating mempool, skipping mempool update: {}", e.display_chain());
+        }
 
         // Update subscribed clients
         electrum_server.notify();
