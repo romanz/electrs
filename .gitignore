@@ -4,3 +4,4 @@ target
 *.sublime*
 *~
 *.pyc
+result
