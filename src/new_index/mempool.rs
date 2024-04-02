@@ -492,6 +492,8 @@ impl Mempool {
     }
 
     pub fn update(mempool: &Arc<RwLock<Mempool>>, daemon: &Daemon) -> Result<()> {
+        let _timer = mempool.read().unwrap().latency.with_label_values(&["update"]).start_timer();
+
         // 1. Determine which transactions are no longer in the daemon's mempool and which ones have newly entered it
         let old_txids = mempool.read().unwrap().old_txids();
         let all_txids = daemon
