@@ -499,19 +499,21 @@ impl Mempool {
             .chain_err(|| "failed to update mempool from daemon")?;
         let txids_to_remove: HashSet<&Txid> = old_txids.difference(&all_txids).collect();
 
-        // 2. Download the new transactions from the daemon's mempool
+        // 2. Remove missing transactions. Even if we are unable to download new transactions from
+        // the daemon, we still want to remove the transactions that are no longer in the mempool.
+        mempool.write().unwrap().remove(txids_to_remove);
+
+        // 3. Download the new transactions from the daemon's mempool
         let new_txids: Vec<&Txid> = all_txids.difference(&old_txids).collect();
         let txs_to_add = daemon
             .gettransactions(&new_txids)
             .chain_err(|| format!("failed to get {} transactions", new_txids.len()))?;
 
-        // 3. Update local mempool to match daemon's state
+        // 4. Update local mempool to match daemon's state
         {
             let mut mempool = mempool.write().unwrap();
             // Add new transactions
             mempool.add(txs_to_add);
-            // Remove missing transactions
-            mempool.remove(txids_to_remove);
 
             mempool
                 .count
