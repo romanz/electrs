@@ -162,7 +162,7 @@ impl TestRunner {
             &metrics,
             Arc::clone(&config),
         )));
-        mempool.write().unwrap().update(&daemon)?;
+        Mempool::update(&mempool, &daemon)?;
 
         let query = Arc::new(Query::new(
             Arc::clone(&chain),
@@ -194,10 +194,9 @@ impl TestRunner {
 
     pub fn sync(&mut self) -> Result<()> {
         self.indexer.update(&self.daemon)?;
-        let mut mempool = self.mempool.write().unwrap();
-        mempool.update(&self.daemon)?;
+        Mempool::update(&self.mempool, &self.daemon)?;
         // force an update for the mempool stats, which are normally cached
-        mempool.update_backlog_stats();
+        self.mempool.write().unwrap().update_backlog_stats();
         Ok(())
     }
 
