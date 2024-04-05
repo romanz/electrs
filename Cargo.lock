@@ -303,6 +303,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f50548a349632abb9a2007d431a302bf0401a786c91f809ff31765fba87e2397"
 dependencies = [
  "anyhow",
+ "bitcoincore-rpc",
+ "log",
+ "tempfile",
+ "which",
+]
+
+[[package]]
+name = "bitcoind"
+version = "0.35.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09db6b30b527263d2e3a8768a2c9299763858cb84d01a9d63d174b9f515e1a32"
+dependencies = [
+ "anyhow",
  "bitcoin_hashes 0.13.0",
  "bitcoincore-rpc",
  "flate2",
@@ -623,7 +636,7 @@ dependencies = [
  "base64 0.21.7",
  "bincode",
  "bitcoin 0.31.1",
- "bitcoind",
+ "bitcoind 0.35.1",
  "clap",
  "crossbeam-channel",
  "dirs",
@@ -679,7 +692,7 @@ dependencies = [
 [[package]]
 name = "electrumd"
 version = "0.1.0"
-source = "git+https://github.com/shesek/electrumd?rev=6eac0b7b1f2447472016e2c1473a6284f7f8648e#6eac0b7b1f2447472016e2c1473a6284f7f8648e"
+source = "git+https://github.com/shesek/electrumd?rev=996fe2a8e563bc1bde6bbc2e0c2a2f4421abcdbc#996fe2a8e563bc1bde6bbc2e0c2a2f4421abcdbc"
 dependencies = [
  "bitcoin_hashes 0.10.0",
  "home",
@@ -704,12 +717,12 @@ dependencies = [
 
 [[package]]
 name = "elementsd"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ae67bd67005d700439d49468429ea4b4648f20fafe1192e528bda1b15bf164c"
+checksum = "f17022ca1a790518f66c46c40ab729cc275f8a009babad583972a946a851cadf"
 dependencies = [
  "bitcoin_hashes 0.12.0",
- "bitcoind",
+ "bitcoind 0.34.1",
  "flate2",
  "minreq",
  "tar",
