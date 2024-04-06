@@ -79,6 +79,7 @@
 
           devShells.default = mkShell {
             inputsFrom = [ bin ];
+            LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
           };
         }
       );
