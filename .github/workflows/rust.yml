@@ -43,3 +43,11 @@ jobs:
 
     - name: Tests (Liquid mode, REST)
       run: cargo test --features liquid
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix build .
+
