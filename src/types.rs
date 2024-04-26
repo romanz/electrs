@@ -6,7 +6,7 @@ use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
     consensus::encode::{deserialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
-    OutPoint, Script, Txid,
+    io, OutPoint, Script, Txid,
 };
 use bitcoin_slices::bsl;
 
@@ -16,10 +16,10 @@ macro_rules! impl_consensus_encoding {
     ($thing:ident, $($field:ident),+) => (
         impl Encodable for $thing {
             #[inline]
-            fn consensus_encode<S: ::std::io::Write + ?Sized>(
+            fn consensus_encode<S: io::Write + ?Sized>(
                 &self,
                 s: &mut S,
-            ) -> Result<usize, std::io::Error> {
+            ) -> Result<usize, io::Error> {
                 let mut len = 0;
                 $(len += self.$field.consensus_encode(s)?;)+
                 Ok(len)
@@ -28,7 +28,7 @@ macro_rules! impl_consensus_encoding {
 
         impl Decodable for $thing {
             #[inline]
-            fn consensus_decode<D: ::std::io::Read + ?Sized>(
+            fn consensus_decode<D: io::BufRead + ?Sized>(
                 d: &mut D,
             ) -> Result<$thing, bitcoin::consensus::encode::Error> {
                 Ok($thing {

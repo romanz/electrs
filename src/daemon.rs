@@ -6,7 +6,7 @@ use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{json, value::RawValue, Value};
 
 use std::fs::File;
 use std::io::Read;
@@ -309,13 +309,13 @@ where
     T: Serialize,
 {
     debug!("calling {} on {} items", name, items.len());
-    let args: Vec<_> = items
+    let args: Vec<Box<RawValue>> = items
         .iter()
-        .map(|item| vec![serde_json::value::to_raw_value(item).unwrap()])
-        .collect();
-    let reqs: Vec<_> = args
+        .map(|item| jsonrpc::try_arg([item]).context("failed to serialize into JSON"))
+        .collect::<Result<Vec<_>>>()?;
+    let reqs: Vec<jsonrpc::Request> = args
         .iter()
-        .map(|arg| client.build_request(name, arg))
+        .map(|arg| client.build_request(name, Some(arg)))
         .collect();
     match client.send_batch(&reqs) {
         Ok(values) => {

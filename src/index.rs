@@ -263,7 +263,7 @@ fn index_single_block(
         fn visit_tx_out(&mut self, _vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             let script = bitcoin::Script::from_bytes(tx_out.script_pubkey());
             // skip indexing unspendable outputs
-            if !script.is_provably_unspendable() {
+            if !script.is_op_return() {
                 let row = ScriptHashRow::row(ScriptHash::new(script), self.height);
                 self.batch.funding_rows.push(row.to_db_row());
             }
