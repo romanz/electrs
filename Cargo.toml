@@ -22,7 +22,7 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.31.2", features = ["serde", "rand-std"] }
+bitcoin = { version = "0.32.0", features = ["serde", "rand-std"] }
 bitcoin_slices = { version = "0.7", features = ["bitcoin", "sha2"] }
 bitcoincore-rpc = { version = "0.18" }
 configure_me = "0.4"
