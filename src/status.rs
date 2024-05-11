@@ -308,10 +308,11 @@ impl ScriptHashStatus {
     }
 
     /// Apply func only on the new blocks (fetched from daemon).
-    fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
+    fn for_new_blocks<B, F, R>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<Vec<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: Fn(BlockHash, SerBlock) -> R + Send + Sync,
+        R: Send + Sync,
     {
         daemon.for_blocks(
             blockhashes
@@ -331,37 +332,54 @@ impl ScriptHashStatus {
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
         let scripthash = self.scripthash;
-        let mut result = HashMap::<BlockHash, HashMap<usize, TxEntry>>::new();
 
         let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
-        self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
-            for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
-                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
-                outpoints.extend(make_outpoints(
-                    filtered_outputs.txid,
-                    &filtered_outputs.result,
-                ));
-                block_entries
-                    .entry(filtered_outputs.pos)
-                    .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
-                    .outputs = filtered_outputs.result;
-            }
-        })?;
+        let outputs_filtering =
+            self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
+                let mut block_entries: HashMap<usize, TxEntry> = HashMap::new();
+                let mut outpoints = vec![];
+                for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
+                    cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
+                    outpoints.extend(make_outpoints(
+                        filtered_outputs.txid,
+                        &filtered_outputs.result,
+                    ));
+                    block_entries
+                        .entry(filtered_outputs.pos)
+                        .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
+                        .outputs = filtered_outputs.result;
+                }
+                (blockhash, outpoints, block_entries)
+            })?;
+
+        outpoints.extend(outputs_filtering.iter().flat_map(|(_, o, _)| o).cloned());
+
+        let mut result: HashMap<_, _> = outputs_filtering
+            .into_iter()
+            .map(|(a, _, b)| (a, b))
+            .collect();
+
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
-        self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
-            for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
-                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
-                block_entries
-                    .entry(filtered_inputs.pos)
-                    .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
-                    .spent = filtered_inputs.result;
-            }
-        })?;
+        let inputs_filtering =
+            self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
+                let mut block_entries: HashMap<usize, TxEntry> = HashMap::new();
+
+                for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
+                    cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                    block_entries
+                        .entry(filtered_inputs.pos)
+                        .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
+                        .spent = filtered_inputs.result;
+                }
+                (blockhash, block_entries)
+            })?;
+        for (b, h) in inputs_filtering {
+            let e = result.entry(b).or_default();
+            e.extend(h);
+        }
 
         Ok(result
             .into_iter()
