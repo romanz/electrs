@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -22,6 +23,18 @@ use crate::signal::Waiter;
 use crate::util::{HeaderList, DEFAULT_BLOCKHASH};
 
 use crate::errors::*;
+
+lazy_static! {
+    static ref DAEMON_CONNECTION_TIMEOUT: Duration = Duration::from_secs(
+        env::var("DAEMON_CONNECTION_TIMEOUT").map_or(10, |s| s.parse().unwrap())
+    );
+    static ref DAEMON_READ_TIMEOUT: Duration = Duration::from_secs(
+        env::var("DAEMON_READ_TIMEOUT").map_or(10 * 60, |s| s.parse().unwrap())
+    );
+    static ref DAEMON_WRITE_TIMEOUT: Duration = Duration::from_secs(
+        env::var("DAEMON_WRITE_TIMEOUT").map_or(10 * 60, |s| s.parse().unwrap())
+    );
+}
 
 fn parse_hash<T>(value: &Value) -> Result<T>
 where
@@ -129,10 +142,18 @@ struct Connection {
 
 fn tcp_connect(addr: SocketAddr, signal: &Waiter) -> Result<TcpStream> {
     loop {
-        match TcpStream::connect(addr) {
-            Ok(conn) => return Ok(conn),
+        match TcpStream::connect_timeout(&addr, *DAEMON_CONNECTION_TIMEOUT) {
+            Ok(conn) => {
+                // can only fail if DAEMON_TIMEOUT is 0
+                conn.set_read_timeout(Some(*DAEMON_READ_TIMEOUT)).unwrap();
+                conn.set_write_timeout(Some(*DAEMON_WRITE_TIMEOUT)).unwrap();
+                return Ok(conn);
+            }
             Err(err) => {
-                warn!("failed to connect daemon at {}: {}", addr, err);
+                warn!(
+                    "failed to connect daemon at {}: {} (backoff 3 seconds)",
+                    addr, err
+                );
                 signal.wait(Duration::from_secs(3), false)?;
                 continue;
             }
