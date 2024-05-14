@@ -208,7 +208,7 @@ impl Connection {
             .chain_err(|| {
                 ErrorKind::Connection("disconnected from daemon while receiving".to_owned())
             })?
-            .chain_err(|| "failed to read status")?;
+            .chain_err(|| ErrorKind::Connection("failed to read status".to_owned()))?;
         let mut headers = HashMap::new();
         for line in iter {
             let line = line.chain_err(|| ErrorKind::Connection("failed to read".to_owned()))?;
