@@ -1,3 +1,8 @@
+# 0.10.5 (May 18 2024)
+
+* Update dependencies (`bitcoin`, `bitcoin_slices`, `bitcoincore-rpc`, `rayon`)
+* Support latest bitcoind (https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/353 & https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/356)
+
 # 0.10.4 (Mar 15 2024)
 
 * Don't fail mempool sync on missing transactions (#997)
