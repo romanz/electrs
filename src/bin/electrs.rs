@@ -22,6 +22,7 @@ use electrs::{
 
 #[cfg(feature = "liquid")]
 use electrs::elements::AssetRegistry;
+use electrs::metrics::MetricOpts;
 
 fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
     let mut jsonrpc_import = config.jsonrpc_import;
@@ -110,7 +111,15 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let rest_server = rest::start(Arc::clone(&config), Arc::clone(&query));
     let electrum_server = ElectrumRPC::start(Arc::clone(&config), Arc::clone(&query), &metrics);
 
+    let main_loop_count = metrics.gauge(MetricOpts::new(
+        "electrs_main_loop_count",
+        "count of iterations of electrs main loop each 5 seconds or after interrupts",
+    ));
+
     loop {
+
+        main_loop_count.inc();
+
         if let Err(err) = signal.wait(Duration::from_secs(5), true) {
             info!("stopping server: {}", err);
             rest_server.stop();
