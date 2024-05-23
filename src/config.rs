@@ -25,6 +25,7 @@ pub struct Config {
     pub daemon_dir: PathBuf,
     pub blocks_dir: PathBuf,
     pub daemon_rpc_addr: SocketAddr,
+    pub daemon_parallelism: usize,
     pub cookie: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
     pub http_addr: SocketAddr,
@@ -131,6 +132,12 @@ impl Config {
                     .long("daemon-rpc-addr")
                     .help("Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet and 127.0.0.1:18443 for regtest)")
                     .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("daemon_parallelism")
+                    .long("daemon-parallelism")
+                    .help("Number of JSONRPC requests to send in parallel")
+                    .default_value("4")
             )
             .arg(
                 Arg::with_name("monitoring_addr")
@@ -386,6 +393,7 @@ impl Config {
             daemon_dir,
             blocks_dir,
             daemon_rpc_addr,
+            daemon_parallelism: value_t_or_exit!(m, "daemon_parallelism", usize),
             cookie,
             utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
             electrum_rpc_addr,

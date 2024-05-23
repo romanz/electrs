@@ -49,6 +49,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         &config.daemon_dir,
         &config.blocks_dir,
         config.daemon_rpc_addr,
+        config.daemon_parallelism,
         config.cookie_getter(),
         config.network_type,
         signal.clone(),
