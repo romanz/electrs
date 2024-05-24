@@ -4,15 +4,15 @@ use electrs_rocksdb as rocksdb;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub(crate) type Row = Box<[u8]>;
+use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
-    pub(crate) tip_row: Row,
-    pub(crate) header_rows: Vec<Row>,
-    pub(crate) funding_rows: Vec<Row>,
-    pub(crate) spending_rows: Vec<Row>,
-    pub(crate) txid_rows: Vec<Row>,
+    pub(crate) tip_row: [u8; 32],
+    pub(crate) header_rows: Vec<[u8; HEADER_ROW_SIZE]>,
+    pub(crate) funding_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+    pub(crate) spending_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+    pub(crate) txid_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
 }
 
 impl WriteBatch {
@@ -218,39 +218,50 @@ impl DBStore {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
 
-    pub(crate) fn iter_funding(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_funding(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
-    pub(crate) fn iter_spending(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_spending(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
-    pub(crate) fn iter_txid(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_txid(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
     fn iter_prefix_cf(
         &self,
         cf: &rocksdb::ColumnFamily,
-        prefix: Row,
-    ) -> impl Iterator<Item = Row> + '_ {
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
         let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.db
-            .iterator_cf_opt(cf, opts, mode)
-            .map(|row| row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
+        self.db.iterator_cf_opt(cf, opts, mode).map(|row| {
+            (&*row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
+                .try_into()
+                .unwrap()
+        })
     }
 
-    pub(crate) fn read_headers(&self) -> Vec<Row> {
+    pub(crate) fn read_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.db
             .iterator_cf_opt(self.headers_cf(), opts, rocksdb::IteratorMode::Start)
             .map(|row| row.expect("header iterator failed").0) // extract key from row
             .filter(|key| &key[..] != TIP_KEY) // headers' rows are longer than TIP_KEY
-            .collect()
+            .map(|key| (&*key).try_into().unwrap())
     }
 
     pub(crate) fn get_tip(&self) -> Option<Vec<u8>> {
@@ -363,6 +374,7 @@ impl Drop for DBStore {
 #[cfg(test)]
 mod tests {
     use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use crate::types::HASH_PREFIX_ROW_SIZE;
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -440,14 +452,18 @@ mod tests {
             ..Default::default()
         });
 
-        let rows = store.iter_txid(b"abcdefgh".to_vec().into_boxed_slice());
+        let rows = store.iter_txid(*b"abcdefgh");
         assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
     }
 
-    fn to_rows(values: &[&[u8]]) -> Vec<Box<[u8]>> {
+    fn to_rows(values: &[&[u8]]) -> Vec<[u8; HASH_PREFIX_ROW_SIZE]> {
         values
             .iter()
-            .map(|v| v.to_vec().into_boxed_slice())
+            .map(|v| {
+                let mut row = [0; HASH_PREFIX_ROW_SIZE];
+                row[..v.len()].copy_from_slice(v);
+                row
+            })
             .collect()
     }
 
