@@ -246,16 +246,64 @@ impl DBStore {
         mode: rocksdb::IteratorMode,
         mut filter_fn: F,
     ) -> impl Iterator<Item = [u8; N]> + '_ {
-        self.db
-            .iterator_cf_opt(cf, readopts, mode)
-            .filter_map(move |row| {
-                let k = &*row.expect("cf iterator failed").0;
-                if filter_fn(k) {
-                    Some(k.try_into().unwrap())
+        struct Iter<F>(F);
+
+        impl<F: FnMut() -> Option<Item>, Item> Iterator for Iter<F> {
+            type Item = Item;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.0()
+            }
+        }
+
+        let mut raw_iter = self.db.raw_iterator_cf_opt(cf, readopts);
+        let mut done = false;
+
+        // copied from DBIteratorWithThreadMode::set_mode
+        let direction = match mode {
+            rocksdb::IteratorMode::Start => {
+                raw_iter.seek_to_first();
+                rocksdb::Direction::Forward
+            }
+            rocksdb::IteratorMode::End => {
+                raw_iter.seek_to_last();
+                rocksdb::Direction::Reverse
+            }
+            rocksdb::IteratorMode::From(key, rocksdb::Direction::Forward) => {
+                raw_iter.seek(key);
+                rocksdb::Direction::Forward
+            }
+            rocksdb::IteratorMode::From(key, rocksdb::Direction::Reverse) => {
+                raw_iter.seek_for_prev(key);
+                rocksdb::Direction::Reverse
+            }
+        };
+
+        Iter(move || loop {
+            // based on <DBIteratorWithThreadMode as Iterator>::next
+            break if done {
+                None
+            } else if let Some((key, _)) = raw_iter.item() {
+                let ret = if filter_fn(key) {
+                    Some(key.try_into().unwrap())
                 } else {
                     None
+                };
+                match direction {
+                    rocksdb::Direction::Forward => raw_iter.next(),
+                    rocksdb::Direction::Reverse => raw_iter.prev(),
                 }
-            })
+                if ret.is_some() {
+                    ret
+                } else {
+                    continue;
+                }
+            } else {
+                done = true;
+                raw_iter.status().expect("cf iterator failed");
+                None
+            };
+        })
     }
 
     fn iter_prefix_cf(
