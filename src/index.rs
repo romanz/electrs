@@ -102,9 +102,8 @@ impl Index {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
             let headers = store
-                .read_headers()
-                .map(|row| HeaderRow::from_db_row(row).header)
-                .collect();
+                .iter_headers()
+                .map(|row| HeaderRow::from_db_row(row).header);
             chain.load(headers, tip);
             chain.drop_last_headers(reindex_last_blocks);
         };

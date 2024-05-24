@@ -254,7 +254,7 @@ impl DBStore {
         })
     }
 
-    pub(crate) fn read_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
+    pub(crate) fn iter_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.db
