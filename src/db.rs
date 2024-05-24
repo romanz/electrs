@@ -239,6 +239,25 @@ impl DBStore {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
+    fn iter_cf<'a, const N: usize, F: FnMut(&[u8]) -> bool + 'a>(
+        &'a self,
+        cf: &rocksdb::ColumnFamily,
+        readopts: rocksdb::ReadOptions,
+        mode: rocksdb::IteratorMode,
+        mut filter_fn: F,
+    ) -> impl Iterator<Item = [u8; N]> + '_ {
+        self.db
+            .iterator_cf_opt(cf, readopts, mode)
+            .filter_map(move |row| {
+                let k = &*row.expect("cf iterator failed").0;
+                if filter_fn(k) {
+                    Some(k.try_into().unwrap())
+                } else {
+                    None
+                }
+            })
+    }
+
     fn iter_prefix_cf(
         &self,
         cf: &rocksdb::ColumnFamily,
@@ -247,21 +266,18 @@ impl DBStore {
         let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.db.iterator_cf_opt(cf, opts, mode).map(|row| {
-            (&*row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
-                .try_into()
-                .unwrap()
-        })
+        self.iter_cf(cf, opts, mode, |_| true)
     }
 
     pub(crate) fn iter_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
-        self.db
-            .iterator_cf_opt(self.headers_cf(), opts, rocksdb::IteratorMode::Start)
-            .map(|row| row.expect("header iterator failed").0) // extract key from row
-            .filter(|key| &key[..] != TIP_KEY) // headers' rows are longer than TIP_KEY
-            .map(|key| (&*key).try_into().unwrap())
+        self.iter_cf(
+            self.headers_cf(),
+            opts,
+            rocksdb::IteratorMode::Start,
+            |key| key != TIP_KEY, // headers' rows are longer than TIP_KEY
+        )
     }
 
     pub(crate) fn get_tip(&self) -> Option<Vec<u8>> {
