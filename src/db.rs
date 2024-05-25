@@ -330,7 +330,7 @@ impl DBStore {
         for key in &batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
         }
-        db_batch.put_cf(self.headers_cf(), TIP_KEY, &batch.tip_row);
+        db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
 
         let mut opts = rocksdb::WriteOptions::new();
         let bulk_import = self.bulk_import.load(Ordering::Relaxed);
