@@ -13,7 +13,7 @@ edition = "2021"
 build = "build.rs"
 
 [features]
-default = ["metrics", "rocksdb"]
+default = ["metrics", "rocksdb", "redb"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
 rocksdb = ["dep:electrs-rocksdb"]

@@ -1,6 +1,9 @@
 #[cfg(feature = "rocksdb")]
 pub mod rocksdb;
 
+#[cfg(feature = "redb")]
+pub mod redb;
+
 use anyhow::Result;
 
 use std::path::Path;
