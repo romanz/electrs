@@ -8,7 +8,7 @@ use std::ops::ControlFlow;
 use crate::{
     chain::{Chain, NewHeader},
     daemon::Daemon,
-    db::{DBStore, WriteBatch},
+    db::{Database, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
     types::{
@@ -71,17 +71,14 @@ impl Stats {
         self.height.set("tip", chain.height() as f64);
     }
 
-    fn observe_db(&self, store: &DBStore) {
-        for (cf, name, value) in store.get_properties() {
-            self.db_properties
-                .set(&format!("{}:{}", name, cf), value as f64);
-        }
+    fn observe_db(&self, store: &impl Database) {
+        store.update_metrics(&self.db_properties);
     }
 }
 
 /// Confirmed transactions' address index
-pub struct Index {
-    store: DBStore,
+pub struct Index<D> {
+    store: D,
     batch_size: usize,
     lookup_limit: Option<usize>,
     chain: Chain,
@@ -90,9 +87,9 @@ pub struct Index {
     flush_needed: bool,
 }
 
-impl Index {
+impl<D: Database> Index<D> {
     pub(crate) fn load(
-        store: DBStore,
+        store: D,
         mut chain: Chain,
         metrics: &Metrics,
         batch_size: usize,
