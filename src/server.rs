@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    config::Config,
+    config::{Config, DatabaseType},
     db::Database,
     electrum::{Client, Rpc},
     metrics::{self, Metrics},
@@ -84,8 +84,33 @@ fn serve() -> Result<()> {
         "step",
         metrics::default_duration_buckets(),
     );
-    // TODO now hardcoded to rocksdb
-    let mut rpc = Rpc::<crate::db::rocksdb::DBStore>::new(&config, metrics)?;
+
+    match config.database {
+        #[cfg(feature = "rocksdb")]
+        DatabaseType::RocksDB => {
+            let rpc = Rpc::<crate::db::rocksdb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[cfg(feature = "redb")]
+        DatabaseType::ReDB => {
+            let rpc = Rpc::<crate::db::redb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[allow(unreachable_patterns)]
+        _ => {
+            Err(anyhow!("this build does not support using {} because that feature was not enabled at compile time", config.database))
+        }
+    }
+}
+
+fn server_loop<D: Database>(
+    mut rpc: Rpc<D>,
+    server_rx: crossbeam_channel::Receiver<Event>,
+    server_batch_size: metrics::Histogram,
+    duration: metrics::Histogram,
+    config: Config,
+) -> Result<()> {
+    debug!("Using {} as database", config.database);
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();

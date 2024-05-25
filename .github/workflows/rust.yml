@@ -16,7 +16,7 @@ jobs:
       matrix:
         build-args:
           [
-            --locked --no-default-features,
+            --locked --no-default-features --features rocksdb,
             --locked,
             --locked --features metrics_process,
           ]
