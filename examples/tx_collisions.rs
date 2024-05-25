@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use electrs_rocksdb::{ColumnFamilyDescriptor, IteratorMode, Options, DB};
 
 fn main() -> Result<()> {
-    let path = std::env::args().skip(1).next().context("missing DB path")?;
+    let path = std::env::args().nth(1).context("missing DB path")?;
     let cf_names = DB::list_cf(&Options::default(), &path)?;
     let cfs: Vec<_> = cf_names
         .iter()
