@@ -1,10 +1,23 @@
+#[cfg(feature = "rocksdb")]
 pub mod rocksdb;
+
+#[cfg(feature = "redb")]
+pub mod redb;
+
+#[cfg(not(any(feature = "rocksdb", feature = "redb",)))]
+compile_error!(
+    "Tried to build electrs without database, but at least one is needed. \
+     Enable at least one of the following features: 'rocksdb', 'redb'."
+);
 
 use anyhow::Result;
 
+use std::ops::RangeBounds;
 use std::path::Path;
 
-use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
+use crate::types::{
+    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE,
+};
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
@@ -55,4 +68,15 @@ pub trait Database: Sized + Sync {
     fn flush(&self);
 
     fn update_metrics(&self, gauge: &crate::metrics::Gauge);
+}
+
+/// Creates a range that includes all values with the given prefix
+pub(crate) fn hash_prefix_range(prefix: HashPrefix) -> impl RangeBounds<SerializedHashPrefixRow> {
+    let mut lower = [0x00; HASH_PREFIX_ROW_SIZE];
+    let mut upper = [0xff; HASH_PREFIX_ROW_SIZE];
+
+    lower[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
+    upper[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
+
+    lower..=upper
 }

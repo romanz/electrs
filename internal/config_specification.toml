@@ -151,3 +151,9 @@ doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://
 name = "signet_magic"
 type = "String"
 doc = "network magic for custom signet network in hex format, as found in Bitcoin Core logs (signet only)"
+
+[[param]]
+name = "database"
+type = "crate::config::DatabaseType"
+doc = "Select database type ('rocksdb' or 'redb')"
+default = "Default::default()"
