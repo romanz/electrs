@@ -243,7 +243,7 @@ impl DBStore {
         &'a self,
         cf: &rocksdb::ColumnFamily,
         readopts: rocksdb::ReadOptions,
-        mode: rocksdb::IteratorMode,
+        start: Option<&[u8]>,
         mut filter_fn: F,
     ) -> impl Iterator<Item = [u8; N]> + '_ {
         struct Iter<F>(F);
@@ -259,24 +259,10 @@ impl DBStore {
         let mut raw_iter = self.db.raw_iterator_cf_opt(cf, readopts);
         let mut done = false;
 
-        // copied from DBIteratorWithThreadMode::set_mode
-        let direction = match mode {
-            rocksdb::IteratorMode::Start => {
-                raw_iter.seek_to_first();
-                rocksdb::Direction::Forward
-            }
-            rocksdb::IteratorMode::End => {
-                raw_iter.seek_to_last();
-                rocksdb::Direction::Reverse
-            }
-            rocksdb::IteratorMode::From(key, rocksdb::Direction::Forward) => {
-                raw_iter.seek(key);
-                rocksdb::Direction::Forward
-            }
-            rocksdb::IteratorMode::From(key, rocksdb::Direction::Reverse) => {
-                raw_iter.seek_for_prev(key);
-                rocksdb::Direction::Reverse
-            }
+        if let Some(key) = start {
+            raw_iter.seek(key);
+        } else {
+            raw_iter.seek_to_first();
         };
 
         Iter(move || loop {
@@ -289,10 +275,7 @@ impl DBStore {
                 } else {
                     None
                 };
-                match direction {
-                    rocksdb::Direction::Forward => raw_iter.next(),
-                    rocksdb::Direction::Reverse => raw_iter.prev(),
-                }
+                raw_iter.next();
                 if ret.is_some() {
                     ret
                 } else {
@@ -311,10 +294,9 @@ impl DBStore {
         cf: &rocksdb::ColumnFamily,
         prefix: [u8; HASH_PREFIX_LEN],
     ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
-        let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.iter_cf(cf, opts, mode, |_| true)
+        self.iter_cf(cf, opts, Some(&prefix), |_| true)
     }
 
     pub(crate) fn iter_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
@@ -323,7 +305,7 @@ impl DBStore {
         self.iter_cf(
             self.headers_cf(),
             opts,
-            rocksdb::IteratorMode::Start,
+            None,
             |key| key != TIP_KEY, // headers' rows are longer than TIP_KEY
         )
     }
