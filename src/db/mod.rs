@@ -1,0 +1,55 @@
+mod rocksdb;
+
+use anyhow::Result;
+
+use std::path::Path;
+
+use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
+
+#[derive(Default)]
+pub struct WriteBatch {
+    pub(crate) tip_row: [u8; 32],
+    pub(crate) header_rows: Vec<[u8; HEADER_ROW_SIZE]>,
+    pub(crate) funding_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+    pub(crate) spending_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+    pub(crate) txid_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+}
+
+impl WriteBatch {
+    pub(crate) fn sort(&mut self) {
+        self.header_rows.sort_unstable();
+        self.funding_rows.sort_unstable();
+        self.spending_rows.sort_unstable();
+        self.txid_rows.sort_unstable();
+    }
+}
+
+pub trait Database: Sized + Sync {
+    fn open(path: &Path, log_dir: Option<&Path>, auto_reindex: bool) -> Result<Self>;
+
+    type HashPrefixRowIter<'a>: Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + 'a
+    where
+        Self: 'a;
+
+    fn iter_funding(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_>;
+
+    fn iter_spending(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_>;
+
+    fn iter_txid(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_>;
+
+    type HeaderIter<'a>: Iterator<Item = [u8; HEADER_ROW_SIZE]> + 'a
+    where
+        Self: 'a;
+
+    fn iter_headers(&self) -> Self::HeaderIter<'_>;
+
+    fn get_tip(&self) -> Option<Vec<u8>>;
+
+    fn write(&self, batch: &WriteBatch);
+
+    fn flush(&self);
+
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge);
+}
+
+pub use rocksdb::RocksDB;

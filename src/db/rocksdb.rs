@@ -6,26 +6,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 
-#[derive(Default)]
-pub(crate) struct WriteBatch {
-    pub(crate) tip_row: [u8; 32],
-    pub(crate) header_rows: Vec<[u8; HEADER_ROW_SIZE]>,
-    pub(crate) funding_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
-    pub(crate) spending_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
-    pub(crate) txid_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
-}
-
-impl WriteBatch {
-    pub(crate) fn sort(&mut self) {
-        self.header_rows.sort_unstable();
-        self.funding_rows.sort_unstable();
-        self.spending_rows.sort_unstable();
-        self.txid_rows.sort_unstable();
-    }
-}
+use super::{Database, WriteBatch};
 
 /// RocksDB wrapper for index storage
-pub struct DBStore {
+pub struct RocksDB {
     db: rocksdb::DB,
     bulk_import: AtomicBool,
 }
@@ -113,7 +97,86 @@ fn default_opts() -> rocksdb::Options {
     opts
 }
 
-impl DBStore {
+pub struct RocksDBRowIter<'a, const N: usize> {
+    raw_iter: rocksdb::DBRawIteratorWithThreadMode<'a, rocksdb::DB>,
+    done: bool,
+    filter_fn: fn(&[u8]) -> bool,
+}
+
+impl<'a, const N: usize> Iterator for RocksDBRowIter<'a, N> {
+    type Item = [u8; N];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // based on <DBIteratorWithThreadMode as Iterator>::next
+            break if self.done {
+                None
+            } else if let Some((key, _)) = self.raw_iter.item() {
+                let ret = if (self.filter_fn)(key) {
+                    Some(key.try_into().unwrap())
+                } else {
+                    None
+                };
+                self.raw_iter.next();
+                if ret.is_some() {
+                    ret
+                } else {
+                    continue;
+                }
+            } else {
+                self.done = true;
+                self.raw_iter.status().expect("cf iterator failed");
+                None
+            };
+        }
+    }
+}
+
+impl Database for RocksDB {
+    fn open(path: &Path, log_dir: Option<&Path>, auto_reindex: bool) -> Result<Self> {
+        Self::open(path, log_dir, auto_reindex)
+    }
+
+    type HashPrefixRowIter<'a> = RocksDBRowIter<'a, HASH_PREFIX_ROW_SIZE>;
+
+    fn iter_funding(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_funding(prefix)
+    }
+
+    fn iter_spending(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_spending(prefix)
+    }
+
+    fn iter_txid(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_txid(prefix)
+    }
+
+    type HeaderIter<'a> = RocksDBRowIter<'a, HEADER_ROW_SIZE>;
+
+    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+        self.iter_headers()
+    }
+
+    fn get_tip(&self) -> Option<Vec<u8>> {
+        self.get_tip()
+    }
+
+    fn write(&self, batch: &WriteBatch) {
+        self.write(batch);
+    }
+
+    fn flush(&self) {
+        self.flush();
+    }
+
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        for (cf, name, value) in self.get_properties() {
+            gauge.set(&format!("{}:{}", name, cf), value as f64);
+        }
+    }
+}
+
+impl RocksDB {
     fn create_cf_descriptors() -> Vec<rocksdb::ColumnFamilyDescriptor> {
         COLUMN_FAMILIES
             .iter()
@@ -139,7 +202,7 @@ impl DBStore {
             live_files.iter().map(|f| f.size).sum::<usize>() as f64 / 1e9,
             live_files.iter().map(|f| f.num_entries).sum::<u64>() as f64 / 1e9
         );
-        let store = DBStore {
+        let store = RocksDB {
             db,
             bulk_import: AtomicBool::new(true),
         };
@@ -221,43 +284,32 @@ impl DBStore {
     pub(crate) fn iter_funding(
         &self,
         prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+    ) -> RocksDBRowIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
     pub(crate) fn iter_spending(
         &self,
         prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+    ) -> RocksDBRowIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
     pub(crate) fn iter_txid(
         &self,
         prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+    ) -> RocksDBRowIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
-    fn iter_cf<'a, const N: usize, F: FnMut(&[u8]) -> bool + 'a>(
+    fn iter_cf<'a, const N: usize>(
         &'a self,
         cf: &rocksdb::ColumnFamily,
         readopts: rocksdb::ReadOptions,
         start: Option<&[u8]>,
-        mut filter_fn: F,
-    ) -> impl Iterator<Item = [u8; N]> + '_ {
-        struct Iter<F>(F);
-
-        impl<F: FnMut() -> Option<Item>, Item> Iterator for Iter<F> {
-            type Item = Item;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                self.0()
-            }
-        }
-
+        filter_fn: fn(&[u8]) -> bool,
+    ) -> RocksDBRowIter<'a, N> {
         let mut raw_iter = self.db.raw_iterator_cf_opt(cf, readopts);
-        let mut done = false;
 
         if let Some(key) = start {
             raw_iter.seek(key);
@@ -265,41 +317,24 @@ impl DBStore {
             raw_iter.seek_to_first();
         };
 
-        Iter(move || loop {
-            // based on <DBIteratorWithThreadMode as Iterator>::next
-            break if done {
-                None
-            } else if let Some((key, _)) = raw_iter.item() {
-                let ret = if filter_fn(key) {
-                    Some(key.try_into().unwrap())
-                } else {
-                    None
-                };
-                raw_iter.next();
-                if ret.is_some() {
-                    ret
-                } else {
-                    continue;
-                }
-            } else {
-                done = true;
-                raw_iter.status().expect("cf iterator failed");
-                None
-            };
-        })
+        RocksDBRowIter {
+            raw_iter,
+            done: false,
+            filter_fn,
+        }
     }
 
     fn iter_prefix_cf(
         &self,
         cf: &rocksdb::ColumnFamily,
         prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+    ) -> RocksDBRowIter<'_, HASH_PREFIX_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
         self.iter_cf(cf, opts, Some(&prefix), |_| true)
     }
 
-    pub(crate) fn iter_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
+    pub(crate) fn iter_headers(&self) -> RocksDBRowIter<'_, HEADER_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.iter_cf(
@@ -411,7 +446,7 @@ impl DBStore {
     }
 }
 
-impl Drop for DBStore {
+impl Drop for RocksDB {
     fn drop(&mut self) {
         info!("closing DB at {}", self.db.path().display());
     }
@@ -419,7 +454,7 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use super::{rocksdb, RocksDB, WriteBatch, CURRENT_FORMAT};
     use crate::types::HASH_PREFIX_ROW_SIZE;
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
@@ -428,13 +463,13 @@ mod tests {
     fn test_reindex_new_format() {
         let dir = tempfile::tempdir().unwrap();
         {
-            let store = DBStore::open(dir.path(), None, false).unwrap();
+            let store = RocksDB::open(dir.path(), None, false).unwrap();
             let mut config = store.get_config().unwrap();
             config.format += 1;
             store.set_config(config);
         };
         assert_eq!(
-            DBStore::open(dir.path(), None, false)
+            RocksDB::open(dir.path(), None, false)
                 .err()
                 .unwrap()
                 .to_string(),
@@ -445,7 +480,7 @@ mod tests {
             )
         );
         {
-            let store = DBStore::open(dir.path(), None, true).unwrap();
+            let store = RocksDB::open(dir.path(), None, true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -463,14 +498,14 @@ mod tests {
             db.put(b"F", b"").unwrap(); // insert legacy DB compaction marker (in 'default' column family)
         };
         assert_eq!(
-            DBStore::open(dir.path(), None, false)
+            RocksDB::open(dir.path(), None, false)
                 .err()
                 .unwrap()
                 .to_string(),
             format!("re-index required due to legacy format",)
         );
         {
-            let store = DBStore::open(dir.path(), None, true).unwrap();
+            let store = RocksDB::open(dir.path(), None, true).unwrap();
             store.flush();
             let config = store.get_config().unwrap();
             assert_eq!(config.format, CURRENT_FORMAT);
@@ -480,7 +515,7 @@ mod tests {
     #[test]
     fn test_db_prefix_scan() {
         let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), None, true).unwrap();
+        let store = RocksDB::open(dir.path(), None, true).unwrap();
 
         let items: &[&[u8]] = &[
             b"ab",
@@ -516,7 +551,7 @@ mod tests {
     #[test]
     fn test_db_log_in_same_dir() {
         let dir1 = tempfile::tempdir().unwrap();
-        let _store = DBStore::open(dir1.path(), None, true).unwrap();
+        let _store = RocksDB::open(dir1.path(), None, true).unwrap();
 
         // LOG file is created in dir1
         let dir_files = list_log_files(dir1.path());
@@ -524,7 +559,7 @@ mod tests {
 
         let dir2 = tempfile::tempdir().unwrap();
         let dir3 = tempfile::tempdir().unwrap();
-        let _store = DBStore::open(dir2.path(), Some(dir3.path()), true).unwrap();
+        let _store = RocksDB::open(dir2.path(), Some(dir3.path()), true).unwrap();
 
         // *_LOG file is not created in dir2, but in dir3
         let dir_files = list_log_files(dir2.path());
