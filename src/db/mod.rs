@@ -4,6 +4,9 @@ pub mod rocksdb;
 #[cfg(feature = "redb")]
 pub mod redb;
 
+#[cfg(not(any(feature = "rocksdb", feature = "redb")))]
+compile_error!("tried to build electrs without database, this is a mistake because it will make electrs not work. Enable at least one of the following features: 'rocksdb', 'redb");
+
 use anyhow::Result;
 
 use std::path::Path;
