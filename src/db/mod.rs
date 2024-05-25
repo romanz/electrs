@@ -1,0 +1,58 @@
+pub mod rocksdb;
+
+use anyhow::Result;
+
+use std::path::Path;
+
+use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
+
+#[derive(Default)]
+pub(crate) struct WriteBatch {
+    pub(crate) tip_row: [u8; 32],
+    pub(crate) header_rows: Vec<SerializedHeaderRow>,
+    pub(crate) funding_rows: Vec<SerializedHashPrefixRow>,
+    pub(crate) spending_rows: Vec<SerializedHashPrefixRow>,
+    pub(crate) txid_rows: Vec<SerializedHashPrefixRow>,
+}
+
+impl WriteBatch {
+    pub(crate) fn sort(&mut self) {
+        self.header_rows.sort_unstable();
+        self.funding_rows.sort_unstable();
+        self.spending_rows.sort_unstable();
+        self.txid_rows.sort_unstable();
+    }
+}
+
+pub trait Database: Sized + Sync {
+    fn open(
+        path: &Path,
+        log_dir: Option<&Path>,
+        auto_reindex: bool,
+        db_parallelism: u8,
+    ) -> Result<Self>;
+
+    type HashPrefixRowIter<'a>: Iterator<Item = SerializedHashPrefixRow> + 'a
+    where
+        Self: 'a;
+
+    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
+
+    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
+
+    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
+
+    type HeaderIter<'a>: Iterator<Item = SerializedHeaderRow> + 'a
+    where
+        Self: 'a;
+
+    fn iter_headers(&self) -> Self::HeaderIter<'_>;
+
+    fn get_tip(&self) -> Option<Vec<u8>>;
+
+    fn write(&self, batch: &WriteBatch);
+
+    fn flush(&self);
+
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge);
+}

@@ -9,7 +9,7 @@ use crate::{
     chain::Chain,
     config::Config,
     daemon::Daemon,
-    db::DBStore,
+    db::Database,
     index::Index,
     mempool::{FeeHistogram, Mempool},
     metrics::Metrics,
@@ -19,8 +19,8 @@ use crate::{
 };
 
 /// Electrum protocol subscriptions' tracker
-pub struct Tracker {
-    index: Index,
+pub struct Tracker<D> {
+    index: Index<D>,
     mempool: Mempool,
     metrics: Metrics,
     ignore_mempool: bool,
@@ -30,9 +30,9 @@ pub(crate) enum Error {
     NotReady,
 }
 
-impl Tracker {
+impl<D: Database> Tracker<D> {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let store = DBStore::open(
+        let store = D::open(
             &config.db_path,
             config.db_log_dir.as_deref(),
             config.auto_reindex,

@@ -19,6 +19,7 @@ use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
+    db::Database,
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
@@ -120,8 +121,8 @@ impl RpcError {
 }
 
 /// Electrum RPC handler
-pub struct Rpc {
-    tracker: Tracker,
+pub struct Rpc<D> {
+    tracker: Tracker<D>,
     cache: Cache,
     rpc_duration: Histogram,
     daemon: Daemon,
@@ -130,7 +131,7 @@ pub struct Rpc {
     port: u16,
 }
 
-impl Rpc {
+impl<D: Database> Rpc<D> {
     /// Perform initial index sync (may take a while on first run).
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
         let rpc_duration = metrics.histogram_vec(

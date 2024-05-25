@@ -18,6 +18,7 @@ use crate::{
     cache::Cache,
     chain::Chain,
     daemon::Daemon,
+    db::Database,
     index::Index,
     mempool::Mempool,
     types::{bsl_txid, ScriptHash, SerBlock, StatusHash},
@@ -329,7 +330,7 @@ impl ScriptHashStatus {
     /// Also cache relevant transactions and their merkle proofs.
     fn sync_confirmed(
         &self,
-        index: &Index,
+        index: &Index<impl Database>,
         daemon: &Daemon,
         cache: &Cache,
         outpoints: &mut HashSet<OutPoint>,
@@ -425,7 +426,7 @@ impl ScriptHashStatus {
     /// After a successful sync, scripthash status is updated.
     pub(crate) fn sync(
         &mut self,
-        index: &Index,
+        index: &Index<impl Database>,
         mempool: &Mempool,
         daemon: &Daemon,
         cache: &Cache,
