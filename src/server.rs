@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     config::Config,
-    db::{Database, RocksDB},
+    db::{rocksdb::RocksDB, Database},
     electrum::{Client, Rpc},
     metrics::{self, Metrics},
     signals::ExitError,

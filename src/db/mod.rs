@@ -1,4 +1,5 @@
-mod rocksdb;
+#[cfg(feature = "rocksdb")]
+pub mod rocksdb;
 
 use anyhow::Result;
 
@@ -51,5 +52,3 @@ pub trait Database: Sized + Sync {
 
     fn update_metrics(&self, gauge: &crate::metrics::Gauge);
 }
-
-pub use rocksdb::RocksDB;
