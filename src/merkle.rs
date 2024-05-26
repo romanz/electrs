@@ -108,6 +108,6 @@ mod tests {
             .join(block_hash_hex);
         let data = std::fs::read(path).unwrap();
         let block: Block = deserialize(&data).unwrap();
-        block.txdata.iter().map(|tx| tx.txid()).collect()
+        block.txdata.iter().map(|tx| tx.compute_txid()).collect()
     }
 }

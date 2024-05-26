@@ -183,7 +183,7 @@ fn default_daemon_dir() -> PathBuf {
 fn default_config_files() -> Vec<OsString> {
     let mut files = vec![OsString::from("electrs.toml")]; // cwd
     if let Some(mut path) = home_dir() {
-        path.extend(&[".electrs", "config.toml"]);
+        path.extend([".electrs", "config.toml"]);
         files.push(OsString::from(path)) // home directory
     }
     files.push(OsString::from("/etc/electrs/config.toml")); // system-wide
