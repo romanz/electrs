@@ -9,7 +9,7 @@ use std::{
 };
 
 const CONFIG_TABLE: TableDefinition<u8, &[u8]> = TableDefinition::new("config");
-const HEADERS_TABLE: TableDefinition<[u8; HEADER_ROW_SIZE], ()> = TableDefinition::new("headers");
+const HEADERS_TABLE: TableDefinition<u32, [u8; HEADER_ROW_SIZE]> = TableDefinition::new("headers");
 const FUNDING_TABLE: TableDefinition<[u8; HASH_PREFIX_ROW_SIZE], ()> =
     TableDefinition::new("funding");
 const SPENDING_TABLE: TableDefinition<[u8; HASH_PREFIX_ROW_SIZE], ()> =
@@ -31,6 +31,16 @@ impl<'a, const N: usize> Iterator for ReDBRowIter<'a, N> {
     }
 }
 
+pub struct ReDBBlockHeaderIter<'a>(redb::Range<'a, u32, [u8; HEADER_ROW_SIZE]>);
+
+impl<'a> Iterator for ReDBBlockHeaderIter<'a> {
+    type Item = [u8; HEADER_ROW_SIZE];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|v| v.unwrap().1.value())
+    }
+}
+
 pub struct ReDB {
     db: redb::Database,
 }
@@ -44,19 +54,16 @@ impl Database for ReDB {
         }
 
         let path = path.join("electrs.redb");
-        let mut this = Self {
-            db: redb::Database::create(&path)?,
-        };
+        let mut this = Self::open_internal(&path)?;
 
         fn create_tables(db: &redb::Database) -> Result<(), redb::Error> {
             let write_txn = db.begin_write()?;
-            {
-                write_txn.open_table(FUNDING_TABLE)?;
-                write_txn.open_table(SPENDING_TABLE)?;
-                write_txn.open_table(TXID_TABLE)?;
-                write_txn.open_table(HEADERS_TABLE)?;
-                write_txn.open_table(CONFIG_TABLE)?;
-            }
+
+            write_txn.open_table(FUNDING_TABLE)?;
+            write_txn.open_table(SPENDING_TABLE)?;
+            write_txn.open_table(TXID_TABLE)?;
+            write_txn.open_table(HEADERS_TABLE)?;
+            write_txn.open_table(CONFIG_TABLE)?;
 
             write_txn.commit()?;
 
@@ -97,9 +104,7 @@ impl Database for ReDB {
                     path.display()
                 )
             })?;
-            this = Self {
-                db: redb::Database::create(&path)?,
-            };
+            this = Self::open_internal(&path)?;
         }
 
         this.set_config_value(FORMAT_KEY, CURRENT_FORMAT.to_be_bytes())
@@ -121,7 +126,7 @@ impl Database for ReDB {
         self.iter_table_hash_prefix(TXID_TABLE, prefix)
     }
 
-    type HeaderIter<'a> = ReDBRowIter<'a, HEADER_ROW_SIZE>;
+    type HeaderIter<'a> = ReDBBlockHeaderIter<'a>;
 
     fn iter_headers(&self) -> Self::HeaderIter<'_> {
         let read_txn = self
@@ -132,9 +137,9 @@ impl Database for ReDB {
             .open_table(HEADERS_TABLE)
             .expect("unable to open table");
 
-        ReDBRowIter(
+        ReDBBlockHeaderIter(
             table
-                .range::<[u8; HEADER_ROW_SIZE]>(..)
+                .range::<u32>(..)
                 .expect("unable to create range iterator"),
         )
     }
@@ -147,7 +152,8 @@ impl Database for ReDB {
 
     fn write(&self, batch: &WriteBatch) {
         fn write_return_error(db: &redb::Database, batch: &WriteBatch) -> Result<(), redb::Error> {
-            let write_txn = db.begin_write()?;
+            let mut write_txn = db.begin_write()?;
+            write_txn.set_durability(redb::Durability::Eventual);
             {
                 let mut table = write_txn.open_table(FUNDING_TABLE)?;
                 for key in &batch.funding_rows {
@@ -165,8 +171,8 @@ impl Database for ReDB {
                 }
 
                 let mut table = write_txn.open_table(HEADERS_TABLE)?;
-                for key in &batch.header_rows {
-                    table.insert(key, ())?;
+                for (key, value) in &batch.header_rows {
+                    table.insert(key, value)?;
                 }
 
                 let mut table = write_txn.open_table(CONFIG_TABLE)?;
@@ -200,6 +206,16 @@ impl Database for ReDB {
 }
 
 impl ReDB {
+    fn open_internal(path: &Path) -> Result<Self, redb::Error> {
+        const GIGABYTE: usize = 1024 * 1024 * 1024;
+
+        Ok(Self {
+            db: redb::Database::builder()
+                .set_cache_size(4 * GIGABYTE)
+                .create(path)?,
+        })
+    }
+
     fn iter_table_hash_prefix(
         &self,
         table_definition: TableDefinition<[u8; HASH_PREFIX_ROW_SIZE], ()>,

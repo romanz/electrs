@@ -16,7 +16,7 @@ use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 #[derive(Default)]
 pub struct WriteBatch {
     pub(crate) tip_row: [u8; 32],
-    pub(crate) header_rows: Vec<[u8; HEADER_ROW_SIZE]>,
+    pub(crate) header_rows: Vec<(u32, [u8; HEADER_ROW_SIZE])>,
     pub(crate) funding_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
     pub(crate) spending_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
     pub(crate) txid_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
@@ -24,10 +24,12 @@ pub struct WriteBatch {
 
 impl WriteBatch {
     pub(crate) fn sort(&mut self) {
-        self.header_rows.sort_unstable();
-        self.funding_rows.sort_unstable();
-        self.spending_rows.sort_unstable();
-        self.txid_rows.sort_unstable();
+        // TODO
+
+        // self.header_rows.sort_unstable();
+        // self.funding_rows.sort_unstable();
+        // self.spending_rows.sort_unstable();
+        // self.txid_rows.sort_unstable();
     }
 }
 

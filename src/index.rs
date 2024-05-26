@@ -3,6 +3,7 @@ use bitcoin::consensus::{deserialize, Decodable, Encodable};
 use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, OutPoint, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
+use std::mem::size_of_val;
 use std::ops::ControlFlow;
 
 use crate::{
@@ -49,8 +50,8 @@ impl Stats {
         self.update_duration.observe_duration(label, f)
     }
 
-    fn observe_size<const N: usize>(&self, label: &str, rows: &[[u8; N]]) {
-        self.update_size.observe(label, (rows.len() * N) as f64);
+    fn observe_size<T>(&self, label: &str, rows: &[T]) {
+        self.update_size.observe(label, size_of_val(rows) as f64);
     }
 
     fn observe_batch(&self, batch: &WriteBatch) {
@@ -277,7 +278,7 @@ fn index_single_block(
                 .expect("block header was already validated");
             self.batch
                 .header_rows
-                .push(HeaderRow::new(header).to_db_row());
+                .push((self.height as u32, HeaderRow::new(header).to_db_row()));
             ControlFlow::Continue(())
         }
     }

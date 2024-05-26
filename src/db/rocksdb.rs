@@ -362,7 +362,7 @@ impl RocksDB {
         for key in &batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
         }
-        for key in &batch.header_rows {
+        for (_, key) in &batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
         }
         db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
