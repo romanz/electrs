@@ -21,9 +21,9 @@ const TIP_KEY: u8 = b'T';
 
 const CURRENT_FORMAT: u64 = 0;
 
-pub struct ReDBRowIter<'a, const N: usize>(redb::Range<'a, [u8; N], ()>);
+pub struct RowKeyIter<'a, const N: usize>(redb::Range<'a, [u8; N], ()>);
 
-impl<'a, const N: usize> Iterator for ReDBRowIter<'a, N> {
+impl<'a, const N: usize> Iterator for RowKeyIter<'a, N> {
     type Item = [u8; N];
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -31,9 +31,9 @@ impl<'a, const N: usize> Iterator for ReDBRowIter<'a, N> {
     }
 }
 
-pub struct ReDBBlockHeaderIter<'a>(redb::Range<'a, u32, [u8; HEADER_ROW_SIZE]>);
+pub struct RowValueIter<'a>(redb::Range<'a, u32, [u8; HEADER_ROW_SIZE]>);
 
-impl<'a> Iterator for ReDBBlockHeaderIter<'a> {
+impl<'a> Iterator for RowValueIter<'a> {
     type Item = [u8; HEADER_ROW_SIZE];
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,11 +41,11 @@ impl<'a> Iterator for ReDBBlockHeaderIter<'a> {
     }
 }
 
-pub struct ReDB {
+pub struct DBStore {
     db: redb::Database,
 }
 
-impl Database for ReDB {
+impl Database for DBStore {
     fn open(path: &Path, log_dir: Option<&Path>, auto_reindex: bool) -> Result<Self> {
         create_dir_all(path).expect("unable to create directories");
 
@@ -112,7 +112,7 @@ impl Database for ReDB {
         Ok(this)
     }
 
-    type HashPrefixRowIter<'a> = ReDBRowIter<'a, HASH_PREFIX_ROW_SIZE>;
+    type HashPrefixRowIter<'a> = RowKeyIter<'a, HASH_PREFIX_ROW_SIZE>;
 
     fn iter_funding(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
         self.iter_table_hash_prefix(FUNDING_TABLE, prefix)
@@ -126,7 +126,7 @@ impl Database for ReDB {
         self.iter_table_hash_prefix(TXID_TABLE, prefix)
     }
 
-    type HeaderIter<'a> = ReDBBlockHeaderIter<'a>;
+    type HeaderIter<'a> = RowValueIter<'a>;
 
     fn iter_headers(&self) -> Self::HeaderIter<'_> {
         let read_txn = self
@@ -137,7 +137,7 @@ impl Database for ReDB {
             .open_table(HEADERS_TABLE)
             .expect("unable to open table");
 
-        ReDBBlockHeaderIter(
+        RowValueIter(
             table
                 .range::<u32>(..)
                 .expect("unable to create range iterator"),
@@ -205,7 +205,7 @@ impl Database for ReDB {
     }
 }
 
-impl ReDB {
+impl DBStore {
     fn open_internal(path: &Path) -> Result<Self, redb::Error> {
         const GIGABYTE: usize = 1024 * 1024 * 1024;
 
@@ -220,7 +220,7 @@ impl ReDB {
         &self,
         table_definition: TableDefinition<[u8; HASH_PREFIX_ROW_SIZE], ()>,
         prefix: [u8; HASH_PREFIX_LEN],
-    ) -> ReDBRowIter<'_, HASH_PREFIX_ROW_SIZE> {
+    ) -> RowKeyIter<'_, HASH_PREFIX_ROW_SIZE> {
         let read_txn = self
             .db
             .begin_read()
@@ -229,7 +229,7 @@ impl ReDB {
             .open_table(table_definition)
             .expect("unable to open table");
 
-        ReDBRowIter(
+        RowKeyIter(
             table
                 .range(hash_prefix_range(prefix))
                 .expect("unable to create range iterator"),

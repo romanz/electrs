@@ -88,12 +88,12 @@ fn serve() -> Result<()> {
     match config.database {
         #[cfg(feature = "rocksdb")]
         DatabaseType::RocksDB => {
-            let rpc = Rpc::<crate::db::rocksdb::RocksDB>::new(&config, metrics)?;
+            let rpc = Rpc::<crate::db::rocksdb::DBStore>::new(&config, metrics)?;
             server_loop(rpc, server_rx, server_batch_size, duration, config)
         }
         #[cfg(feature = "redb")]
         DatabaseType::ReDB => {
-            let rpc = Rpc::<crate::db::redb::ReDB>::new(&config, metrics)?;
+            let rpc = Rpc::<crate::db::redb::DBStore>::new(&config, metrics)?;
             server_loop(rpc, server_rx, server_batch_size, duration, config)
         }
         #[allow(unreachable_patterns)]
