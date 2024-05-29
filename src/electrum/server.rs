@@ -588,19 +588,17 @@ impl Connection {
         }
     }
 
-    fn parse_requests(mut reader: BufReader<TcpStream>, tx: SyncSender<Message>) -> Result<()> {
+    fn parse_requests(mut reader: BufReader<TcpStream>, tx: &SyncSender<Message>) -> Result<()> {
         loop {
             let mut line = Vec::<u8>::new();
             reader
                 .read_until(b'\n', &mut line)
                 .chain_err(|| "failed to read a request")?;
             if line.is_empty() {
-                tx.send(Message::Done).chain_err(|| "channel closed")?;
                 return Ok(());
             } else {
                 if line.starts_with(&[22, 3, 1]) {
                     // (very) naive SSL handshake detection
-                    let _ = tx.send(Message::Done);
                     bail!("invalid request - maybe SSL-encrypted data?: {:?}", line)
                 }
                 match String::from_utf8(line) {
@@ -608,12 +606,19 @@ impl Connection {
                         .send(Message::Request(req))
                         .chain_err(|| "channel closed")?,
                     Err(err) => {
-                        let _ = tx.send(Message::Done);
                         bail!("invalid UTF8: {}", err)
                     }
                 }
             }
         }
+    }
+
+    fn reader_thread(reader: BufReader<TcpStream>, tx: SyncSender<Message>) -> Result<()> {
+        let result = Connection::parse_requests(reader, &tx);
+        if let Err(e) = tx.send(Message::Done) {
+            warn!("failed closing channel: {}", e);
+        }
+        result
     }
 
     pub fn run(mut self, receiver: Receiver<Message>) {
@@ -622,7 +627,7 @@ impl Connection {
 
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         let sender = self.sender.clone();
-        let child = spawn_thread("reader", || Connection::parse_requests(reader, sender));
+        let child = spawn_thread("reader", || Connection::reader_thread(reader, sender));
         if let Err(e) = self.handle_replies(receiver) {
             error!(
                 "[{}] connection handling failed: {}",
