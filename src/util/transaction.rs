@@ -96,15 +96,14 @@ pub fn extract_tx_prevouts<'a>(
         .collect()
 }
 
-pub fn get_prev_outpoints(txs: &[Transaction]) -> BTreeSet<OutPoint> {
-    txs.iter()
-        .flat_map(|tx| {
-            tx.input
-                .iter()
-                .filter(|txin| has_prevout(txin))
-                .map(|txin| txin.previous_output)
-        })
-        .collect()
+pub fn get_prev_outpoints<'a>(txs: impl Iterator<Item = &'a Transaction>) -> BTreeSet<OutPoint> {
+    txs.flat_map(|tx| {
+        tx.input
+            .iter()
+            .filter(|txin| has_prevout(txin))
+            .map(|txin| txin.previous_output)
+    })
+    .collect()
 }
 
 pub fn serialize_outpoint<S>(outpoint: &OutPoint, serializer: S) -> Result<S::Ok, S::Error>

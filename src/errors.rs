@@ -9,6 +9,11 @@ error_chain! {
             display("Connection error: {}", msg)
         }
 
+        RpcError(code: i64, error: serde_json::Value, method: String) {
+            description("RPC error")
+            display("{} RPC error {}: {}", method, code, error)
+        }
+
         Interrupt(sig: i32) {
             description("Interruption by external signal")
             display("Iterrupted by signal {}", sig)

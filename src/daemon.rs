@@ -11,7 +11,7 @@ use std::time::Duration;
 use base64::prelude::{Engine, BASE64_STANDARD};
 use error_chain::ChainedError;
 use hex::FromHex;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde_json::{from_str, from_value, Value};
 
 #[cfg(not(feature = "liquid"))]
@@ -81,13 +81,13 @@ fn parse_error_code(err: &Value) -> Option<i64> {
 
 fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Result<Value> {
     if let Some(reply_obj) = reply.as_object_mut() {
-        if let Some(err) = reply_obj.get("error") {
+        if let Some(err) = reply_obj.get_mut("error") {
             if !err.is_null() {
                 if let Some(code) = parse_error_code(&err) {
                     match code {
                         // RPC_IN_WARMUP -> retry by later reconnection
                         -28 => bail!(ErrorKind::Connection(err.to_string())),
-                        _ => bail!("{} RPC error: {}", method, err),
+                        code => bail!(ErrorKind::RpcError(code, err.take(), method.to_string())),
                     }
                 }
             }
@@ -442,29 +442,37 @@ impl Daemon {
         }
     }
 
-    // Send requests in parallel over multiple connections as individual JSON-RPC requests (with no JSON-RPC batching)
-    fn requests(&self, method: &str, params_list: &[Value]) -> Result<Vec<Value>> {
+    // Send requests in parallel over multiple RPC connections as individual JSON-RPC requests (with no JSON-RPC batching),
+    // buffering the replies into a vector. If any of the requests fail, processing is terminated and an Err is returned.
+    fn requests(&self, method: &str, params_list: Vec<Value>) -> Result<Vec<Value>> {
+        self.requests_iter(method, params_list).collect()
+    }
+
+    // Send requests in parallel over multiple RPC connections, iterating over the results without buffering them.
+    // Errors are included in the iterator and do not terminate other pending requests.
+    fn requests_iter<'a>(
+        &'a self,
+        method: &'a str,
+        params_list: Vec<Value>,
+    ) -> impl ParallelIterator<Item = Result<Value>> + 'a {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(self.daemon_parallelism)
             .thread_name(|i| format!("rpc-requests-{}", i))
             .build()
             .unwrap();
 
-        thread_pool.install(|| {
-            params_list
-                .par_iter()
-                .map(|params| {
-                    // Store a local per-thread Daemon, each with its own TCP connection. These will get initialized as
-                    // necessary for the threads managed by rayon, and get destroyed when the thread pool is dropped.
-                    thread_local!(static DAEMON_INSTANCE: OnceCell<Daemon> = OnceCell::new());
+        thread_pool.install(move || {
+            params_list.into_par_iter().map(move |params| {
+                // Store a local per-thread Daemon, each with its own TCP connection. These will get initialized as
+                // necessary for the threads managed by rayon, and get destroyed when the thread pool is dropped.
+                thread_local!(static DAEMON_INSTANCE: OnceCell<Daemon> = OnceCell::new());
 
-                    DAEMON_INSTANCE.with(|daemon| {
-                        daemon
-                            .get_or_init(|| self.retry_reconnect())
-                            .retry_request(method, params)
-                    })
+                DAEMON_INSTANCE.with(|daemon| {
+                    daemon
+                        .get_or_init(|| self.retry_reconnect())
+                        .retry_request(&method, &params)
                 })
-                .collect()
+            })
         })
     }
 
@@ -491,12 +499,12 @@ impl Daemon {
     pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
         let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
         let params_list: Vec<Value> = self
-            .requests("getblockhash", &heights)?
+            .requests("getblockhash", heights)?
             .into_iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
         let mut result = vec![];
-        for h in self.requests("getblockheader", &params_list)? {
+        for h in self.requests("getblockheader", params_list)? {
             result.push(header_from_value(h)?);
         }
         Ok(result)
@@ -518,7 +526,7 @@ impl Daemon {
             .iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
-        let values = self.requests("getblock", &params_list)?;
+        let values = self.requests("getblock", params_list)?;
         let mut blocks = vec![];
         for value in values {
             blocks.push(block_from_value(value)?);
@@ -526,14 +534,29 @@ impl Daemon {
         Ok(blocks)
     }
 
-    pub fn gettransactions(&self, txhashes: &[&Txid]) -> Result<Vec<Transaction>> {
-        let params_list: Vec<Value> = txhashes
+    /// Fetch the given transactions in parallel over multiple threads and RPC connections,
+    /// ignoring any missing ones and returning whatever is available.
+    pub fn gettransactions_available(&self, txids: &[&Txid]) -> Result<Vec<Transaction>> {
+        const RPC_INVALID_ADDRESS_OR_KEY: i64 = -5;
+
+        let params_list: Vec<Value> = txids
             .iter()
             .map(|txhash| json!([txhash, /*verbose=*/ false]))
             .collect();
 
-        let values = self.requests("getrawtransaction", &params_list)?;
-        values.into_iter().map(tx_from_value).collect()
+        self.requests_iter("getrawtransaction", params_list)
+            .filter_map(|res| match res {
+                Ok(val) => Some(tx_from_value(val)),
+                // Ignore 'tx not found' errors
+                Err(Error(ErrorKind::RpcError(code, _, _), _))
+                    if code == RPC_INVALID_ADDRESS_OR_KEY =>
+                {
+                    None
+                }
+                // Terminate iteration if any other errors are encountered
+                Err(e) => Some(Err(e)),
+            })
+            .collect()
     }
 
     pub fn gettransaction_raw(
@@ -574,7 +597,7 @@ impl Daemon {
         let params_list: Vec<Value> = conf_targets.iter().map(|t| json!([t, "ECONOMICAL"])).collect();
 
         Ok(self
-            .requests("estimatesmartfee", &params_list)?
+            .requests("estimatesmartfee", params_list)?
             .iter()
             .zip(conf_targets)
             .filter_map(|(reply, target)| {
