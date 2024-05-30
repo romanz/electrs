@@ -21,7 +21,7 @@ use crate::new_index::{
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
-use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
+use crate::util::{extract_tx_prevouts, full_hash, get_prev_outpoints, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
 use crate::elements::asset;
@@ -288,40 +288,57 @@ impl Mempool {
         self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
     }
 
-    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) {
+    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) -> Result<()> {
         if self.txstore.get(txid).is_none() {
             if let Ok(tx) = daemon.getmempooltx(&txid) {
                 self.add(vec![tx])
+            } else {
+                bail!("add_by_txid cannot find {}", txid);
             }
+        } else {
+            Ok(())
         }
     }
 
-    fn add(&mut self, txs: Vec<Transaction>) {
+    fn add(&mut self, txs: Vec<Transaction>) -> Result<()> {
         self.delta
             .with_label_values(&["add"])
             .observe(txs.len() as f64);
         let _timer = self.latency.with_label_values(&["add"]).start_timer();
 
-        let mut txids = vec![];
-        // Phase 1: add to txstore
-        for tx in txs {
-            let txid = tx.txid();
-            txids.push(txid);
+        let spent_prevouts = get_prev_outpoints(&txs);
+        let txs_map = txs
+            .into_iter()
+            .map(|tx| (tx.txid(), tx))
+            .collect::<HashMap<_, _>>();
+
+        // Lookup spent prevouts that were funded within the same `add` batch
+        let mut txos = HashMap::new();
+        let remain_prevouts = spent_prevouts
+            .into_iter()
+            .filter(|prevout| {
+                if let Some(prevtx) = txs_map.get(&prevout.txid) {
+                    if let Some(out) = prevtx.output.get(prevout.vout as usize) {
+                        txos.insert(prevout.clone(), out.clone());
+                        // remove from the list of remaining `prevouts`
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        // Lookup remaining spent prevouts in mempool & on-chain
+        // Fails if any are missing.
+        txos.extend(self.lookup_txos(remain_prevouts)?);
+
+        // Add to txstore and indexes
+        for (txid, tx) in txs_map {
             self.txstore.insert(txid, tx);
-        }
-        // Phase 2: index history and spend edges (can fail if some txos cannot be found)
-        let txos = match self.lookup_txos(self.get_prevouts(&txids)) {
-            Ok(txos) => txos,
-            Err(err) => {
-                warn!("lookup txouts failed: {}", err);
-                // TODO: should we remove txids from txstore?
-                return;
-            }
-        };
-        for txid in txids {
-            let tx = self.txstore.get(&txid).expect("missing mempool tx");
-            let txid_bytes = full_hash(&txid[..]);
+            let tx = self.txstore.get(&txid).expect("was just added");
+
             let prevouts = extract_tx_prevouts(&tx, &txos, false);
+            let txid_bytes = full_hash(&txid[..]);
 
             // Get feeinfo for caching and recent tx overview
             let feeinfo = TxFeeInfo::new(&tx, &prevouts, self.config.network_type);
@@ -395,6 +412,8 @@ impl Mempool {
                 &mut self.asset_issuance,
             );
         }
+
+        Ok(())
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
@@ -421,24 +440,6 @@ impl Mempool {
         txos.extend(self.chain.lookup_txos(remain_outpoints)?);
 
         Ok(txos)
-    }
-
-    fn get_prevouts(&self, txids: &[Txid]) -> BTreeSet<OutPoint> {
-        let _timer = self
-            .latency
-            .with_label_values(&["get_prevouts"])
-            .start_timer();
-
-        txids
-            .iter()
-            .map(|txid| self.txstore.get(txid).expect("missing mempool tx"))
-            .flat_map(|tx| {
-                tx.input
-                    .iter()
-                    .filter(|txin| has_prevout(txin))
-                    .map(|txin| txin.previous_output)
-            })
-            .collect()
     }
 
     fn remove(&mut self, to_remove: HashSet<&Txid>) {
@@ -510,7 +511,7 @@ impl Mempool {
         {
             let mut mempool = mempool.write().unwrap();
             // Add new transactions
-            mempool.add(txs_to_add);
+            mempool.add(txs_to_add)?;
 
             mempool
                 .count
