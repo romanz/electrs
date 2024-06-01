@@ -82,14 +82,11 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         &metrics,
         Arc::clone(&config),
     )));
-    loop {
-        match Mempool::update(&mempool, &daemon) {
-            Ok(_) => break,
-            Err(e) => {
-                warn!("Error performing initial mempool update, trying again in 5 seconds: {}", e.display_chain());
-                signal.wait(Duration::from_secs(5), false)?;
-            },
-        }
+
+    while !Mempool::update(&mempool, &daemon, &tip)? {
+        // Mempool syncing was aborted because the chain tip moved;
+        // Index the new block(s) and try again.
+        tip = indexer.update(&daemon)?;
     }
 
     #[cfg(feature = "liquid")]
@@ -118,7 +115,6 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     ));
 
     loop {
-
         main_loop_count.inc();
 
         if let Err(err) = signal.wait(Duration::from_secs(5), true) {
@@ -131,14 +127,12 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         // Index new blocks
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
-            indexer.update(&daemon)?;
-            tip = current_tip;
+            tip = indexer.update(&daemon)?;
         };
 
         // Update mempool
-        if let Err(e) = Mempool::update(&mempool, &daemon) {
-            // Log the error if the result is an Err
-            warn!("Error updating mempool, skipping mempool update: {}", e.display_chain());
+        if !Mempool::update(&mempool, &daemon, &tip)? {
+            warn!("skipped failed mempool update, trying again in 5 seconds");
         }
 
         // Update subscribed clients

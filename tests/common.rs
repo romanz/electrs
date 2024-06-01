@@ -149,7 +149,7 @@ impl TestRunner {
         };
 
         let mut indexer = Indexer::open(Arc::clone(&store), fetch_from, &config, &metrics);
-        indexer.update(&daemon)?;
+        let tip = indexer.update(&daemon)?;
         indexer.fetch_from(FetchFrom::Bitcoind);
 
         let chain = Arc::new(ChainQuery::new(
@@ -164,7 +164,7 @@ impl TestRunner {
             &metrics,
             Arc::clone(&config),
         )));
-        Mempool::update(&mempool, &daemon)?;
+        assert!(Mempool::update(&mempool, &daemon, &tip)?);
 
         let query = Arc::new(Query::new(
             Arc::clone(&chain),
@@ -195,8 +195,8 @@ impl TestRunner {
     }
 
     pub fn sync(&mut self) -> Result<()> {
-        self.indexer.update(&self.daemon)?;
-        Mempool::update(&self.mempool, &self.daemon)?;
+        let tip = self.indexer.update(&self.daemon)?;
+        assert!(Mempool::update(&self.mempool, &self.daemon, &tip)?);
         // force an update for the mempool stats, which are normally cached
         self.mempool.write().unwrap().update_backlog_stats();
         Ok(())
