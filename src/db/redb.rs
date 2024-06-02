@@ -1,10 +1,9 @@
-use super::{Database, WriteBatch};
+use super::{hash_prefix_range, Database, WriteBatch};
 use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 use anyhow::{Context, Result};
 use redb::TableDefinition;
 use std::{
     fs::{create_dir_all, remove_file},
-    ops::RangeInclusive,
     path::Path,
 };
 
@@ -252,15 +251,4 @@ impl DBStore {
 
         Ok(())
     }
-}
-
-/// Creates a range that includes all values with the given prefix
-fn hash_prefix_range(prefix: [u8; HASH_PREFIX_LEN]) -> RangeInclusive<[u8; HASH_PREFIX_ROW_SIZE]> {
-    let mut lower = [0x00; HASH_PREFIX_ROW_SIZE];
-    let mut upper = [0xff; HASH_PREFIX_ROW_SIZE];
-
-    lower[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
-    upper[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
-
-    lower..=upper
 }

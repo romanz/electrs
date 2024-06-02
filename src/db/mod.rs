@@ -4,12 +4,15 @@ pub mod rocksdb;
 #[cfg(feature = "redb")]
 pub mod redb;
 
+#[cfg(feature = "sled")]
+pub mod sled;
+
 #[cfg(not(any(feature = "rocksdb", feature = "redb")))]
 compile_error!("tried to build electrs without database, this is a mistake because it will make electrs not work. Enable at least one of the following features: 'rocksdb', 'redb");
 
 use anyhow::Result;
 
-use std::path::Path;
+use std::{ops::RangeBounds, path::Path};
 
 use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 
@@ -59,4 +62,17 @@ pub trait Database: Sized + Sync {
     fn flush(&self);
 
     fn update_metrics(&self, gauge: &crate::metrics::Gauge);
+}
+
+/// Creates a range that includes all values with the given prefix
+pub(crate) fn hash_prefix_range(
+    prefix: [u8; HASH_PREFIX_LEN],
+) -> impl RangeBounds<[u8; HASH_PREFIX_ROW_SIZE]> {
+    let mut lower = [0x00; HASH_PREFIX_ROW_SIZE];
+    let mut upper = [0xff; HASH_PREFIX_ROW_SIZE];
+
+    lower[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
+    upper[..HASH_PREFIX_LEN].copy_from_slice(&prefix);
+
+    lower..=upper
 }
