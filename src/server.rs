@@ -96,6 +96,11 @@ fn serve() -> Result<()> {
             let rpc = Rpc::<crate::db::redb::DBStore>::new(&config, metrics)?;
             server_loop(rpc, server_rx, server_batch_size, duration, config)
         }
+        #[cfg(feature = "sled")]
+        DatabaseType::Sled => {
+            let rpc = Rpc::<crate::db::sled::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
         #[allow(unreachable_patterns)]
         _ => {
             Err(anyhow!("this build does not support using {} because that feature was not enabled at compile time", config.database))
