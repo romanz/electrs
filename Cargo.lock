@@ -79,9 +79,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.32.0"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7170e7750a20974246f17ece04311b4205a6155f1db564c5b224af817663c3ea"
+checksum = "4bf33434c870e98ecc8608588ccc990c5daba9ba9ad39733dc85fba22c211504"
 dependencies = [
  "base58ck",
  "bech32",
