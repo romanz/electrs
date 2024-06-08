@@ -128,7 +128,6 @@ pub struct Config {
     pub network: Network,
     pub db_path: PathBuf,
     pub db_log_dir: Option<PathBuf>,
-    pub daemon_dir: PathBuf,
     pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_p2p_addr: SocketAddr,
@@ -146,7 +145,6 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub signet_magic: Magic,
-    pub args: Vec<String>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -195,7 +193,7 @@ impl Config {
     pub fn from_args() -> Config {
         use internal::ResultExt;
 
-        let (mut config, args) =
+        let (mut config, _args) =
             internal::Config::including_optional_config_files(default_config_files())
                 .unwrap_or_exit();
 
@@ -282,17 +280,44 @@ impl Config {
             ResolvAddr::resolve_or_exit,
         );
 
+        let changed_daemon_dir = config.daemon_dir != default_daemon_dir();
+
+        let mut default_cookie_path = config.daemon_dir;
+
         match config.network {
             Network::Bitcoin => (),
-            Network::Testnet => config.daemon_dir.push("testnet3"),
-            Network::Regtest => config.daemon_dir.push("regtest"),
-            Network::Signet => config.daemon_dir.push("signet"),
+            Network::Testnet => default_cookie_path.push("testnet3"),
+            Network::Regtest => default_cookie_path.push("regtest"),
+            Network::Signet => default_cookie_path.push("signet"),
             unsupported => unsupported_network(unsupported),
         }
+        default_cookie_path.push(".cookie");
 
-        let daemon_dir = &config.daemon_dir;
+        if changed_daemon_dir {
+            eprintln!(
+                "Error: `daemon_dir` is not used anymore and deprecated, \
+                please remove this option."
+            );
+            if config.auth.is_none() && config.cookie_file.is_none() {
+                eprintln!(
+                    "Set the `cookie_file` option to \"{}\" because \
+                    `daemon_dir` will be removed in a future release.",
+                    default_cookie_path.display()
+                );
+            }
+            std::process::exit(1);
+        }
+
+        if config.timestamp {
+            eprintln!(
+                "Error: `timestamp` is deprecated, timestamps on logs is (and was) always \
+                enabled, please remove this option."
+            );
+            std::process::exit(1);
+        }
+
         let daemon_auth = SensitiveAuth(match (config.auth, config.cookie_file) {
-            (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
+            (None, None) => Auth::CookieFile(default_cookie_path),
             (None, Some(cookie_file)) => Auth::CookieFile(cookie_file),
             (Some(auth), None) => {
                 let parts: Vec<&str> = auth.splitn(2, ':').collect();
@@ -336,7 +361,6 @@ impl Config {
             network: config.network,
             db_path: config.db_dir,
             db_log_dir: config.db_log_dir,
-            daemon_dir: config.daemon_dir,
             daemon_auth,
             daemon_rpc_addr,
             daemon_p2p_addr,
@@ -354,7 +378,6 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             signet_magic: magic,
-            args: args.map(|a| a.into_string().unwrap()).collect(),
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",
