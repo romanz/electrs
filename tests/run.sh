@@ -42,7 +42,7 @@ TIP=`$BTC getbestblockhash`
 export RUST_LOG=electrs=debug
 electrs \
   --db-dir=data/electrs \
-  --daemon-dir=data/bitcoin \
+  --cookie-file=data/bitcoin/regtest/.cookie \
   --network=regtest \
   2> data/electrs/regtest-debug.log &
 ELECTRS_PID=$!
