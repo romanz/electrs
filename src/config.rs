@@ -293,6 +293,8 @@ impl Config {
         }
         default_cookie_path.push(".cookie");
 
+        let mut deprecated_options_used = false;
+
         if changed_daemon_dir {
             eprintln!(
                 "Error: `daemon_dir` is not used anymore and deprecated, \
@@ -305,7 +307,7 @@ impl Config {
                     default_cookie_path.display()
                 );
             }
-            std::process::exit(1);
+            deprecated_options_used = true;
         }
 
         if config.timestamp {
@@ -313,6 +315,10 @@ impl Config {
                 "Error: `timestamp` is deprecated, timestamps on logs is (and was) always \
                 enabled, please remove this option."
             );
+            deprecated_options_used = true;
+        }
+
+        if deprecated_options_used {
             std::process::exit(1);
         }
 
