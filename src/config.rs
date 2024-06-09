@@ -318,6 +318,11 @@ impl Config {
             deprecated_options_used = true;
         }
 
+        if config.verbose > 0 {
+            eprintln!("Error: please use `log_filters` to set logging verbosity",);
+            deprecated_options_used = true;
+        }
+
         if deprecated_options_used {
             std::process::exit(1);
         }
@@ -338,11 +343,6 @@ impl Config {
                 std::process::exit(1);
             }
         });
-
-        if config.verbose > 0 {
-            eprintln!("Error: please use `log_filters` to set logging verbosity",);
-            std::process::exit(1);
-        }
         let log_filters = config.log_filters;
 
         let index_lookup_limit = match config.index_lookup_limit {
