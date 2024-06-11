@@ -24,6 +24,22 @@ pub(crate) struct Entry {
     pub has_unconfirmed_inputs: bool,
 }
 
+impl Entry {
+    pub fn new(
+        txid: Txid,
+        tx: Transaction,
+        rpc_entry: bitcoincore_rpc::json::GetMempoolEntryResult,
+    ) -> Entry {
+        Entry {
+            txid,
+            tx,
+            vsize: rpc_entry.vsize,
+            fee: rpc_entry.fees.base,
+            has_unconfirmed_inputs: !rpc_entry.depends.is_empty(),
+        }
+    }
+}
+
 /// Mempool current state
 pub(crate) struct Mempool {
     entries: HashMap<Txid, Entry>,
@@ -38,8 +54,9 @@ pub(crate) struct Mempool {
 /// An update to [`Mempool`]'s internal state. This can be fetched
 /// asynchronously using [`MempoolSyncUpdate::poll`], and applied
 /// using [`Mempool::apply_sync_update`].
+#[derive(Default)]
 pub(crate) struct MempoolSyncUpdate {
-    new_entries: Vec<Entry>,
+    pub(crate) new_entries: Vec<Entry>,
     removed_entries: HashSet<Txid>,
 }
 
@@ -151,6 +168,10 @@ impl Mempool {
         &self.fees
     }
 
+    pub(crate) fn all_txids(&self) -> HashSet<Txid> {
+        HashSet::<Txid>::from_iter(self.entries.keys().copied())
+    }
+
     pub(crate) fn get(&self, txid: &Txid) -> Option<&Entry> {
         self.entries.get(txid)
     }
@@ -182,6 +203,11 @@ impl Mempool {
         let removed = update.removed_entries.len();
         let added = update.new_entries.len();
 
+        // Return early to avoid spurious logs.
+        if added == 0 && removed == 0 {
+            return;
+        }
+
         for txid_to_remove in update.removed_entries {
             self.remove_entry(txid_to_remove);
         }
@@ -208,22 +234,6 @@ impl Mempool {
             self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
             self.count.set(&label, self.fees.count[bin_index] as f64);
         }
-    }
-
-    pub fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) {
-        let old_txids = HashSet::<Txid>::from_iter(self.entries.keys().copied());
-
-        let poll_result = MempoolSyncUpdate::poll(daemon, old_txids, exit_flag);
-
-        let sync_update = match poll_result {
-            Ok(sync_update) => sync_update,
-            Err(e) => {
-                warn!("mempool sync failed: {}", e);
-                return;
-            }
-        };
-
-        self.apply_sync_update(sync_update);
     }
 
     /// Add a transaction entry to the mempool and update the fee histogram.
