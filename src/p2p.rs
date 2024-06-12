@@ -22,6 +22,7 @@ use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::ops::ControlFlow;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::types::SerBlock;
@@ -93,21 +94,26 @@ impl Connection {
     /// Request and process the specified blocks (in the specified order).
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    pub(crate) fn for_blocks<B, F, R>(
+        &mut self,
+        blockhashes: B,
+        mut func: F,
+    ) -> Result<ControlFlow<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: FnMut(BlockHash, SerBlock) -> ControlFlow<R>,
     {
         self.blocks_duration.observe_duration("total", || {
             let blockhashes: Vec<BlockHash> = blockhashes.into_iter().collect();
             if blockhashes.is_empty() {
-                return Ok(());
+                return Ok(ControlFlow::Continue(()));
             }
             self.blocks_duration.observe_duration("request", || {
                 debug!("loading {} blocks", blockhashes.len());
                 self.req_send.send(Request::get_blocks(&blockhashes))
             })?;
 
+            let mut ret = ControlFlow::Continue(());
             for hash in blockhashes {
                 let block = self.blocks_duration.observe_duration("response", || {
                     let block = self
@@ -123,10 +129,13 @@ impl Connection {
                     );
                     Ok(block)
                 })?;
-                self.blocks_duration
-                    .observe_duration("process", || func(hash, block));
+                if ret.is_continue() {
+                    ret = self
+                        .blocks_duration
+                        .observe_duration("process", || func(hash, block));
+                }
             }
-            Ok(())
+            Ok(ret)
         })
     }
 
