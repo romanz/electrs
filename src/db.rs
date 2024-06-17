@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use electrs_rocksdb as rocksdb;
 
+use std::iter;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -246,16 +247,6 @@ impl DBStore {
         start: Option<&[u8]>,
         mut filter_fn: F,
     ) -> impl Iterator<Item = [u8; N]> + '_ {
-        struct Iter<F>(F);
-
-        impl<F: FnMut() -> Option<Item>, Item> Iterator for Iter<F> {
-            type Item = Item;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                self.0()
-            }
-        }
-
         let mut raw_iter = self.db.raw_iterator_cf_opt(cf, readopts);
         let mut done = false;
 
@@ -265,7 +256,7 @@ impl DBStore {
             raw_iter.seek_to_first();
         };
 
-        Iter(move || loop {
+        iter::from_fn(move || loop {
             // based on <DBIteratorWithThreadMode as Iterator>::next
             break if done {
                 None
