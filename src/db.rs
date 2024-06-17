@@ -262,7 +262,11 @@ impl DBStore {
                 None
             } else if let Some((key, _)) = raw_iter.item() {
                 let ret = if filter_fn(key) {
-                    Some(key.try_into().unwrap())
+                    Some(
+                        key.try_into()
+                            .with_context(|| format!("expected {N} bytes, got {}", key.len()))
+                            .expect("database key has wrong length"),
+                    )
                 } else {
                     None
                 };
