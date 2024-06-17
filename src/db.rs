@@ -415,7 +415,6 @@ impl Drop for DBStore {
 #[cfg(test)]
 mod tests {
     use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
-    use crate::types::{SerializedHashPrefixRow, HASH_PREFIX_ROW_SIZE};
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -477,35 +476,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = DBStore::open(dir.path(), None, true).unwrap();
 
-        let items: &[&[u8]] = &[
-            b"ab",
-            b"abcdefgh",
-            b"abcdefghj",
-            b"abcdefghjk",
-            b"abcdefghxyz",
-            b"abcdefgi",
-            b"b",
-            b"c",
+        let items = [
+            *b"ab          ",
+            *b"abcdefgh    ",
+            *b"abcdefghj   ",
+            *b"abcdefghjk  ",
+            *b"abcdefghxyz ",
+            *b"abcdefgi    ",
+            *b"b           ",
+            *b"c           ",
         ];
 
         store.write(&WriteBatch {
-            txid_rows: to_rows(items),
+            txid_rows: items.to_vec(),
             ..Default::default()
         });
 
         let rows = store.iter_txid(*b"abcdefgh");
-        assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
-    }
-
-    fn to_rows(values: &[&[u8]]) -> Vec<SerializedHashPrefixRow> {
-        values
-            .iter()
-            .map(|v| {
-                let mut row = [0; HASH_PREFIX_ROW_SIZE];
-                row[..v.len()].copy_from_slice(v);
-                row
-            })
-            .collect()
+        assert_eq!(rows.collect::<Vec<_>>(), items[1..5]);
     }
 
     #[test]
