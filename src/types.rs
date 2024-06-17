@@ -40,20 +40,21 @@ macro_rules! impl_consensus_encoding {
 pub const HASH_PREFIX_LEN: usize = 8;
 const HEIGHT_SIZE: usize = 4;
 
-type HashPrefix = [u8; HASH_PREFIX_LEN];
+pub(crate) type HashPrefix = [u8; HASH_PREFIX_LEN];
+pub(crate) type SerializedHashPrefixRow = [u8; HASH_PREFIX_ROW_SIZE];
 type Height = u32;
 pub(crate) type SerBlock = Vec<u8>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {
-    prefix: [u8; HASH_PREFIX_LEN],
+    prefix: HashPrefix,
     height: Height, // transaction confirmed height
 }
 
 pub const HASH_PREFIX_ROW_SIZE: usize = HASH_PREFIX_LEN + HEIGHT_SIZE;
 
 impl HashPrefixRow {
-    pub(crate) fn to_db_row(&self) -> [u8; HASH_PREFIX_ROW_SIZE] {
+    pub(crate) fn to_db_row(&self) -> SerializedHashPrefixRow {
         let mut row = [0; HASH_PREFIX_ROW_SIZE];
         let len = self
             .consensus_encode(&mut (&mut row as &mut [u8]))
@@ -62,7 +63,7 @@ impl HashPrefixRow {
         row
     }
 
-    pub(crate) fn from_db_row(row: [u8; HASH_PREFIX_ROW_SIZE]) -> Self {
+    pub(crate) fn from_db_row(row: SerializedHashPrefixRow) -> Self {
         deserialize(&row).expect("bad HashPrefixRow")
     }
 
@@ -94,7 +95,7 @@ impl ScriptHash {
 pub(crate) struct ScriptHashRow;
 
 impl ScriptHashRow {
-    pub(crate) fn scan_prefix(scripthash: ScriptHash) -> [u8; HASH_PREFIX_LEN] {
+    pub(crate) fn scan_prefix(scripthash: ScriptHash) -> HashPrefix {
         scripthash.0[..HASH_PREFIX_LEN].try_into().unwrap()
     }
 
@@ -116,7 +117,7 @@ hash_newtype! {
 // ***************************************************************************
 
 fn spending_prefix(prev: OutPoint) -> HashPrefix {
-    let txid_prefix = <[u8; HASH_PREFIX_LEN]>::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
+    let txid_prefix = HashPrefix::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
     let value = u64::from_be_bytes(txid_prefix);
     let value = value.wrapping_add(prev.vout.into());
     value.to_be_bytes()
@@ -125,7 +126,7 @@ fn spending_prefix(prev: OutPoint) -> HashPrefix {
 pub(crate) struct SpendingPrefixRow;
 
 impl SpendingPrefixRow {
-    pub(crate) fn scan_prefix(outpoint: OutPoint) -> [u8; HASH_PREFIX_LEN] {
+    pub(crate) fn scan_prefix(outpoint: OutPoint) -> HashPrefix {
         spending_prefix(outpoint)
     }
 
@@ -148,7 +149,7 @@ fn txid_prefix(txid: &Txid) -> HashPrefix {
 pub(crate) struct TxidRow;
 
 impl TxidRow {
-    pub(crate) fn scan_prefix(txid: Txid) -> [u8; HASH_PREFIX_LEN] {
+    pub(crate) fn scan_prefix(txid: Txid) -> HashPrefix {
         txid_prefix(&txid)
     }
 
@@ -161,6 +162,8 @@ impl TxidRow {
 }
 
 // ***************************************************************************
+
+pub(crate) type SerializedHeaderRow = [u8; HEADER_ROW_SIZE];
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct HeaderRow {
@@ -176,7 +179,7 @@ impl HeaderRow {
         Self { header }
     }
 
-    pub(crate) fn to_db_row(&self) -> [u8; HEADER_ROW_SIZE] {
+    pub(crate) fn to_db_row(&self) -> SerializedHeaderRow {
         let mut row = [0; HEADER_ROW_SIZE];
         let len = self
             .consensus_encode(&mut (&mut row as &mut [u8]))
@@ -185,7 +188,7 @@ impl HeaderRow {
         row
     }
 
-    pub(crate) fn from_db_row(row: [u8; HEADER_ROW_SIZE]) -> Self {
+    pub(crate) fn from_db_row(row: SerializedHeaderRow) -> Self {
         deserialize(&row).expect("bad HeaderRow")
     }
 }

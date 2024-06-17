@@ -5,15 +5,15 @@ use std::iter;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
+use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
     pub(crate) tip_row: [u8; 32],
-    pub(crate) header_rows: Vec<[u8; HEADER_ROW_SIZE]>,
-    pub(crate) funding_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
-    pub(crate) spending_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
-    pub(crate) txid_rows: Vec<[u8; HASH_PREFIX_ROW_SIZE]>,
+    pub(crate) header_rows: Vec<SerializedHeaderRow>,
+    pub(crate) funding_rows: Vec<SerializedHashPrefixRow>,
+    pub(crate) spending_rows: Vec<SerializedHashPrefixRow>,
+    pub(crate) txid_rows: Vec<SerializedHashPrefixRow>,
 }
 
 impl WriteBatch {
@@ -221,22 +221,22 @@ impl DBStore {
 
     pub(crate) fn iter_funding(
         &self,
-        prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
     pub(crate) fn iter_spending(
         &self,
-        prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
     pub(crate) fn iter_txid(
         &self,
-        prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
@@ -287,14 +287,14 @@ impl DBStore {
     fn iter_prefix_cf(
         &self,
         cf: &rocksdb::ColumnFamily,
-        prefix: [u8; HASH_PREFIX_LEN],
-    ) -> impl Iterator<Item = [u8; HASH_PREFIX_ROW_SIZE]> + '_ {
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
         self.iter_cf(cf, opts, Some(&prefix), |_| true)
     }
 
-    pub(crate) fn iter_headers(&self) -> impl Iterator<Item = [u8; HEADER_ROW_SIZE]> + '_ {
+    pub(crate) fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.iter_cf(
@@ -415,7 +415,7 @@ impl Drop for DBStore {
 #[cfg(test)]
 mod tests {
     use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
-    use crate::types::HASH_PREFIX_ROW_SIZE;
+    use crate::types::{SerializedHashPrefixRow, HASH_PREFIX_ROW_SIZE};
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -497,7 +497,7 @@ mod tests {
         assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
     }
 
-    fn to_rows(values: &[&[u8]]) -> Vec<[u8; HASH_PREFIX_ROW_SIZE]> {
+    fn to_rows(values: &[&[u8]]) -> Vec<SerializedHashPrefixRow> {
         values
             .iter()
             .map(|v| {
