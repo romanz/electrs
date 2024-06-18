@@ -13,16 +13,18 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
 use std::iter::FromIterator;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::{
     cache::Cache,
-    config::{Config, ELECTRS_VERSION},
+    config::{Config, TxBroadcastMethod, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
     tracker::Tracker,
+    tx_broadcaster::TxBroadcaster,
     types::ScriptHash,
 };
 
@@ -123,7 +125,8 @@ pub struct Rpc {
     tracker: Tracker,
     cache: Cache,
     rpc_duration: Histogram,
-    daemon: Daemon,
+    daemon: Arc<Daemon>,
+    tx_broadcaster: TxBroadcaster,
     signal: Signal,
     banner: String,
     port: u16,
@@ -141,13 +144,28 @@ impl Rpc {
 
         let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
-        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
+        let daemon = Arc::new(Daemon::connect(
+            config,
+            signal.exit_flag(),
+            tracker.metrics(),
+        )?);
         let cache = Cache::new(tracker.metrics());
+
+        let tx_broadcaster = match config.tx_broadcast_method {
+            TxBroadcastMethod::BitcoinRPC => TxBroadcaster::BitcoinRPC(daemon.clone()),
+            TxBroadcastMethod::PushtxClear => TxBroadcaster::PushtxClear,
+            TxBroadcastMethod::PushtxTor => TxBroadcaster::PushtxTor,
+            TxBroadcastMethod::Script => {
+                TxBroadcaster::Script(config.tx_broadcast_script.clone().unwrap())
+            }
+        };
+
         Ok(Self {
             tracker,
             cache,
             rpc_duration,
             daemon,
+            tx_broadcaster,
             signal,
             banner: config.server_banner.clone(),
             port: config.electrum_rpc_addr.port(),
@@ -360,7 +378,7 @@ impl Rpc {
     fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
         let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
-        let txid = self.daemon.broadcast(&tx)?;
+        let txid = self.tx_broadcaster.broadcast(&tx)?;
         Ok(json!(txid))
     }
 

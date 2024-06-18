@@ -121,6 +121,47 @@ impl From<BitcoinNetwork> for Network {
     }
 }
 
+/// Describes how the user wants electrs to handle transaction broadcasting.
+#[derive(Debug, Deserialize, PartialEq, Eq, Copy, Clone)]
+pub enum TxBroadcastMethod {
+    /// Use the bitcoin node's send_raw_transaction RPC call.
+    #[serde(rename = "rpc")]
+    BitcoinRPC,
+    /// Use the [`pushtx`] crate to broadcast directly to peers over clearnet.
+    #[serde(rename = "pushtx-clear")]
+    PushtxClear,
+    /// Use the [`pushtx`] crate to broadcast directly to peers over TOR.
+    #[serde(rename = "pushtx-tor")]
+    PushtxTor,
+    /// Pass the transaction to a script as the first and only positional argument.
+    #[serde(rename = "script")]
+    Script,
+}
+
+impl ::configure_me::parse_arg::ParseArgFromStr for TxBroadcastMethod {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
+        write!(
+            writer,
+            "either 'rpc', 'pushtx-clear', 'pushtx-tor' or 'script'"
+        )
+    }
+}
+
+impl FromStr for TxBroadcastMethod {
+    type Err = anyhow::Error;
+
+    fn from_str(string: &str) -> std::result::Result<Self, Self::Err> {
+        let method = match string {
+            "rpc" => TxBroadcastMethod::BitcoinRPC,
+            "pushtx-clear" => TxBroadcastMethod::PushtxClear,
+            "pushtx-tor" => TxBroadcastMethod::PushtxTor,
+            "script" => TxBroadcastMethod::Script,
+            method => bail!("invalid tx broadcast method \"{method}\""),
+        };
+        Ok(method)
+    }
+}
+
 /// Parsed and post-processed configuration
 #[derive(Debug)]
 pub struct Config {
@@ -144,6 +185,8 @@ pub struct Config {
     pub sync_once: bool,
     pub skip_block_download_wait: bool,
     pub disable_electrum_rpc: bool,
+    pub tx_broadcast_method: TxBroadcastMethod,
+    pub tx_broadcast_script: Option<String>,
     pub server_banner: String,
     pub signet_magic: Magic,
     pub args: Vec<String>,
@@ -332,6 +375,22 @@ impl Config {
             std::process::exit(0);
         }
 
+        if config.tx_broadcast_script.is_some()
+            && config.tx_broadcast_method != TxBroadcastMethod::Script
+        {
+            eprintln!(
+                "Error: tx_broadcast_script must not be configured if tx_broadcast_method != \"script\""
+            );
+            std::process::exit(1);
+        } else if config.tx_broadcast_script.is_none()
+            && config.tx_broadcast_method == TxBroadcastMethod::Script
+        {
+            eprintln!(
+                "Error: tx_broadcast_script must be configured if tx_broadcast_method == \"script\""
+            );
+            std::process::exit(1);
+        }
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
@@ -352,6 +411,8 @@ impl Config {
             sync_once: config.sync_once,
             skip_block_download_wait: config.skip_block_download_wait,
             disable_electrum_rpc: config.disable_electrum_rpc,
+            tx_broadcast_method: config.tx_broadcast_method,
+            tx_broadcast_script: config.tx_broadcast_script,
             server_banner: config.server_banner,
             signet_magic: magic,
             args: args.map(|a| a.into_string().unwrap()).collect(),
