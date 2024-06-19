@@ -13,9 +13,12 @@ edition = "2021"
 build = "build.rs"
 
 [features]
-default = ["metrics"]
+default = ["metrics", "rocksdb", "redb", "sled"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+rocksdb = ["dep:electrs-rocksdb"]
+redb = ["dep:redb"]
+sled = ["dep:sled"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -38,9 +41,12 @@ serde_derive = "1.0, <=1.0.171"  # avoid precompiled binaries (https://github.co
 serde_json = "1.0"
 signal-hook = "0.3"
 tiny_http = { version = "0.12", optional = true }
+redb = { version = "2.1.0", optional = true }
+sled = { version = "0.34.7", optional = true }
 
 [dependencies.electrs-rocksdb]
 version = "0.19.0-e3"
+optional = true
 
 default-features = false
 # ZSTD is used for data compression

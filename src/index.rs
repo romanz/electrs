@@ -1,13 +1,15 @@
 use anyhow::{Context, Result};
-use bitcoin::consensus::{deserialize, serialize, Decodable};
+use bitcoin::consensus::{deserialize, Decodable, Encodable};
+use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, OutPoint, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
+use std::mem::size_of_val;
 use std::ops::ControlFlow;
 
 use crate::{
     chain::{Chain, NewHeader},
     daemon::Daemon,
-    db::{DBStore, Row, WriteBatch},
+    db::{Database, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
     types::{
@@ -48,8 +50,8 @@ impl Stats {
         self.update_duration.observe_duration(label, f)
     }
 
-    fn observe_size(&self, label: &str, rows: &[Row]) {
-        self.update_size.observe(label, db_rows_size(rows) as f64);
+    fn observe_size<T>(&self, label: &str, rows: &[T]) {
+        self.update_size.observe(label, size_of_val(rows) as f64);
     }
 
     fn observe_batch(&self, batch: &WriteBatch) {
@@ -70,17 +72,14 @@ impl Stats {
         self.height.set("tip", chain.height() as f64);
     }
 
-    fn observe_db(&self, store: &DBStore) {
-        for (cf, name, value) in store.get_properties() {
-            self.db_properties
-                .set(&format!("{}:{}", name, cf), value as f64);
-        }
+    fn observe_db(&self, store: &impl Database) {
+        store.update_metrics(&self.db_properties);
     }
 }
 
 /// Confirmed transactions' address index
-pub struct Index {
-    store: DBStore,
+pub struct Index<D> {
+    store: D,
     batch_size: usize,
     lookup_limit: Option<usize>,
     chain: Chain,
@@ -89,9 +88,9 @@ pub struct Index {
     flush_needed: bool,
 }
 
-impl Index {
+impl<D: Database> Index<D> {
     pub(crate) fn load(
-        store: DBStore,
+        store: D,
         mut chain: Chain,
         metrics: &Metrics,
         batch_size: usize,
@@ -101,10 +100,8 @@ impl Index {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
             let headers = store
-                .read_headers()
-                .into_iter()
-                .map(|row| HeaderRow::from_db_row(&row).header)
-                .collect();
+                .iter_headers()
+                .map(|row| HeaderRow::from_db_row(row).header);
             chain.load(headers, tip);
             chain.drop_last_headers(reindex_last_blocks);
         };
@@ -141,7 +138,7 @@ impl Index {
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -151,7 +148,7 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -161,7 +158,7 @@ impl Index {
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
             .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| HashPrefixRow::from_db_row(&row).height())
+            .map(|row| HashPrefixRow::from_db_row(row).height())
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -236,10 +233,6 @@ impl Index {
     }
 }
 
-fn db_rows_size(rows: &[Row]) -> usize {
-    rows.iter().map(|key| key.len()).sum()
-}
-
 fn index_single_block(
     block_hash: BlockHash,
     block: SerBlock,
@@ -285,12 +278,16 @@ fn index_single_block(
                 .expect("block header was already validated");
             self.batch
                 .header_rows
-                .push(HeaderRow::new(header).to_db_row());
+                .push((self.height as u32, HeaderRow::new(header).to_db_row()));
             ControlFlow::Continue(())
         }
     }
 
     let mut index_block = IndexBlockVisitor { batch, height };
     bsl::Block::visit(&block, &mut index_block).expect("core returned invalid block");
-    batch.tip_row = serialize(&block_hash).into_boxed_slice();
+
+    let len = block_hash
+        .consensus_encode(&mut (&mut batch.tip_row as &mut [u8]))
+        .expect("in-memory writers don't error");
+    debug_assert_eq!(len, BlockHash::LEN);
 }

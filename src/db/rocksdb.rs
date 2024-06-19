@@ -4,25 +4,9 @@ use electrs_rocksdb as rocksdb;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub(crate) type Row = Box<[u8]>;
+use crate::types::{HASH_PREFIX_LEN, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
 
-#[derive(Default)]
-pub(crate) struct WriteBatch {
-    pub(crate) tip_row: Row,
-    pub(crate) header_rows: Vec<Row>,
-    pub(crate) funding_rows: Vec<Row>,
-    pub(crate) spending_rows: Vec<Row>,
-    pub(crate) txid_rows: Vec<Row>,
-}
-
-impl WriteBatch {
-    pub(crate) fn sort(&mut self) {
-        self.header_rows.sort_unstable();
-        self.funding_rows.sort_unstable();
-        self.spending_rows.sort_unstable();
-        self.txid_rows.sort_unstable();
-    }
-}
+use super::{Database, WriteBatch};
 
 /// RocksDB wrapper for index storage
 pub struct DBStore {
@@ -111,6 +95,85 @@ fn default_opts() -> rocksdb::Options {
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
     opts.set_block_based_table_factory(&block_opts);
     opts
+}
+
+pub struct RowKeyIter<'a, const N: usize> {
+    raw_iter: rocksdb::DBRawIteratorWithThreadMode<'a, rocksdb::DB>,
+    done: bool,
+    filter_fn: fn(&[u8]) -> bool,
+}
+
+impl<'a, const N: usize> Iterator for RowKeyIter<'a, N> {
+    type Item = [u8; N];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // based on <DBIteratorWithThreadMode as Iterator>::next
+            break if self.done {
+                None
+            } else if let Some((key, _)) = self.raw_iter.item() {
+                let ret = if (self.filter_fn)(key) {
+                    Some(key.try_into().unwrap())
+                } else {
+                    None
+                };
+                self.raw_iter.next();
+                if ret.is_some() {
+                    ret
+                } else {
+                    continue;
+                }
+            } else {
+                self.done = true;
+                self.raw_iter.status().expect("cf iterator failed");
+                None
+            };
+        }
+    }
+}
+
+impl Database for DBStore {
+    fn open(path: &Path, log_dir: Option<&Path>, auto_reindex: bool) -> Result<Self> {
+        Self::open(path, log_dir, auto_reindex)
+    }
+
+    type HashPrefixRowIter<'a> = RowKeyIter<'a, HASH_PREFIX_ROW_SIZE>;
+
+    fn iter_funding(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_funding(prefix)
+    }
+
+    fn iter_spending(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_spending(prefix)
+    }
+
+    fn iter_txid(&self, prefix: [u8; HASH_PREFIX_LEN]) -> Self::HashPrefixRowIter<'_> {
+        self.iter_txid(prefix)
+    }
+
+    type HeaderIter<'a> = RowKeyIter<'a, HEADER_ROW_SIZE>;
+
+    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+        self.iter_headers()
+    }
+
+    fn get_tip(&self) -> Option<Vec<u8>> {
+        self.get_tip()
+    }
+
+    fn write(&self, batch: &WriteBatch) {
+        self.write(batch);
+    }
+
+    fn flush(&self) {
+        self.flush();
+    }
+
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        for (cf, name, value) in self.get_properties() {
+            gauge.set(&format!("{}:{}", name, cf), value as f64);
+        }
+    }
 }
 
 impl DBStore {
@@ -218,39 +281,68 @@ impl DBStore {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
 
-    pub(crate) fn iter_funding(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_funding(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> RowKeyIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
-    pub(crate) fn iter_spending(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_spending(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> RowKeyIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
-    pub(crate) fn iter_txid(&self, prefix: Row) -> impl Iterator<Item = Row> + '_ {
+    pub(crate) fn iter_txid(
+        &self,
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> RowKeyIter<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.txid_cf(), prefix)
+    }
+
+    fn iter_cf<'a, const N: usize>(
+        &'a self,
+        cf: &rocksdb::ColumnFamily,
+        readopts: rocksdb::ReadOptions,
+        start: Option<&[u8]>,
+        filter_fn: fn(&[u8]) -> bool,
+    ) -> RowKeyIter<'a, N> {
+        let mut raw_iter = self.db.raw_iterator_cf_opt(cf, readopts);
+
+        if let Some(key) = start {
+            raw_iter.seek(key);
+        } else {
+            raw_iter.seek_to_first();
+        };
+
+        RowKeyIter {
+            raw_iter,
+            done: false,
+            filter_fn,
+        }
     }
 
     fn iter_prefix_cf(
         &self,
         cf: &rocksdb::ColumnFamily,
-        prefix: Row,
-    ) -> impl Iterator<Item = Row> + '_ {
-        let mode = rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward);
+        prefix: [u8; HASH_PREFIX_LEN],
+    ) -> RowKeyIter<'_, HASH_PREFIX_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.db
-            .iterator_cf_opt(cf, opts, mode)
-            .map(|row| row.expect("prefix iterator failed").0) // values are empty in prefix-scanned CFs
+        self.iter_cf(cf, opts, Some(&prefix), |_| true)
     }
 
-    pub(crate) fn read_headers(&self) -> Vec<Row> {
+    pub(crate) fn iter_headers(&self) -> RowKeyIter<'_, HEADER_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
-        self.db
-            .iterator_cf_opt(self.headers_cf(), opts, rocksdb::IteratorMode::Start)
-            .map(|row| row.expect("header iterator failed").0) // extract key from row
-            .filter(|key| &key[..] != TIP_KEY) // headers' rows are longer than TIP_KEY
-            .collect()
+        self.iter_cf(
+            self.headers_cf(),
+            opts,
+            None,
+            |key| key != TIP_KEY, // headers' rows are longer than TIP_KEY
+        )
     }
 
     pub(crate) fn get_tip(&self) -> Option<Vec<u8>> {
@@ -270,10 +362,10 @@ impl DBStore {
         for key in &batch.txid_rows {
             db_batch.put_cf(self.txid_cf(), key, b"");
         }
-        for key in &batch.header_rows {
+        for (_, key) in &batch.header_rows {
             db_batch.put_cf(self.headers_cf(), key, b"");
         }
-        db_batch.put_cf(self.headers_cf(), TIP_KEY, &batch.tip_row);
+        db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
 
         let mut opts = rocksdb::WriteOptions::new();
         let bulk_import = self.bulk_import.load(Ordering::Relaxed);
@@ -363,6 +455,7 @@ impl Drop for DBStore {
 #[cfg(test)]
 mod tests {
     use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use crate::types::HASH_PREFIX_ROW_SIZE;
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -440,14 +533,18 @@ mod tests {
             ..Default::default()
         });
 
-        let rows = store.iter_txid(b"abcdefgh".to_vec().into_boxed_slice());
+        let rows = store.iter_txid(*b"abcdefgh");
         assert_eq!(rows.collect::<Vec<_>>(), to_rows(&items[1..5]));
     }
 
-    fn to_rows(values: &[&[u8]]) -> Vec<Box<[u8]>> {
+    fn to_rows(values: &[&[u8]]) -> Vec<[u8; HASH_PREFIX_ROW_SIZE]> {
         values
             .iter()
-            .map(|v| v.to_vec().into_boxed_slice())
+            .map(|v| {
+                let mut row = [0; HASH_PREFIX_ROW_SIZE];
+                row[..v.len()].copy_from_slice(v);
+                row
+            })
             .collect()
     }
 
