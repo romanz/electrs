@@ -1030,16 +1030,15 @@ fn get_previous_txos(block_entries: &[BlockEntry]) -> BTreeSet<OutPoint> {
 
 fn lookup_txos(txstore_db: &DB, outpoints: BTreeSet<OutPoint>) -> Result<HashMap<OutPoint, TxOut>> {
     let keys = outpoints.iter().map(TxOutRow::key).collect::<Vec<_>>();
-    let mut remain_outpoints = outpoints.into_iter();
     txstore_db
         .multi_get(keys)
         .into_iter()
-        .map(|res| {
-            let outpoint = remain_outpoints.next().unwrap();
-            match res.unwrap() {
-                Some(txo) => Ok((outpoint, deserialize(&txo).expect("failed to parse TxOut"))),
-                None => Err(format!("missing txo {}", outpoint).into()),
-            }
+        .zip(outpoints)
+        .map(|(res, outpoint)| {
+            let txo = res
+                .unwrap()
+                .ok_or_else(|| format!("missing txo {}", outpoint))?;
+            Ok((outpoint, deserialize(&txo).expect("failed to parse TxOut")))
         })
         .collect()
 }
