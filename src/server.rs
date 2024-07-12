@@ -91,6 +91,11 @@ fn serve() -> Result<()> {
             let rpc = Rpc::<crate::db::rocksdb::DBStore>::new(&config, metrics)?;
             server_loop(rpc, server_rx, server_batch_size, duration, config)
         }
+        #[cfg(feature = "lmdb")]
+        DatabaseType::LMDB => {
+            let rpc = Rpc::<crate::db::lmdb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
         #[cfg(feature = "redb")]
         DatabaseType::ReDB => {
             let rpc = Rpc::<crate::db::redb::DBStore>::new(&config, metrics)?;
