@@ -122,9 +122,11 @@ impl From<BitcoinNetwork> for Network {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[allow(clippy::upper_case_acronyms)] // LMDB
 pub enum DatabaseType {
     #[default]
     RocksDB,
+    LMDB,
     ReDB,
     Sled,
 }
@@ -135,6 +137,7 @@ impl FromStr for DatabaseType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "rocksdb" => Self::RocksDB,
+            "lmdb" => Self::LMDB,
             "redb" => Self::ReDB,
             "sled" => Self::Sled,
             _ => return Err(UnknownDatabaseTypeError(s.to_owned())),
@@ -144,7 +147,7 @@ impl FromStr for DatabaseType {
 
 impl ::configure_me::parse_arg::ParseArgFromStr for DatabaseType {
     fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
-        write!(writer, "either 'rocksdb', 'redb' or 'sled'")
+        write!(writer, "either 'rocksdb', 'lmdb', 'redb' or 'sled'")
     }
 }
 
@@ -152,6 +155,7 @@ impl fmt::Display for DatabaseType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RocksDB => write!(f, "rocksdb"),
+            Self::LMDB => write!(f, "lmdb"),
             Self::ReDB => write!(f, "redb"),
             Self::Sled => write!(f, "sled"),
         }
