@@ -155,5 +155,5 @@ doc = "network magic for custom signet network in hex format, as found in Bitcoi
 [[param]]
 name = "database"
 type = "crate::config::DatabaseType"
-doc = "Select database type ('rocksdb', 'redb' or 'sled')"
+doc = "Select database type ('rocksdb', 'lmdb', 'redb' or 'sled')"
 default = "Default::default()"
