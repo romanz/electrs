@@ -392,7 +392,10 @@ impl<'a, const N: usize> Iterator for DBIterator<'a, N> {
         while !self.done {
             let key = match self.raw.key() {
                 Some(key) => key,
-                None => break, // end of scan
+                None => {
+                    self.raw.status().expect("DB scan failed");
+                    break; // end of scan
+                }
             };
             let prefix_match = match self.prefix {
                 Some(key_prefix) => key.starts_with(&key_prefix),
@@ -408,7 +411,6 @@ impl<'a, const N: usize> Iterator for DBIterator<'a, N> {
                 None => continue, // skip keys with size != N
             }
         }
-        self.raw.status().expect("DB scan failed");
         self.done = true;
         None
     }
