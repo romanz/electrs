@@ -148,11 +148,15 @@ impl Daemon {
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
-        Ok(self
-            .rpc
-            .estimate_smart_fee(nblocks, None)
-            .context("failed to estimate fee")?
-            .fee_rate)
+        let res = self.rpc.estimate_smart_fee(nblocks, None);
+        if let Err(bitcoincore_rpc::Error::JsonRpc(jsonrpc::Error::Rpc(RpcError {
+            code: -32603,
+            ..
+        }))) = res
+        {
+            return Ok(None); // don't fail when fee estimation is disabled (e.g. with `-blocksonly=1`)
+        }
+        Ok(res.context("failed to estimate fee")?.fee_rate)
     }
 
     pub(crate) fn get_relay_fee(&self) -> Result<Amount> {
