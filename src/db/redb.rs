@@ -3,7 +3,7 @@ use crate::types::{
     HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE,
 };
 use anyhow::{Context, Result};
-use redb::TableDefinition;
+use redb::{ReadableTableMetadata, TableDefinition, TableHandle};
 use std::fs::{create_dir_all, remove_file};
 use std::path::Path;
 
@@ -182,20 +182,49 @@ impl Database for DBStore {
     }
 
     fn flush(&self) {
-        // TODO?
+        let write_txn = self
+            .db
+            .begin_write()
+            .expect("failed to begin write transaction");
+        write_txn.commit().expect("failed to commit transaction");
     }
 
-    fn update_metrics(&self, _gauge: &crate::metrics::Gauge) {
-        // TODO do something with table stats
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        fn update_table_metrics<K: redb::Key, V: redb::Value>(
+            gauge: &crate::metrics::Gauge,
+            read_txn: &redb::ReadTransaction,
+            table_definition: redb::TableDefinition<K, V>,
+        ) {
+            let table = read_txn
+                .open_table(table_definition)
+                .expect("unable to open table");
 
-        // let read_txn = self
-        //     .db
-        //     .begin_read()
-        //     .expect("unable to create read transaction");
-        // let table = read_txn
-        //     .open_table(FUNDING_TABLE)
-        //     .expect("unable to open table");
-        // let stats = table.stats().expect("unable to get table stats");
+            let table_name = table_definition.name();
+
+            let stats = table.stats().expect("unable to get table stats");
+
+            for (name, value) in [
+                ("tree_height", stats.tree_height() as f64),
+                ("leaf_pages", stats.leaf_pages() as f64),
+                ("branch_pages", stats.branch_pages() as f64),
+                ("stored_leaf_bytes", stats.stored_bytes() as f64),
+                ("metadata_bytes", stats.metadata_bytes() as f64),
+                ("fragmented_bytes", stats.fragmented_bytes() as f64),
+            ] {
+                gauge.set(&format!("redb.{}:{}", name, table_name), value);
+            }
+        }
+
+        let read_txn = self
+            .db
+            .begin_read()
+            .expect("unable to create read transaction");
+
+        update_table_metrics(gauge, &read_txn, FUNDING_TABLE);
+        update_table_metrics(gauge, &read_txn, SPENDING_TABLE);
+        update_table_metrics(gauge, &read_txn, TXID_TABLE);
+        update_table_metrics(gauge, &read_txn, HEADERS_TABLE);
+        update_table_metrics(gauge, &read_txn, CONFIG_TABLE);
     }
 }
 

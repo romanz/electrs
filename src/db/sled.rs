@@ -24,6 +24,7 @@ impl<const N: usize> Iterator for RowKeyIter<N> {
 }
 
 pub struct DBStore {
+    db: sled::Db,
     config: sled::Tree,
     headers: sled::Tree,
     funding: sled::Tree,
@@ -161,17 +162,14 @@ impl Database for DBStore {
     }
 
     fn flush(&self) {
-        // TODO
-
-        self.config.flush().expect("config flush failed");
-        self.headers.flush().expect("headers flush failed");
-        self.funding.flush().expect("funding flush failed");
-        self.spending.flush().expect("spending flush failed");
-        self.txid.flush().expect("txid flush failed");
+        self.db.flush().expect("flush failed");
     }
 
-    fn update_metrics(&self, _gauge: &crate::metrics::Gauge) {
-        // TODO
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        gauge.set(
+            "sled.size_on_disk",
+            self.db.size_on_disk().expect("unable to get database size") as f64,
+        );
     }
 }
 
@@ -180,12 +178,19 @@ impl DBStore {
         // TODO config
         let db = sled::Config::new().path(path).open()?;
 
+        let config = db.open_tree("config")?;
+        let headers = db.open_tree("headers")?;
+        let funding = db.open_tree("funding")?;
+        let spending = db.open_tree("spending")?;
+        let txid = db.open_tree("txid")?;
+
         Ok(Self {
-            config: db.open_tree("config")?,
-            headers: db.open_tree("headers")?,
-            funding: db.open_tree("funding")?,
-            spending: db.open_tree("spending")?,
-            txid: db.open_tree("txid")?,
+            db,
+            config,
+            headers,
+            funding,
+            spending,
+            txid,
         })
     }
 

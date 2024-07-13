@@ -179,8 +179,41 @@ impl Database for DBStore {
         self.env.force_sync().unwrap();
     }
 
-    fn update_metrics(&self, _gauge: &crate::metrics::Gauge) {
-        // TODO
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        fn update_table_metrics<KC, DC>(
+            gauge: &crate::metrics::Gauge,
+            rtxn: &RoTxn,
+            db: &heed::Database<KC, DC>,
+            db_name: &str,
+        ) {
+            let stats = db.stat(rtxn).unwrap();
+
+            for (name, value) in [
+                ("page_size", stats.page_size as f64),
+                ("depth", stats.depth as f64),
+                ("branch_pages", stats.branch_pages as f64),
+                ("leaf_pages", stats.leaf_pages as f64),
+                ("overflow_pages", stats.overflow_pages as f64),
+                ("entries", stats.entries as f64),
+            ] {
+                gauge.set(&format!("lmdb.{}:{}", name, db_name), value);
+            }
+        }
+
+        gauge.set(
+            "lmdb.size_on_disk",
+            self.env
+                .real_disk_size()
+                .expect("unable to get database size") as f64,
+        );
+
+        let rtxn = self.env.read_txn().unwrap();
+
+        update_table_metrics(gauge, &rtxn, &self.funding, "funding");
+        update_table_metrics(gauge, &rtxn, &self.spending, "spending");
+        update_table_metrics(gauge, &rtxn, &self.txid, "txid");
+        update_table_metrics(gauge, &rtxn, &self.headers, "headers");
+        update_table_metrics(gauge, &rtxn, &self.config, "config");
     }
 }
 
