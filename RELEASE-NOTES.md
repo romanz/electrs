@@ -1,3 +1,13 @@
+# 0.10.5 (May 18 2024)
+
+* Update dependencies (`bitcoin`, `bitcoin_slices`, `bitcoincore-rpc`, `rayon`)
+* Support latest bitcoind (https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/353 & https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/356)
+
+# 0.10.4 (Mar 15 2024)
+
+* Don't fail mempool sync on missing transactions (#997)
+* Update dependencies (`anyhow`, `crossbeam-channel`, `log`, `secp256k1`, `secp256k1-sys`, `smallvec`, `tempfile`, `termcolor`, `thiserror`, `thiserror-impl`)
+
 # 0.10.3 (Feb 10 2024)
 
 * Update dependencies (`serde_json`, `tempfile`, `env_logger`, `rayon`, `bitcoin`, `crossbeam-channel`, `shlex`)

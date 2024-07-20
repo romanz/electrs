@@ -82,8 +82,20 @@ impl MempoolSyncUpdate {
                 .iter()
                 .zip(entries.into_iter().zip(txs.into_iter()))
                 .filter_map(|(txid, (entry, tx))| {
-                    let tx = tx.ok()?;
-                    let entry = entry.ok()?;
+                    let entry = match entry {
+                        Some(entry) => entry,
+                        None => {
+                            warn!("missing mempool entry: {}", txid);
+                            return None;
+                        }
+                    };
+                    let tx = match tx {
+                        Some(tx) => tx,
+                        None => {
+                            warn!("missing mempool tx: {}", txid);
+                            return None;
+                        }
+                    };
                     Some(Entry {
                         txid: *txid,
                         tx,
@@ -332,7 +344,7 @@ impl Serialize for FeeHistogram {
         let mut seq = serializer.serialize_seq(Some(self.vsize.len()))?;
         // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
         let fee_rates =
-            (0..FeeHistogram::BINS).map(|i| std::u64::MAX.checked_shr(i as u32).unwrap_or(0));
+            (0..FeeHistogram::BINS).map(|i| u64::MAX.checked_shr(i as u32).unwrap_or(0));
         fee_rates
             .zip(self.vsize.iter().copied())
             .skip_while(|(_fee_rate, vsize)| *vsize == 0)

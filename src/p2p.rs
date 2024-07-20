@@ -7,6 +7,7 @@ use bitcoin::{
         Decodable,
     },
     hashes::Hash,
+    io,
     p2p::{
         self, address,
         message::{self, CommandString, NetworkMessage},
@@ -19,9 +20,8 @@ use bitcoin::{
 use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
-use std::io::{self, ErrorKind, Write};
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::types::SerBlock;
@@ -141,10 +141,11 @@ impl Connection {
         metrics: &Metrics,
         magic: Magic,
     ) -> Result<Self> {
-        let conn = Arc::new(
-            TcpStream::connect(address)
-                .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?,
-        );
+        let recv_conn = TcpStream::connect(address)
+            .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
+        let mut send_conn = recv_conn
+            .try_clone()
+            .context("failed to clone connection")?;
 
         let (tx_send, tx_recv) = bounded::<NetworkMessage>(1);
         let (rx_send, rx_recv) = bounded::<RawNetworkMessage>(1);
@@ -180,7 +181,6 @@ impl Connection {
             default_duration_buckets(),
         );
 
-        let stream = Arc::clone(&conn);
         let mut buffer = vec![];
         crate::thread::spawn("p2p_send", move || loop {
             use std::net::Shutdown;
@@ -190,7 +190,7 @@ impl Connection {
                     // p2p_loop is closed, so tx_send is disconnected
                     debug!("closing p2p_send thread: no more messages to send");
                     // close the stream reader (p2p_recv thread may block on it)
-                    if let Err(e) = stream.shutdown(Shutdown::Read) {
+                    if let Err(e) = send_conn.shutdown(Shutdown::Read) {
                         warn!("failed to shutdown p2p connection: {}", e)
                     }
                     return Ok(());
@@ -203,16 +203,16 @@ impl Connection {
                 raw_msg
                     .consensus_encode(&mut buffer)
                     .expect("in-memory writers don't error");
-                (&*stream)
+                send_conn
                     .write_all(buffer.as_slice())
                     .context("p2p failed to send")
             })?;
         });
 
-        let stream = Arc::clone(&conn);
+        let mut stream_reader = std::io::BufReader::new(recv_conn);
         crate::thread::spawn("p2p_recv", move || loop {
             let start = Instant::now();
-            let raw_msg = RawNetworkMessage::consensus_decode(&mut &*stream);
+            let raw_msg = RawNetworkMessage::consensus_decode(&mut stream_reader);
             {
                 let duration = duration_to_seconds(start.elapsed());
                 let label = format!(
@@ -232,7 +232,7 @@ impl Connection {
                     }
                     raw_msg
                 }
-                Err(encode::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
+                Err(encode::Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {
                     debug!("closing p2p_recv thread: connection closed");
                     return Ok(());
                 }
@@ -390,7 +390,9 @@ enum ParsedNetworkMessage {
 }
 
 impl Decodable for RawNetworkMessage {
-    fn consensus_decode<D: io::Read + ?Sized>(d: &mut D) -> Result<Self, encode::Error> {
+    fn consensus_decode<D: bitcoin::io::BufRead + ?Sized>(
+        d: &mut D,
+    ) -> Result<Self, encode::Error> {
         let magic = Decodable::consensus_decode(d)?;
         let cmd = Decodable::consensus_decode(d)?;
 

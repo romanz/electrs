@@ -22,7 +22,7 @@ FROM base as bitcoin-build
 # Download
 WORKDIR /build/bitcoin
 ARG ARCH=x86_64
-ARG BITCOIND_VERSION=26.0
+ARG BITCOIND_VERSION=27.0
 RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
 RUN tar xvf bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
 RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
