@@ -225,6 +225,12 @@ impl Daemon {
             .context("failed to get mempool txids")
     }
 
+    pub(crate) fn get_mempool_entry(&self, txid: &Txid) -> Result<json::GetMempoolEntryResult> {
+        self.rpc
+            .get_mempool_entry(txid)
+            .context("failed to get mempool entry")
+    }
+
     pub(crate) fn get_mempool_entries(
         &self,
         txids: &[Txid],
