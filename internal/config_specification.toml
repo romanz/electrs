@@ -108,9 +108,9 @@ doc = "Disable Electrum RPC server - only sync and index blocks."
 
 [[param]]
 name = "tx_broadcast_method"
-type = "crate::config::TxBroadcastMethod"
+type = "crate::config::TxBroadcastMethodConfigOption"
 doc = "'rpc' to broadcast transactions directly from the bitcoin node, OR 'pushtx-clear' to broadcast transactions to a single random peer, OR 'pushtx-tor' to broadcast to random peers over a local TOR proxy"
-default = "crate::config::TxBroadcastMethod::BitcoinRPC"
+default = "crate::config::TxBroadcastMethodConfigOption::BitcoinRPC"
 
 [[param]]
 name = "tx_broadcast_script"

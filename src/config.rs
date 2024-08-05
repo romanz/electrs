@@ -123,7 +123,7 @@ impl From<BitcoinNetwork> for Network {
 
 /// Describes how the user wants electrs to handle transaction broadcasting.
 #[derive(Debug, Deserialize, PartialEq, Eq, Copy, Clone)]
-pub enum TxBroadcastMethod {
+pub enum TxBroadcastMethodConfigOption {
     /// Use the bitcoin node's send_raw_transaction RPC call.
     #[serde(rename = "rpc")]
     BitcoinRPC,
@@ -133,12 +133,12 @@ pub enum TxBroadcastMethod {
     /// Use the [`pushtx`] crate to broadcast directly to peers over TOR.
     #[serde(rename = "pushtx-tor")]
     PushtxTor,
-    /// Pass the transaction to a script as the first and only positional argument.
+    /// Pass the transaction to the given script file as the first and only positional argument.
     #[serde(rename = "script")]
     Script,
 }
 
-impl ::configure_me::parse_arg::ParseArgFromStr for TxBroadcastMethod {
+impl ::configure_me::parse_arg::ParseArgFromStr for TxBroadcastMethodConfigOption {
     fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
         write!(
             writer,
@@ -147,19 +147,32 @@ impl ::configure_me::parse_arg::ParseArgFromStr for TxBroadcastMethod {
     }
 }
 
-impl FromStr for TxBroadcastMethod {
+impl FromStr for TxBroadcastMethodConfigOption {
     type Err = anyhow::Error;
 
     fn from_str(string: &str) -> std::result::Result<Self, Self::Err> {
         let method = match string {
-            "rpc" => TxBroadcastMethod::BitcoinRPC,
-            "pushtx-clear" => TxBroadcastMethod::PushtxClear,
-            "pushtx-tor" => TxBroadcastMethod::PushtxTor,
-            "script" => TxBroadcastMethod::Script,
+            "rpc" => TxBroadcastMethodConfigOption::BitcoinRPC,
+            "pushtx-clear" => TxBroadcastMethodConfigOption::PushtxClear,
+            "pushtx-tor" => TxBroadcastMethodConfigOption::PushtxTor,
+            "script" => TxBroadcastMethodConfigOption::Script,
             method => bail!("invalid tx broadcast method \"{method}\""),
         };
         Ok(method)
     }
+}
+
+/// Describes how the user wants electrs to handle transaction broadcasting.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum TxBroadcastMethod {
+    /// Use the bitcoin node's send_raw_transaction RPC call.
+    BitcoinRPC,
+    /// Use the [`pushtx`] crate to broadcast directly to peers over clearnet.
+    PushtxClear,
+    /// Use the [`pushtx`] crate to broadcast directly to peers over TOR.
+    PushtxTor,
+    /// Pass the transaction to a script as the first and only positional argument.
+    Script(String),
 }
 
 /// Parsed and post-processed configuration
@@ -186,7 +199,6 @@ pub struct Config {
     pub skip_block_download_wait: bool,
     pub disable_electrum_rpc: bool,
     pub tx_broadcast_method: TxBroadcastMethod,
-    pub tx_broadcast_script: Option<String>,
     pub server_banner: String,
     pub signet_magic: Magic,
 }
@@ -390,20 +402,28 @@ impl Config {
         }
 
         if config.tx_broadcast_script.is_some()
-            && config.tx_broadcast_method != TxBroadcastMethod::Script
+            && config.tx_broadcast_method != TxBroadcastMethodConfigOption::Script
         {
             eprintln!(
                 "Error: tx_broadcast_script must not be configured if tx_broadcast_method != \"script\""
             );
             std::process::exit(1);
-        } else if config.tx_broadcast_script.is_none()
-            && config.tx_broadcast_method == TxBroadcastMethod::Script
-        {
-            eprintln!(
-                "Error: tx_broadcast_script must be configured if tx_broadcast_method == \"script\""
-            );
-            std::process::exit(1);
         }
+
+        let tx_broadcast_method = match config.tx_broadcast_method {
+            TxBroadcastMethodConfigOption::Script => match config.tx_broadcast_script {
+                None => {
+                    eprintln!(
+                        "Error: tx_broadcast_script must be configured if tx_broadcast_method == \"script\""
+                    );
+                    std::process::exit(1);
+                }
+                Some(script_path) => TxBroadcastMethod::Script(script_path),
+            },
+            TxBroadcastMethodConfigOption::BitcoinRPC => TxBroadcastMethod::BitcoinRPC,
+            TxBroadcastMethodConfigOption::PushtxClear => TxBroadcastMethod::PushtxClear,
+            TxBroadcastMethodConfigOption::PushtxTor => TxBroadcastMethod::PushtxTor,
+        };
 
         let config = Config {
             network: config.network,
@@ -425,8 +445,7 @@ impl Config {
             sync_once: config.sync_once,
             skip_block_download_wait: config.skip_block_download_wait,
             disable_electrum_rpc: config.disable_electrum_rpc,
-            tx_broadcast_method: config.tx_broadcast_method,
-            tx_broadcast_script: config.tx_broadcast_script,
+            tx_broadcast_method,
             server_banner: config.server_banner,
             signet_magic: magic,
         };

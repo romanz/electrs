@@ -151,13 +151,11 @@ impl Rpc {
         )?);
         let cache = Cache::new(tracker.metrics());
 
-        let tx_broadcaster = match config.tx_broadcast_method {
+        let tx_broadcaster = match &config.tx_broadcast_method {
             TxBroadcastMethod::BitcoinRPC => TxBroadcaster::BitcoinRPC(daemon.clone()),
             TxBroadcastMethod::PushtxClear => TxBroadcaster::PushtxClear,
             TxBroadcastMethod::PushtxTor => TxBroadcaster::PushtxTor,
-            TxBroadcastMethod::Script => {
-                TxBroadcaster::Script(config.tx_broadcast_script.clone().unwrap())
-            }
+            TxBroadcastMethod::Script(script_path) => TxBroadcaster::Script(script_path.clone()),
         };
 
         Ok(Self {
