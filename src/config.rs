@@ -189,7 +189,6 @@ pub struct Config {
     pub tx_broadcast_script: Option<String>,
     pub server_banner: String,
     pub signet_magic: Magic,
-    pub args: Vec<String>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -238,7 +237,7 @@ impl Config {
     pub fn from_args() -> Config {
         use internal::ResultExt;
 
-        let (mut config, args) =
+        let (mut config, _args) =
             internal::Config::including_optional_config_files(default_config_files())
                 .unwrap_or_exit();
 
@@ -333,6 +332,25 @@ impl Config {
             unsupported => unsupported_network(unsupported),
         }
 
+        let mut deprecated_options_used = false;
+
+        if config.timestamp {
+            eprintln!(
+                "Error: `timestamp` is deprecated, timestamps on logs is (and was) always \
+                enabled, please remove this option."
+            );
+            deprecated_options_used = true;
+        }
+
+        if config.verbose > 0 {
+            eprintln!("Error: please use `log_filters` to set logging verbosity",);
+            deprecated_options_used = true;
+        }
+
+        if deprecated_options_used {
+            std::process::exit(1);
+        }
+
         let daemon_dir = &config.daemon_dir;
         let daemon_auth = SensitiveAuth(match (config.auth, config.cookie_file) {
             (None, None) => Auth::CookieFile(daemon_dir.join(".cookie")),
@@ -351,10 +369,6 @@ impl Config {
             }
         });
 
-        if config.verbose > 0 {
-            eprintln!("Error: please use `log_filters` to set logging verbosity",);
-            std::process::exit(1);
-        }
         let log_filters = config.log_filters;
 
         let index_lookup_limit = match config.index_lookup_limit {
@@ -415,7 +429,6 @@ impl Config {
             tx_broadcast_script: config.tx_broadcast_script,
             server_banner: config.server_banner,
             signet_magic: magic,
-            args: args.map(|a| a.into_string().unwrap()).collect(),
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",
