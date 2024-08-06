@@ -288,14 +288,12 @@ impl Mempool {
         self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
     }
 
-    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) -> Result<()> {
-        if self.txstore.get(txid).is_none() {
+    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: Txid) -> Result<()> {
+        if self.txstore.get(&txid).is_none() {
             if let Ok(tx) = daemon.getmempooltx(&txid) {
-                self.add({
-                    let mut txs_map = HashMap::new();
-                    txs_map.insert(tx.txid(), tx);
-                    txs_map
-                })
+                let mut txs_map = HashMap::new();
+                txs_map.insert(txid, tx);
+                self.add(txs_map)
             } else {
                 bail!("add_by_txid cannot find {}", txid);
             }
@@ -537,7 +535,7 @@ impl Mempool {
             }
 
             let fetched_count = new_txs.len();
-            fetched_txs.extend(&mut new_txs.into_iter().map(|tx| (tx.txid(), tx)));
+            fetched_txs.extend(new_txs);
 
             // Retry if any transactions were evicted form the mempool before we managed to get them
             if fetched_count != new_txids.len() {

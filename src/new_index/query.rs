@@ -75,7 +75,7 @@ impl Query {
             .mempool
             .write()
             .unwrap()
-            .add_by_txid(&self.daemon, &txid);
+            .add_by_txid(&self.daemon, txid);
         Ok(txid)
     }
 

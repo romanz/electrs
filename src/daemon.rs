@@ -11,7 +11,7 @@ use std::time::Duration;
 use base64::prelude::{Engine, BASE64_STANDARD};
 use error_chain::ChainedError;
 use hex::FromHex;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde_json::{from_str, from_value, Value};
 
 #[cfg(not(feature = "liquid"))]
@@ -461,7 +461,7 @@ impl Daemon {
         &'a self,
         method: &'a str,
         params_list: Vec<Value>,
-    ) -> impl ParallelIterator<Item = Result<Value>> + 'a {
+    ) -> impl ParallelIterator<Item = Result<Value>> + IndexedParallelIterator + 'a {
         self.rpc_threads.install(move || {
             params_list.into_par_iter().map(move |params| {
                 // Store a local per-thread Daemon, each with its own TCP connection. These will
@@ -537,7 +537,7 @@ impl Daemon {
 
     /// Fetch the given transactions in parallel over multiple threads and RPC connections,
     /// ignoring any missing ones and returning whatever is available.
-    pub fn gettransactions_available(&self, txids: &[&Txid]) -> Result<Vec<Transaction>> {
+    pub fn gettransactions_available(&self, txids: &[&Txid]) -> Result<Vec<(Txid, Transaction)>> {
         const RPC_INVALID_ADDRESS_OR_KEY: i64 = -5;
 
         let params_list: Vec<Value> = txids
@@ -546,8 +546,9 @@ impl Daemon {
             .collect();
 
         self.requests_iter("getrawtransaction", params_list)
-            .filter_map(|res| match res {
-                Ok(val) => Some(tx_from_value(val)),
+            .zip(txids)
+            .filter_map(|(res, txid)| match res {
+                Ok(val) => Some(tx_from_value(val).map(|tx| (**txid, tx))),
                 // Ignore 'tx not found' errors
                 Err(Error(ErrorKind::RpcError(code, _, _), _))
                     if code == RPC_INVALID_ADDRESS_OR_KEY =>
