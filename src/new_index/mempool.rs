@@ -519,6 +519,15 @@ impl Mempool {
                 .iter()
                 .filter(|&txid| !fetched_txs.contains_key(txid) && !indexed_txids.contains(txid))
                 .collect::<Vec<_>>();
+            if new_txids.is_empty() {
+                break;
+            }
+            debug!(
+                "mempool with total {} txs, {} fetched, {} missing",
+                all_txids.len(),
+                indexed_txids.len() + fetched_txs.len(),
+                new_txids.len()
+            );
             let new_txs = daemon.gettransactions_available(&new_txids)?;
 
             // Abort if the chain tip moved while fetching transactions
@@ -557,6 +566,8 @@ impl Mempool {
                 mempool.update_backlog_stats();
             }
         }
+
+        trace!("mempool is synced");
 
         Ok(true)
     }
