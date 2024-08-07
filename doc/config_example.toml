@@ -33,7 +33,8 @@ log_filters = "INFO"
 # How to broadcast transactions.
 # - "rpc" : use bitcoind to broadcast the TX directly
 # - "pushtx-clear" : send the transaction to random bitcoin peers resolved from DNS seeds directly over clearnet
-#                    (bad for privacy, don't use this unless you know what you're doing)
+#                    (bad for privacy, don't use this unless you have protected the outbound connections via
+#                    other means, such as a VPN)
 # - "pushtx-tor" : send the transaction to random bitcoin peers resolved from DNS seeds over a TOR proxy
 # - "script" : pass the hex-encoded transaction to a script (specified by tx_broadcast_script)
 tx_broadcast_method = "rpc"
