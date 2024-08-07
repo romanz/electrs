@@ -401,28 +401,25 @@ impl Config {
             std::process::exit(0);
         }
 
-        if config.tx_broadcast_script.is_some()
-            && config.tx_broadcast_method != TxBroadcastMethodConfigOption::Script
-        {
-            eprintln!(
-                "Error: tx_broadcast_script must not be configured if tx_broadcast_method != \"script\""
-            );
-            std::process::exit(1);
-        }
-
-        let tx_broadcast_method = match config.tx_broadcast_method {
-            TxBroadcastMethodConfigOption::Script => match config.tx_broadcast_script {
-                None => {
-                    eprintln!(
+        let tx_broadcast_method = match (config.tx_broadcast_method, config.tx_broadcast_script) {
+            (TxBroadcastMethodConfigOption::Script, Some(script_path)) => {
+                TxBroadcastMethod::Script(script_path)
+            }
+            (TxBroadcastMethodConfigOption::BitcoinRPC, None) => TxBroadcastMethod::BitcoinRPC,
+            (TxBroadcastMethodConfigOption::PushtxClear, None) => TxBroadcastMethod::PushtxClear,
+            (TxBroadcastMethodConfigOption::PushtxTor, None) => TxBroadcastMethod::PushtxTor,
+            (TxBroadcastMethodConfigOption::Script, None) => {
+                eprintln!(
                         "Error: tx_broadcast_script must be configured if tx_broadcast_method == \"script\""
                     );
-                    std::process::exit(1);
-                }
-                Some(script_path) => TxBroadcastMethod::Script(script_path),
-            },
-            TxBroadcastMethodConfigOption::BitcoinRPC => TxBroadcastMethod::BitcoinRPC,
-            TxBroadcastMethodConfigOption::PushtxClear => TxBroadcastMethod::PushtxClear,
-            TxBroadcastMethodConfigOption::PushtxTor => TxBroadcastMethod::PushtxTor,
+                std::process::exit(1);
+            }
+            (_, Some(_)) => {
+                eprintln!(
+                "Error: tx_broadcast_script must not be configured if tx_broadcast_method != \"script\""
+            );
+                std::process::exit(1);
+            }
         };
 
         let config = Config {
