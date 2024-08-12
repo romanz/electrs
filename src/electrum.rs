@@ -13,7 +13,6 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
 use std::iter::FromIterator;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::{
     cache::Cache,
@@ -125,7 +124,7 @@ pub struct Rpc {
     tracker: Tracker,
     cache: Cache,
     rpc_duration: Histogram,
-    daemon: Arc<Daemon>,
+    daemon: Daemon,
     tx_broadcaster: TxBroadcaster,
     signal: Signal,
     banner: String,
@@ -144,15 +143,11 @@ impl Rpc {
 
         let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
-        let daemon = Arc::new(Daemon::connect(
-            config,
-            signal.exit_flag(),
-            tracker.metrics(),
-        )?);
+        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
         let cache = Cache::new(tracker.metrics());
 
         let tx_broadcaster = match &config.tx_broadcast_method {
-            TxBroadcastMethod::BitcoinRPC => TxBroadcaster::BitcoinRPC(daemon.clone()),
+            TxBroadcastMethod::BitcoinRPC => TxBroadcaster::BitcoinRPC,
             TxBroadcastMethod::PushtxClear => TxBroadcaster::PushtxClear,
             TxBroadcastMethod::PushtxTor => TxBroadcaster::PushtxTor,
             TxBroadcastMethod::Script(script_path) => TxBroadcaster::Script(script_path.clone()),
@@ -376,7 +371,7 @@ impl Rpc {
     fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
         let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
-        let txid = self.tx_broadcaster.broadcast(&tx)?;
+        let txid = self.tx_broadcaster.broadcast(&self.daemon, &tx)?;
         Ok(json!(txid))
     }
 

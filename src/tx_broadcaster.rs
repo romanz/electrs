@@ -1,13 +1,11 @@
 use anyhow::{bail, Result};
 use bitcoin::{Transaction, Txid};
 
-use std::sync::Arc;
-
 use crate::daemon::Daemon;
 
 /// Represents one of many possible ways of broadcasting transactions.
 pub enum TxBroadcaster {
-    BitcoinRPC(Arc<Daemon>),
+    BitcoinRPC,
     PushtxClear,
     PushtxTor,
     Script(String),
@@ -67,9 +65,9 @@ fn broadcast_with_pushtx(tx: &Transaction, opts: pushtx::Opts) -> Result<Txid> {
 }
 
 impl TxBroadcaster {
-    pub fn broadcast(&self, tx: &Transaction) -> Result<Txid> {
+    pub fn broadcast(&self, daemon: &Daemon, tx: &Transaction) -> Result<Txid> {
         match self {
-            TxBroadcaster::BitcoinRPC(daemon) => daemon.broadcast(tx),
+            TxBroadcaster::BitcoinRPC => daemon.broadcast(tx),
             TxBroadcaster::PushtxClear => broadcast_with_pushtx(
                 tx,
                 pushtx::Opts {
