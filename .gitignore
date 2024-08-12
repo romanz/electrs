@@ -5,3 +5,4 @@ target
 *~
 *.pyc
 result
+.direnv
