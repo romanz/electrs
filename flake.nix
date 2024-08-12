@@ -36,8 +36,7 @@
           nativeBuildInputs = with pkgs; [ rustToolchain clang ]; # required only at build time
           buildInputs = with pkgs; [ ]; # also required at runtime
 
-          commonArgs = {
-            inherit src buildInputs nativeBuildInputs;
+          envVars = {
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
             ELEMENTSD_SKIP_DOWNLOAD = true;
             BITCOIND_SKIP_DOWNLOAD = true;
@@ -46,8 +45,12 @@
             # link rocksdb dynamically
             ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
             ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
-
           };
+
+          commonArgs = {
+            inherit src buildInputs nativeBuildInputs;
+          } // envVars;
+
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           bin = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts;
@@ -62,7 +65,6 @@
             # TODO: do testing by providing executables via *_EXE env var for {bitcoin,elements,electrum}d
             doCheck = false;
           });
-
 
         in
         with pkgs;
@@ -84,19 +86,9 @@
             program = "${bin}/bin/electrs";
           };
 
-
-          devShells.default = mkShell {
+          devShells.default = mkShell (envVars // {
             inputsFrom = [ bin ];
-            LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
-            ELEMENTSD_SKIP_DOWNLOAD = true;
-            BITCOIND_SKIP_DOWNLOAD = true;
-            ELECTRUMD_SKIP_DOWNLOAD = true;
-
-            # to link rocksdb dynamically
-            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
-            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
-
-          };
+          });
         }
       );
 }
