@@ -20,7 +20,10 @@
     flake-utils.lib.eachDefaultSystem
       (system:
         let
-          overlays = [ (import rust-overlay) ];
+          overlays = [
+            (import rust-overlay)
+            (import ./rocksdb-overlay.nix)
+          ];
           pkgs = import nixpkgs {
             inherit system overlays;
           };
@@ -28,7 +31,7 @@
 
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-          src = craneLib.cleanCargoSource ./.; 
+          src = craneLib.cleanCargoSource ./.;
 
           nativeBuildInputs = with pkgs; [ rustToolchain clang ]; # required only at build time
           buildInputs = with pkgs; [ ]; # also required at runtime
@@ -39,6 +42,11 @@
             ELEMENTSD_SKIP_DOWNLOAD = true;
             BITCOIND_SKIP_DOWNLOAD = true;
             ELECTRUMD_SKIP_DOWNLOAD = true;
+
+            # link rocksdb dynamically
+            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
+            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           bin = craneLib.buildPackage (commonArgs // {
@@ -80,6 +88,11 @@
           devShells.default = mkShell {
             inputsFrom = [ bin ];
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
+
+            # to link rocksdb dynamically
+            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
+            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+
           };
         }
       );
