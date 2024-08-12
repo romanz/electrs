@@ -57,7 +57,7 @@ impl TestRunner {
         }
 
         // Setup node
-        let node = NodeD::with_conf(noded::downloaded_exe_path().unwrap(), &node_conf).unwrap();
+        let node = NodeD::with_conf(noded::exe_path().unwrap(), &node_conf).unwrap();
 
         #[cfg(not(feature = "liquid"))]
         let (node_client, params) = (&node.client, &node.params);

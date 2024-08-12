@@ -23,8 +23,7 @@ fn test_electrum() -> Result<()> {
     let server_arg = format!("{}:t", electrum_addr.to_string());
     electrum_wallet_conf.args = vec!["-v", "--server", &server_arg];
     electrum_wallet_conf.view_stdout = true;
-    let electrum_wallet =
-        ElectrumD::with_conf(electrumd::downloaded_exe_path()?, &electrum_wallet_conf)?;
+    let electrum_wallet = ElectrumD::with_conf(electrumd::exe_path()?, &electrum_wallet_conf)?;
 
     let notify_wallet = || {
         electrum_server.notify();
