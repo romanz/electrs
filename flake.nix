@@ -88,6 +88,9 @@
           devShells.default = mkShell {
             inputsFrom = [ bin ];
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib"; # for rocksdb
+            ELEMENTSD_SKIP_DOWNLOAD = true;
+            BITCOIND_SKIP_DOWNLOAD = true;
+            ELECTRUMD_SKIP_DOWNLOAD = true;
 
             # to link rocksdb dynamically
             ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
