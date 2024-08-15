@@ -73,7 +73,7 @@
             {
               # that way we can build `bin` specifically,
               # but it's also the default.
-              inherit bin;
+              inherit bin binLiquid;
               default = bin;
             };
 
