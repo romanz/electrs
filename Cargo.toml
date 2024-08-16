@@ -85,4 +85,4 @@ rev = "d3792352992a539afffbe11501d1aff9fd5b919d"            # add-peer branch
 # not yet published on crates.io
 [patch.crates-io.electrumd]
 git = "https://github.com/shesek/electrumd"
-rev = "996fe2a8e563bc1bde6bbc2e0c2a2f4421abcdbc"
+rev = "b35d9db285d932cb3c2296beab65e571a2506349"
