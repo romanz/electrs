@@ -316,22 +316,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoind"
-version = "0.34.1"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f50548a349632abb9a2007d431a302bf0401a786c91f809ff31765fba87e2397"
-dependencies = [
- "anyhow",
- "bitcoincore-rpc",
- "log",
- "tempfile",
- "which",
-]
-
-[[package]]
-name = "bitcoind"
-version = "0.35.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09db6b30b527263d2e3a8768a2c9299763858cb84d01a9d63d174b9f515e1a32"
+checksum = "2542fac51d8cd8fce6109f4a3ffd1acfdaa3394c36d4a8207af15b8b0540e2fc"
 dependencies = [
  "anyhow",
  "bitcoin_hashes 0.13.0",
@@ -751,7 +738,7 @@ dependencies = [
  "bincode",
  "bitcoin 0.31.2",
  "bitcoin-test-data",
- "bitcoind 0.35.1",
+ "bitcoind",
  "clap 2.34.0",
  "criterion",
  "crossbeam-channel",
@@ -833,12 +820,12 @@ dependencies = [
 
 [[package]]
 name = "elementsd"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f17022ca1a790518f66c46c40ab729cc275f8a009babad583972a946a851cadf"
+checksum = "19b08013ae0b60e4a3ac9d126e230338dec55575ddf7811aeaebb096f7c3abbf"
 dependencies = [
  "bitcoin_hashes 0.12.0",
- "bitcoind 0.34.1",
+ "bitcoind",
  "flate2",
  "minreq",
  "tar",

@@ -125,7 +125,7 @@ fn test_electrum() -> Result<()> {
         )?]),
     )?;
     notify_wallet();
-    assert_balance(0.3, -0.161);
+    assert_balance(0.139, 0.0);
 
     tester.mine()?;
     notify_wallet();

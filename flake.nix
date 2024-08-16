@@ -36,16 +36,22 @@
           nativeBuildInputs = with pkgs; [ rustToolchain clang ]; # required only at build time
           buildInputs = with pkgs; [ ]; # also required at runtime
 
-          envVars = {
-            LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-            ELEMENTSD_SKIP_DOWNLOAD = true;
-            BITCOIND_SKIP_DOWNLOAD = true;
-            ELECTRUMD_SKIP_DOWNLOAD = true;
+          envVars =
+            {
+              LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+              ELEMENTSD_SKIP_DOWNLOAD = true;
+              BITCOIND_SKIP_DOWNLOAD = true;
+              ELECTRUMD_SKIP_DOWNLOAD = true;
 
-            # link rocksdb dynamically
-            ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
-            ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
-          };
+              # link rocksdb dynamically
+              ROCKSDB_INCLUDE_DIR = "${pkgs.rocksdb}/include";
+              ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
+
+              # for integration testing
+              BITCOIND_EXE = "${pkgs.bitcoind}/bin/bitcoind";
+              ELEMENTSD_EXE = "${pkgs.elementsd}/bin/elementsd";
+              ELECTRUMD_EXE = "${pkgs.electrum}/bin/electrum";
+            };
 
           commonArgs = {
             inherit src buildInputs nativeBuildInputs;
@@ -54,16 +60,10 @@
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           bin = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts;
-
-            # TODO: do testing by providing executables via *_EXE env var for {bitcoin,elements,electrum}d
-            doCheck = false;
           });
           binLiquid = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts;
             cargoExtraArgs = "--features liquid";
-
-            # TODO: do testing by providing executables via *_EXE env var for {bitcoin,elements,electrum}d
-            doCheck = false;
           });
 
         in
