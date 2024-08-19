@@ -1,6 +1,8 @@
+use std::str::FromStr;
 use std::sync::{Arc, Once, RwLock};
 use std::{env, net};
 
+use log::LevelFilter;
 use stderrlog::StdErrLog;
 use tempfile::TempDir;
 
@@ -53,7 +55,7 @@ impl TestRunner {
             #[cfg(feature = "liquid")]
             node_conf.args.push("-anyonecanspendaremine=1");
 
-            node_conf.view_stdout = true;
+            node_conf.view_stdout = std::env::var_os("RUST_LOG").is_some();
         }
 
         // Setup node
@@ -310,7 +312,11 @@ fn generate(
 fn init_log() -> StdErrLog {
     static ONCE: Once = Once::new();
     let mut log = stderrlog::new();
-    log.verbosity(4);
+    match std::env::var("RUST_LOG") {
+        Ok(e) => log.verbosity(LevelFilter::from_str(&e).unwrap_or(LevelFilter::Off)),
+        Err(_) => log.verbosity(0),
+    };
+
     // log.timestamp(stderrlog::Timestamp::Millisecond        );
     ONCE.call_once(|| log.init().expect("logging initialization failed"));
     log
