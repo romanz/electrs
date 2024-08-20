@@ -978,8 +978,8 @@ fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRo
             let mut rows = vec![];
             let blockhash = full_hash(&b.entry.hash()[..]);
             let txids: Vec<Txid> = b.block.txdata.iter().map(|tx| tx.txid()).collect();
-            for tx in &b.block.txdata {
-                add_transaction(tx, blockhash, &mut rows, iconfig);
+            for (tx, txid) in b.block.txdata.iter().zip(txids.iter()) {
+                add_transaction(*txid, tx, blockhash, &mut rows, iconfig);
             }
 
             if !iconfig.light_mode {
@@ -996,6 +996,7 @@ fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRo
 }
 
 fn add_transaction(
+    txid: Txid,
     tx: &Transaction,
     blockhash: FullHash,
     rows: &mut Vec<DBRow>,
@@ -1007,7 +1008,7 @@ fn add_transaction(
         rows.push(TxRow::new(tx).into_row());
     }
 
-    let txid = full_hash(&tx.txid()[..]);
+    let txid = full_hash(&txid[..]);
     for (txo_index, txo) in tx.output.iter().enumerate() {
         if is_spendable(txo) {
             rows.push(TxOutRow::new(&txid, txo_index, txo).into_row());
