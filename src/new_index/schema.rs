@@ -1005,7 +1005,7 @@ fn add_transaction(
     rows.push(TxConfRow::new(txid, blockhash).into_row());
 
     if !iconfig.light_mode {
-        rows.push(TxRow::new(tx).into_row());
+        rows.push(TxRow::new(txid, tx).into_row());
     }
 
     let txid = full_hash(&txid[..]);
@@ -1183,8 +1183,8 @@ struct TxRow {
 }
 
 impl TxRow {
-    fn new(txn: &Transaction) -> TxRow {
-        let txid = full_hash(&txn.txid()[..]);
+    fn new(txid: Txid, txn: &Transaction) -> TxRow {
+        let txid = full_hash(&txid[..]);
         TxRow {
             key: TxRowKey { code: b'T', txid },
             value: serialize(txn),
