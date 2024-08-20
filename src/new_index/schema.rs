@@ -1002,7 +1002,7 @@ fn add_transaction(
     rows: &mut Vec<DBRow>,
     iconfig: &IndexerConfig,
 ) {
-    rows.push(TxConfRow::new(tx, blockhash).into_row());
+    rows.push(TxConfRow::new(txid, blockhash).into_row());
 
     if !iconfig.light_mode {
         rows.push(TxRow::new(tx).into_row());
@@ -1216,8 +1216,8 @@ struct TxConfRow {
 }
 
 impl TxConfRow {
-    fn new(txn: &Transaction, blockhash: FullHash) -> TxConfRow {
-        let txid = full_hash(&txn.txid()[..]);
+    fn new(txid: Txid, blockhash: FullHash) -> TxConfRow {
+        let txid = full_hash(&txid[..]);
         TxConfRow {
             key: TxConfKey {
                 code: b'C',
