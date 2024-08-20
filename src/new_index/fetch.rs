@@ -37,6 +37,7 @@ pub fn start_fetcher(
     fetcher(daemon, new_headers)
 }
 
+#[derive(Clone)]
 pub struct BlockEntry {
     pub block: Block,
     pub entry: HeaderEntry,

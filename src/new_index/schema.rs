@@ -1646,3 +1646,46 @@ impl GetAmountVal for confidential::Value {
         self
     }
 }
+
+// This is needed to bench private functions
+#[cfg(feature = "bench")]
+pub mod bench {
+    use crate::new_index::schema::IndexerConfig;
+    use crate::new_index::BlockEntry;
+    use crate::new_index::DBRow;
+    use crate::util::HeaderEntry;
+    use bitcoin::Block;
+
+    pub struct Data {
+        block_entry: BlockEntry,
+        iconfig: IndexerConfig,
+    }
+
+    impl Data {
+        pub fn new(block: Block) -> Data {
+            let iconfig = IndexerConfig {
+                light_mode: false,
+                address_search: false,
+                index_unspendables: false,
+                network: crate::chain::Network::Regtest,
+            };
+            let height = 702861;
+            let hash = block.block_hash();
+            let header = block.header.clone();
+            let block_entry = BlockEntry {
+                block,
+                entry: HeaderEntry::new(height, hash, header),
+                size: 0u32, // wrong but not needed for benching
+            };
+
+            Data {
+                block_entry,
+                iconfig,
+            }
+        }
+    }
+
+    pub fn add_blocks(data: &Data) -> Vec<DBRow> {
+        super::add_blocks(&[data.block_entry.clone()], &data.iconfig)
+    }
+}
