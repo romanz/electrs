@@ -80,8 +80,7 @@ dependencies = [
 [[package]]
 name = "bitcoin"
 version = "0.32.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
+source = "git+https://github.com/jlest01/rust-bitcoin.git?branch=bip352-silentpayments-module-v0#5ae56d12a54e15b6564cac22fa1ee2c0b2bb2ce7"
 dependencies = [
  "base58ck",
  "bech32",
@@ -140,8 +139,7 @@ dependencies = [
 [[package]]
 name = "bitcoin_slices"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8041a1be831c809ada090db2e3bd1469c65b72321bb2f31d7f56261eefc8321"
+source = "git+https://github.com/jlest01/bitcoin_slices.git?branch=bip352-silentpayments-module-v0#ee774c189a78f05f9fea1bfe987f6696c9acfa39"
 dependencies = [
  "bitcoin",
  "bitcoin_hashes",
@@ -151,8 +149,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
+source = "git+https://github.com/jlest01/rust-bitcoincore-rpc.git?branch=bip352-silentpayments-module-v0#0a0db4394487caa15684fe82840d67da057b3565"
 dependencies = [
  "bitcoincore-rpc-json",
  "jsonrpc",
@@ -164,8 +161,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
+source = "git+https://github.com/jlest01/rust-bitcoincore-rpc.git?branch=bip352-silentpayments-module-v0#0a0db4394487caa15684fe82840d67da057b3565"
 dependencies = [
  "bitcoin",
  "serde",
@@ -988,8 +984,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "secp256k1"
 version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
+source = "git+https://github.com/rust-bitcoin/rust-secp256k1.git?rev=refs/pull/721/head#c21714714a4d71bb2baf9468cfba7c253e54bf45"
 dependencies = [
  "bitcoin_hashes",
  "rand",
@@ -1000,8 +995,7 @@ dependencies = [
 [[package]]
 name = "secp256k1-sys"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1433bd67156263443f14d603720b082dd3121779323fce20cba2aa07b874bc1b"
+source = "git+https://github.com/rust-bitcoin/rust-secp256k1.git?rev=refs/pull/721/head#c21714714a4d71bb2baf9468cfba7c253e54bf45"
 dependencies = [
  "cc",
 ]
