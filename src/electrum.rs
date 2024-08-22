@@ -529,7 +529,18 @@ impl Rpc {
             Err(response) => return response, // params parsing may fail - the response contains request id
         };
         self.rpc_duration.observe_duration(&call.method, || {
-            if self.tracker.status().is_err() {
+            let is_sp_indexing = self.tracker.silent_payments_index && self.tracker.sp_status().is_err();
+
+            if is_sp_indexing {
+                match &call.params {
+                    Params::SpTweaks(_) => {
+                        return error_msg(&call.id, RpcError::UnavailableIndex)
+                    }
+                    _ => (),
+                };
+            }
+
+            if is_sp_indexing || self.tracker.status().is_err() {
                 // Allow only a few RPC (for sync status notification) not requiring index DB being compacted.
                 match &call.params {
                     Params::BlockHeader(_)
