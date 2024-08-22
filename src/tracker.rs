@@ -25,7 +25,7 @@ pub struct Tracker {
     mempool: Mempool,
     metrics: Metrics,
     ignore_mempool: bool,
-    silent_payments_index: bool,
+    pub silent_payments_index: bool,
 }
 
 pub(crate) enum Error {
@@ -74,7 +74,10 @@ impl Tracker {
     }
 
     pub(crate) fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) -> Result<bool> {
-        let done = self.index.sync(daemon, exit_flag)?;
+        let mut done = self.index.sync(daemon, exit_flag)?;
+        if done {
+            done = self.index.silent_payments_sync(daemon, exit_flag)?;
+        }
         if done && !self.ignore_mempool {
             self.mempool.sync(daemon, exit_flag);
             // TODO: double check tip - and retry on diff
@@ -84,6 +87,13 @@ impl Tracker {
 
     pub(crate) fn status(&self) -> Result<(), Error> {
         if self.index.is_ready() {
+            return Ok(());
+        }
+        Err(Error::NotReady)
+    }
+
+    pub(crate) fn sp_status(&self) -> Result<(), Error> {
+        if self.index.is_sp_ready() {
             return Ok(());
         }
         Err(Error::NotReady)
