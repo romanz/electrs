@@ -25,6 +25,7 @@ pub struct Tracker {
     mempool: Mempool,
     metrics: Metrics,
     ignore_mempool: bool,
+    silent_payments_index: bool,
 }
 
 pub(crate) enum Error {
@@ -52,6 +53,7 @@ impl Tracker {
             mempool: Mempool::new(&metrics),
             metrics,
             ignore_mempool: config.ignore_mempool,
+            silent_payments_index: config.silent_payments_index,
         })
     }
 

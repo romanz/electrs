@@ -145,3 +145,7 @@ doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://
 name = "signet_magic"
 type = "String"
 doc = "network magic for custom signet network in hex format, as found in Bitcoin Core logs (signet only)"
+
+[[switch]]
+name = "silent_payments_index"
+doc = "Enable silent payments index."
