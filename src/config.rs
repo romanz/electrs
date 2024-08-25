@@ -146,6 +146,7 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub signet_magic: Magic,
+    pub silent_payments_index: bool,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -368,6 +369,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             signet_magic: magic,
+            silent_payments_index: config.silent_payments_index,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",

@@ -22,9 +22,9 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.32.2", features = ["serde", "rand-std"] }
-bitcoin_slices = { version = "0.8", features = ["bitcoin", "sha2"] }
-bitcoincore-rpc = { version = "0.19.0" }
+bitcoin = { git = "https://github.com/jlest01/rust-bitcoin.git", branch = "bip352-silentpayments-module-v0", features = ["serde", "rand-std"] }
+bitcoin_slices = { git = "https://github.com/jlest01/bitcoin_slices.git", branch = "bip352-silentpayments-module-v0", features = ["bitcoin", "sha2"] }
+bitcoincore-rpc = {  git = "https://github.com/jlest01/rust-bitcoincore-rpc.git", branch = "bip352-silentpayments-module-v0" }
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
