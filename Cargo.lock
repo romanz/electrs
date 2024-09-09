@@ -276,9 +276,9 @@ dependencies = [
 
 [[package]]
 name = "configure_me_codegen"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2878e3458451e60138a59b3e19ffd00ae7df709a05aaac6aff3e87610ed3ea54"
+checksum = "d47e3f1ae619b1b7df4ed20a820a44c053e0b421e6d52f69d07320408568aab5"
 dependencies = [
  "cargo_toml",
  "fmt2io",
@@ -470,9 +470,9 @@ checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
 name = "fmt2io"
-version = "0.1.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9db8691f0820ad11ce6eb94057d0dd9c456500da04da0c12a85c90d6f979cc9"
+checksum = "6b6129284da9f7e5296cc22183a63f24300e945e297705dcc0672f7df01d62c8"
 
 [[package]]
 name = "fnv"
