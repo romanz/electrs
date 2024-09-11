@@ -460,7 +460,7 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use super::{rocksdb, DBStore, CURRENT_FORMAT};
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -519,27 +519,7 @@ mod tests {
 
     #[test]
     fn test_db_prefix_scan() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), None, true, 1).unwrap();
-
-        let items = [
-            *b"ab          ",
-            *b"abcdefgh    ",
-            *b"abcdefghj   ",
-            *b"abcdefghjk  ",
-            *b"abcdefghxyz ",
-            *b"abcdefgi    ",
-            *b"b           ",
-            *b"c           ",
-        ];
-
-        store.write(&WriteBatch {
-            txid_rows: items.to_vec(),
-            ..Default::default()
-        });
-
-        let rows = store.iter_txid(*b"abcdefgh");
-        assert_eq!(rows.collect::<Vec<_>>(), items[1..5]);
+        super::super::test_db_prefix_scan::<DBStore>();
     }
 
     #[test]

@@ -278,3 +278,13 @@ impl DBStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DBStore;
+
+    #[test]
+    fn test_db_prefix_scan() {
+        super::super::test_db_prefix_scan::<DBStore>();
+    }
+}

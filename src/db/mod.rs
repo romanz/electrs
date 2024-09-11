@@ -91,3 +91,28 @@ pub(crate) fn hash_prefix_range(prefix: HashPrefix) -> impl RangeBounds<Serializ
 
     lower..=upper
 }
+
+#[cfg(test)]
+pub(crate) fn test_db_prefix_scan<D: Database>() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = D::open(dir.path(), None, true, 1).unwrap();
+
+    let items = [
+        *b"ab          ",
+        *b"abcdefgh    ",
+        *b"abcdefghj   ",
+        *b"abcdefghjk  ",
+        *b"abcdefghxyz ",
+        *b"abcdefgi    ",
+        *b"b           ",
+        *b"c           ",
+    ];
+
+    store.write(&WriteBatch {
+        txid_rows: items.to_vec(),
+        ..Default::default()
+    });
+
+    let rows = store.iter_txid(*b"abcdefgh");
+    assert_eq!(rows.collect::<Vec<_>>(), items[1..5]);
+}
