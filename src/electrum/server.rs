@@ -555,7 +555,8 @@ impl Connection {
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    self.handle_value(cmd, &empty_params, start_time)?;
+                    let reply = self.handle_value(cmd, &empty_params, start_time)?;
+                    self.send_values(&[reply])?
                 }
                 Message::PeriodicUpdate => {
                     let values = self
@@ -573,7 +574,7 @@ impl Connection {
         cmd: Value,
         empty_params: &Value,
         start_time: Instant,
-    ) -> Result<()> {
+    ) -> Result<Value> {
         Ok(
             match (
                 cmd.get("method"),
@@ -608,7 +609,7 @@ impl Connection {
                         })
                     );
 
-                    self.send_values(&[reply])?
+                    reply
                 }
                 _ => {
                     bail!("invalid command: {}", cmd)
