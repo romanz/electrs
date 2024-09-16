@@ -555,49 +555,7 @@ impl Connection {
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    match (
-                        cmd.get("method"),
-                        cmd.get("params").unwrap_or_else(|| &empty_params),
-                        cmd.get("id"),
-                    ) {
-                        (
-                            Some(&Value::String(ref method)),
-                            &Value::Array(ref params),
-                            Some(ref id),
-                        ) => {
-                            conditionally_log_rpc_event!(
-                                self,
-                                json!({
-                                    "event": "rpc request",
-                                    "id": id,
-                                    "method": method,
-                                    "params": if let Some(RpcLogging::Full) = self.rpc_logging {
-                                        json!(params)
-                                    } else {
-                                        Value::Null
-                                    }
-                                })
-                            );
-
-                            let reply = self.handle_command(method, params, id)?;
-
-                            conditionally_log_rpc_event!(
-                                self,
-                                json!({
-                                    "event": "rpc response",
-                                    "method": method,
-                                    "payload_size": reply.to_string().as_bytes().len(),
-                                    "duration_micros": start_time.elapsed().as_micros(),
-                                    "id": id,
-                                })
-                            );
-
-                            self.send_values(&[reply])?
-                        }
-                        _ => {
-                            bail!("invalid command: {}", cmd)
-                        }
-                    }
+                    self.handle_value(cmd, &empty_params, start_time)?;
                 }
                 Message::PeriodicUpdate => {
                     let values = self
@@ -608,6 +566,55 @@ impl Connection {
                 Message::Done => return Ok(()),
             }
         }
+    }
+
+    fn handle_value(
+        &mut self,
+        cmd: Value,
+        empty_params: &Value,
+        start_time: Instant,
+    ) -> Result<()> {
+        Ok(
+            match (
+                cmd.get("method"),
+                cmd.get("params").unwrap_or_else(|| empty_params),
+                cmd.get("id"),
+            ) {
+                (Some(&Value::String(ref method)), &Value::Array(ref params), Some(ref id)) => {
+                    conditionally_log_rpc_event!(
+                        self,
+                        json!({
+                            "event": "rpc request",
+                            "id": id,
+                            "method": method,
+                            "params": if let Some(RpcLogging::Full) = self.rpc_logging {
+                                json!(params)
+                            } else {
+                                Value::Null
+                            }
+                        })
+                    );
+
+                    let reply = self.handle_command(method, params, id)?;
+
+                    conditionally_log_rpc_event!(
+                        self,
+                        json!({
+                            "event": "rpc response",
+                            "method": method,
+                            "payload_size": reply.to_string().as_bytes().len(),
+                            "duration_micros": start_time.elapsed().as_micros(),
+                            "id": id,
+                        })
+                    );
+
+                    self.send_values(&[reply])?
+                }
+                _ => {
+                    bail!("invalid command: {}", cmd)
+                }
+            },
+        )
     }
 
     #[trace]
