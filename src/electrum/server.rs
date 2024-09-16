@@ -555,8 +555,17 @@ impl Connection {
             match msg {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
-                    let reply = self.handle_value(cmd, &empty_params, start_time)?;
-                    self.send_values(&[reply])?
+                    if let Value::Array(arr) = cmd {
+                        let mut result = Vec::with_capacity(arr.len());
+                        for el in arr {
+                            let reply = self.handle_value(el, &empty_params, start_time)?;
+                            result.push(reply)
+                        }
+                        self.send_values(&[Value::Array(result)])?
+                    } else {
+                        let reply = self.handle_value(cmd, &empty_params, start_time)?;
+                        self.send_values(&[reply])?
+                    }
                 }
                 Message::PeriodicUpdate => {
                     let values = self

@@ -156,6 +156,12 @@ fn test_electrum_raw() {
     let s = write_and_read(&mut stream, write);
     let expected = "{\"id\":0,\"jsonrpc\":\"2.0\",\"result\":[\"electrs-esplora 0.4.1\",\"1.4\"]}";
     assert_eq!(s, expected);
+
+    let write = "[{\"jsonrpc\": \"2.0\", \"method\": \"server.version\", \"id\": 0}]";
+    let s = write_and_read(&mut stream, write);
+    let expected =
+        "[{\"id\":0,\"jsonrpc\":\"2.0\",\"result\":[\"electrs-esplora 0.4.1\",\"1.4\"]}]";
+    assert_eq!(s, expected);
 }
 
 fn write_and_read(stream: &mut TcpStream, write: &str) -> String {
