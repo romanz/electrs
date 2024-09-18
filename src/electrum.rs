@@ -26,7 +26,7 @@ use crate::{
     types::ScriptHash,
 };
 
-const PROTOCOL_VERSION: &str = "1.4";
+const PROTOCOL_VERSION: &str = "1.5";
 const UNKNOWN_FEE: isize = -1; // (allowed by Electrum protocol)
 
 const UNSUBSCRIBED_QUERY_MESSAGE: &str = "your wallet uses less efficient method of querying electrs, consider contacting the developer of your wallet. Reason:";
@@ -364,6 +364,26 @@ impl Rpc {
         Ok(json!(txid))
     }
 
+    fn testmempoolaccept(&self, (txs_hex,): &(String,)) -> Result<Value> {
+        let tx_hex_vec: Vec<String> = txs_hex.split(',').map(|s| s.trim().to_string()).collect();
+
+        let txs = tx_hex_vec
+            .iter()
+            .map(|tx_hex| {
+                let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
+                let tx = deserialize(&tx_bytes).context("invalid transaction")?;
+                Ok(tx)
+            })
+            .collect::<Result<Vec<bitcoin::Transaction>>>()?;
+
+        let txs_ref: Vec<&bitcoin::Transaction> = txs.iter().collect();
+        let txs_arr = txs_ref.as_slice();
+
+        let result = self.daemon.test_mempool_accept(txs_arr).unwrap();
+
+        Ok(json!(result))
+    }
+
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
         let (txid, verbose) = args.into();
         if verbose {
@@ -557,6 +577,7 @@ impl Rpc {
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
+                Params::TestMempoolAccept(args) => self.testmempoolaccept(args),
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
@@ -573,6 +594,7 @@ enum Params {
     BlockHeader((usize,)),
     BlockHeaders((usize, usize)),
     TransactionBroadcast((String,)),
+    TestMempoolAccept((String,)),
     Donation,
     EstimateFee((u16,)),
     Features,
@@ -606,6 +628,7 @@ impl Params {
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
             "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
+            "blockchain.mempool.testmempoolaccept" => Params::TestMempoolAccept(convert(params)?),
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
             "blockchain.transaction.id_from_pos" => {

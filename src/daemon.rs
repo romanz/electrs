@@ -173,6 +173,15 @@ impl Daemon {
             .context("failed to broadcast transaction")
     }
 
+    pub(crate) fn test_mempool_accept(
+        &self,
+        txs: &[&Transaction],
+    ) -> Result<Vec<json::TestMempoolAcceptResult>> {
+        self.rpc
+            .test_mempool_accept(txs)
+            .context("failed to broadcast transaction")
+    }
+
     pub(crate) fn get_transaction_info(
         &self,
         txid: &Txid,
