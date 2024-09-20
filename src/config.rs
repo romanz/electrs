@@ -41,6 +41,12 @@ pub struct Config {
     pub electrum_banner: String,
     pub electrum_rpc_logging: Option<RpcLogging>,
 
+    /// Enable compaction during initial sync
+    ///
+    /// By default compaction is off until initial sync is finished for performance reasons,
+    /// however, this requires much more disk space.
+    pub initial_sync_compaction: bool,
+
     #[cfg(feature = "liquid")]
     pub parent_network: BNetwork,
     #[cfg(feature = "liquid")]
@@ -191,6 +197,10 @@ impl Config {
                     .long("electrum-rpc-logging")
                     .help(&rpc_logging_help)
                     .takes_value(true),
+            ).arg(
+                Arg::with_name("initial_sync_compaction")
+                    .long("initial-sync-compaction")
+                    .help("Perform compaction during initial sync (slower but less disk space required)")
             );
 
         #[cfg(unix)]
@@ -403,6 +413,7 @@ impl Config {
             index_unspendables: m.is_present("index_unspendables"),
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
+            initial_sync_compaction: m.is_present("initial_sync_compaction"),
 
             #[cfg(feature = "liquid")]
             parent_network,

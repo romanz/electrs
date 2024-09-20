@@ -90,7 +90,7 @@ impl DB {
         db_opts.set_compression_type(rocksdb::DBCompressionType::Snappy);
         db_opts.set_target_file_size_base(1_073_741_824);
         db_opts.set_write_buffer_size(256 << 20);
-        db_opts.set_disable_auto_compactions(true); // for initial bulk load
+        db_opts.set_disable_auto_compactions(!config.initial_sync_compaction); // for initial bulk load
 
         // db_opts.set_advise_random_on_open(???);
         db_opts.set_compaction_readahead_size(1 << 20);

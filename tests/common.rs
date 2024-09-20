@@ -113,6 +113,7 @@ impl TestRunner {
             asset_db_path: None, // XXX
             #[cfg(feature = "liquid")]
             parent_network: bitcoin::Network::Regtest,
+            initial_sync_compaction: false,
             //#[cfg(feature = "electrum-discovery")]
             //electrum_public_hosts: Option<crate::electrum::ServerHosts>,
             //#[cfg(feature = "electrum-discovery")]
