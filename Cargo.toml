@@ -52,7 +52,13 @@ url = "2.2.0"
 hyper = "0.14"
 hyperlocal = "0.8"
 # close to same tokio version as dependent by hyper v0.14 and hyperlocal 0.8 -- things can go awry if they mismatch
-tokio = { version = "1", features = ["sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "rt"] }
+opentelemetry = { version = "0.20.0", features = ["rt-tokio"] }
+tracing-opentelemetry = "0.21.0"
+opentelemetry-otlp = { version = "0.13.0", default-features = false, features = ["http-proto", "reqwest-client"] }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+opentelemetry-semantic-conventions = "0.12.0"
+tracing = { version = "0.1.40", features = ["async-await", "log"] }
 
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.8", optional = true }
