@@ -154,7 +154,7 @@ impl DB {
     }
 
     pub fn write(&self, mut rows: Vec<DBRow>, flush: DBFlush) {
-        debug!(
+        log::trace!(
             "writing {} rows to {:?}, flush={:?}",
             rows.len(),
             self.db,
