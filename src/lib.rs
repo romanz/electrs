@@ -29,3 +29,12 @@ pub mod util;
 
 #[cfg(feature = "liquid")]
 pub mod elements;
+
+#[cfg(not(any(feature = "otlp-tracing", feature = "no-otlp-tracing")))]
+compile_error!("Must enable one of the 'otlp-tracing' or 'no-otlp-tracing' features");
+
+#[cfg(all(feature = "otlp-tracing", feature = "no-otlp-tracing"))]
+compile_error!("Cannot enable both the 'otlp-tracing' and 'no-otlp-tracing' (default) features");
+
+#[cfg(feature = "otlp-tracing")]
+pub mod otlp_trace;

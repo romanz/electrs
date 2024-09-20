@@ -21,6 +21,9 @@ use electrs::{
     signal::Waiter,
 };
 
+#[cfg(feature = "otlp-tracing")]
+use electrs::otlp_trace;
+
 #[cfg(feature = "liquid")]
 use electrs::elements::AssetRegistry;
 use electrs::metrics::MetricOpts;
@@ -148,10 +151,22 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     Ok(())
 }
 
-fn main() {
+fn main_() {
     let config = Arc::new(Config::from_args());
     if let Err(e) = run_server(config) {
         error!("server failed: {}", e.display_chain());
         process::exit(1);
     }
+}
+
+#[cfg(feature = "no-otlp-tracing")]
+fn main() {
+    main_();
+}
+
+#[cfg(feature = "otlp-tracing")]
+#[tokio::main]
+async fn main() {
+    let _tracing_guard = otlp_trace::init_tracing("electrs");
+    main_()
 }

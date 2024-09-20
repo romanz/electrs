@@ -383,7 +383,6 @@ impl ChainQuery {
 
     pub fn get_block_txids(&self, hash: &BlockHash) -> Option<Vec<Txid>> {
         let _timer = self.start_timer("get_block_txids");
-
         if self.light_mode {
             // TODO fetch block as binary from REST API instead of as hex
             let mut blockinfo = self.daemon.getblock_raw(hash, 1).ok()?;
@@ -464,6 +463,7 @@ impl ChainQuery {
             &TxHistoryRow::prefix_height(code, &hash[..], start_height as u32),
         )
     }
+
     fn history_iter_scan_reverse(&self, code: u8, hash: &[u8]) -> ReverseScanIterator {
         self.store.history_db.iter_scan_reverse(
             &TxHistoryRow::filter(code, &hash[..]),
@@ -885,6 +885,7 @@ impl ChainQuery {
                 })
             })
     }
+
     pub fn tx_confirming_block(&self, txid: &Txid) -> Option<BlockId> {
         let _timer = self.start_timer("tx_confirming_block");
         let headers = self.store.indexed_headers.read().unwrap();

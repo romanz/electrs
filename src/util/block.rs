@@ -9,6 +9,8 @@ use std::slice;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime as DateTime;
 
+use tracing::instrument;
+
 const MTP_SPAN: usize = 11;
 
 lazy_static! {
@@ -92,6 +94,7 @@ impl HeaderList {
         }
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     pub fn new(
         mut headers_map: HashMap<BlockHash, BlockHeader>,
         tip_hash: BlockHash,
@@ -129,6 +132,7 @@ impl HeaderList {
         headers
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     pub fn order(&self, new_headers: Vec<BlockHeader>) -> Vec<HeaderEntry> {
         // header[i] -> header[i-1] (i.e. header.last() is the tip)
         struct HashedHeader {
@@ -168,6 +172,7 @@ impl HeaderList {
             .collect()
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     pub fn apply(&mut self, new_headers: Vec<HeaderEntry>) {
         // new_headers[i] -> new_headers[i - 1] (i.e. new_headers.last() is the tip)
         for i in 1..new_headers.len() {
@@ -205,6 +210,7 @@ impl HeaderList {
         }
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     pub fn header_by_blockhash(&self, blockhash: &BlockHash) -> Option<&HeaderEntry> {
         let height = self.heights.get(blockhash)?;
         let header = self.headers.get(*height)?;
@@ -215,6 +221,7 @@ impl HeaderList {
         }
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     pub fn header_by_height(&self, height: usize) -> Option<&HeaderEntry> {
         self.headers.get(height).map(|entry| {
             assert_eq!(entry.height(), height);

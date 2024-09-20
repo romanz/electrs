@@ -13,6 +13,8 @@ use crypto::sha2::Sha256;
 use error_chain::ChainedError;
 use serde_json::{from_str, Value};
 
+use tracing::instrument;
+
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize_hex;
 #[cfg(feature = "liquid")]
@@ -69,6 +71,7 @@ fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<
 }
 
 // TODO: implement caching and delta updates
+#[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
 fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<FullHash> {
     if txs.is_empty() {
         None
@@ -261,6 +264,7 @@ impl Connection {
         }))
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let conf_target = usize_from_value(params.get(0), "blocks_count")?;
         let fee_rate = self
@@ -388,6 +392,7 @@ impl Connection {
         Ok(json!(rawtx.to_lower_hex_string()))
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let txid = Txid::from(hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?);
         let height = usize_from_value(params.get(1), "height")?;
@@ -425,12 +430,14 @@ impl Connection {
         }))
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!(), method = %method))]
     fn handle_command(&mut self, method: &str, params: &[Value], id: &Value) -> Result<Value> {
         let timer = self
             .stats
             .latency
             .with_label_values(&[method])
             .start_timer();
+
         let result = match method {
             "blockchain.block.header" => self.blockchain_block_header(&params),
             "blockchain.block.headers" => self.blockchain_block_headers(&params),
@@ -480,6 +487,7 @@ impl Connection {
         })
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
         let timer = self
             .stats
@@ -537,6 +545,7 @@ impl Connection {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     fn handle_replies(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let empty_params = json!([]);
         loop {
@@ -601,6 +610,7 @@ impl Connection {
         }
     }
 
+    #[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
     fn parse_requests(mut reader: BufReader<TcpStream>, tx: &SyncSender<Message>) -> Result<()> {
         loop {
             let mut line = Vec::<u8>::new();
@@ -663,6 +673,7 @@ impl Connection {
     }
 }
 
+#[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
 fn get_history(
     query: &Query,
     scripthash: &[u8],
