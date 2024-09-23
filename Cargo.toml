@@ -10,6 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
+default-run = "electrs"
 
 [features]
 liquid = ["elements"]
