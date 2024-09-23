@@ -15,7 +15,7 @@ use electrs::{
     electrum::RPC as ElectrumRPC,
     errors::*,
     metrics::Metrics,
-    new_index::{precache, ChainQuery, FetchFrom, Indexer, Mempool, Query, Store},
+    new_index::{precache, zmq, ChainQuery, FetchFrom, Indexer, Mempool, Query, Store},
     rest,
     signal::Waiter,
 };
@@ -44,6 +44,10 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let signal = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
+
+    if let Some(zmq_addr) = config.zmq_addr.as_ref() {
+        zmq::start(&format!("tcp://{zmq_addr}"), None);
+    }
 
     let daemon = Arc::new(Daemon::new(
         &config.daemon_dir,

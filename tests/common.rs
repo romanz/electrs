@@ -109,6 +109,7 @@ impl TestRunner {
             electrum_txs_limit: 100,
             electrum_banner: "".into(),
             electrum_rpc_logging: None,
+            zmq_addr: None,
 
             #[cfg(feature = "liquid")]
             asset_db_path: None, // XXX

@@ -57,6 +57,7 @@ tokio = { version = "1", features = ["sync", "macros"] }
 
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.8", optional = true }
+zmq = "0.10.0"
 
 
 [dev-dependencies]
