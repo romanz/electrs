@@ -139,9 +139,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_slices"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8041a1be831c809ada090db2e3bd1469c65b72321bb2f31d7f56261eefc8321"
+checksum = "b0c2d2aa6c95757d94701123e5da8392fef1a4b8462564045d9309a8e11b0d22"
 dependencies = [
  "bitcoin",
  "bitcoin_hashes",
