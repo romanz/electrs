@@ -25,6 +25,7 @@ mod signals;
 mod status;
 mod thread;
 mod tracker;
+mod tx_broadcaster;
 mod types;
 
 pub use server::run;
