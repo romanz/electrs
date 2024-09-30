@@ -38,6 +38,9 @@ lazy_static! {
     );
 }
 
+const MAX_ATTEMPTS: u32 = 5;
+const RETRY_WAIT_DURATION: Duration = Duration::from_secs(1);
+
 fn parse_hash<T>(value: &Value) -> Result<T>
 where
     T: FromStr,
@@ -527,7 +530,28 @@ impl Daemon {
             .iter()
             .map(|hash| json!([hash, /*verbose=*/ false]))
             .collect();
-        let values = self.requests("getblock", params_list)?;
+
+        let mut attempts = MAX_ATTEMPTS;
+        let values = loop {
+            attempts -= 1;
+
+            match self.requests("getblock", params_list.clone()) {
+                Ok(blocks) => break blocks,
+                Err(e) => {
+                    let err_msg = format!("{e:?}");
+                    if err_msg.contains("Block not found on disk") {
+                        // There is a small chance the node returns the header but didn't finish to index the block
+                        log::warn!("getblocks failing with: {e:?} trying {attempts} more time")
+                    } else {
+                        panic!("failed to get blocks from bitcoind: {}", err_msg);
+                    }
+                }
+            }
+            if attempts == 0 {
+                panic!("failed to get blocks from bitcoind")
+            }
+            std::thread::sleep(RETRY_WAIT_DURATION);
+        };
         let mut blocks = vec![];
         for value in values {
             blocks.push(block_from_value(value)?);
@@ -596,7 +620,10 @@ impl Daemon {
     // Missing estimates are logged but do not cause a failure, whatever is available is returned
     #[allow(clippy::float_cmp)]
     pub fn estimatesmartfee_batch(&self, conf_targets: &[u16]) -> Result<HashMap<u16, f64>> {
-        let params_list: Vec<Value> = conf_targets.iter().map(|t| json!([t, "ECONOMICAL"])).collect();
+        let params_list: Vec<Value> = conf_targets
+            .iter()
+            .map(|t| json!([t, "ECONOMICAL"]))
+            .collect();
 
         Ok(self
             .requests("estimatesmartfee", params_list)?
