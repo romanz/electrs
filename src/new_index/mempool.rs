@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use crate::chain::{deserialize, Network, OutPoint, Transaction, TxOut, Txid};
+use crate::chain::{deserialize, BlockHash, Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
@@ -21,7 +21,7 @@ use crate::new_index::{
     SpendingInfo, SpendingInput, TxHistoryInfo, Utxo,
 };
 use crate::util::fees::{make_fee_histogram, TxFeeInfo};
-use crate::util::{extract_tx_prevouts, full_hash, has_prevout, is_spendable, Bytes};
+use crate::util::{extract_tx_prevouts, full_hash, get_prev_outpoints, is_spendable, Bytes};
 
 #[cfg(feature = "liquid")]
 use crate::elements::asset;
@@ -276,7 +276,7 @@ impl Mempool {
         &self.backlog_stats.0
     }
 
-    pub fn old_txids(&self) -> HashSet<Txid> {
+    pub fn txids_set(&self) -> HashSet<Txid> {
         return HashSet::from_iter(self.txstore.keys().cloned());
     }
 
@@ -288,40 +288,55 @@ impl Mempool {
         self.backlog_stats = (BacklogStats::new(&self.feeinfo), Instant::now());
     }
 
-    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: &Txid) {
-        if self.txstore.get(txid).is_none() {
+    pub fn add_by_txid(&mut self, daemon: &Daemon, txid: Txid) -> Result<()> {
+        if self.txstore.get(&txid).is_none() {
             if let Ok(tx) = daemon.getmempooltx(&txid) {
-                self.add(vec![tx])
+                let mut txs_map = HashMap::new();
+                txs_map.insert(txid, tx);
+                self.add(txs_map)
+            } else {
+                bail!("add_by_txid cannot find {}", txid);
             }
+        } else {
+            Ok(())
         }
     }
 
-    fn add(&mut self, txs: Vec<Transaction>) {
+    fn add(&mut self, txs_map: HashMap<Txid, Transaction>) -> Result<()> {
         self.delta
             .with_label_values(&["add"])
-            .observe(txs.len() as f64);
+            .observe(txs_map.len() as f64);
         let _timer = self.latency.with_label_values(&["add"]).start_timer();
 
-        let mut txids = vec![];
-        // Phase 1: add to txstore
-        for tx in txs {
-            let txid = tx.txid();
-            txids.push(txid);
+        let spent_prevouts = get_prev_outpoints(txs_map.values());
+
+        // Lookup spent prevouts that were funded within the same `add` batch
+        let mut txos = HashMap::new();
+        let remain_prevouts = spent_prevouts
+            .into_iter()
+            .filter(|prevout| {
+                if let Some(prevtx) = txs_map.get(&prevout.txid) {
+                    if let Some(out) = prevtx.output.get(prevout.vout as usize) {
+                        txos.insert(prevout.clone(), out.clone());
+                        // remove from the list of remaining `prevouts`
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        // Lookup remaining spent prevouts in mempool & on-chain
+        // Fails if any are missing.
+        txos.extend(self.lookup_txos(remain_prevouts)?);
+
+        // Add to txstore and indexes
+        for (txid, tx) in txs_map {
             self.txstore.insert(txid, tx);
-        }
-        // Phase 2: index history and spend edges (can fail if some txos cannot be found)
-        let txos = match self.lookup_txos(self.get_prevouts(&txids)) {
-            Ok(txos) => txos,
-            Err(err) => {
-                warn!("lookup txouts failed: {}", err);
-                // TODO: should we remove txids from txstore?
-                return;
-            }
-        };
-        for txid in txids {
-            let tx = self.txstore.get(&txid).expect("missing mempool tx");
-            let txid_bytes = full_hash(&txid[..]);
+            let tx = self.txstore.get(&txid).expect("was just added");
+
             let prevouts = extract_tx_prevouts(&tx, &txos, false);
+            let txid_bytes = full_hash(&txid[..]);
 
             // Get feeinfo for caching and recent tx overview
             let feeinfo = TxFeeInfo::new(&tx, &prevouts, self.config.network_type);
@@ -395,6 +410,8 @@ impl Mempool {
                 &mut self.asset_issuance,
             );
         }
+
+        Ok(())
     }
 
     fn lookup_txo(&self, outpoint: &OutPoint) -> Option<TxOut> {
@@ -421,24 +438,6 @@ impl Mempool {
         txos.extend(self.chain.lookup_txos(remain_outpoints)?);
 
         Ok(txos)
-    }
-
-    fn get_prevouts(&self, txids: &[Txid]) -> BTreeSet<OutPoint> {
-        let _timer = self
-            .latency
-            .with_label_values(&["get_prevouts"])
-            .start_timer();
-
-        txids
-            .iter()
-            .map(|txid| self.txstore.get(txid).expect("missing mempool tx"))
-            .flat_map(|tx| {
-                tx.input
-                    .iter()
-                    .filter(|txin| has_prevout(txin))
-                    .map(|txin| txin.previous_output)
-            })
-            .collect()
     }
 
     fn remove(&mut self, to_remove: HashSet<&Txid>) {
@@ -486,31 +485,74 @@ impl Mempool {
             .map_or_else(|| vec![], |entries| self._history(entries, limit))
     }
 
-    pub fn update(mempool: &Arc<RwLock<Mempool>>, daemon: &Daemon) -> Result<()> {
+    /// Sync our local view of the mempool with the bitcoind Daemon RPC. If the chain tip moves before
+    /// the mempool is fetched in full, syncing is aborted and an Ok(false) is returned.
+    pub fn update(
+        mempool: &Arc<RwLock<Mempool>>,
+        daemon: &Daemon,
+        tip: &BlockHash,
+    ) -> Result<bool> {
         let _timer = mempool.read().unwrap().latency.with_label_values(&["update"]).start_timer();
 
-        // 1. Determine which transactions are no longer in the daemon's mempool and which ones have newly entered it
-        let old_txids = mempool.read().unwrap().old_txids();
-        let all_txids = daemon
-            .getmempooltxids()
-            .chain_err(|| "failed to update mempool from daemon")?;
-        let txids_to_remove: HashSet<&Txid> = old_txids.difference(&all_txids).collect();
+        // Continuously attempt to fetch mempool transactions until we're able to get them in full
+        let mut fetched_txs = HashMap::<Txid, Transaction>::new();
+        let mut indexed_txids = mempool.read().unwrap().txids_set();
+        loop {
+            // Get bitcoind's current list of mempool txids
+            let all_txids = daemon
+                .getmempooltxids()
+                .chain_err(|| "failed to update mempool from daemon")?;
 
-        // 2. Remove missing transactions. Even if we are unable to download new transactions from
-        // the daemon, we still want to remove the transactions that are no longer in the mempool.
-        mempool.write().unwrap().remove(txids_to_remove);
+            // Remove evicted mempool transactions
+            mempool
+                .write()
+                .unwrap()
+                .remove(indexed_txids.difference(&all_txids).collect());
 
-        // 3. Download the new transactions from the daemon's mempool
-        let new_txids: Vec<&Txid> = all_txids.difference(&old_txids).collect();
-        let txs_to_add = daemon
-            .gettransactions(&new_txids)
-            .chain_err(|| format!("failed to get {} transactions", new_txids.len()))?;
+            indexed_txids.retain(|txid| all_txids.contains(txid));
+            fetched_txs.retain(|txid, _| all_txids.contains(txid));
 
-        // 4. Update local mempool to match daemon's state
+            // Fetch missing transactions from bitcoind
+            let new_txids = all_txids
+                .iter()
+                .filter(|&txid| !fetched_txs.contains_key(txid) && !indexed_txids.contains(txid))
+                .collect::<Vec<_>>();
+            if new_txids.is_empty() {
+                break;
+            }
+            debug!(
+                "mempool with total {} txs, {} fetched, {} missing",
+                all_txids.len(),
+                indexed_txids.len() + fetched_txs.len(),
+                new_txids.len()
+            );
+            let new_txs = daemon.gettransactions_available(&new_txids)?;
+
+            // Abort if the chain tip moved while fetching transactions
+            if daemon.getbestblockhash()? != *tip {
+                warn!("chain tip moved while updating mempool");
+                return Ok(false);
+            }
+
+            let fetched_count = new_txs.len();
+            fetched_txs.extend(new_txs);
+
+            // Retry if any transactions were evicted form the mempool before we managed to get them
+            if fetched_count != new_txids.len() {
+                warn!(
+                    "failed to fetch {} mempool txs, retrying...",
+                    new_txids.len() - fetched_count
+                );
+            } else {
+                break;
+            }
+        }
+
+        // Add fetched transactions to our view of the mempool
         {
             let mut mempool = mempool.write().unwrap();
-            // Add new transactions
-            mempool.add(txs_to_add);
+
+            mempool.add(fetched_txs)?;
 
             mempool
                 .count
@@ -523,7 +565,9 @@ impl Mempool {
             }
         }
 
-        Ok(())
+        trace!("mempool is synced");
+
+        Ok(true)
     }
 }
 

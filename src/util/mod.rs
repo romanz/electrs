@@ -12,8 +12,8 @@ pub use self::block::{
 pub use self::fees::get_tx_fee;
 pub use self::script::{get_innerscripts, ScriptToAddr, ScriptToAsm};
 pub use self::transaction::{
-    extract_tx_prevouts, has_prevout, is_coinbase, is_spendable, serialize_outpoint,
-    TransactionStatus, TxInput,
+    extract_tx_prevouts, get_prev_outpoints, has_prevout, is_coinbase, is_spendable,
+    serialize_outpoint, TransactionStatus, TxInput,
 };
 
 use std::collections::HashMap;

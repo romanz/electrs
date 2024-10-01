@@ -1,7 +1,7 @@
 use crate::chain::{BlockHash, OutPoint, Transaction, TxIn, TxOut, Txid};
 use crate::util::BlockId;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 #[cfg(feature = "liquid")]
 lazy_static! {
@@ -94,6 +94,16 @@ pub fn extract_tx_prevouts<'a>(
             ))
         })
         .collect()
+}
+
+pub fn get_prev_outpoints<'a>(txs: impl Iterator<Item = &'a Transaction>) -> BTreeSet<OutPoint> {
+    txs.flat_map(|tx| {
+        tx.input
+            .iter()
+            .filter(|txin| has_prevout(txin))
+            .map(|txin| txin.previous_output)
+    })
+    .collect()
 }
 
 pub fn serialize_outpoint<S>(outpoint: &OutPoint, serializer: S) -> Result<S::Ok, S::Error>
