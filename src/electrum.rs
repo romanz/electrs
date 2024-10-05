@@ -9,15 +9,17 @@ use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
 
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
 use std::iter::FromIterator;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::{
     cache::Cache,
     config::{Config, ELECTRS_VERSION},
     daemon::{self, extract_bitcoind_error, Daemon},
+    mempool::{self, MempoolSyncUpdate},
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
@@ -45,6 +47,20 @@ struct Request {
 
     #[serde(default)]
     params: Value,
+}
+
+struct CallResult {
+    response: Value,
+    mempool_update: MempoolSyncUpdate,
+}
+
+impl CallResult {
+    fn new<T: serde::Serialize>(response: T) -> CallResult {
+        CallResult {
+            response: json!(response),
+            mempool_update: MempoolSyncUpdate::default(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -123,7 +139,7 @@ pub struct Rpc {
     tracker: Tracker,
     cache: Cache,
     rpc_duration: Histogram,
-    daemon: Daemon,
+    daemon: Arc<Daemon>,
     signal: Signal,
     banner: String,
     port: u16,
@@ -147,7 +163,7 @@ impl Rpc {
             tracker,
             cache,
             rpc_duration,
-            daemon,
+            daemon: Arc::new(daemon),
             signal,
             banner: config.server_banner.clone(),
             port: config.electrum_rpc_addr.port(),
@@ -158,12 +174,25 @@ impl Rpc {
         &self.signal
     }
 
+    pub(crate) fn daemon(&self) -> &Arc<Daemon> {
+        &self.daemon
+    }
+
     pub fn new_block_notification(&self) -> Receiver<()> {
         self.daemon.new_block_notification()
     }
 
-    pub fn sync(&mut self) -> Result<bool> {
-        self.tracker.sync(&self.daemon, self.signal.exit_flag())
+    pub fn sync_chain(&mut self) -> Result<bool> {
+        self.tracker
+            .sync_chain(&self.daemon, self.signal.exit_flag())
+    }
+
+    pub(crate) fn mempool_txids(&self) -> HashSet<Txid> {
+        self.tracker.mempool.all_txids()
+    }
+
+    pub(crate) fn mempool_apply(&mut self, sync_update: MempoolSyncUpdate) {
+        self.tracker.mempool.apply_sync_update(sync_update)
     }
 
     pub fn update_client(&self, client: &mut Client) -> Result<Vec<String>> {
@@ -357,11 +386,20 @@ impl Rpc {
         Ok(status)
     }
 
-    fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
+    fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<(Value, MempoolSyncUpdate)> {
         let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
         let tx = deserialize(&tx_bytes).context("invalid transaction")?;
         let txid = self.daemon.broadcast(&tx)?;
-        Ok(json!(txid))
+
+        // Try to fetch the mempool entry immediately, so we can return an update
+        // to be applied to the mempool.
+        let mut mempool_update = MempoolSyncUpdate::default();
+        if let Ok(rpc_entry) = self.daemon.get_mempool_entry(&txid) {
+            let entry = mempool::Entry::new(txid, tx, rpc_entry);
+            mempool_update.new_entries.push(entry);
+        }
+
+        Ok((json!(txid), mempool_update))
     }
 
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
@@ -432,7 +470,7 @@ impl Rpc {
     }
 
     fn get_fee_histogram(&self) -> Result<Value> {
-        Ok(json!(self.tracker.fees_histogram()))
+        Ok(json!(self.tracker.mempool.fees_histogram()))
     }
 
     fn server_id(&self) -> String {
@@ -460,7 +498,7 @@ impl Rpc {
         }))
     }
 
-    pub fn handle_requests(&self, client: &mut Client, lines: &[String]) -> Vec<String> {
+    pub fn handle_requests(&mut self, client: &mut Client, lines: &[String]) -> Vec<String> {
         lines
             .iter()
             .map(|line| {
@@ -472,7 +510,7 @@ impl Rpc {
             .collect()
     }
 
-    fn handle_calls(&self, client: &mut Client, calls: Result<Calls, Value>) -> Value {
+    fn handle_calls(&mut self, client: &mut Client, calls: Result<Calls, Value>) -> Value {
         let calls: Calls = match calls {
             Ok(calls) => calls,
             Err(response) => return response, // JSON parsing failed - the response does not contain request id
@@ -483,12 +521,33 @@ impl Rpc {
                 if let Some(result) = self.try_multi_call(client, &batch) {
                     return json!(result);
                 }
-                json!(batch
+                let responses = batch
                     .into_iter()
-                    .map(|result| self.single_call(client, result))
-                    .collect::<Vec<Value>>())
+                    .map(|call| {
+                        let CallResult {
+                            response,
+                            mempool_update,
+                        } = self.single_call(client, call);
+
+                        // Apply the mempool update immediately, so that the next
+                        // response will reflect the updated mempool state.
+                        self.mempool_apply(mempool_update);
+
+                        response
+                    })
+                    .collect::<Vec<Value>>();
+                json!(responses)
             }
-            Calls::Single(result) => self.single_call(client, result),
+
+            Calls::Single(call) => {
+                let CallResult {
+                    response,
+                    mempool_update,
+                } = self.single_call(client, call);
+
+                self.mempool_apply(mempool_update);
+                response
+            }
         }
     }
 
@@ -523,10 +582,10 @@ impl Rpc {
         )
     }
 
-    fn single_call(&self, client: &mut Client, call: Result<Call, Value>) -> Value {
+    fn single_call(&self, client: &mut Client, call: Result<Call, Value>) -> CallResult {
         let call = match call {
             Ok(call) => call,
-            Err(response) => return response, // params parsing may fail - the response contains request id
+            Err(response) => return CallResult::new(response), // params parsing may fail - the response contains request id
         };
         self.rpc_duration.observe_duration(&call.method, || {
             if self.tracker.status().is_err() {
@@ -536,9 +595,11 @@ impl Rpc {
                     | Params::BlockHeaders(_)
                     | Params::HeadersSubscribe
                     | Params::Version(_) => (),
-                    _ => return error_msg(&call.id, RpcError::UnavailableIndex),
+                    _ => return CallResult::new(error_msg(&call.id, RpcError::UnavailableIndex)),
                 };
             }
+
+            let mut mempool_update = MempoolSyncUpdate::default();
             let result = match &call.params {
                 Params::Banner => Ok(json!(self.banner)),
                 Params::BlockHeader(args) => self.block_header(*args),
@@ -556,13 +617,23 @@ impl Rpc {
                 Params::ScriptHashListUnspent(args) => self.scripthash_list_unspent(client, args),
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
-                Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
+                Params::TransactionBroadcast(args) => {
+                    self.transaction_broadcast(args)
+                        .map(|(result, sync_update)| {
+                            mempool_update = sync_update; // extract the mempool sync update
+                            result
+                        })
+                }
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
                 Params::Version(args) => self.version(args),
             };
-            call.response(result)
+
+            CallResult {
+                response: call.response(result),
+                mempool_update,
+            }
         })
     }
 }
