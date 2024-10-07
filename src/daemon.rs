@@ -219,6 +219,12 @@ impl Daemon {
             .tx)
     }
 
+    pub(crate) fn get_mempool_info(&self) -> Result<json::GetMempoolInfoResult> {
+        self.rpc
+            .get_mempool_info()
+            .context("failed to get mempool info")
+    }
+
     pub(crate) fn get_mempool_txids(&self) -> Result<Vec<Txid>> {
         self.rpc
             .get_raw_mempool()

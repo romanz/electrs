@@ -211,6 +211,18 @@ impl Mempool {
     }
 
     pub fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) {
+        let loaded = match daemon.get_mempool_info() {
+            Ok(info) => info.loaded.unwrap_or(true),
+            Err(e) => {
+                warn!("mempool sync failed: {}", e);
+                return;
+            }
+        };
+        if !loaded {
+            warn!("mempool not loaded");
+            return;
+        }
+
         let old_txids = HashSet::<Txid>::from_iter(self.entries.keys().copied());
 
         let poll_result = MempoolSyncUpdate::poll(daemon, old_txids, exit_flag);
