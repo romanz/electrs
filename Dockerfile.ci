@@ -40,7 +40,7 @@ WORKDIR /build/
 RUN apt-get install -qqy git libsecp256k1-1 python3-cryptography python3-setuptools python3-venv python3-pip jq curl
 RUN git clone --recurse-submodules https://github.com/spesmilo/electrum/ && cd electrum/ && git log -1
 RUN python3 -m venv --system-site-packages venv && \
-	venv/bin/pip install -e electrum/ && \
+    ELECTRUM_ECC_DONT_COMPILE=1 venv/bin/pip install -e electrum/ && \
 	ln /build/venv/bin/electrum /usr/bin/electrum
 
 RUN electrum version --offline
