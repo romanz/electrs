@@ -550,7 +550,6 @@ impl Connection {
         let empty_params = json!([]);
         loop {
             let msg = receiver.recv().chain_err(|| "channel closed")?;
-            let start_time = Instant::now();
             trace!("RPC {:?}", msg);
             match msg {
                 Message::Request(line) => {
@@ -558,12 +557,12 @@ impl Connection {
                     if let Value::Array(arr) = cmd {
                         let mut result = Vec::with_capacity(arr.len());
                         for el in arr {
-                            let reply = self.handle_value(el, &empty_params, start_time)?;
+                            let reply = self.handle_value(el, &empty_params)?;
                             result.push(reply)
                         }
                         self.send_values(&[Value::Array(result)])?
                     } else {
-                        let reply = self.handle_value(cmd, &empty_params, start_time)?;
+                        let reply = self.handle_value(cmd, &empty_params)?;
                         self.send_values(&[reply])?
                     }
                 }
@@ -578,12 +577,8 @@ impl Connection {
         }
     }
 
-    fn handle_value(
-        &mut self,
-        cmd: Value,
-        empty_params: &Value,
-        start_time: Instant,
-    ) -> Result<Value> {
+    fn handle_value(&mut self, cmd: Value, empty_params: &Value) -> Result<Value> {
+        let start_time = Instant::now();
         Ok(
             match (
                 cmd.get("method"),
