@@ -10,7 +10,7 @@ Documentation for the database schema and indexing process [is available here](d
 
 ### Installing & indexing
 
-Install Rust, Bitcoin Core (no `txindex` needed) and the `clang` and `cmake` packages, then:
+Install Rust, Bitcoin Core (no `txindex` needed) and the `clang` and `cmake` packages, increase maximum number open files by `ulimit -n 100000` and then:
 
 ```bash
 $ git clone https://github.com/blockstream/electrs && cd electrs
