@@ -390,9 +390,7 @@ enum ParsedNetworkMessage {
 }
 
 impl Decodable for RawNetworkMessage {
-    fn consensus_decode<D: bitcoin::io::BufRead + ?Sized>(
-        d: &mut D,
-    ) -> Result<Self, encode::Error> {
+    fn consensus_decode<D: bitcoin::io::Read + ?Sized>(d: &mut D) -> Result<Self, encode::Error> {
         let magic = Decodable::consensus_decode(d)?;
         let cmd = Decodable::consensus_decode(d)?;
 
