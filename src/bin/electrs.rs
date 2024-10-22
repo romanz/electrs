@@ -41,12 +41,12 @@ fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
 }
 
 fn run_server(config: Arc<Config>) -> Result<()> {
-    let signal = Waiter::start();
+    let (block_hash_notify, signal) = Waiter::start();
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 
     if let Some(zmq_addr) = config.zmq_addr.as_ref() {
-        zmq::start(&format!("tcp://{zmq_addr}"), None);
+        zmq::start(&format!("tcp://{zmq_addr}"), Some(block_hash_notify));
     }
 
     let daemon = Arc::new(Daemon::new(

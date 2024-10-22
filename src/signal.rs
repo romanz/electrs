@@ -1,4 +1,5 @@
-use crossbeam_channel::{self as channel, after, select};
+use bitcoin::BlockHash;
+use crossbeam_channel::{self as channel, after, select, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -9,6 +10,7 @@ use crate::errors::*;
 #[derive(Clone)] // so multiple threads could wait on signals
 pub struct Waiter {
     receiver: channel::Receiver<i32>,
+    zmq_receiver: channel::Receiver<BlockHash>,
 }
 
 fn notify(signals: &[i32]) -> channel::Receiver<i32> {
@@ -25,34 +27,54 @@ fn notify(signals: &[i32]) -> channel::Receiver<i32> {
 }
 
 impl Waiter {
-    pub fn start() -> Waiter {
-        Waiter {
-            receiver: notify(&[
-                SIGINT, SIGTERM,
-                SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
-            ]),
-        }
+    pub fn start() -> (Sender<BlockHash>, Waiter) {
+        let (block_hash_notify, block_hash_receive) = channel::bounded(1);
+
+        (
+            block_hash_notify,
+            Waiter {
+                receiver: notify(&[
+                    SIGINT, SIGTERM,
+                    SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
+                ]),
+                zmq_receiver: block_hash_receive,
+            },
+        )
     }
 
-    pub fn wait(&self, duration: Duration, accept_sigusr: bool) -> Result<()> {
+    pub fn wait(&self, duration: Duration, accept_block_notification: bool) -> Result<()> {
         let start = Instant::now();
         select! {
             recv(self.receiver) -> msg => {
                 match msg {
                     Ok(sig) if sig == SIGUSR1 => {
                         trace!("notified via SIGUSR1");
-                        if accept_sigusr {
+                        if accept_block_notification {
                             Ok(())
                         } else {
                             let wait_more = duration.saturating_sub(start.elapsed());
-                            self.wait(wait_more, accept_sigusr)
+                            self.wait(wait_more, accept_block_notification)
                         }
                     }
                     Ok(sig) => bail!(ErrorKind::Interrupt(sig)),
                     Err(_) => bail!("signal hook channel disconnected"),
                 }
             },
+            recv(self.zmq_receiver) -> msg => {
+                match msg {
+                    Ok(_) => {
+                        if accept_block_notification {
+                            Ok(())
+                        } else {
+                            let wait_more = duration.saturating_sub(start.elapsed());
+                            self.wait(wait_more, accept_block_notification)
+                        }
+                    }
+                    Err(_) => bail!("signal hook channel disconnected"),
+                }
+            },
             recv(after(duration)) -> _ => Ok(()),
+
         }
     }
 }

@@ -1,6 +1,5 @@
-use std::sync::mpsc::Sender;
-
 use bitcoin::{hashes::Hash, BlockHash};
+use crossbeam_channel::Sender;
 
 use crate::util::spawn_thread;
 

@@ -124,7 +124,7 @@ impl TestRunner {
             //tor_proxy: Option<std::net::SocketAddr>,
         });
 
-        let signal = Waiter::start();
+        let signal = Waiter::start().1;
         let metrics = Metrics::new(rand_available_addr());
         metrics.start();
 

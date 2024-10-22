@@ -21,7 +21,7 @@ fn main() {
         util::has_prevout,
     };
 
-    let signal = Waiter::start();
+    let signal = Waiter::start().1;
     let config = Config::from_args();
     let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
 
