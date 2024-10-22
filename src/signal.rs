@@ -1,5 +1,5 @@
 use bitcoin::BlockHash;
-use crossbeam_channel::{self as channel, after, select, Sender};
+use crossbeam_channel::{self as channel, after, select};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -27,19 +27,14 @@ fn notify(signals: &[i32]) -> channel::Receiver<i32> {
 }
 
 impl Waiter {
-    pub fn start() -> (Sender<BlockHash>, Waiter) {
-        let (block_hash_notify, block_hash_receive) = channel::bounded(1);
-
-        (
-            block_hash_notify,
-            Waiter {
-                receiver: notify(&[
-                    SIGINT, SIGTERM,
-                    SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
-                ]),
-                zmq_receiver: block_hash_receive,
-            },
-        )
+    pub fn start(block_hash_receive: channel::Receiver<BlockHash>) -> Waiter {
+        Waiter {
+            receiver: notify(&[
+                SIGINT, SIGTERM,
+                SIGUSR1, // allow external triggering (e.g. via bitcoind `blocknotify`)
+            ]),
+            zmq_receiver: block_hash_receive,
+        }
     }
 
     pub fn wait(&self, duration: Duration, accept_block_notification: bool) -> Result<()> {

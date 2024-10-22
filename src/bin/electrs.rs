@@ -4,6 +4,7 @@ extern crate log;
 
 extern crate electrs;
 
+use crossbeam_channel::{self as channel};
 use error_chain::ChainedError;
 use std::process;
 use std::sync::{Arc, RwLock};
@@ -41,7 +42,8 @@ fn fetch_from(config: &Config, store: &Store) -> FetchFrom {
 }
 
 fn run_server(config: Arc<Config>) -> Result<()> {
-    let (block_hash_notify, signal) = Waiter::start();
+    let (block_hash_notify, block_hash_receive) = channel::bounded(1);
+    let signal = Waiter::start(block_hash_receive);
     let metrics = Metrics::new(config.monitoring_addr);
     metrics.start();
 

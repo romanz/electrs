@@ -21,7 +21,7 @@ fn main() {
         util::has_prevout,
     };
 
-    let signal = Waiter::start().1;
+    let signal = Waiter::start(crossbeam_channel::never());
     let config = Config::from_args();
     let store = Arc::new(Store::open(&config.db_path.join("newindex"), &config));
 
