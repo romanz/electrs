@@ -3,7 +3,7 @@ use crossbeam_channel::Sender;
 
 use crate::util::spawn_thread;
 
-pub fn start(url: &str, block_hash_notify: Option<Sender<BlockHash>>) {
+pub fn start(url: &str, block_hash_notify: Sender<BlockHash>) {
     log::debug!("Starting ZMQ thread");
     let ctx = zmq::Context::new();
     let subscriber: zmq::Socket = ctx.socket(zmq::SUB).expect("failed creating subscriber");
@@ -28,9 +28,7 @@ pub fn start(url: &str, block_hash_notify: Option<Sender<BlockHash>>) {
                         reversed.reverse();
                         if let Ok(block_hash) = BlockHash::from_slice(&reversed[..]) {
                             log::debug!("New block from ZMQ: {block_hash}");
-                            if let Some(block_hash_notify) = block_hash_notify.as_ref() {
-                                let _ = block_hash_notify.send(block_hash);
-                            }
+                            let _ = block_hash_notify.send(block_hash);
                         }
                     }
                 }

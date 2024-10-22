@@ -46,7 +46,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     metrics.start();
 
     if let Some(zmq_addr) = config.zmq_addr.as_ref() {
-        zmq::start(&format!("tcp://{zmq_addr}"), Some(block_hash_notify));
+        zmq::start(&format!("tcp://{zmq_addr}"), block_hash_notify);
     }
 
     let daemon = Arc::new(Daemon::new(
