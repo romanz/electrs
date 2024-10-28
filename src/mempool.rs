@@ -85,14 +85,14 @@ impl MempoolSyncUpdate {
                     let entry = match entry {
                         Some(entry) => entry,
                         None => {
-                            warn!("missing mempool entry: {}", txid);
+                            debug!("missing mempool entry: {}", txid);
                             return None;
                         }
                     };
                     let tx = match tx {
                         Some(tx) => tx,
                         None => {
-                            warn!("missing mempool tx: {}", txid);
+                            debug!("missing mempool tx: {}", txid);
                             return None;
                         }
                     };
