@@ -32,6 +32,7 @@ use crate::util::{create_socket, spawn_thread, BlockId, BoolThen, Channel, FullH
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::new(1, 4);
 const MAX_HEADERS: usize = 2016;
+const MAX_ARRAY_BATCH: usize = 20;
 
 #[cfg(feature = "electrum-discovery")]
 use crate::electrum::{DiscoveryManager, ServerFeatures};
@@ -555,6 +556,13 @@ impl Connection {
                 Message::Request(line) => {
                     let cmd: Value = from_str(&line).chain_err(|| "invalid JSON format")?;
                     if let Value::Array(arr) = cmd {
+                        if arr.len() > MAX_ARRAY_BATCH {
+                            bail!(
+                                "Too many elements in batch requests {} max:{}",
+                                arr.len(),
+                                MAX_ARRAY_BATCH
+                            );
+                        }
                         let mut result = Vec::with_capacity(arr.len());
                         for el in arr {
                             let reply = self.handle_value(el, &empty_params)?;
