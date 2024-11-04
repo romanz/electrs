@@ -1,6 +1,10 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - new-index
+  pull_request: {}
 
 jobs:
   test:
