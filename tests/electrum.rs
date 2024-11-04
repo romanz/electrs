@@ -145,6 +145,7 @@ fn test_electrum() -> Result<()> {
 /// This only runs on Bitcoin (non-Liquid) mode.
 #[cfg_attr(not(feature = "liquid"), test)]
 #[cfg_attr(feature = "liquid", allow(dead_code))]
+#[ignore = "must be launched singularly, otherwise conflict with the other server"]
 fn test_electrum_raw() {
     // Spawn an Electrs Electrum RPC server
     let (_electrum_server, electrum_addr, mut _tester) = common::init_electrum_tester().unwrap();
