@@ -6,20 +6,18 @@ use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::{
     consensus::encode::{deserialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
-    OutPoint, Script, Txid,
+    io, OutPoint, Script, Txid,
 };
 use bitcoin_slices::bsl;
-
-use crate::db;
 
 macro_rules! impl_consensus_encoding {
     ($thing:ident, $($field:ident),+) => (
         impl Encodable for $thing {
             #[inline]
-            fn consensus_encode<S: ::std::io::Write + ?Sized>(
+            fn consensus_encode<S: io::Write + ?Sized>(
                 &self,
                 s: &mut S,
-            ) -> Result<usize, std::io::Error> {
+            ) -> Result<usize, io::Error> {
                 let mut len = 0;
                 $(len += self.$field.consensus_encode(s)?;)+
                 Ok(len)
@@ -28,7 +26,7 @@ macro_rules! impl_consensus_encoding {
 
         impl Decodable for $thing {
             #[inline]
-            fn consensus_decode<D: ::std::io::Read + ?Sized>(
+            fn consensus_decode<D: io::Read + ?Sized>(
                 d: &mut D,
             ) -> Result<$thing, bitcoin::consensus::encode::Error> {
                 Ok($thing {
@@ -39,33 +37,34 @@ macro_rules! impl_consensus_encoding {
     );
 }
 
-const HASH_PREFIX_LEN: usize = 8;
+pub const HASH_PREFIX_LEN: usize = 8;
 const HEIGHT_SIZE: usize = 4;
 
-type HashPrefix = [u8; HASH_PREFIX_LEN];
+pub(crate) type HashPrefix = [u8; HASH_PREFIX_LEN];
+pub(crate) type SerializedHashPrefixRow = [u8; HASH_PREFIX_ROW_SIZE];
 type Height = u32;
 pub(crate) type SerBlock = Vec<u8>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct HashPrefixRow {
-    prefix: [u8; HASH_PREFIX_LEN],
+    prefix: HashPrefix,
     height: Height, // transaction confirmed height
 }
 
-const HASH_PREFIX_ROW_SIZE: usize = HASH_PREFIX_LEN + HEIGHT_SIZE;
+pub const HASH_PREFIX_ROW_SIZE: usize = HASH_PREFIX_LEN + HEIGHT_SIZE;
 
 impl HashPrefixRow {
-    pub(crate) fn to_db_row(&self) -> db::Row {
-        let mut vec = Vec::with_capacity(HASH_PREFIX_ROW_SIZE);
+    pub(crate) fn to_db_row(&self) -> SerializedHashPrefixRow {
+        let mut row = [0; HASH_PREFIX_ROW_SIZE];
         let len = self
-            .consensus_encode(&mut vec)
+            .consensus_encode(&mut (&mut row as &mut [u8]))
             .expect("in-memory writers don't error");
         debug_assert_eq!(len, HASH_PREFIX_ROW_SIZE);
-        vec.into_boxed_slice()
+        row
     }
 
-    pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(row).expect("bad HashPrefixRow")
+    pub(crate) fn from_db_row(row: SerializedHashPrefixRow) -> Self {
+        deserialize(&row).expect("bad HashPrefixRow")
     }
 
     pub fn height(&self) -> usize {
@@ -96,8 +95,8 @@ impl ScriptHash {
 pub(crate) struct ScriptHashRow;
 
 impl ScriptHashRow {
-    pub(crate) fn scan_prefix(scripthash: ScriptHash) -> Box<[u8]> {
-        scripthash.0[..HASH_PREFIX_LEN].to_vec().into_boxed_slice()
+    pub(crate) fn scan_prefix(scripthash: ScriptHash) -> HashPrefix {
+        scripthash.0[..HASH_PREFIX_LEN].try_into().unwrap()
     }
 
     pub(crate) fn row(scripthash: ScriptHash, height: usize) -> HashPrefixRow {
@@ -118,7 +117,7 @@ hash_newtype! {
 // ***************************************************************************
 
 fn spending_prefix(prev: OutPoint) -> HashPrefix {
-    let txid_prefix = <[u8; HASH_PREFIX_LEN]>::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
+    let txid_prefix = HashPrefix::try_from(&prev.txid[..HASH_PREFIX_LEN]).unwrap();
     let value = u64::from_be_bytes(txid_prefix);
     let value = value.wrapping_add(prev.vout.into());
     value.to_be_bytes()
@@ -127,8 +126,8 @@ fn spending_prefix(prev: OutPoint) -> HashPrefix {
 pub(crate) struct SpendingPrefixRow;
 
 impl SpendingPrefixRow {
-    pub(crate) fn scan_prefix(outpoint: OutPoint) -> Box<[u8]> {
-        Box::new(spending_prefix(outpoint))
+    pub(crate) fn scan_prefix(outpoint: OutPoint) -> HashPrefix {
+        spending_prefix(outpoint)
     }
 
     pub(crate) fn row(outpoint: OutPoint, height: usize) -> HashPrefixRow {
@@ -150,8 +149,8 @@ fn txid_prefix(txid: &Txid) -> HashPrefix {
 pub(crate) struct TxidRow;
 
 impl TxidRow {
-    pub(crate) fn scan_prefix(txid: Txid) -> Box<[u8]> {
-        Box::new(txid_prefix(&txid))
+    pub(crate) fn scan_prefix(txid: Txid) -> HashPrefix {
+        txid_prefix(&txid)
     }
 
     pub(crate) fn row(txid: Txid, height: usize) -> HashPrefixRow {
@@ -164,12 +163,14 @@ impl TxidRow {
 
 // ***************************************************************************
 
+pub(crate) type SerializedHeaderRow = [u8; HEADER_ROW_SIZE];
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct HeaderRow {
     pub(crate) header: BlockHeader,
 }
 
-const HEADER_ROW_SIZE: usize = 80;
+pub const HEADER_ROW_SIZE: usize = 80;
 
 impl_consensus_encoding!(HeaderRow, header);
 
@@ -178,17 +179,17 @@ impl HeaderRow {
         Self { header }
     }
 
-    pub(crate) fn to_db_row(&self) -> db::Row {
-        let mut vec = Vec::with_capacity(HEADER_ROW_SIZE);
+    pub(crate) fn to_db_row(&self) -> SerializedHeaderRow {
+        let mut row = [0; HEADER_ROW_SIZE];
         let len = self
-            .consensus_encode(&mut vec)
+            .consensus_encode(&mut (&mut row as &mut [u8]))
             .expect("in-memory writers don't error");
         debug_assert_eq!(len, HEADER_ROW_SIZE);
-        vec.into_boxed_slice()
+        row
     }
 
-    pub(crate) fn from_db_row(row: &[u8]) -> Self {
-        deserialize(row).expect("bad HeaderRow")
+    pub(crate) fn from_db_row(row: SerializedHeaderRow) -> Self {
+        deserialize(&row).expect("bad HeaderRow")
     }
 }
 
@@ -219,8 +220,8 @@ mod tests {
         let scripthash: ScriptHash = from_str(hex).unwrap();
         let row1 = ScriptHashRow::row(scripthash, 123456);
         let db_row = row1.to_db_row();
-        assert_eq!(&*db_row, &hex!("a384491d38929fcc40e20100"));
-        let row2 = HashPrefixRow::from_db_row(&db_row);
+        assert_eq!(db_row, hex!("a384491d38929fcc40e20100"));
+        let row2 = HashPrefixRow::from_db_row(db_row);
         assert_eq!(row1, row2);
     }
 
@@ -247,8 +248,8 @@ mod tests {
         let row1 = TxidRow::row(txid, 91812);
         let row2 = TxidRow::row(txid, 91842);
 
-        assert_eq!(&*row1.to_db_row(), &hex!("9985d82954e10f22a4660100"));
-        assert_eq!(&*row2.to_db_row(), &hex!("9985d82954e10f22c2660100"));
+        assert_eq!(row1.to_db_row(), hex!("9985d82954e10f22a4660100"));
+        assert_eq!(row2.to_db_row(), hex!("9985d82954e10f22c2660100"));
     }
 
     #[test]
@@ -261,8 +262,8 @@ mod tests {
         let row2 = TxidRow::row(txid, 91880);
 
         // low-endian encoding => rows should be sorted according to block height
-        assert_eq!(&*row1.to_db_row(), &hex!("68b45f58b674e94e4a660100"));
-        assert_eq!(&*row2.to_db_row(), &hex!("68b45f58b674e94ee8660100"));
+        assert_eq!(row1.to_db_row(), hex!("68b45f58b674e94e4a660100"));
+        assert_eq!(row2.to_db_row(), hex!("68b45f58b674e94ee8660100"));
     }
 
     #[test]

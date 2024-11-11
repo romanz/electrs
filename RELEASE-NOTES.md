@@ -1,3 +1,33 @@
+# 0.10.7 (Nov 05 2024)
+
+* Support testnet4
+* Enable LTO in release build
+* Don't sync mempool when bitcoind mempool is not yet loaded
+* Update dependencies (`bitcoin`, `bitcoin_slices`)
+
+# 0.10.6 (Sep 29 2024)
+
+* Update dependencies (`bitcoin`, `configure_me_codegen`, `crossbeam-channel`, `log`)
+* Deprecate unused config option `timestamp`
+* Don't fail if bitcoind fee estimation is disabled
+* Save on allocations by using fixed size types for database rows
+* Add BTC Prague 2024 dev/hack/day slides
+
+# 0.10.5 (May 18 2024)
+
+* Update dependencies (`bitcoin`, `bitcoin_slices`, `bitcoincore-rpc`, `rayon`)
+* Support latest bitcoind (https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/353 & https://github.com/rust-bitcoin/rust-bitcoincore-rpc/pull/356)
+
+# 0.10.4 (Mar 15 2024)
+
+* Don't fail mempool sync on missing transactions (#997)
+* Update dependencies (`anyhow`, `crossbeam-channel`, `log`, `secp256k1`, `secp256k1-sys`, `smallvec`, `tempfile`, `termcolor`, `thiserror`, `thiserror-impl`)
+
+# 0.10.3 (Feb 10 2024)
+
+* Update dependencies (`serde_json`, `tempfile`, `env_logger`, `rayon`, `bitcoin`, `crossbeam-channel`, `shlex`)
+* Fix build on Debian 12 (#1001)
+
 # 0.10.2 (Dec 31 2023)
 
 * Use batched RPC to fetch mempool entries & transactions (#979)

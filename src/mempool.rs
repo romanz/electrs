@@ -82,8 +82,20 @@ impl MempoolSyncUpdate {
                 .iter()
                 .zip(entries.into_iter().zip(txs.into_iter()))
                 .filter_map(|(txid, (entry, tx))| {
-                    let tx = tx.ok()?;
-                    let entry = entry.ok()?;
+                    let entry = match entry {
+                        Some(entry) => entry,
+                        None => {
+                            debug!("missing mempool entry: {}", txid);
+                            return None;
+                        }
+                    };
+                    let tx = match tx {
+                        Some(tx) => tx,
+                        None => {
+                            debug!("missing mempool tx: {}", txid);
+                            return None;
+                        }
+                    };
                     Some(Entry {
                         txid: *txid,
                         tx,
@@ -199,6 +211,18 @@ impl Mempool {
     }
 
     pub fn sync(&mut self, daemon: &Daemon, exit_flag: &ExitFlag) {
+        let loaded = match daemon.get_mempool_info() {
+            Ok(info) => info.loaded.unwrap_or(true),
+            Err(e) => {
+                warn!("mempool sync failed: {}", e);
+                return;
+            }
+        };
+        if !loaded {
+            warn!("mempool not loaded");
+            return;
+        }
+
         let old_txids = HashSet::<Txid>::from_iter(self.entries.keys().copied());
 
         let poll_result = MempoolSyncUpdate::poll(daemon, old_txids, exit_flag);
@@ -332,7 +356,7 @@ impl Serialize for FeeHistogram {
         let mut seq = serializer.serialize_seq(Some(self.vsize.len()))?;
         // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
         let fee_rates =
-            (0..FeeHistogram::BINS).map(|i| std::u64::MAX.checked_shr(i as u32).unwrap_or(0));
+            (0..FeeHistogram::BINS).map(|i| u64::MAX.checked_shr(i as u32).unwrap_or(0));
         fee_rates
             .zip(self.vsize.iter().copied())
             .skip_while(|(_fee_rate, vsize)| *vsize == 0)

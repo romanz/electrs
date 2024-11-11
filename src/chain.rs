@@ -57,11 +57,11 @@ impl Chain {
     }
 
     /// Load the chain from a collection of headers, up to the given tip
-    pub(crate) fn load(&mut self, headers: Vec<BlockHeader>, tip: BlockHash) {
+    pub(crate) fn load(&mut self, headers: impl Iterator<Item = BlockHeader>, tip: BlockHash) {
         let genesis_hash = self.headers[0].0;
 
         let header_map: HashMap<BlockHash, BlockHeader> =
-            headers.into_iter().map(|h| (h.block_hash(), h)).collect();
+            headers.map(|h| (h.block_hash(), h)).collect();
         let mut blockhash = tip;
         let mut new_headers: Vec<&BlockHeader> = Vec::with_capacity(header_map.len());
         while blockhash != genesis_hash {
@@ -202,7 +202,10 @@ hex!("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a03
 
         // test loading from a list of headers and tip
         let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
+        regtest.load(
+            headers.iter().copied(),
+            headers.last().unwrap().block_hash(),
+        );
         assert_eq!(regtest.height(), headers.len());
 
         // test getters
@@ -239,7 +242,10 @@ hex!("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a03
 
         // test reorg
         let mut regtest = Chain::new(Regtest);
-        regtest.load(headers.clone(), headers.last().unwrap().block_hash());
+        regtest.load(
+            headers.iter().copied(),
+            headers.last().unwrap().block_hash(),
+        );
         let height = regtest.height();
 
         let new_header: BlockHeader = deserialize(&hex!("000000200030d7f9c11ef35b89a0eefb9a5e449909339b5e7854d99804ea8d6a49bf900a0304d2e55fe0b6415949cff9bca0f88c0717884a5e5797509f89f856af93624a7a6bcc60ffff7f2000000000")).unwrap();
