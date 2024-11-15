@@ -1,12 +1,13 @@
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
-use std::env;
+use std::convert::TryFrom;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use std::{env, fs, io};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use error_chain::ChainedError;
@@ -391,6 +392,26 @@ impl Daemon {
             .collect();
         paths.sort();
         Ok(paths)
+    }
+
+    /// bitcoind v28.0+ defaults to xor-ing all blk*.dat files with this key,
+    /// stored in the blocks dir.
+    /// See: <https://github.com/bitcoin/bitcoin/pull/28052>
+    pub fn read_blk_file_xor_key(&self) -> Result<Option<[u8; 8]>> {
+        // From: <https://github.com/bitcoin/bitcoin/blob/v28.0/src/node/blockstorage.cpp#L1160>
+        let path = self.blocks_dir.join("xor.dat");
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err).chain_err(|| "failed to read daemon xor.dat file"),
+        };
+        let xor_key: [u8; 8] = <[u8; 8]>::try_from(bytes.as_slice()).chain_err(|| {
+            format!(
+                "xor.dat unexpected length: actual: {}, expected: 8",
+                bytes.len()
+            )
+        })?;
+        Ok(Some(xor_key))
     }
 
     pub fn magic(&self) -> u32 {
