@@ -1,3 +1,18 @@
+# 0.10.7 (Nov 05 2024)
+
+* Support testnet4
+* Enable LTO in release build
+* Don't sync mempool when bitcoind mempool is not yet loaded
+* Update dependencies (`bitcoin`, `bitcoin_slices`)
+
+# 0.10.6 (Sep 29 2024)
+
+* Update dependencies (`bitcoin`, `configure_me_codegen`, `crossbeam-channel`, `log`)
+* Deprecate unused config option `timestamp`
+* Don't fail if bitcoind fee estimation is disabled
+* Save on allocations by using fixed size types for database rows
+* Add BTC Prague 2024 dev/hack/day slides
+
 # 0.10.5 (May 18 2024)
 
 * Update dependencies (`bitcoin`, `bitcoin_slices`, `bitcoincore-rpc`, `rayon`)

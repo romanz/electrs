@@ -246,7 +246,7 @@ fn index_single_block(
         height: usize,
     }
 
-    impl<'a> Visitor for IndexBlockVisitor<'a> {
+    impl Visitor for IndexBlockVisitor<'_> {
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             let txid = bsl_txid(tx);
             self.batch

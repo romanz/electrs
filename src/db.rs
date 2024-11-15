@@ -239,8 +239,8 @@ impl DBStore {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
-    fn iter_cf<'a, const N: usize>(
-        &'a self,
+    fn iter_cf<const N: usize>(
+        &self,
         cf: &rocksdb::ColumnFamily,
         readopts: rocksdb::ReadOptions,
         prefix: Option<HashPrefix>,
@@ -385,7 +385,7 @@ impl<'a, const N: usize> DBIterator<'a, N> {
     }
 }
 
-impl<'a, const N: usize> Iterator for DBIterator<'a, N> {
+impl<const N: usize> Iterator for DBIterator<'_, N> {
     type Item = [u8; N];
 
     fn next(&mut self) -> Option<Self::Item> {

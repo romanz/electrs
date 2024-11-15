@@ -111,7 +111,10 @@ impl FromStr for BitcoinNetwork {
 
 impl ::configure_me::parse_arg::ParseArgFromStr for BitcoinNetwork {
     fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
-        write!(writer, "either 'bitcoin', 'testnet', 'regtest' or 'signet'")
+        write!(
+            writer,
+            "either 'bitcoin', 'testnet', 'testnet4', 'regtest' or 'signet'"
+        )
     }
 }
 
@@ -128,7 +131,6 @@ pub struct Config {
     pub network: Network,
     pub db_path: PathBuf,
     pub db_log_dir: Option<PathBuf>,
-    pub daemon_dir: PathBuf,
     pub daemon_auth: SensitiveAuth,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_p2p_addr: SocketAddr,
@@ -206,6 +208,7 @@ impl Config {
         let db_subdir = match config.network {
             Network::Bitcoin => "bitcoin",
             Network::Testnet => "testnet",
+            Network::Testnet4 => "testnet4",
             Network::Regtest => "regtest",
             Network::Signet => "signet",
             unsupported => unsupported_network(unsupported),
@@ -216,6 +219,7 @@ impl Config {
         let default_daemon_rpc_port = match config.network {
             Network::Bitcoin => 8332,
             Network::Testnet => 18332,
+            Network::Testnet4 => 48332,
             Network::Regtest => 18443,
             Network::Signet => 38332,
             unsupported => unsupported_network(unsupported),
@@ -223,6 +227,7 @@ impl Config {
         let default_daemon_p2p_port = match config.network {
             Network::Bitcoin => 8333,
             Network::Testnet => 18333,
+            Network::Testnet4 => 48333,
             Network::Regtest => 18444,
             Network::Signet => 38333,
             unsupported => unsupported_network(unsupported),
@@ -230,6 +235,7 @@ impl Config {
         let default_electrum_port = match config.network {
             Network::Bitcoin => 50001,
             Network::Testnet => 60001,
+            Network::Testnet4 => 40001,
             Network::Regtest => 60401,
             Network::Signet => 60601,
             unsupported => unsupported_network(unsupported),
@@ -237,6 +243,7 @@ impl Config {
         let default_monitoring_port = match config.network {
             Network::Bitcoin => 4224,
             Network::Testnet => 14224,
+            Network::Testnet4 => 44224,
             Network::Regtest => 24224,
             Network::Signet => 34224,
             unsupported => unsupported_network(unsupported),
@@ -284,6 +291,7 @@ impl Config {
         match config.network {
             Network::Bitcoin => (),
             Network::Testnet => config.daemon_dir.push("testnet3"),
+            Network::Testnet4 => config.daemon_dir.push("testnet4"),
             Network::Regtest => config.daemon_dir.push("regtest"),
             Network::Signet => config.daemon_dir.push("signet"),
             unsupported => unsupported_network(unsupported),
@@ -350,7 +358,6 @@ impl Config {
             network: config.network,
             db_path: config.db_dir,
             db_log_dir: config.db_log_dir,
-            daemon_dir: config.daemon_dir,
             daemon_auth,
             daemon_rpc_addr,
             daemon_p2p_addr,
