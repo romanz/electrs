@@ -308,10 +308,15 @@ impl ScriptHashStatus {
     }
 
     /// Apply func only on the new blocks (fetched from daemon).
-    fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
+    fn for_new_blocks<B, F, R>(
+        &self,
+        blockhashes: B,
+        daemon: &Daemon,
+        func: F,
+    ) -> Result<ControlFlow<R>>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: FnMut(BlockHash, SerBlock) -> ControlFlow<R>,
     {
         daemon.for_blocks(
             blockhashes
@@ -347,6 +352,7 @@ impl ScriptHashStatus {
                     .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
                     .outputs = filtered_outputs.result;
             }
+            ControlFlow::Continue::<()>(())
         })?;
         let spending_blockhashes: HashSet<BlockHash> = outpoints
             .par_iter()
@@ -361,6 +367,7 @@ impl ScriptHashStatus {
                     .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
                     .spent = filtered_inputs.result;
             }
+            ControlFlow::Continue::<()>(())
         })?;
 
         Ok(result
