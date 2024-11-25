@@ -41,6 +41,7 @@ pub struct Config {
     pub electrum_txs_limit: usize,
     pub electrum_banner: String,
     pub electrum_rpc_logging: Option<RpcLogging>,
+    pub zmq_addr: Option<SocketAddr>,
 
     /// Enable compaction during initial sync
     ///
@@ -208,6 +209,11 @@ impl Config {
                 Arg::with_name("initial_sync_compaction")
                     .long("initial-sync-compaction")
                     .help("Perform compaction during initial sync (slower but less disk space required)")
+            ).arg(
+                Arg::with_name("zmq_addr")
+                    .long("zmq-addr")
+                    .help("Optional zmq socket address of the bitcoind daemon")
+                    .takes_value(true),
             );
 
         #[cfg(unix)]
@@ -352,6 +358,9 @@ impl Config {
                 .unwrap_or(&format!("127.0.0.1:{}", default_http_port)),
             "HTTP Server",
         );
+        let zmq_addr: Option<SocketAddr> = m
+            .value_of("zmq_addr")
+            .map(|e| str_to_socketaddr(e, "ZMQ addr"));
 
         let http_socket_file: Option<PathBuf> = m.value_of("http_socket_file").map(PathBuf::from);
         let monitoring_addr: SocketAddr = str_to_socketaddr(
@@ -422,6 +431,7 @@ impl Config {
             cors: m.value_of("cors").map(|s| s.to_string()),
             precache_scripts: m.value_of("precache_scripts").map(|s| s.to_string()),
             initial_sync_compaction: m.is_present("initial_sync_compaction"),
+            zmq_addr,
 
             #[cfg(feature = "liquid")]
             parent_network,
