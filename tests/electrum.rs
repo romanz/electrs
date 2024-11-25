@@ -141,7 +141,7 @@ fn test_electrum() -> Result<()> {
     Ok(())
 }
 
-/// Test the Electrum RPC server using an headless Electrum wallet
+/// Test the Electrum RPC server using a raw TCP socket
 /// This only runs on Bitcoin (non-Liquid) mode.
 #[cfg_attr(not(feature = "liquid"), test)]
 #[cfg_attr(feature = "liquid", allow(dead_code))]
