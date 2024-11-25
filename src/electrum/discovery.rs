@@ -307,7 +307,8 @@ impl DiscoveryManager {
                 entry.remove_entry();
             }
         } else {
-            unreachable!("missing expected server, corrupted state");
+            // FIXME This was an unreachable but it was reached.
+            log::warn!("missing expected server, corrupted state");
         }
     }
 
