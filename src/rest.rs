@@ -987,9 +987,7 @@ fn handle_request(
                     .ok_or_else(|| HttpError::from("Missing tx".to_string()))?,
                 _ => return http_message(StatusCode::METHOD_NOT_ALLOWED, "Invalid method", 0),
             };
-            let txid = query
-                .broadcast_raw(&txhex)
-                .map_err(|err| HttpError::from(err.description().to_string()))?;
+            let txid = query.broadcast_raw(&txhex)?;
             http_message(StatusCode::OK, txid.to_string(), 0)
         }
 
