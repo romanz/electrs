@@ -9,7 +9,7 @@ error_chain! {
             display("Connection error: {}", msg)
         }
 
-        RpcError(code: i64, error: serde_json::Value, method: String) {
+        RpcError(code: i64, error: String, method: String) {
             description("RPC error")
             display("{} RPC error {}: {}", method, code, error)
         }
