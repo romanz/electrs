@@ -526,6 +526,15 @@ impl Mempool {
                 indexed_txids.len() + fetched_txs.len(),
                 new_txids.len()
             );
+
+            {
+                let mempool = mempool.read().unwrap();
+
+                mempool.count.with_label_values(&["all_txs"]).set(all_txids.len() as f64);
+                mempool.count.with_label_values(&["fetched_txs"]).set((indexed_txids.len() + fetched_txs.len()) as f64);
+                mempool.count.with_label_values(&["missing_txs"]).set(new_txids.len() as f64);
+            }
+
             let new_txs = daemon.gettransactions_available(&new_txids)?;
 
             // Abort if the chain tip moved while fetching transactions
