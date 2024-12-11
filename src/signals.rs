@@ -1,6 +1,9 @@
 use anyhow::Context;
 use crossbeam_channel::{unbounded, Receiver};
+
+#[cfg(not(windows))]
 use signal_hook::consts::signal::*;
+#[cfg(not(windows))]
 use signal_hook::iterator::Signals;
 
 use std::sync::{
@@ -53,6 +56,7 @@ pub(crate) struct Signal {
 }
 
 impl Signal {
+    #[cfg(not(windows))]
     pub fn new() -> Signal {
         let ids = vec![
             SIGINT, SIGTERM,
@@ -77,6 +81,42 @@ impl Signal {
             }
             Ok(())
         });
+        result
+    }
+
+    #[cfg(windows)]
+    pub fn new() -> Signal {
+        let (tx, rx) = unbounded();
+        let result = Signal {
+            rx,
+            exit: ExitFlag::new(),
+        };
+
+        let exit_flag = result.exit.clone();
+        let tx_clone = tx.clone();
+
+        // Handle Ctrl-C
+        ctrlc::set_handler(move || {
+            info!("notified via Ctrl-C");
+            exit_flag.set();
+            let _ = tx.send(());
+        })
+        .expect("failed to set Ctrl-C handler");
+
+        // Handle close/shutdown
+        let exit_flag_clone = result.exit.clone();
+        spawn("signal", move || {
+            // Windows-specific handling for graceful shutdown
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if exit_flag_clone.flag.load(Ordering::Relaxed) {
+                    break;
+                }
+            }
+            let _ = tx_clone.send(());
+            Ok(())
+        });
+
         result
     }
 
