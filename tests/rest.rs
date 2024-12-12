@@ -168,6 +168,23 @@ fn test_rest() -> Result<()> {
     tester.mine()?;
     assert_eq!(get_json("/mempool")?["count"].as_u64(), Some(0));
 
+    // Test POST /tx
+    let txid = tester.send(&addr1, "9.9 BTC".parse().unwrap())?;
+    let tx_hex = get_plain(&format!("/tx/{}/hex", txid))?;
+    // Re-send the tx created by send(). It'll be accepted again since its still in the mempool.
+    let broadcast1_resp = ureq::post(&format!("http://{}/tx", rest_addr)).send_string(&tx_hex)?;
+    assert_eq!(broadcast1_resp.status(), 200);
+    assert_eq!(broadcast1_resp.into_string()?, txid.to_string());
+    // Mine the tx then submit it again. Should now fail.
+    tester.mine()?;
+    let broadcast2_res = ureq::post(&format!("http://{}/tx", rest_addr)).send_string(&tx_hex);
+    let broadcast2_resp = broadcast2_res.unwrap_err().into_response().unwrap();
+    assert_eq!(broadcast2_resp.status(), 400);
+    assert_eq!(
+        broadcast2_resp.into_string()?,
+        "sendrawtransaction RPC error -27: Transaction already in block chain"
+    );
+
     // Elements-only tests
     #[cfg(feature = "liquid")]
     {
