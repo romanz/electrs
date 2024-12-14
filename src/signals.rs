@@ -1,3 +1,4 @@
+#[cfg(not(windows))]
 use anyhow::Context;
 use crossbeam_channel::{unbounded, Receiver};
 #[cfg(not(windows))]
