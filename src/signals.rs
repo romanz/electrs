@@ -12,6 +12,7 @@ use std::sync::{
 };
 use std::{error, fmt};
 
+#[cfg(not(windows))]
 use crate::thread::spawn;
 
 #[derive(Debug)]
