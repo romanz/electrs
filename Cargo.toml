@@ -39,7 +39,7 @@ serde_json = "1.0"
 tiny_http = { version = "0.12", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-ctrlc = "3.2.5"
+ctrlc = "=3.4.2" 
 
 [target.'cfg(not(windows))'.dependencies]
 signal-hook = "0.3"
