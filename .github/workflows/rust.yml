@@ -10,16 +10,19 @@ jobs:
   build:
     name: Build
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         build-args:
           [
             --locked --no-default-features,
-            --locked,
-            --locked --features metrics_process,
+            --locked
           ]
+        include:
+          - os: ubuntu-latest
+            build-args: --locked --features metrics_process
 
     steps:
       - uses: actions/checkout@v3
