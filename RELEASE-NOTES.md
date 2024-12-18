@@ -1,3 +1,11 @@
+# 0.11.0 (TBD)
+
+* Update MSRV to 1.85
+* Support Debian 13 (trixie) / Ubuntu 25.04 (plucky)
+* Update RocksDB crate to `rust-rocksdb` 0.36
+  - [Dynamic linking with RocksDB](doc/install.md) now requires [RocksDB 9.10.0](https://packages.debian.org/trixie/librocksdb-dev) (instead of 7.8.3).
+  - Old electrs versions won't be able to read the new RocksDB database format (requiring reindex).
+
 # 0.10.10 (Jul 19 2025)
 
 * Update documentation links and typos.

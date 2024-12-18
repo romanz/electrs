@@ -2,13 +2,13 @@
 # The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
 # If you are not familiar with Docker either it's probably be safer to NOT use it.
 
-FROM debian:bookworm-slim AS base
+FROM debian:trixie-slim AS base
 RUN apt-get update -qqy
 RUN apt-get install -qqy librocksdb-dev curl
 
 ### Electrum Rust Server ###
 FROM base AS electrs-build
-RUN apt-get install -qqy cargo clang cmake
+RUN apt-get install -qqy cargo build-essential libclang-dev
 
 # Install electrs
 WORKDIR /build/electrs

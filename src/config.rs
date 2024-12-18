@@ -17,6 +17,7 @@ pub const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_SERVER_ADDRESS: [u8; 4] = [127, 0, 0, 1]; // by default, serve on IPv4 localhost
 
 mod internal {
+    #![allow(unused_imports)]
     include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
 }
 

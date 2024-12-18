@@ -1,11 +1,11 @@
 ## Quickstart
 
 <details>
-<summary>Building from source on an Ubuntu 21.10 VM:</summary>
+<summary>Building from source on an Ubuntu 25.04 / Debian 13:</summary>
 
 ```bash
 $ sudo apt update
-$ sudo apt install -y clang cmake build-essential git cargo
+$ sudo apt install -y build-essential libclang-dev git cargo
 $ git clone https://github.com/romanz/electrs
 $ cd electrs
 $ cargo build --locked --release
@@ -25,14 +25,14 @@ $ ./target/release/electrs --version  # should print the latest version
 Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken binaries.
 Make sure to use latest OS! (see #226)
 
-Install [recent Rust](https://rustup.rs/) (1.63.0+, `apt install cargo` is preferred for Debian 12),
+Install [recent Rust](https://rustup.rs/) (1.85.0+, `apt install cargo` is preferred for Debian 13),
 [latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.21+)
 and [latest Electrum wallet](https://electrum.org/#download) (4.0+).
 
 Also, install the following packages (on Debian or Ubuntu):
 ```bash
 $ sudo apt update
-$ sudo apt install clang cmake build-essential  # for building 'rust-rocksdb'
+$ sudo apt install build-essential libclang-dev  # for building 'rust-rocksdb'
 ```
 
 There are two ways to compile `electrs`: by statically linking to `librocksdb` or dynamically linking.
@@ -52,18 +52,18 @@ The advantages of dynamic linking:
 * Cross compilation is more reliable
 * If another application is also using `rocksdb`, you don't store it on disk and in RAM twice
 
-If you decided to use dynamic linking, you will also need to install the library ([7.8.3 release](https://github.com/facebook/rocksdb/releases/tag/v7.8.3) is required).
-On [Debian 12 (bookworm)](https://packages.debian.org/bookworm/librocksdb-dev) and [Ubuntu 23.04 (lunar)](https://packages.ubuntu.com/lunar/librocksdb-dev):
+If you decided to use dynamic linking, you will also need to install the library ([9.10.0 release](https://github.com/facebook/rocksdb/releases/tag/v9.10.0) is required).
+On [Debian 13 (trixie)](https://packages.debian.org/bookworm/librocksdb-dev) and [Ubuntu 25.04 (plucky)](https://packages.ubuntu.com/plucky/librocksdb-dev):
 
 ```bash
-$ sudo apt install librocksdb-dev=7.8.3-2
+$ sudo apt install librocksdb-dev=9.10.0-1
 ```
 
 For other versions of Debian or Ubuntu, you can build librocksdb and install inside `/usr/local` directory using following command.
 
 ```bash
 $ sudo apt install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
-$ git clone -b v7.8.3 --depth 1 https://github.com/facebook/rocksdb && cd rocksdb
+$ git clone -b v9.10.0 --depth 1 https://github.com/facebook/rocksdb && cd rocksdb
 $ make shared_lib -j $(nproc) && sudo make install-shared
 $ cd .. && rm -r rocksdb
 ```
@@ -149,7 +149,7 @@ sudo chroot debootstrap-buster /bin/bash
 apt install curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
-apt install clang cmake build-essential
+apt install build-essential libclang-dev
 
 # install target specific cross compiler (armhf/gnueabihf)
 apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross

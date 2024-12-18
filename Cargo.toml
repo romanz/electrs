@@ -10,7 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.85.0"
 build = "build.rs"
 
 [features]
@@ -45,8 +45,8 @@ ctrlc = "=3.4.2"
 [target.'cfg(not(windows))'.dependencies]
 signal-hook = "0.3"
 
-[dependencies.electrs-rocksdb]
-version = "0.19.0-e3"
+[dependencies.rust-rocksdb]
+version = "0.36"
 
 default-features = false
 # ZSTD is used for data compression

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use electrs_rocksdb as rocksdb;
+use rust_rocksdb as rocksdb;
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
