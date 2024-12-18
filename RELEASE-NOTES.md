@@ -1,3 +1,9 @@
+# 0.11.0 (TBD)
+
+* Update MSRV to 1.85
+* Test on Debian 13
+* Update RocksDB crate to `rust-rocksdb` 0.36
+
 # 0.10.10 (Jul 19 2025)
 
 * Update documentation links and typos.
