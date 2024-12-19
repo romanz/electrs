@@ -5,8 +5,8 @@ mod metrics_impl {
     #[cfg(feature = "metrics_process")]
     use prometheus::process_collector::ProcessCollector;
 
-    use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry};
-    use tiny_http::{Response, Server};
+    use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry, TEXT_FORMAT};
+    use tiny_http::{Header as HttpHeader, Response, Server};
 
     use std::net::SocketAddr;
 
@@ -33,13 +33,15 @@ mod metrics_impl {
             };
 
             spawn("metrics", move || {
+                let content_type = HttpHeader::from_bytes(&b"Content-Type"[..], TEXT_FORMAT)
+                    .expect("failed to create HTTP header for Prometheus text format");
                 for request in server.incoming_requests() {
                     let mut buffer = vec![];
                     prometheus::TextEncoder::new()
                         .encode(&reg.gather(), &mut buffer)
                         .context("failed to encode metrics")?;
                     request
-                        .respond(Response::from_data(buffer))
+                        .respond(Response::from_data(buffer).with_header(content_type.clone()))
                         .context("failed to send HTTP response")?;
                 }
                 Ok(())
