@@ -190,10 +190,10 @@ fn default_config_files() -> Vec<OsString> {
 impl Config {
     /// Parses args, env vars, config files and post-processes them
     pub fn from_args() -> Config {
-        use internal::ResultExt;
+        use internal::prelude::ResultExt;
 
         let (mut config, _args) =
-            internal::Config::including_optional_config_files(default_config_files())
+            internal::prelude::Config::including_optional_config_files(default_config_files())
                 .unwrap_or_exit();
 
         fn unsupported_network(network: Network) -> ! {
