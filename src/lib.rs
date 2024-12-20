@@ -7,8 +7,6 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-extern crate configure_me;
-
 mod cache;
 mod chain;
 mod config;
