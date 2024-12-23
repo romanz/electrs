@@ -29,7 +29,7 @@ bitcoincore-rpc = { version = "0.19.0" }
 configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
-env_logger = "0.10"
+env_logger = "0.11"
 log = "0.4"
 parking_lot = "0.12"
 prometheus = { version = "0.13", optional = true }
