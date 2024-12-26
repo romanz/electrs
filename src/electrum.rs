@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use bitcoin::{
     consensus::{deserialize, encode::serialize_hex},
     hashes::hex::FromHex,
+    hex::DisplayHex,
     BlockHash, Txid,
 };
 use crossbeam_channel::Receiver;
@@ -373,8 +374,11 @@ impl Rpc {
                 .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
-        if let Some(tx) = self.cache.get_tx(&txid, serialize_hex) {
-            return Ok(json!(tx));
+        if let Some(tx_hex) = self
+            .cache
+            .get_tx(&txid, |tx_bytes| tx_bytes.to_lower_hex_string())
+        {
+            return Ok(json!(tx_hex));
         }
         debug!("tx cache miss: txid={}", txid);
         // use internal index to load confirmed transaction without an RPC
