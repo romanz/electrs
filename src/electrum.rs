@@ -374,6 +374,7 @@ impl Rpc {
                 .map(|(blockhash, _tx)| blockhash);
             return self.daemon.get_transaction_info(&txid, blockhash);
         }
+        // if the scripthash was subscribed, tx should be cached
         if let Some(tx_hex) = self
             .cache
             .get_tx(&txid, |tx_bytes| tx_bytes.to_lower_hex_string())
@@ -381,13 +382,13 @@ impl Rpc {
             return Ok(json!(tx_hex));
         }
         debug!("tx cache miss: txid={}", txid);
-        // use internal index to load confirmed transaction without an RPC
-        if let Some(tx) = self
+        // use internal index to load confirmed transaction
+        if let Some(tx_hex) = self
             .tracker
             .lookup_transaction(&self.daemon, txid)?
-            .map(|(_blockhash, tx)| tx)
+            .map(|(_blockhash, tx)| tx.to_lower_hex_string())
         {
-            return Ok(json!(serialize_hex(&tx)));
+            return Ok(json!(tx_hex));
         }
         // load unconfirmed transaction via RPC
         Ok(json!(self.daemon.get_transaction_hex(&txid, None)?))

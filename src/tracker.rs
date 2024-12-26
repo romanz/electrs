@@ -1,10 +1,8 @@
+use std::ops::ControlFlow;
+
 use anyhow::{Context, Result};
-use bitcoin::{BlockHash, Transaction, Txid};
-use bitcoin_slices::{
-    bsl::{self, FindTransaction},
-    Error::VisitBreak,
-    Visit,
-};
+use bitcoin::{BlockHash, Txid};
+use bitcoin_slices::{bsl, Error::VisitBreak, Visit, Visitor};
 
 use crate::{
     cache::Cache,
@@ -17,6 +15,7 @@ use crate::{
     metrics::Metrics,
     signals::ExitFlag,
     status::{Balance, ScriptHashStatus, UnspentEntry},
+    types::bsl_txid,
 };
 
 /// Electrum protocol subscriptions' tracker
@@ -106,7 +105,7 @@ impl Tracker {
         &self,
         daemon: &Daemon,
         txid: Txid,
-    ) -> Result<Option<(BlockHash, Transaction)>> {
+    ) -> Result<Option<(BlockHash, Box<[u8]>)>> {
         // Note: there are two blocks with coinbase transactions having same txid (see BIP-30)
         let blockhashes = self.index.filter_by_txid(txid);
         let mut result = None;
@@ -116,10 +115,31 @@ impl Tracker {
             }
             let mut visitor = FindTransaction::new(txid);
             result = match bsl::Block::visit(&block, &mut visitor) {
-                Ok(_) | Err(VisitBreak) => visitor.tx_found().map(|tx| (blockhash, tx)),
+                Ok(_) | Err(VisitBreak) => visitor.found.map(|tx| (blockhash, tx)),
                 Err(e) => panic!("core returned invalid block: {:?}", e),
             };
         })?;
         Ok(result)
+    }
+}
+
+pub struct FindTransaction {
+    txid: bitcoin::Txid,
+    found: Option<Box<[u8]>>, // no need to deserialize
+}
+
+impl FindTransaction {
+    pub fn new(txid: bitcoin::Txid) -> Self {
+        Self { txid, found: None }
+    }
+}
+impl Visitor for FindTransaction {
+    fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
+        if self.txid == bsl_txid(tx) {
+            self.found = Some(tx.as_ref().into());
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
     }
 }
