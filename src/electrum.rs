@@ -406,9 +406,9 @@ impl Rpc {
             Some(position) => {
                 let proof = Proof::create(&txids, position);
                 Ok(json!({
-                "block_height": height,
-                "pos": proof.position(),
-                "merkle": proof.to_hex(),
+                    "block_height": height,
+                    "pos": proof.position(),
+                    "merkle": proof.to_hex(),
                 }))
             }
         }
