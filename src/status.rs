@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bitcoin::{
-    consensus::Decodable,
+    consensus::serialize,
     hashes::{sha256, Hash, HashEngine},
     Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
@@ -337,7 +337,7 @@ impl ScriptHashStatus {
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
             for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
-                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
+                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx_bytes);
                 outpoints.extend(make_outpoints(
                     filtered_outputs.txid,
                     &filtered_outputs.result,
@@ -355,7 +355,7 @@ impl ScriptHashStatus {
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
             let block_entries = result.entry(blockhash).or_default();
             for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
-                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx_bytes);
                 block_entries
                     .entry(filtered_inputs.pos)
                     .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
@@ -394,7 +394,7 @@ impl ScriptHashStatus {
                 .entry(entry.txid)
                 .or_insert_with(|| TxEntry::new(entry.txid))
                 .outputs = funding_outputs;
-            cache.add_tx(entry.txid, || entry.tx.clone());
+            cache.add_tx(entry.txid, || serialize(&entry.tx).into_boxed_slice());
         }
         for entry in outpoints
             .iter()
@@ -406,7 +406,7 @@ impl ScriptHashStatus {
                 .entry(entry.txid)
                 .or_insert_with(|| TxEntry::new(entry.txid))
                 .spent = spent_outpoints;
-            cache.add_tx(entry.txid, || entry.tx.clone());
+            cache.add_tx(entry.txid, || serialize(&entry.tx).into_boxed_slice());
         }
         result.into_values().collect()
     }
@@ -501,7 +501,7 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
 }
 
 struct FilteredTx<T> {
-    tx: Transaction,
+    tx_bytes: Box<[u8]>,
     txid: Txid,
     pos: usize,
     result: Vec<T>,
@@ -515,22 +515,20 @@ fn filter_block_txs_outputs(block: SerBlock, scripthash: ScriptHash) -> Vec<Filt
         pos: usize,
     }
     impl Visitor for FindOutputs {
+        // Called after all TxOuts are visited
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::take(&mut self.buffer);
-                let txid = bsl_txid(tx);
-                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<TxOutput> {
-                    tx,
-                    txid,
+                    tx_bytes: tx.as_ref().into(),
+                    txid: bsl_txid(tx),
                     pos: self.pos,
-                    result,
+                    result: std::mem::take(&mut self.buffer), // clear buffer for next tx
                 });
             }
             self.pos += 1;
             ControlFlow::Continue(())
         }
+        // Keep only relevant outputs
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             let current = ScriptHash::hash(tx_out.script_pubkey());
             if current == self.scripthash {
@@ -566,22 +564,20 @@ fn filter_block_txs_inputs(
     }
 
     impl Visitor for FindInputs<'_> {
+        // Called after all TxIns are visited
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::take(&mut self.buffer);
-                let txid = bsl_txid(tx);
-                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<OutPoint> {
-                    tx,
-                    txid,
+                    tx_bytes: tx.as_ref().into(),
+                    txid: bsl_txid(tx),
                     pos: self.pos,
-                    result,
+                    result: std::mem::take(&mut self.buffer), // clear buffer for next tx
                 });
             }
             self.pos += 1;
             ControlFlow::Continue(())
         }
+        // Keep only relevant outpoints
         fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
             let current: OutPoint = tx_in.prevout().into();
             if self.outpoints.contains(&current) {
