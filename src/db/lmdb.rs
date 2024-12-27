@@ -9,7 +9,9 @@ use heed::{
     EnvOpenOptions, RoTxn,
 };
 
-use crate::types::{HashPrefix, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE};
+use crate::types::{
+    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE,
+};
 
 use super::{Database, WriteBatch};
 
@@ -109,23 +111,25 @@ impl Database for DBStore {
         Ok(this)
     }
 
-    type HashPrefixRowIter<'a> = RowKeyIter<'a, HASH_PREFIX_ROW_SIZE>;
-
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(&self.funding, prefix)
     }
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(&self.spending, prefix)
     }
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(&self.txid, prefix)
     }
 
-    type HeaderIter<'a> = HeaderIter<'a>;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         let rtxn = self.env.clone().static_read_txn().unwrap();
 
         let iter = self

@@ -4,7 +4,9 @@ use rust_rocksdb as rocksdb;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::types::{HashPrefix, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
+use crate::types::{
+    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE,
+};
 
 use super::{Database, WriteBatch};
 
@@ -110,23 +112,25 @@ impl Database for DBStore {
         Self::open(path, log_dir, auto_reindex, db_parallelism)
     }
 
-    type HashPrefixRowIter<'a> = DBIterator<'a, HASH_PREFIX_ROW_SIZE>;
-
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_funding(prefix)
     }
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_spending(prefix)
     }
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_txid(prefix)
     }
 
-    type HeaderIter<'a> = DBIterator<'a, HEADER_ROW_SIZE>;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         self.iter_headers()
     }
 

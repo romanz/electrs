@@ -6,7 +6,7 @@ use sled::Batch;
 
 use super::{hash_prefix_range, Database, WriteBatch};
 
-use crate::types::{HashPrefix, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
+use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
 
 const FORMAT_KEY: u8 = b'F';
 const TIP_KEY: u8 = b'T';
@@ -86,23 +86,25 @@ impl Database for DBStore {
         Ok(this)
     }
 
-    type HashPrefixRowIter<'a> = RowKeyIter<HASH_PREFIX_ROW_SIZE>;
-
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         RowKeyIter(self.funding.range(hash_prefix_range(prefix)))
     }
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         RowKeyIter(self.spending.range(hash_prefix_range(prefix)))
     }
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         RowKeyIter(self.txid.range(hash_prefix_range(prefix)))
     }
 
-    type HeaderIter<'a> = RowKeyIter<HEADER_ROW_SIZE>;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         RowKeyIter(self.headers.range::<SerializedHeaderRow, _>(..))
     }
 

@@ -1,5 +1,5 @@
 use super::{Database, WriteBatch};
-use crate::types::{HashPrefix, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE};
+use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
 use anyhow::{Context, Result};
 use fjall::{Keyspace, PartitionHandle, PersistMode, Slice};
 use std::fs::{create_dir_all, remove_file};
@@ -10,17 +10,11 @@ const TIP_KEY: u8 = b'T';
 
 const CURRENT_FORMAT: u64 = 0;
 
-pub struct RowKeyIter<const N: usize>(
-    // TODO remove this (third) Box
-    Box<dyn Iterator<Item = Result<(Slice, Slice), fjall::Error>>>,
-);
-
-impl<const N: usize> Iterator for RowKeyIter<N> {
-    type Item = [u8; N];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|v| (&*v.unwrap().0).try_into().unwrap())
-    }
+fn fjall_entry_to_key_array<const N: usize>(
+    entry: Result<(Slice, Slice), fjall::Error>,
+) -> [u8; N] {
+    let (k, _v) = entry.unwrap();
+    (&*k).try_into().unwrap()
 }
 
 pub struct DBStore {
@@ -87,24 +81,26 @@ impl Database for DBStore {
         Ok(this)
     }
 
-    type HashPrefixRowIter<'a> = RowKeyIter<HASH_PREFIX_ROW_SIZE>;
-
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         Self::iter_table_hash_prefix(&self.funding, prefix)
     }
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         Self::iter_table_hash_prefix(&self.spending, prefix)
     }
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         Self::iter_table_hash_prefix(&self.txid, prefix)
     }
 
-    type HeaderIter<'a> = RowKeyIter<HEADER_ROW_SIZE>;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_> {
-        RowKeyIter(Box::new(self.headers.iter()))
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
+        self.headers.iter().map(fjall_entry_to_key_array)
     }
 
     fn get_tip(&self) -> Option<Vec<u8>> {
@@ -189,8 +185,8 @@ impl DBStore {
     fn iter_table_hash_prefix(
         table: &PartitionHandle,
         prefix: HashPrefix,
-    ) -> RowKeyIter<HASH_PREFIX_ROW_SIZE> {
-        RowKeyIter(Box::new(table.prefix(prefix)))
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> {
+        table.prefix(prefix).map(fjall_entry_to_key_array)
     }
 
     fn config_value<const N: usize>(&self, key: u8) -> Result<Option<[u8; N]>, fjall::Error> {

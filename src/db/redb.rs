@@ -1,6 +1,6 @@
 use super::{hash_prefix_range, Database, WriteBatch};
 use crate::types::{
-    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE,
+    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE,
 };
 use anyhow::{Context, Result};
 use redb::{ReadableTableMetadata, TableDefinition, TableHandle};
@@ -105,23 +105,25 @@ impl Database for DBStore {
         Ok(this)
     }
 
-    type HashPrefixRowIter<'a> = RowKeyIter<'a, HASH_PREFIX_ROW_SIZE>;
-
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(FUNDING_TABLE, prefix)
     }
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(SPENDING_TABLE, prefix)
     }
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_> {
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
         self.iter_table_hash_prefix(TXID_TABLE, prefix)
     }
 
-    type HeaderIter<'a> = RowKeyIter<'a, HEADER_ROW_SIZE>;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_> {
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         let read_txn = self
             .db
             .begin_read()

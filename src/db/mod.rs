@@ -60,21 +60,19 @@ pub trait Database: Sized + Sync {
         db_parallelism: u8,
     ) -> Result<Self>;
 
-    type HashPrefixRowIter<'a>: Iterator<Item = SerializedHashPrefixRow> + 'a
-    where
-        Self: 'a;
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_;
 
-    fn iter_funding(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_;
 
-    fn iter_spending(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_;
 
-    fn iter_txid(&self, prefix: HashPrefix) -> Self::HashPrefixRowIter<'_>;
-
-    type HeaderIter<'a>: Iterator<Item = SerializedHeaderRow> + 'a
-    where
-        Self: 'a;
-
-    fn iter_headers(&self) -> Self::HeaderIter<'_>;
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_;
 
     fn get_tip(&self) -> Option<Vec<u8>>;
 
