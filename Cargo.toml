@@ -10,13 +10,18 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.74.0"
 build = "build.rs"
 
 [features]
-default = ["metrics"]
+default = ["metrics", "rocksdb", "lmdb", "redb", "sled", "fjall"]
 metrics = ["prometheus", "tiny_http"]
 metrics_process = ["prometheus/process"]
+rocksdb = ["dep:rust-rocksdb"]
+lmdb = ["dep:heed"]
+redb = ["dep:redb"]
+sled = ["dep:sled"]
+fjall = ["dep:fjall"]
 
 [package.metadata.configure_me]
 spec = "internal/config_specification.toml"
@@ -38,6 +43,10 @@ serde = "1.0"
 serde_derive = "1.0, <=1.0.171"  # avoid precompiled binaries (https://github.com/serde-rs/serde/issues/2538)
 serde_json = "1.0"
 tiny_http = { version = "0.12", optional = true }
+redb = { version = "2.1.0", optional = true }
+sled = { version = "0.34.7", optional = true }
+heed = { version = "0.20.3", default-features = false, optional = true }
+fjall = { version = "2.4.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 ctrlc = "=3.4.2"
@@ -45,8 +54,9 @@ ctrlc = "=3.4.2"
 [target.'cfg(not(windows))'.dependencies]
 signal-hook = "0.3"
 
-[dependencies.electrs-rocksdb]
-version = "0.19.0-e3"
+[dependencies.rust-rocksdb]
+version = "0.27.1"
+optional = true
 
 default-features = false
 # ZSTD is used for data compression

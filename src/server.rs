@@ -10,7 +10,8 @@ use std::{
 };
 
 use crate::{
-    config::Config,
+    config::{Config, DatabaseType},
+    db::Database,
     electrum::{Client, Rpc},
     metrics::{self, Metrics},
     signals::ExitError,
@@ -83,7 +84,48 @@ fn serve() -> Result<()> {
         "step",
         metrics::default_duration_buckets(),
     );
-    let mut rpc = Rpc::new(&config, metrics)?;
+
+    match config.database {
+        #[cfg(feature = "rocksdb")]
+        DatabaseType::RocksDB => {
+            let rpc = Rpc::<crate::db::rocksdb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[cfg(feature = "lmdb")]
+        DatabaseType::LMDB => {
+            let rpc = Rpc::<crate::db::lmdb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[cfg(feature = "redb")]
+        DatabaseType::ReDB => {
+            let rpc = Rpc::<crate::db::redb::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[cfg(feature = "sled")]
+        DatabaseType::Sled => {
+            let rpc = Rpc::<crate::db::sled::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[cfg(feature = "fjall")]
+        DatabaseType::Fjall => {
+            let rpc = Rpc::<crate::db::fjall::DBStore>::new(&config, metrics)?;
+            server_loop(rpc, server_rx, server_batch_size, duration, config)
+        }
+        #[allow(unreachable_patterns)]
+        _ => {
+            Err(anyhow!("this build does not support using {} because that feature was not enabled at compile time", config.database))
+        }
+    }
+}
+
+fn server_loop<D: Database>(
+    mut rpc: Rpc<D>,
+    server_rx: crossbeam_channel::Receiver<Event>,
+    server_batch_size: metrics::Histogram,
+    duration: metrics::Histogram,
+    config: Config,
+) -> Result<()> {
+    debug!("Using {} as database", config.database);
 
     let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
@@ -130,7 +172,7 @@ fn serve() -> Result<()> {
     }
 }
 
-fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
+fn notify_peers(rpc: &Rpc<impl Database>, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
     peers
         .into_par_iter()
         .filter_map(|(_, mut peer)| match notify_peer(rpc, &mut peer) {
@@ -144,7 +186,7 @@ fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> 
         .collect()
 }
 
-fn notify_peer(rpc: &Rpc, peer: &mut Peer) -> Result<()> {
+fn notify_peer(rpc: &Rpc<impl Database>, peer: &mut Peer) -> Result<()> {
     let notifications = rpc
         .update_client(&mut peer.client)
         .context("failed to generate notifications")?;
@@ -163,7 +205,7 @@ enum Message {
     Done,
 }
 
-fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
+fn handle_events(rpc: &Rpc<impl Database>, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
     let mut events_by_peer = HashMap::<usize, Vec<Message>>::new();
     events
         .into_iter()
@@ -174,7 +216,7 @@ fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>
 }
 
 fn handle_peer_events(
-    rpc: &Rpc,
+    rpc: &Rpc<impl Database>,
     peers: &mut HashMap<usize, Peer>,
     peer_id: usize,
     messages: Vec<Message>,
