@@ -10,15 +10,19 @@ pub mod redb;
 #[cfg(feature = "sled")]
 pub mod sled;
 
+#[cfg(feature = "fjall")]
+pub mod fjall;
+
 #[cfg(not(any(
     feature = "rocksdb",
     feature = "lmdb",
     feature = "redb",
     feature = "sled",
+    feature = "fjall",
 )))]
 compile_error!(
     "Tried to build electrs without database, but at least one is needed. \
-     Enable at least one of the following features: 'rocksdb', 'lmdb', 'redb', 'sled'."
+     Enable at least one of the following features: 'rocksdb', 'lmdb', 'redb', 'sled', 'fjall'."
 );
 
 use anyhow::Result;
