@@ -1,3 +1,13 @@
+# 0.10.8 (Dec 30 2024)
+
+*  Separate blocks reading & index writing into scoped threads
+*  Set HTTP `Content-Type` header for Prometheus response
+*  Use `ctrlc` in place of `signal-hook` on Windows
+*  Don't deserialize transactions if not needed
+*  Run CI only on `master` branch and PRs
+*  Update dependencies (`bitcoin`, `bitcoin_slices`, `crossbeam-channel`, `tempfile`)
+
+
 # 0.10.7 (Nov 05 2024)
 
 * Support testnet4
