@@ -36,6 +36,7 @@ impl Tracker {
             &config.db_path,
             config.db_log_dir.as_deref(),
             config.auto_reindex,
+            config.db_parallelism,
         )?;
         let chain = Chain::new(config.network);
         Ok(Self {
