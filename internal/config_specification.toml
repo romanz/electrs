@@ -35,6 +35,12 @@ type = "std::path::PathBuf"
 doc = "Directory to store index database internal log (default: same as specified by `db_dir`)"
 
 [[param]]
+name = "db_parallelism"
+type = "u8"
+doc = "Max threads to use for DB background operations (flushes and compactions)"
+default = "1"
+
+[[param]]
 name = "daemon_dir"
 type = "std::path::PathBuf"
 doc = "Data directory of Bitcoind (default: ~/.bitcoin/)"
