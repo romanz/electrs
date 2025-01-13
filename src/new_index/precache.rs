@@ -7,7 +7,7 @@ use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use rayon::prelude::*;
 
-use hex::FromHex;
+use bitcoin::hex::FromHex;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;

@@ -1,10 +1,10 @@
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hex::FromHex;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::merkle_tree::MerkleBlock;
-use bitcoin::VarInt;
+
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
-use hex::FromHex;
 use itertools::Itertools;
 use rayon::prelude::*;
 
@@ -38,6 +38,12 @@ use crate::new_index::fetch::{start_fetcher, BlockEntry, FetchFrom};
 
 #[cfg(feature = "liquid")]
 use crate::elements::{asset, peg};
+
+#[cfg(feature = "liquid")]
+use elements::encode::VarInt;
+
+#[cfg(not(feature = "liquid"))]
+use bitcoin::VarInt;
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
 
