@@ -24,7 +24,7 @@ use tokio::sync::oneshot;
 use std::fs;
 use std::str::FromStr;
 
-use tracing::instrument;
+use instrumented_macro::instrumented;
 
 #[cfg(feature = "liquid")]
 use {
@@ -593,7 +593,7 @@ impl Handle {
     }
 }
 
-#[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
+#[instrumented]
 fn handle_request(
     method: Method,
     uri: hyper::Uri,
@@ -1167,7 +1167,7 @@ fn json_response<T: Serialize>(value: T, ttl: u32) -> Result<Response<Body>, Htt
         .unwrap())
 }
 
-#[instrument(skip_all, fields(module = module_path!(), file = file!(), line = line!()))]
+#[instrumented]
 fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, HttpError> {
     let mut values = Vec::new();
     let mut current_hash = match start_height {
