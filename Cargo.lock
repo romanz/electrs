@@ -908,6 +908,7 @@ dependencies = [
  "glob",
  "hyper",
  "hyperlocal",
+ "instrumented_macro",
  "itertools 0.12.1",
  "lazy_static",
  "libc",
@@ -1613,6 +1614,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "instrumented_macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
