@@ -158,7 +158,7 @@ impl TransactionValue {
         let weight = weight.to_wu();
 
         TransactionValue {
-            txid: tx.txid(),
+            txid: tx.compute_txid(),
             #[cfg(not(feature = "liquid"))]
             version: tx.version.0 as u32,
             #[cfg(feature = "liquid")]

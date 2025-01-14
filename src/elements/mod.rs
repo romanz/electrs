@@ -94,4 +94,13 @@ pub mod ebcompact {
             self.is_v1_p2tr()
         }
     }
+
+    pub trait TxidCompat {
+        fn compute_txid(&self) -> elements::Txid;
+    }
+    impl TxidCompat for elements::Transaction {
+        fn compute_txid(&self) -> elements::Txid {
+            self.txid()
+        }
+    }
 }
