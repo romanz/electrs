@@ -1,7 +1,7 @@
 use crate::chain::{Network, Transaction, TxOut};
 use std::collections::HashMap;
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
 const VSIZE_BIN_WIDTH: u64 = 50_000; // in vbytes
 
@@ -48,7 +48,7 @@ pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>, network: N
     tx.fee_in(*network.native_asset())
 }
 
-#[instrumented]
+#[trace]
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f64, u64)> {
     entries.sort_unstable_by(|e1, e2| e1.fee_per_vbyte.partial_cmp(&e2.fee_per_vbyte).unwrap());
 

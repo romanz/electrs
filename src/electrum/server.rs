@@ -13,7 +13,7 @@ use crypto::sha2::Sha256;
 use error_chain::ChainedError;
 use serde_json::{from_str, Value};
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize_hex;
@@ -71,7 +71,7 @@ fn bool_from_value_or(val: Option<&Value>, name: &str, default: bool) -> Result<
 }
 
 // TODO: implement caching and delta updates
-#[instrumented]
+#[trace]
 fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<FullHash> {
     if txs.is_empty() {
         None
@@ -264,7 +264,7 @@ impl Connection {
         }))
     }
 
-    #[instrumented]
+    #[trace]
     fn blockchain_estimatefee(&self, params: &[Value]) -> Result<Value> {
         let conf_target = usize_from_value(params.get(0), "blocks_count")?;
         let fee_rate = self
@@ -392,7 +392,7 @@ impl Connection {
         Ok(json!(rawtx.to_lower_hex_string()))
     }
 
-    #[instrumented]
+    #[trace]
     fn blockchain_transaction_get_merkle(&self, params: &[Value]) -> Result<Value> {
         let txid = Txid::from(hash_from_value(params.get(0)).chain_err(|| "bad tx_hash")?);
         let height = usize_from_value(params.get(1), "height")?;
@@ -430,7 +430,7 @@ impl Connection {
         }))
     }
 
-    #[instrumented(method = %method)]
+    #[trace(method = %method)]
     fn handle_command(&mut self, method: &str, params: &[Value], id: &Value) -> Result<Value> {
         let timer = self
             .stats
@@ -487,7 +487,7 @@ impl Connection {
         })
     }
 
-    #[instrumented]
+    #[trace]
     fn update_subscriptions(&mut self) -> Result<Vec<Value>> {
         let timer = self
             .stats
@@ -545,7 +545,7 @@ impl Connection {
         Ok(())
     }
 
-    #[instrumented]
+    #[trace]
     fn handle_replies(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let empty_params = json!([]);
         loop {
@@ -610,7 +610,7 @@ impl Connection {
         }
     }
 
-    #[instrumented]
+    #[trace]
     fn parse_requests(mut reader: BufReader<TcpStream>, tx: &SyncSender<Message>) -> Result<()> {
         loop {
             let mut line = Vec::<u8>::new();
@@ -673,7 +673,7 @@ impl Connection {
     }
 }
 
-#[instrumented]
+#[trace]
 fn get_history(
     query: &Query,
     scripthash: &[u8],

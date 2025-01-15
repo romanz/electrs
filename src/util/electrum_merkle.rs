@@ -3,9 +3,9 @@ use crate::errors::*;
 use crate::new_index::ChainQuery;
 use bitcoin::hashes::{sha256d::Hash as Sha256dHash, Hash};
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
-#[instrumented]
+#[trace]
 pub fn get_tx_merkle_proof(
     chain: &ChainQuery,
     tx_hash: &Txid,
@@ -24,7 +24,7 @@ pub fn get_tx_merkle_proof(
     Ok((branch, pos))
 }
 
-#[instrumented]
+#[trace]
 pub fn get_header_merkle_proof(
     chain: &ChainQuery,
     height: usize,
@@ -53,7 +53,7 @@ pub fn get_header_merkle_proof(
     let header_hashes = header_hashes.into_iter().map(Sha256dHash::from).collect();
     Ok(create_merkle_branch_and_root(header_hashes, height))
 }
-#[instrumented]
+#[trace]
 pub fn get_id_from_pos(
     chain: &ChainQuery,
     height: usize,

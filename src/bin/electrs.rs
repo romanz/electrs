@@ -159,7 +159,7 @@ fn main_() {
     }
 }
 
-#[cfg(feature = "no-otlp-tracing")]
+#[cfg(not(feature = "otlp-tracing"))]
 fn main() {
     main_();
 }

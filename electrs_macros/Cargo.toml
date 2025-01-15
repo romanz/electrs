@@ -1,10 +1,13 @@
 [package]
-name = "instrumented_macro"
+name = "electrs_macros"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
 proc-macro = true
+
+[features]
+otlp-tracing = []
 
 [dependencies]
 syn = "2.0"

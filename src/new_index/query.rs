@@ -11,7 +11,7 @@ use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
 #[cfg(feature = "liquid")]
 use crate::{
@@ -71,7 +71,7 @@ impl Query {
         self.mempool.read().unwrap()
     }
 
-    #[instrumented]
+    #[trace]
     pub fn broadcast_raw(&self, txhex: &str) -> Result<Txid> {
         let txid = self.daemon.broadcast_raw(txhex)?;
         let _ = self
@@ -82,7 +82,7 @@ impl Query {
         Ok(txid)
     }
 
-    #[instrumented]
+    #[trace]
     pub fn utxo(&self, scripthash: &[u8]) -> Result<Vec<Utxo>> {
         let mut utxos = self.chain.utxo(scripthash, self.config.utxos_limit)?;
         let mempool = self.mempool();
@@ -91,7 +91,7 @@ impl Query {
         Ok(utxos)
     }
 
-    #[instrumented]
+    #[trace]
     pub fn history_txids(&self, scripthash: &[u8], limit: usize) -> Vec<(Txid, Option<BlockId>)> {
         let confirmed_txids = self.chain.history_txids(scripthash, limit);
         let confirmed_len = confirmed_txids.len();
@@ -113,21 +113,21 @@ impl Query {
         )
     }
 
-    #[instrumented]
+    #[trace]
     pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
         self.chain
             .lookup_txn(txid, None)
             .or_else(|| self.mempool().lookup_txn(txid))
     }
 
-    #[instrumented]
+    #[trace]
     pub fn lookup_raw_txn(&self, txid: &Txid) -> Option<Bytes> {
         self.chain
             .lookup_raw_txn(txid, None)
             .or_else(|| self.mempool().lookup_raw_txn(txid))
     }
 
-    #[instrumented]
+    #[trace]
     pub fn lookup_txos(&self, outpoints: BTreeSet<OutPoint>) -> HashMap<OutPoint, TxOut> {
         // the mempool lookup_txos() internally looks up confirmed txos as well
         self.mempool()
@@ -135,14 +135,14 @@ impl Query {
             .expect("failed loading txos")
     }
 
-    #[instrumented]
+    #[trace]
     pub fn lookup_spend(&self, outpoint: &OutPoint) -> Option<SpendingInput> {
         self.chain
             .lookup_spend(outpoint)
             .or_else(|| self.mempool().lookup_spend(outpoint))
     }
 
-    #[instrumented]
+    #[trace]
     pub fn lookup_tx_spends(&self, tx: Transaction) -> Vec<Option<SpendingInput>> {
         let txid = tx.compute_txid();
 
@@ -162,22 +162,22 @@ impl Query {
             .collect()
     }
 
-    #[instrumented]
+    #[trace]
     pub fn get_tx_status(&self, txid: &Txid) -> TransactionStatus {
         TransactionStatus::from(self.chain.tx_confirming_block(txid))
     }
 
-    #[instrumented]
+    #[trace]
     pub fn get_mempool_tx_fee(&self, txid: &Txid) -> Option<u64> {
         self.mempool().get_tx_fee(txid)
     }
 
-    #[instrumented]
+    #[trace]
     pub fn has_unconfirmed_parents(&self, txid: &Txid) -> bool {
         self.mempool().has_unconfirmed_parents(txid)
     }
 
-    #[instrumented]
+    #[trace]
     pub fn estimate_fee(&self, conf_target: u16) -> Option<f64> {
         if self.config.network_type.is_regtest() {
             return self.get_relayfee().ok();
@@ -197,7 +197,7 @@ impl Query {
             .copied()
     }
 
-    #[instrumented]
+    #[trace]
     pub fn estimate_fee_map(&self) -> HashMap<u16, f64> {
         if let (ref cache, Some(cache_time)) = *self.cached_estimates.read().unwrap() {
             if cache_time.elapsed() < Duration::from_secs(FEE_ESTIMATES_TTL) {
@@ -209,7 +209,7 @@ impl Query {
         self.cached_estimates.read().unwrap().0.clone()
     }
 
-    #[instrumented]
+    #[trace]
     fn update_fee_estimates(&self) {
         match self.daemon.estimatesmartfee_batch(&CONF_TARGETS) {
             Ok(estimates) => {
@@ -221,7 +221,7 @@ impl Query {
         }
     }
 
-    #[instrumented]
+    #[trace]
     pub fn get_relayfee(&self) -> Result<f64> {
         if let Some(cached) = *self.cached_relayfee.read().unwrap() {
             return Ok(cached);
@@ -252,13 +252,13 @@ impl Query {
     }
 
     #[cfg(feature = "liquid")]
-    #[instrumented]
+    #[trace]
     pub fn lookup_asset(&self, asset_id: &AssetId) -> Result<Option<LiquidAsset>> {
         lookup_asset(&self, self.asset_db.as_ref(), asset_id, None)
     }
 
     #[cfg(feature = "liquid")]
-    #[instrumented]
+    #[trace]
     pub fn list_registry_assets(
         &self,
         start_index: usize,

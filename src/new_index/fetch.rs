@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
 use crate::chain::{Block, BlockHash};
 use crate::daemon::Daemon;
@@ -27,7 +27,7 @@ pub enum FetchFrom {
     BlkFiles,
 }
 
-#[instrumented]
+#[trace]
 pub fn start_fetcher(
     from: FetchFrom,
     daemon: &Daemon,
@@ -70,7 +70,7 @@ impl<T> Fetcher<T> {
     }
 }
 
-#[instrumented]
+#[trace]
 fn bitcoind_fetcher(
     daemon: &Daemon,
     new_headers: Vec<HeaderEntry>,
@@ -109,7 +109,7 @@ fn bitcoind_fetcher(
     ))
 }
 
-#[instrumented]
+#[trace]
 fn blkfiles_fetcher(
     daemon: &Daemon,
     new_headers: Vec<HeaderEntry>,
@@ -157,7 +157,7 @@ fn blkfiles_fetcher(
     ))
 }
 
-#[instrumented]
+#[trace]
 fn blkfiles_reader(blk_files: Vec<PathBuf>, xor_key: Option<[u8; 8]>) -> Fetcher<Vec<u8>> {
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
@@ -188,7 +188,7 @@ fn blkfile_apply_xor_key(xor_key: [u8; 8], blob: &mut [u8]) {
     }
 }
 
-#[instrumented]
+#[trace]
 fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<SizedBlock>> {
     let chan = SyncChannel::new(1);
     let sender = chan.sender();
@@ -207,7 +207,7 @@ fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<SizedBloc
     )
 }
 
-#[instrumented]
+#[trace]
 fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<SizedBlock>> {
     let mut cursor = Cursor::new(&blob);
     let mut slices = vec![];

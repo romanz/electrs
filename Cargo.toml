@@ -1,4 +1,5 @@
-workspace = { members = ["instrumented_macro"] }
+workspace = { members = ["electrs_macros"] }
+
 [package]
 name = "electrs"
 version = "0.4.1"
@@ -17,17 +18,14 @@ default-run = "electrs"
 liquid = ["elements"]
 electrum-discovery = ["electrum-client"]
 bench = []
-default = ["no-otlp-tracing"]
 otlp-tracing = [
-    "tracing/max_level_trace",
+    "tracing",
     "tracing-subscriber",
     "opentelemetry",
     "tracing-opentelemetry",
     "opentelemetry-otlp",
-    "opentelemetry-semantic-conventions"
-]
-no-otlp-tracing = [
-    "tracing/max_level_off"
+    "opentelemetry-semantic-conventions",
+    "electrs_macros/otlp-tracing"
 ]
 
 [dependencies]
@@ -71,12 +69,12 @@ tracing-opentelemetry = {  version = "0.21.0", optional = true }
 opentelemetry-otlp = { version = "0.13.0", default-features = false, features = ["http-proto", "reqwest-client"], optional = true }
 tracing-subscriber = { version = "0.3.17", default-features = false, features = ["env-filter", "fmt"], optional = true }
 opentelemetry-semantic-conventions = { version = "0.12.0", optional = true }
-tracing = { version = "0.1.40", default-features = false, features = ["attributes"] }
+tracing = { version = "0.1.40", default-features = false, features = ["attributes"], optional = true }
 
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.8", optional = true }
 zmq = "0.10.0"
-instrumented_macro = { path = "instrumented_macro" }
+electrs_macros = { path = "electrs_macros", default-features = false }
 
 [dev-dependencies]
 bitcoind = { version = "0.36", features = ["25_0"] }

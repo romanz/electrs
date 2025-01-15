@@ -1,9 +1,12 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+
 
 #[proc_macro_attribute]
-pub fn instrumented(attr: TokenStream, item: TokenStream) -> TokenStream {
+#[cfg(feature = "otlp-tracing")]
+pub fn trace(attr: TokenStream, item: TokenStream) -> TokenStream {
+    use quote::quote;
+    use syn::{parse_macro_input, ItemFn};
+
     let additional_fields = if !attr.is_empty() {
         let attr_tokens: proc_macro2::TokenStream = attr.into();
         quote! {, #attr_tokens }
@@ -23,4 +26,10 @@ pub fn instrumented(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     expanded.into()
+}
+
+#[proc_macro_attribute]
+#[cfg(not(feature = "otlp-tracing"))]
+pub fn trace(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }

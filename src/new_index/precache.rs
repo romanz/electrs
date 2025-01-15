@@ -13,9 +13,9 @@ use std::io;
 use std::io::prelude::*;
 use std::str::FromStr;
 
-use instrumented_macro::instrumented;
+use electrs_macros::trace;
 
-#[instrumented]
+#[trace]
 pub fn precache(chain: &ChainQuery, scripthashes: Vec<FullHash>) {
     let total = scripthashes.len();
     info!("Pre-caching stats and utxo set for {} scripthashes", total);
@@ -39,7 +39,7 @@ pub fn precache(chain: &ChainQuery, scripthashes: Vec<FullHash>) {
     });
 }
 
-#[instrumented]
+#[trace]
 pub fn scripthashes_from_file(path: String) -> Result<Vec<FullHash>> {
     let reader =
         io::BufReader::new(File::open(path).chain_err(|| "cannot open precache scripthash file")?);
