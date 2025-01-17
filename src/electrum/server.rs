@@ -7,10 +7,10 @@ use std::thread;
 use std::time::Instant;
 
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
+use bitcoin::hex::DisplayHex;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 use error_chain::ChainedError;
-use hex::{self, DisplayHex};
 use serde_json::{from_str, Value};
 
 #[cfg(not(feature = "liquid"))]

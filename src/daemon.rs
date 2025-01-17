@@ -10,8 +10,8 @@ use std::time::Duration;
 use std::{env, fs, io};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
+use bitcoin::hex::FromHex;
 use error_chain::ChainedError;
-use hex::FromHex;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde_json::{from_str, from_value, Value};
 

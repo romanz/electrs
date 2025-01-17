@@ -14,7 +14,7 @@ use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
 #[cfg(feature = "liquid")]
 use crate::{
     chain::AssetId,
-    elements::{lookup_asset, AssetRegistry, AssetSorting, LiquidAsset},
+    elements::{ebcompact::TxidCompat, lookup_asset, AssetRegistry, AssetSorting, LiquidAsset},
 };
 
 const FEE_ESTIMATES_TTL: u64 = 60; // seconds
@@ -133,7 +133,7 @@ impl Query {
     }
 
     pub fn lookup_tx_spends(&self, tx: Transaction) -> Vec<Option<SpendingInput>> {
-        let txid = tx.txid();
+        let txid = tx.compute_txid();
 
         tx.output
             .par_iter()

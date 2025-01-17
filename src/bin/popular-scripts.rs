@@ -1,11 +1,11 @@
 extern crate electrs;
 
+use bitcoin::hex::DisplayHex;
 use electrs::{
     config::Config,
     new_index::{Store, TxHistoryKey},
     util::bincode,
 };
-use hex::DisplayHex;
 
 fn main() {
     let config = Config::from_args();
