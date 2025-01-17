@@ -40,6 +40,11 @@ fn test_rest() -> Result<()> {
         vout["scriptpubkey_address"].as_str() == Some(&addr1.to_string())
             && vout["value"].as_u64() == Some(119123000)
     }));
+    #[cfg(feature = "liquid")]
+    {
+        assert_eq!(res["discount_vsize"].as_u64().unwrap(), 228);
+        assert_eq!(res["discount_weight"].as_u64().unwrap(), 912);
+    }
 
     // Test GET /tx/:txid/status
     let res = get_json(&format!("/tx/{}/status", txid1_confirmed))?;
