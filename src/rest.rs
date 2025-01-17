@@ -127,6 +127,12 @@ struct TransactionValue {
     fee: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<TransactionStatus>,
+
+    #[cfg(feature = "liquid")]
+    discount_vsize: usize,
+
+    #[cfg(feature = "liquid")]
+    discount_weight: usize,
 }
 
 impl TransactionValue {
@@ -170,6 +176,12 @@ impl TransactionValue {
             weight: weight as u64,
             fee,
             status: Some(TransactionStatus::from(blockid)),
+
+            #[cfg(feature = "liquid")]
+            discount_vsize: tx.discount_vsize(),
+
+            #[cfg(feature = "liquid")]
+            discount_weight: tx.discount_weight(),
         }
     }
 }
