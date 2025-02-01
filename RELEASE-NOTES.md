@@ -1,3 +1,8 @@
+# 0.10.9 (Feb 01 2025)
+
+* Update `bitcoin_slices` to 0.10.0
+* Allow concurrent DB background operations for SSDs
+
 # 0.10.8 (Dec 30 2024)
 
 *  Separate blocks reading & index writing into scoped threads
@@ -6,7 +11,6 @@
 *  Don't deserialize transactions if not needed
 *  Run CI only on `master` branch and PRs
 *  Update dependencies (`bitcoin`, `bitcoin_slices`, `crossbeam-channel`, `tempfile`)
-
 
 # 0.10.7 (Nov 05 2024)
 
