@@ -21,4 +21,9 @@ FROM base AS result
 # Copy the binaries
 COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
 
-WORKDIR /
+WORKDIR /electrs
+
+# Copy config file
+COPY ./docker/testnet/conf.toml ./electrs.toml
+
+CMD ["/usr/bin/electrs", "--conf=/electrs/electrs.toml"]
