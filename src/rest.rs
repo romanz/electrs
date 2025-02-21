@@ -16,7 +16,7 @@ use crate::util::{
 use bitcoin::consensus::encode;
 
 use bitcoin::hashes::FromSliceError as HashError;
-use bitcoin::hex::{self, DisplayHex, FromHex};
+use bitcoin::hex::{self, DisplayHex, FromHex, HexToBytesIter};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Response, Server, StatusCode};
 use hyperlocal::UnixServerExt;
@@ -1017,6 +1017,63 @@ fn handle_request(
             };
             let txid = query.broadcast_raw(&txhex)?;
             http_message(StatusCode::OK, txid.to_string(), 0)
+        }
+        (&Method::POST, Some(&"txs"), Some(&"package"), None, None, None) => {
+            let txhexes: Vec<String> =
+                serde_json::from_str(String::from_utf8(body.to_vec())?.as_str())?;
+
+            if txhexes.len() > 25 {
+                Result::Err(HttpError::from(
+                    "Exceeded maximum of 25 transactions".to_string(),
+                ))?
+            }
+
+            let maxfeerate = query_params
+                .get("maxfeerate")
+                .map(|s| {
+                    s.parse::<f64>()
+                        .map_err(|_| HttpError::from("Invalid maxfeerate".to_string()))
+                })
+                .transpose()?;
+
+            let maxburnamount = query_params
+                .get("maxburnamount")
+                .map(|s| {
+                    s.parse::<f64>()
+                        .map_err(|_| HttpError::from("Invalid maxburnamount".to_string()))
+                })
+                .transpose()?;
+
+            // pre-checks
+            txhexes.iter().enumerate().try_for_each(|(index, txhex)| {
+                // each transaction must be of reasonable size
+                // (more than 60 bytes, within 400kWU standardness limit)
+                if !(120..800_000).contains(&txhex.len()) {
+                    Result::Err(HttpError::from(format!(
+                        "Invalid transaction size for item {}",
+                        index
+                    )))
+                } else {
+                    // must be a valid hex string
+                    HexToBytesIter::new(txhex)
+                        .map_err(|_| {
+                            HttpError::from(format!("Invalid transaction hex for item {}", index))
+                        })?
+                        .filter(|r| r.is_err())
+						.next()
+						.transpose()
+                        .map_err(|_| {
+                            HttpError::from(format!("Invalid transaction hex for item {}", index))
+                        })
+                        .map(|_| ())
+                }
+            })?;
+
+            let result = query
+                .submit_package(txhexes, maxfeerate, maxburnamount)
+                .map_err(|err| HttpError::from(err.description().to_string()))?;
+
+            json_response(result, TTL_SHORT)
         }
 
         (&Method::GET, Some(&"mempool"), None, None, None, None) => {

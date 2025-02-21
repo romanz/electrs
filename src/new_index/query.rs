@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::chain::{Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, SubmitPackageResult};
 use crate::errors::*;
 use crate::new_index::{ChainQuery, Mempool, ScriptStats, SpendingInput, Utxo};
 use crate::util::{is_spendable, BlockId, Bytes, TransactionStatus};
@@ -80,6 +80,16 @@ impl Query {
             .unwrap()
             .add_by_txid(&self.daemon, txid);
         Ok(txid)
+    }
+
+    #[trace]
+    pub fn submit_package(
+        &self,
+        txhex: Vec<String>,
+        maxfeerate: Option<f64>,
+        maxburnamount: Option<f64>,
+    ) -> Result<SubmitPackageResult> {
+        self.daemon.submit_package(txhex, maxfeerate, maxburnamount)
     }
 
     #[trace]

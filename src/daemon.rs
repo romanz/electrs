@@ -141,6 +141,34 @@ struct NetworkInfo {
     relayfee: f64, // in BTC/kB
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct MempoolFeesSubmitPackage {
+    base: f64,
+    #[serde(rename = "effective-feerate")]
+    effective_feerate: Option<f64>,
+    #[serde(rename = "effective-includes")]
+    effective_includes: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubmitPackageResult {
+    package_msg: String,
+    #[serde(rename = "tx-results")]
+    tx_results: HashMap<String, TxResult>,
+    #[serde(rename = "replaced-transactions")]
+    replaced_transactions: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TxResult {
+    txid: String,
+    #[serde(rename = "other-wtxid")]
+    other_wtxid: Option<String>,
+    vsize: Option<u32>,
+    fees: Option<MempoolFeesSubmitPackage>,
+    error: Option<String>,
+}
+
 pub trait CookieGetter: Send + Sync {
     fn get(&self) -> Result<Vec<u8>>;
 }
@@ -669,6 +697,25 @@ impl Daemon {
             Txid::from_str(txid.as_str().chain_err(|| "non-string txid")?)
                 .chain_err(|| "failed to parse txid")?,
         )
+    }
+
+    pub fn submit_package(
+        &self,
+        txhex: Vec<String>,
+        maxfeerate: Option<f64>,
+        maxburnamount: Option<f64>,
+    ) -> Result<SubmitPackageResult> {
+        let params = match (maxfeerate, maxburnamount) {
+            (Some(rate), Some(burn)) => {
+                json!([txhex, format!("{:.8}", rate), format!("{:.8}", burn)])
+            }
+            (Some(rate), None) => json!([txhex, format!("{:.8}", rate)]),
+            (None, Some(burn)) => json!([txhex, null, format!("{:.8}", burn)]),
+            (None, None) => json!([txhex]),
+        };
+        let result = self.request("submitpackage", params)?;
+        serde_json::from_value::<SubmitPackageResult>(result)
+            .chain_err(|| "invalid submitpackage reply")
     }
 
     // Get estimated feerates for the provided confirmation targets using a batch RPC request
