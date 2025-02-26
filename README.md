@@ -47,7 +47,7 @@ which is better optimized for public usage at the cost of consuming *significant
  * Low index storage overhead (~10%), relying on a local full node for transaction retrieval
  * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
  * Low CPU & memory usage (after initial indexing)
- * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
+ * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03_bitcoin-core.adoc#txindex) is not required for the Bitcoin node
  * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
 
 ## Altcoins
