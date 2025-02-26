@@ -52,8 +52,8 @@ impl TxEntry {
 }
 
 // Confirmation height of a transaction or its mempool state:
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 enum Height {
     Confirmed { height: usize },
     Unconfirmed { has_unconfirmed_inputs: bool },
@@ -89,8 +89,8 @@ impl std::fmt::Display for Height {
 }
 
 // A single history entry:
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 #[derive(Serialize)]
 pub(crate) struct HistoryEntry {
     #[serde(rename = "tx_hash")]
@@ -105,7 +105,7 @@ pub(crate) struct HistoryEntry {
 
 impl HistoryEntry {
     // Hash to compute ScriptHash status, as defined here:
-    // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#status
+    // https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#status
     fn hash(&self, engine: &mut sha256::HashEngine) {
         let s = format!("{}:{}:", self.txid, self.height);
         engine.input(s.as_bytes());
@@ -141,7 +141,7 @@ pub struct ScriptHashStatus {
 }
 
 /// Specific scripthash balance
-/// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-balance
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-balance
 #[derive(Default, Eq, PartialEq, Serialize)]
 pub(crate) struct Balance {
     #[serde(with = "bitcoin::amount::serde::as_sat", rename = "confirmed")]
@@ -151,7 +151,7 @@ pub(crate) struct Balance {
 }
 
 /// A single unspent transaction output entry
-/// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-listunspent
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-listunspent
 #[derive(Serialize)]
 pub(crate) struct UnspentEntry {
     height: usize, // 0 = mempool entry
@@ -500,7 +500,7 @@ fn filter_inputs(tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoin
         .collect()
 }
 
-// See https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#status for details
+// See https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#status for details
 fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
     if history.is_empty() {
         return None;

@@ -354,7 +354,7 @@ impl Serialize for FeeHistogram {
         S: Serializer,
     {
         let mut seq = serializer.serialize_seq(Some(self.vsize.len()))?;
-        // https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
+        // https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#mempool-get-fee-histogram
         let fee_rates =
             (0..FeeHistogram::BINS).map(|i| u64::MAX.checked_shr(i as u32).unwrap_or(0));
         fee_rates
