@@ -7,7 +7,7 @@ and [latest Electrum wallet](https://electrum.org/#download) (3.2+).
 Also, install the following packages (on Debian):
 ```bash
 $ sudo apt update
-$ sudo apt install clang cmake  # for building 'rust-rocksdb'
+$ sudo apt install clang cmake build-essential  # for building 'rust-rocksdb'
 ```
 
 ## Build
