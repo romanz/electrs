@@ -1,7 +1,7 @@
 ### Important changes from versions older than 0.9.3
 
 * If you use `verbose` (or `-v` argument), switch to `log_filters` (or `RUST_LOG` environment variable).
-  Please note that it allows to set per-module filters, but module naming is considered unstable.
+  Please note that it allows setting per-module filters, but module naming is considered unstable.
   If you have used `-vv` (the value suggested in the documentation), switch to `--log-filters INFO`:
 
 
@@ -70,7 +70,7 @@ sudo apt upgrade
 ```
 
 Similarly for other distributions - use their respective commands.  
-If a new version of `electrs` is not yet in the package system, try wait a few days or contact the maintainers of the packages if it's been a long time.
+If a new version of `electrs` is not yet in the package system, try waiting a few days or contact the maintainers of the packages if it has been a long time.
 
 ### Upgrading manual installation
 
