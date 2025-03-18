@@ -59,7 +59,7 @@ configure_me_codegen = { version = "0.4.8", default-features = false }
 [dev-dependencies]
 bitcoin-test-data = "0.2.0"
 hex_lit = "0.1.1"
-tempfile = "3.17"
+tempfile = "3.19"
 
 [profile.release]
 lto = true
