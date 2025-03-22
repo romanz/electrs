@@ -16,11 +16,6 @@ allowing the user to keep real-time track of balances and transaction history us
 Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
 thus preserving the privacy of the user's addresses and balances.
 
-<<<<<<< HEAD
-[BTC Prague 2024 dev/hack/day](https://btcprague.com/dev-hack-day/) slides are here: https://bit.ly/electrs
-
-=======
->>>>>>> e7868bd (sync with upstream)
 ## Usage
 
 **Please prefer to use OUR usage guide!**
