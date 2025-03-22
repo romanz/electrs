@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+version: "3"
+>>>>>>> e7868bd (sync with upstream)
 services:
   bitcoind:
     container_name: bitcoind
@@ -32,12 +36,19 @@ services:
     image: oneforalonee/electrs:latest
     restart: on-failure
     hostname: electrs
+<<<<<<< HEAD
     command: >-
       /usr/bin/electrs --conf=/electrs/electrs.toml
+=======
+>>>>>>> e7868bd (sync with upstream)
     expose:
       - 50001
     ports:
       - 50001:50001
     volumes:
       - ./electrs_db:/electrs/db
+<<<<<<< HEAD
       - ./conf.toml:/electrs/electrs.toml
+=======
+      - ./electrs.toml:/electrs/electrs.toml
+>>>>>>> e7868bd (sync with upstream)

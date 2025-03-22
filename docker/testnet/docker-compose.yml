@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+version: "3"
+>>>>>>> e7868bd (sync with upstream)
 services:
   bitcoind:
     container_name: bitcoind
@@ -17,11 +21,19 @@ services:
       -rpcport=18332 -rest -listen=1 -listenonion=0
       -rpcauth=alice:128f22494cc2208ea8376a3d0b45a131$9cc0187c0e49f35454a3ed1250e40ecaef420cfcd294d3ac22496adbe64f04b9
     expose:
+<<<<<<< HEAD
       - 18332
     ports:
       - 18332:18332
     volumes:
       - ./bitcoind:/home/bitcoin/.bitcoin
+=======
+      - 8332
+    ports:
+      - 8332:8332
+    volumes:
+      - ./:/home/bitcoin/.bitcoin
+>>>>>>> e7868bd (sync with upstream)
 
   electrs:
     depends_on:
@@ -33,6 +45,7 @@ services:
     image: oneforalonee/electrs:latest
     restart: on-failure
     hostname: electrs
+<<<<<<< HEAD
     command: >-
       /usr/bin/electrs --conf=/electrs/electrs.toml
     expose:
@@ -42,3 +55,12 @@ services:
     volumes:
       - ./db:/electrs/db
       - ./conf.toml:/electrs/electrs.toml
+=======
+    expose:
+      - 50001
+    ports:
+      - 50001:50001
+    volumes:
+      - ./db:/electrs/db
+      - ./electrs.toml:/electrs/electrs.toml
+>>>>>>> e7868bd (sync with upstream)

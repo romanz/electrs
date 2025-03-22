@@ -16,8 +16,11 @@ allowing the user to keep real-time track of balances and transaction history us
 Since it runs on the user's own machine, there is no need for the wallet to communicate with external Electrum servers,
 thus preserving the privacy of the user's addresses and balances.
 
+<<<<<<< HEAD
 [BTC Prague 2024 dev/hack/day](https://btcprague.com/dev-hack-day/) slides are here: https://bit.ly/electrs
 
+=======
+>>>>>>> e7868bd (sync with upstream)
 ## Usage
 
 **Please prefer to use OUR usage guide!**
@@ -29,7 +32,7 @@ If you can't use our guide, please ask about what you don't understand or consid
 Note that this implementation of Electrum server is optimized for **personal/small-scale (family/friends) usage**.
 It's a bad idea to run it publicly as it'd expose you to DoS and maybe also other attacks.
 If you want to run a public server you may be interested in the [Blockstream fork of electrs](https://github.com/Blockstream/electrs)
-which is better optimized for public usage at the cost of consuming *significantly* more resources.
+which is better optimized for public usage at the cost of consuming _significantly_ more resources.
 
 - [Installation from source](doc/install.md)
 - [Pre-built binaries](doc/binaries.md) (No official binaries available but a beta repository is available for installation)
@@ -41,14 +44,14 @@ which is better optimized for public usage at the cost of consuming *significant
 
 ## Features
 
- * Supports Electrum protocol [v1.4](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html)
- * Maintains an index over transaction inputs and outputs, allowing fast balance queries
- * Fast synchronization of the Bitcoin blockchain (~6.5 hours for ~504GB @ August 2023) using HDD storage.
- * Low index storage overhead (~10%), relying on a local full node for transaction retrieval
- * Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
- * Low CPU & memory usage (after initial indexing)
- * [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03_bitcoin-core.adoc#txindex) is not required for the Bitcoin node
- * Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
+- Supports Electrum protocol [v1.4](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html)
+- Maintains an index over transaction inputs and outputs, allowing fast balance queries
+- Fast synchronization of the Bitcoin blockchain (~6.5 hours for ~504GB @ August 2023) using HDD storage.
+- Low index storage overhead (~10%), relying on a local full node for transaction retrieval
+- Efficient mempool tracker (allowing better fee [estimation](https://github.com/spesmilo/electrum/blob/59c1d03f018026ac301c4e74facfc64da8ae4708/RELEASE-NOTES#L34-L46))
+- Low CPU & memory usage (after initial indexing)
+- [`txindex`](https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch03.asciidoc#txindex) is not required for the Bitcoin node
+- Uses a single [RocksDB](https://github.com/spacejam/rust-rocksdb) database, for better consistency and crash recovery
 
 ## Altcoins
 
