@@ -22,7 +22,7 @@ Some guides were suggesting trace log level and we started to trace much more in
 
 Upgrading checklist:
 
-* Make sure you upgrade at time when you don't need to use electrs for a while.
+* Make sure you upgrade at a time when you don't need to use electrs for a while.
   Because of reindex electrs will be unable to serve your requests for a few hours.
   (The exact time depends on your hardware.)
   If you wish to check the database without reindexing run electrs with `--no-auto-reindex`.
