@@ -2,12 +2,12 @@
 # The maintainers of electrs are not deeply familiar with Docker, so you should DYOR.
 # If you are not familiar with Docker either it's probably be safer to NOT use it.
 
-FROM debian:bookworm-slim as base
+FROM debian:bookworm-slim AS base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev wget
+RUN apt-get install -qqy librocksdb-dev wget git build-essential cmake pkgconf python3 libevent-dev libboost-dev
 
 ### Electrum Rust Server ###
-FROM base as electrs-build
+FROM base AS electrs-build
 RUN apt-get install -qqy cargo clang cmake
 
 # Install electrs
@@ -18,20 +18,18 @@ ENV ROCKSDB_LIB_DIR=/usr/lib
 RUN cargo install --locked --path .
 
 ### Bitcoin Core ###
-FROM base as bitcoin-build
-# Download
-WORKDIR /build/bitcoin
-ARG ARCH=x86_64
-ARG BITCOIND_VERSION=28.0
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
-RUN tar xvf bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoin-cli .
+FROM base AS bitcoin-build
+# Clone
+RUN git clone --depth 1 --branch http-rewrite-13march2025 https://github.com/pinheadmz/bitcoin
+WORKDIR /bitcoin
+# Build
+RUN cmake -B build -DENABLE_WALLET=OFF -DBUILD_GUI=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_GUI_TESTS=OFF -DBUILD_TESTS=OFF -DBUILD_UTIL=OFF -DBUILD_TX=OFF -DBUILD_WALLET_TOOL=OFF
+RUN cmake --build build
 
-FROM base as result
+FROM base AS result
 # Copy the binaries
 COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
-COPY --from=bitcoin-build /build/bitcoin/bitcoind /build/bitcoin/bitcoin-cli /usr/bin/
+COPY --from=bitcoin-build /bitcoin/build/bin/bitcoind /bitcoin/build/bin/bitcoin-cli /usr/bin/
 RUN bitcoind -version && bitcoin-cli -version
 
 ### Electrum ###
