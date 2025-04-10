@@ -27,6 +27,7 @@ use electrs::{
     rest,
     signal::Waiter,
 };
+use electrs::config::RpcLogging;
 
 pub struct TestRunner {
     config: Arc<Config>,
@@ -38,6 +39,7 @@ pub struct TestRunner {
     daemon: Arc<Daemon>,
     mempool: Arc<RwLock<Mempool>>,
     metrics: Metrics,
+    salt_rwlock: Arc<RwLock<String>>,
 }
 
 impl TestRunner {
@@ -108,7 +110,7 @@ impl TestRunner {
             utxos_limit: 100,
             electrum_txs_limit: 100,
             electrum_banner: "".into(),
-            electrum_rpc_logging: None,
+            rpc_logging: RpcLogging::default(),
             zmq_addr: None,
 
             #[cfg(feature = "liquid")]
@@ -179,6 +181,8 @@ impl TestRunner {
             None, // TODO
         ));
 
+        let salt_rwlock = Arc::new(RwLock::new(String::from("foobar")));
+
         Ok(TestRunner {
             config,
             node,
@@ -188,6 +192,7 @@ impl TestRunner {
             daemon,
             mempool,
             metrics,
+            salt_rwlock,
         })
     }
 
@@ -280,6 +285,7 @@ pub fn init_electrum_tester() -> Result<(ElectrumRPC, net::SocketAddr, TestRunne
         Arc::clone(&tester.config),
         Arc::clone(&tester.query),
         &tester.metrics,
+        Arc::clone(&tester.salt_rwlock),
     );
     log::info!(
         "Electrum server running on {}",

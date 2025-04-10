@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Instant;
 
@@ -19,7 +19,6 @@ use electrs_macros::trace;
 use bitcoin::consensus::encode::serialize_hex;
 #[cfg(feature = "liquid")]
 use elements::encode::serialize_hex;
-
 use crate::chain::Txid;
 use crate::config::{Config, RpcLogging};
 use crate::electrum::{get_electrum_height, ProtocolVersion};
@@ -95,7 +94,7 @@ fn get_status_hash(txs: Vec<(Txid, Option<BlockId>)>, query: &Query) -> Option<F
 
 macro_rules! conditionally_log_rpc_event {
     ($self:ident, $event:expr) => {
-        if $self.rpc_logging.is_some() {
+        if $self.rpc_logging.enabled {
             $self.log_rpc_event($event);
         }
     };
@@ -112,7 +111,8 @@ struct Connection {
     txs_limit: usize,
     #[cfg(feature = "electrum-discovery")]
     discovery: Option<Arc<DiscoveryManager>>,
-    rpc_logging: Option<RpcLogging>,
+    rpc_logging: RpcLogging,
+    salt: String,
 }
 
 impl Connection {
@@ -124,7 +124,8 @@ impl Connection {
         stats: Arc<Stats>,
         txs_limit: usize,
         #[cfg(feature = "electrum-discovery")] discovery: Option<Arc<DiscoveryManager>>,
-        rpc_logging: Option<RpcLogging>,
+        rpc_logging: RpcLogging,
+        salt: String,
     ) -> Connection {
         Connection {
             query,
@@ -138,6 +139,7 @@ impl Connection {
             #[cfg(feature = "electrum-discovery")]
             discovery,
             rpc_logging,
+            salt,
         }
     }
 
@@ -525,11 +527,25 @@ impl Connection {
         Ok(result)
     }
 
+    fn hash_ip_with_salt(&self, ip: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.input(self.salt.as_bytes());
+        hasher.input(ip.as_bytes());
+        hasher.result_str()
+    }
+
     fn log_rpc_event(&self, mut log: Value) {
+        let real_ip = self.addr.ip().to_string();
+        let ip_to_log = if self.rpc_logging.anonymize_ip {
+            self.hash_ip_with_salt(&real_ip)
+        } else {
+            real_ip
+        };
+
         log.as_object_mut().unwrap().insert(
             "source".into(),
             json!({
-                "ip": self.addr.ip().to_string(),
+                "ip": ip_to_log,
                 "port": self.addr.port(),
             }),
         );
@@ -594,28 +610,20 @@ impl Connection {
                 cmd.get("id"),
             ) {
                 (Some(&Value::String(ref method)), &Value::Array(ref params), Some(ref id)) => {
-                    conditionally_log_rpc_event!(
-                        self,
-                        json!({
-                            "event": "rpc request",
-                            "id": id,
-                            "method": method,
-                            "params": if let Some(RpcLogging::Full) = self.rpc_logging {
-                                json!(params)
-                            } else {
-                                Value::Null
-                            }
-                        })
-                    );
-
                     let reply = self.handle_command(method, params, id)?;
 
                     conditionally_log_rpc_event!(
                         self,
                         json!({
-                            "event": "rpc response",
+                            "event": "rpc_response",
                             "method": method,
-                            "payload_size": reply.to_string().as_bytes().len(),
+                            "params": if self.rpc_logging.hide_params {
+                                    Value::Null
+                                } else {
+                                    json!(params)
+                                },
+                            "request_size": serde_json::to_vec(&cmd).map(|v| v.len()).unwrap_or(0),
+                            "response_size": reply.to_string().as_bytes().len(),
                             "duration_micros": start_time.elapsed().as_micros(),
                             "id": id,
                         })
@@ -666,7 +674,7 @@ impl Connection {
 
     pub fn run(mut self, receiver: Receiver<Message>) {
         self.stats.clients.inc();
-        conditionally_log_rpc_event!(self, json!({ "event": "connection established" }));
+        conditionally_log_rpc_event!(self, json!({ "event": "connection_established" }));
 
         let reader = BufReader::new(self.stream.try_clone().expect("failed to clone TcpStream"));
         let sender = self.sender.clone();
@@ -684,7 +692,7 @@ impl Connection {
             .sub(self.status_hashes.len() as i64);
 
         debug!("[{}] shutting down connection", self.addr);
-        conditionally_log_rpc_event!(self, json!({ "event": "connection closed" }));
+        conditionally_log_rpc_event!(self, json!({ "event": "connection_closed" }));
 
         let _ = self.stream.shutdown(Shutdown::Both);
         if let Err(err) = child.join().expect("receiver panicked") {
@@ -787,7 +795,12 @@ impl RPC {
         chan
     }
 
-    pub fn start(config: Arc<Config>, query: Arc<Query>, metrics: &Metrics) -> RPC {
+    pub fn start(
+        config: Arc<Config>,
+        query: Arc<Query>,
+        metrics: &Metrics,
+        salt_rwlock: Arc<RwLock<String>>
+    ) -> RPC {
         let stats = Arc::new(Stats {
             latency: metrics.histogram_vec(
                 HistogramOpts::new("electrum_rpc", "Electrum RPC latency (seconds)"),
@@ -847,12 +860,14 @@ impl RPC {
                     let query = Arc::clone(&query);
                     let stats = Arc::clone(&stats);
                     let garbage_sender = garbage_sender.clone();
-                    let rpc_logging = config.electrum_rpc_logging.clone();
+                    let rpc_logging = config.rpc_logging.clone();
                     #[cfg(feature = "electrum-discovery")]
                     let discovery = discovery.clone();
 
                     let (sender, receiver) = mpsc::sync_channel(10);
                     senders.lock().unwrap().push(sender.clone());
+
+                    let salt = salt_rwlock.read().unwrap().clone();
 
                     let spawned = spawn_thread("peer", move || {
                         info!("[{}] connected peer", addr);
@@ -866,6 +881,7 @@ impl RPC {
                             #[cfg(feature = "electrum-discovery")]
                             discovery,
                             rpc_logging,
+                            salt,
                         );
                         conn.run(receiver);
                         info!("[{}] disconnected peer", addr);

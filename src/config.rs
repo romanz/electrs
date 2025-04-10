@@ -40,7 +40,7 @@ pub struct Config {
     pub utxos_limit: usize,
     pub electrum_txs_limit: usize,
     pub electrum_banner: String,
-    pub electrum_rpc_logging: Option<RpcLogging>,
+    pub rpc_logging: RpcLogging,
     pub zmq_addr: Option<SocketAddr>,
 
     /// Enable compaction during initial sync
@@ -74,10 +74,6 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
 impl Config {
     pub fn from_args() -> Config {
         let network_help = format!("Select network type ({})", Network::names().join(", "));
-        let rpc_logging_help = format!(
-            "Select RPC logging option ({})",
-            RpcLogging::options().join(", ")
-        );
 
         let args = App::new("Electrum Rust Server")
             .version(crate_version!())
@@ -201,10 +197,20 @@ impl Config {
                     .help("Welcome banner for the Electrum server, shown in the console to clients.")
                     .takes_value(true)
             ).arg(
-                Arg::with_name("electrum_rpc_logging")
-                    .long("electrum-rpc-logging")
-                    .help(&rpc_logging_help)
-                    .takes_value(true),
+                Arg::with_name("enable_json_rpc_logging")
+                    .long("enable-json-rpc-logging")
+                    .help("turns on rpc logging")
+                    .takes_value(false)
+            ).arg(
+                Arg::with_name("hide_json_rpc_logging_parameters")
+                    .long("hide-json-rpc-logging-parameters")
+                    .help("disables parameter printing in rpc logs")
+                    .takes_value(false)
+            ).arg(
+                Arg::with_name("anonymize_json_rpc_logging_source_ip")
+                    .long("anonymize-json-rpc-logging-source-ip")
+                    .help("enables ip anonymization in rpc logs")
+                    .takes_value(false)
             ).arg(
                 Arg::with_name("initial_sync_compaction")
                     .long("initial-sync-compaction")
@@ -427,9 +433,15 @@ impl Config {
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,
-            electrum_rpc_logging: m
-                .value_of("electrum_rpc_logging")
-                .map(|option| RpcLogging::from(option)),
+            rpc_logging: {
+                let params = RpcLogging {
+                    enabled: m.is_present("enable_json_rpc_logging"),
+                    hide_params: m.is_present("hide_json_rpc_logging_parameters"),
+                    anonymize_ip: m.is_present("anonymize_json_rpc_logging_source_ip"),
+                };
+                params.validate();
+                params
+            },
             http_addr,
             http_socket_file,
             monitoring_addr,
@@ -471,25 +483,17 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum RpcLogging {
-    Full,
-    NoParams,
+#[derive(Debug, Default, Clone)]
+pub struct RpcLogging {
+    pub enabled: bool,
+    pub hide_params: bool,
+    pub anonymize_ip: bool,
 }
 
 impl RpcLogging {
-    pub fn options() -> Vec<String> {
-        return vec!["full".to_string(), "no-params".to_string()];
-    }
-}
-
-impl From<&str> for RpcLogging {
-    fn from(option: &str) -> Self {
-        match option {
-            "full" => RpcLogging::Full,
-            "no-params" => RpcLogging::NoParams,
-
-            _ => panic!("unsupported RPC logging option: {:?}", option),
+    pub fn validate(&self) {
+        if !self.enabled && (self.hide_params || self.anonymize_ip) {
+            panic!("Flags '--hide-json-rpc-logging-parameters' or '--anonymize-json-rpc-logging-source-ip' require '--enable-json-rpc-logging'");
         }
     }
 }
