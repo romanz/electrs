@@ -60,6 +60,8 @@ pub struct TxOverview {
     vsize: u64,
     #[cfg(not(feature = "liquid"))]
     value: u64,
+    #[cfg(feature = "liquid")]
+    discount_vsize: u64,
 }
 
 impl Mempool {
@@ -366,6 +368,8 @@ impl Mempool {
                     .values()
                     .map(|prevout| prevout.value.to_sat())
                     .sum(),
+                #[cfg(feature = "liquid")]
+                discount_vsize: tx.discount_vsize() as u64,
             });
 
             self.feeinfo.insert(txid, feeinfo);

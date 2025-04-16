@@ -1,3 +1,4 @@
+
 use crate::chain::{
     address, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxMerkleNode,
     TxOut, Txid,
@@ -10,7 +11,8 @@ use crate::util::{
     is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm, TransactionStatus,
     DEFAULT_BLOCKHASH,
 };
-
+#[cfg(feature = "liquid")]
+use crate::util::optional_value_for_newer_blocks;
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
 
@@ -50,6 +52,8 @@ const ADDRESS_SEARCH_LIMIT: usize = 10;
 const ASSETS_PER_PAGE: usize = 25;
 #[cfg(feature = "liquid")]
 const ASSETS_MAX_PER_PAGE: usize = 100;
+#[cfg(feature = "liquid")]
+const START_OF_LIQUID_DISCOUNT_CT_POLICY: u32 = 1734120000; // Friday, December 13, 2024, 20:00 GMT
 
 const TTL_LONG: u32 = 157_784_630; // ttl for static resources (5 years)
 const TTL_SHORT: u32 = 10; // ttl for volatie resources
@@ -131,10 +135,12 @@ struct TransactionValue {
     status: Option<TransactionStatus>,
 
     #[cfg(feature = "liquid")]
-    discount_vsize: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    discount_vsize: Option<usize>,
 
     #[cfg(feature = "liquid")]
-    discount_weight: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    discount_weight: Option<usize>,
 }
 
 impl TransactionValue {
@@ -180,10 +186,14 @@ impl TransactionValue {
             status: Some(TransactionStatus::from(blockid)),
 
             #[cfg(feature = "liquid")]
-            discount_vsize: tx.discount_vsize(),
+            discount_vsize: optional_value_for_newer_blocks(blockid,
+                                                            START_OF_LIQUID_DISCOUNT_CT_POLICY,
+                                                            tx.discount_vsize()),
 
             #[cfg(feature = "liquid")]
-            discount_weight: tx.discount_weight(),
+            discount_weight: optional_value_for_newer_blocks(blockid,
+                                                             START_OF_LIQUID_DISCOUNT_CT_POLICY,
+                                                             tx.discount_weight()),
         }
     }
 }

@@ -16,6 +16,9 @@ pub use self::transaction::{
     serialize_outpoint, TransactionStatus, TxInput,
 };
 
+#[cfg(feature = "liquid")]
+pub use self::transaction::optional_value_for_newer_blocks;
+
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
 use std::thread;

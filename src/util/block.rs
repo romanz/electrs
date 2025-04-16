@@ -20,7 +20,7 @@ lazy_static! {
             .unwrap();
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct BlockId {
     pub height: usize,
     pub hash: BlockHash,
