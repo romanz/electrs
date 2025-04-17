@@ -27,13 +27,13 @@ The codebase is maintained using the "contributor workflow" where everyone
 without exception contributes patch proposals using "pull requests". This
 facilitates social contribution, easy testing and peer review.
 
-To contribute a patch, the workflow is a as follows:
+To contribute a patch, the workflow is as follows:
 
 1. Fork repository
 2. Create topic branch
 3. Commit patches
 
-Please keep commits should atomic and diffs easy to read. For this reason
+Please keep commits atomic and diffs easy to read. For this reason
 do not mix any formatting fixes or code moves with actual code changes.
 Further, each commit, individually, should compile and pass tests, in order to
 ensure git bisect and other automated tools function properly.
@@ -84,7 +84,7 @@ grammar fixes.
 
 ### Formatting
 
-The repository currently does use `rustfmt` for all the formatting needs. Running the automated
+The repository currently uses `rustfmt` for all the formatting needs. Running the automated
 script mentioned above would format all your code for you :)
 
 ## Ending Notes
