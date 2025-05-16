@@ -38,7 +38,7 @@ Upgrading checklist:
 * If you use `verbose = 4` (or `-vvvv` argument) lower it down to `2` (`-vv`) for production use.
   Keeping it would waste resources because we utilize it more now.
 * **After reindexing**, if you did **not** delete `mainnet` subdirectory within `db_dir` check that `electrs` works as expected and then *delete whole `mainnet` subdirectory*.
-* If you are using our Dockerfile, please make sure to re-map the DB volume (see [the section above](docker.md#docker-based-installation-from-source)).
+* If you are using our Dockerfile, please make sure to re-map the DB volume (see [the section above](install.md#docker-based-installation-from-source)).
 
 ### Important changes from version older than 0.8.8
 
