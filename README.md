@@ -3,7 +3,7 @@
 # Electrum Server in Rust
 
 [![CI](https://github.com/romanz/electrs/actions/workflows/rust.yml/badge.svg)](https://github.com/romanz/electrs/actions)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)]( https://github.com/romanz/electrs/compare)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/romanz/electrs/compare)
 [![crates.io](https://img.shields.io/crates/v/electrs.svg)](https://crates.io/crates/electrs)
 [![gitter.im](https://badges.gitter.im/romanz/electrs.svg)](https://gitter.im/romanz/electrs)
 
