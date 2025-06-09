@@ -3,6 +3,7 @@ use itertools::{Either, Itertools};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::serialize;
+use electrs_macros::trace;
 #[cfg(feature = "liquid")]
 use elements::{encode::serialize, AssetId};
 
@@ -11,7 +12,6 @@ use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use electrs_macros::trace;
 use crate::chain::{deserialize, BlockHash, Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
 use crate::daemon::Daemon;
@@ -516,7 +516,12 @@ impl Mempool {
         daemon: &Daemon,
         tip: &BlockHash,
     ) -> Result<bool> {
-        let _timer = mempool.read().unwrap().latency.with_label_values(&["update"]).start_timer();
+        let _timer = mempool
+            .read()
+            .unwrap()
+            .latency
+            .with_label_values(&["update"])
+            .start_timer();
 
         // Continuously attempt to fetch mempool transactions until we're able to get them in full
         let mut fetched_txs = HashMap::<Txid, Transaction>::new();
@@ -554,9 +559,18 @@ impl Mempool {
             {
                 let mempool = mempool.read().unwrap();
 
-                mempool.count.with_label_values(&["all_txs"]).set(all_txids.len() as f64);
-                mempool.count.with_label_values(&["fetched_txs"]).set((indexed_txids.len() + fetched_txs.len()) as f64);
-                mempool.count.with_label_values(&["missing_txs"]).set(new_txids.len() as f64);
+                mempool
+                    .count
+                    .with_label_values(&["all_txs"])
+                    .set(all_txids.len() as f64);
+                mempool
+                    .count
+                    .with_label_values(&["fetched_txs"])
+                    .set((indexed_txids.len() + fetched_txs.len()) as f64);
+                mempool
+                    .count
+                    .with_label_values(&["missing_txs"])
+                    .set(new_txids.len() as f64);
             }
 
             let new_txs = daemon.gettransactions_available(&new_txids)?;

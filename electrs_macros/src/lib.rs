@@ -1,6 +1,5 @@
 use proc_macro::TokenStream;
 
-
 #[proc_macro_attribute]
 #[cfg(feature = "otlp-tracing")]
 pub fn trace(attr: TokenStream, item: TokenStream) -> TokenStream {
