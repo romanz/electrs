@@ -1,6 +1,6 @@
 [package]
 name = "electrs"
-version = "0.10.5"
+version = "0.10.9"
 authors = ["Roman Zeyde <me@romanzey.de>"]
 description = "An efficient re-implementation of Electrum Server in Rust"
 license = "MIT"
@@ -10,6 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2021"
+rust-version = "1.63.0"
 build = "build.rs"
 
 [features]
@@ -22,8 +23,8 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
-bitcoin = { version = "0.32.2", features = ["serde", "rand-std"] }
-bitcoin_slices = { version = "0.8", features = ["bitcoin", "sha2"] }
+bitcoin = { version = "0.32.6", features = ["serde", "rand-std"] }
+bitcoin_slices = { version = "0.10.0", features = ["bitcoin", "sha2"] }
 bitcoincore-rpc = { version = "0.19.0" }
 configure_me = "0.4"
 crossbeam-channel = "0.5"
@@ -36,9 +37,14 @@ rayon = "1.9"
 serde = "1.0"
 serde_derive = "1.0, <=1.0.171"  # avoid precompiled binaries (https://github.com/serde-rs/serde/issues/2538)
 serde_json = "1.0"
-signal-hook = "0.3"
 tiny_http = { version = "0.12", optional = true }
 pushtx = "0.4.0"
+
+[target.'cfg(windows)'.dependencies]
+ctrlc = "=3.4.2"
+
+[target.'cfg(not(windows))'.dependencies]
+signal-hook = "0.3"
 
 [dependencies.electrs-rocksdb]
 version = "0.19.0-e3"
@@ -49,9 +55,12 @@ default-features = false
 features = ["zstd", "snappy"]
 
 [build-dependencies]
-configure_me_codegen = { version = "0.4.4", default-features = false }
+configure_me_codegen = { version = "0.4.8", default-features = false }
 
 [dev-dependencies]
 bitcoin-test-data = "0.2.0"
 hex_lit = "0.1.1"
-tempfile = "3.10"
+tempfile = "3.20"
+
+[profile.release]
+lto = true

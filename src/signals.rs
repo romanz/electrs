@@ -1,6 +1,9 @@
+#[cfg(not(windows))]
 use anyhow::Context;
 use crossbeam_channel::{unbounded, Receiver};
+#[cfg(not(windows))]
 use signal_hook::consts::signal::*;
+#[cfg(not(windows))]
 use signal_hook::iterator::Signals;
 
 use std::sync::{
@@ -9,6 +12,7 @@ use std::sync::{
 };
 use std::{error, fmt};
 
+#[cfg(not(windows))]
 use crate::thread::spawn;
 
 #[derive(Debug)]
@@ -53,6 +57,7 @@ pub(crate) struct Signal {
 }
 
 impl Signal {
+    #[cfg(not(windows))]
     pub fn new() -> Signal {
         let ids = vec![
             SIGINT, SIGTERM,
@@ -77,6 +82,27 @@ impl Signal {
             }
             Ok(())
         });
+        result
+    }
+
+    #[cfg(windows)]
+    pub fn new() -> Signal {
+        let (tx, rx) = unbounded();
+        let result = Signal {
+            rx,
+            exit: ExitFlag::new(),
+        };
+
+        let exit_flag = result.exit.clone();
+
+        // Handle Ctrl-C
+        ctrlc::set_handler(move || {
+            info!("notified via Ctrl-C");
+            exit_flag.set();
+            let _ = tx.send(());
+        })
+        .expect("failed to set Ctrl-C handler");
+
         result
     }
 

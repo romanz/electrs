@@ -26,7 +26,7 @@ macro_rules! impl_consensus_encoding {
 
         impl Decodable for $thing {
             #[inline]
-            fn consensus_decode<D: io::BufRead + ?Sized>(
+            fn consensus_decode<D: io::Read + ?Sized>(
                 d: &mut D,
             ) -> Result<$thing, bitcoin::consensus::encode::Error> {
                 Ok($thing {
@@ -75,7 +75,7 @@ impl HashPrefixRow {
 impl_consensus_encoding!(HashPrefixRow, prefix, height);
 
 hash_newtype! {
-    /// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes
+    /// https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#script-hashes
     #[hash_newtype(backward)]
     pub struct ScriptHash(sha256::Hash);
 }
@@ -110,7 +110,7 @@ impl ScriptHashRow {
 // ***************************************************************************
 
 hash_newtype! {
-    /// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#status
+    /// https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#status
     pub struct StatusHash(sha256::Hash);
 }
 

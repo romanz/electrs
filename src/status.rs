@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bitcoin::{
-    consensus::Decodable,
+    consensus::serialize,
     hashes::{sha256, Hash, HashEngine},
     Amount, BlockHash, OutPoint, SignedAmount, Transaction, Txid,
 };
@@ -30,6 +30,7 @@ struct TxEntry {
     spent: Vec<OutPoint>,   // relevant spent outpoints
 }
 
+// Funded outputs of a transaction
 struct TxOutput {
     index: u32,
     value: Amount,
@@ -51,8 +52,8 @@ impl TxEntry {
 }
 
 // Confirmation height of a transaction or its mempool state:
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 enum Height {
     Confirmed { height: usize },
     Unconfirmed { has_unconfirmed_inputs: bool },
@@ -88,8 +89,8 @@ impl std::fmt::Display for Height {
 }
 
 // A single history entry:
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-history
+// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
 #[derive(Serialize)]
 pub(crate) struct HistoryEntry {
     #[serde(rename = "tx_hash")]
@@ -103,6 +104,8 @@ pub(crate) struct HistoryEntry {
 }
 
 impl HistoryEntry {
+    // Hash to compute ScriptHash status, as defined here:
+    // https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#status
     fn hash(&self, engine: &mut sha256::HashEngine) {
         let s = format!("{}:{}:", self.txid, self.height);
         engine.input(s.as_bytes());
@@ -138,6 +141,7 @@ pub struct ScriptHashStatus {
 }
 
 /// Specific scripthash balance
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-balance
 #[derive(Default, Eq, PartialEq, Serialize)]
 pub(crate) struct Balance {
     #[serde(with = "bitcoin::amount::serde::as_sat", rename = "confirmed")]
@@ -146,8 +150,8 @@ pub(crate) struct Balance {
     mempool_delta: SignedAmount,
 }
 
-// A single unspent transaction output entry:
-// https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-listunspent
+/// A single unspent transaction output entry
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-listunspent
 #[derive(Serialize)]
 pub(crate) struct UnspentEntry {
     height: usize, // 0 = mempool entry
@@ -161,28 +165,28 @@ pub(crate) struct UnspentEntry {
 struct Unspent {
     // mapping an outpoint to its value & confirmation height
     outpoints: HashMap<OutPoint, (Amount, usize)>,
-    confirmed_balance: Amount,
-    mempool_delta: SignedAmount,
+    balance: Balance,
 }
 
 impl Unspent {
     fn build(status: &ScriptHashStatus, chain: &Chain) -> Self {
         let mut unspent = Unspent::default();
-
+        // First, add all relevant entries' funding outputs to the outpoints' map
         status
             .confirmed_height_entries(chain)
             .for_each(|(height, entries)| entries.iter().for_each(|e| unspent.insert(e, height)));
+        // Then, remove spent outpoints from the map
         status
             .confirmed_entries(chain)
             .for_each(|e| unspent.remove(e));
 
-        unspent.confirmed_balance = unspent.balance();
-
+        unspent.balance.confirmed_balance = unspent.balance();
+        // Now, do the same over the mempool (first add funding outputs, and then remove spent ones)
         status.mempool.iter().for_each(|e| unspent.insert(e, 0)); // mempool height = 0
         status.mempool.iter().for_each(|e| unspent.remove(e));
 
-        unspent.mempool_delta =
-            unspent.balance().to_signed().unwrap() - unspent.confirmed_balance.to_signed().unwrap();
+        unspent.balance.mempool_delta = unspent.balance().to_signed().unwrap()
+            - unspent.balance.confirmed_balance.to_signed().unwrap();
 
         unspent
     }
@@ -199,6 +203,7 @@ impl Unspent {
             .collect()
     }
 
+    /// Total amount of unspent outputs
     fn balance(&self) -> Amount {
         self.outpoints
             .values()
@@ -240,7 +245,7 @@ impl ScriptHashStatus {
     fn confirmed_height_entries<'a>(
         &'a self,
         chain: &'a Chain,
-    ) -> impl Iterator<Item = (usize, &[TxEntry])> + 'a {
+    ) -> impl Iterator<Item = (usize, &'a [TxEntry])> + 'a {
         self.confirmed
             .iter()
             .filter_map(move |(blockhash, entries)| {
@@ -252,7 +257,7 @@ impl ScriptHashStatus {
 
     /// Iterate through confirmed TxEntries.
     /// Skip entries from stale blocks.
-    fn confirmed_entries<'a>(&'a self, chain: &'a Chain) -> impl Iterator<Item = &TxEntry> + 'a {
+    fn confirmed_entries<'a>(&'a self, chain: &'a Chain) -> impl Iterator<Item = &'a TxEntry> + 'a {
         self.confirmed_height_entries(chain)
             .flat_map(|(_height, entries)| entries)
     }
@@ -264,18 +269,17 @@ impl ScriptHashStatus {
             .collect()
     }
 
+    /// Collect unspent transaction entries
     pub(crate) fn get_unspent(&self, chain: &Chain) -> Vec<UnspentEntry> {
         Unspent::build(self, chain).into_entries()
     }
 
+    /// Collect unspent transaction balance
     pub(crate) fn get_balance(&self, chain: &Chain) -> Balance {
-        let unspent = Unspent::build(self, chain);
-        Balance {
-            confirmed_balance: unspent.confirmed_balance,
-            mempool_delta: unspent.mempool_delta,
-        }
+        Unspent::build(self, chain).balance
     }
 
+    /// Collect transaction history entries
     pub(crate) fn get_history(&self) -> &[HistoryEntry] {
         &self.history
     }
@@ -307,7 +311,7 @@ impl ScriptHashStatus {
             .collect()
     }
 
-    /// Apply func only on the new blocks (fetched from daemon).
+    /// Apply `func` only on the new blocks (to be fetched via p2p interface).
     fn for_new_blocks<B, F>(&self, blockhashes: B, daemon: &Daemon, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
@@ -330,34 +334,39 @@ impl ScriptHashStatus {
         cache: &Cache,
         outpoints: &mut HashSet<OutPoint>,
     ) -> Result<HashMap<BlockHash, Vec<TxEntry>>> {
-        let scripthash = self.scripthash;
+        // Will be updated during the following block scans
         let mut result = HashMap::<BlockHash, HashMap<usize, TxEntry>>::new();
 
-        let funding_blockhashes = index.limit_result(index.filter_by_funding(scripthash))?;
+        let funding_blockhashes = index.limit_result(index.filter_by_funding(self.scripthash))?;
         self.for_new_blocks(funding_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
-            for filtered_outputs in filter_block_txs_outputs(block, scripthash) {
-                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx);
+            let block_entries = result.entry(blockhash).or_default(); // the block may already exist
+
+            // extract relevant funding transactions
+            for filtered_outputs in filter_block_txs_outputs(block, self.scripthash) {
+                cache.add_tx(filtered_outputs.txid, move || filtered_outputs.tx_bytes);
+                // store funded outpoints (to check for spending later)
                 outpoints.extend(make_outpoints(
                     filtered_outputs.txid,
                     &filtered_outputs.result,
                 ));
                 block_entries
-                    .entry(filtered_outputs.pos)
+                    .entry(filtered_outputs.pos) // the transaction may already exist
                     .or_insert_with(|| TxEntry::new(filtered_outputs.txid))
                     .outputs = filtered_outputs.result;
             }
         })?;
         let spending_blockhashes: HashSet<BlockHash> = outpoints
-            .par_iter()
+            .par_iter() // use rayon for concurrent index lookups
             .flat_map_iter(|outpoint| index.filter_by_spending(*outpoint))
             .collect();
         self.for_new_blocks(spending_blockhashes, daemon, |blockhash, block| {
-            let block_entries = result.entry(blockhash).or_default();
+            let block_entries = result.entry(blockhash).or_default(); // the block may already exist
+
+            // extract relevant spending transactions
             for filtered_inputs in filter_block_txs_inputs(&block, outpoints) {
-                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx);
+                cache.add_tx(filtered_inputs.txid, move || filtered_inputs.tx_bytes);
                 block_entries
-                    .entry(filtered_inputs.pos)
+                    .entry(filtered_inputs.pos) // the transaction may already exist
                     .or_insert_with(|| TxEntry::new(filtered_inputs.txid))
                     .spent = filtered_inputs.result;
             }
@@ -366,11 +375,10 @@ impl ScriptHashStatus {
         Ok(result
             .into_iter()
             .map(|(blockhash, entries_map)| {
-                // sort transactions by their position in a block
-                let sorted_entries = entries_map
+                let sorted_entries: Vec<TxEntry> = entries_map
                     .into_iter()
-                    .collect::<BTreeMap<usize, TxEntry>>()
-                    .into_values()
+                    .collect::<BTreeMap<usize, TxEntry>>() // sort transactions by their position in a block
+                    .into_values() // drop position within block
                     .collect();
                 (blockhash, sorted_entries)
             })
@@ -386,15 +394,17 @@ impl ScriptHashStatus {
         outpoints: &mut HashSet<OutPoint>,
     ) -> Vec<TxEntry> {
         let mut result = HashMap::<Txid, TxEntry>::new();
+        // extract relevant funding transactions
         for entry in mempool.filter_by_funding(&self.scripthash) {
             let funding_outputs = filter_outputs(&entry.tx, self.scripthash);
             assert!(!funding_outputs.is_empty());
+            // store funded outpoints (to check for spending later)
             outpoints.extend(make_outpoints(entry.txid, &funding_outputs));
             result
-                .entry(entry.txid)
+                .entry(entry.txid) // the transaction may already exist
                 .or_insert_with(|| TxEntry::new(entry.txid))
                 .outputs = funding_outputs;
-            cache.add_tx(entry.txid, || entry.tx.clone());
+            cache.add_tx(entry.txid, || serialize(&entry.tx).into_boxed_slice());
         }
         for entry in outpoints
             .iter()
@@ -403,10 +413,10 @@ impl ScriptHashStatus {
             let spent_outpoints = filter_inputs(&entry.tx, outpoints);
             assert!(!spent_outpoints.is_empty());
             result
-                .entry(entry.txid)
+                .entry(entry.txid) // the transaction may already exist
                 .or_insert_with(|| TxEntry::new(entry.txid))
                 .spent = spent_outpoints;
-            cache.add_tx(entry.txid, || entry.tx.clone());
+            cache.add_tx(entry.txid, || serialize(&entry.tx).into_boxed_slice());
         }
         result.into_values().collect()
     }
@@ -425,7 +435,7 @@ impl ScriptHashStatus {
         let new_tip = index.chain().tip();
         if self.tip != new_tip {
             let update = self.sync_confirmed(index, daemon, cache, &mut outpoints)?;
-            self.confirmed.extend(update);
+            self.confirmed.extend(update); // add new blocks to the map
             self.tip = new_tip;
         }
         if !self.confirmed.is_empty() {
@@ -439,6 +449,7 @@ impl ScriptHashStatus {
         if !self.mempool.is_empty() {
             debug!("{} mempool transactions", self.mempool.len());
         }
+        // update history entries and status hash
         self.history.clear();
         self.history
             .extend(self.get_confirmed_history(index.chain()));
@@ -489,6 +500,7 @@ fn filter_inputs(tx: &Transaction, outpoints: &HashSet<OutPoint>) -> Vec<OutPoin
         .collect()
 }
 
+// See https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#status for details
 fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
     if history.is_empty() {
         return None;
@@ -501,7 +513,7 @@ fn compute_status_hash(history: &[HistoryEntry]) -> Option<StatusHash> {
 }
 
 struct FilteredTx<T> {
-    tx: Transaction,
+    tx_bytes: Box<[u8]>,
     txid: Txid,
     pos: usize,
     result: Vec<T>,
@@ -515,22 +527,20 @@ fn filter_block_txs_outputs(block: SerBlock, scripthash: ScriptHash) -> Vec<Filt
         pos: usize,
     }
     impl Visitor for FindOutputs {
+        // Called after all TxOuts are visited
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::take(&mut self.buffer);
-                let txid = bsl_txid(tx);
-                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<TxOutput> {
-                    tx,
-                    txid,
+                    tx_bytes: tx.as_ref().into(),
+                    txid: bsl_txid(tx),
                     pos: self.pos,
-                    result,
+                    result: std::mem::take(&mut self.buffer), // clear buffer for next tx
                 });
             }
             self.pos += 1;
             ControlFlow::Continue(())
         }
+        // Keep only relevant outputs
         fn visit_tx_out(&mut self, vout: usize, tx_out: &bsl::TxOut) -> ControlFlow<()> {
             let current = ScriptHash::hash(tx_out.script_pubkey());
             if current == self.scripthash {
@@ -565,23 +575,21 @@ fn filter_block_txs_inputs(
         pos: usize,
     }
 
-    impl<'a> Visitor for FindInputs<'a> {
+    impl Visitor for FindInputs<'_> {
+        // Called after all TxIns are visited
         fn visit_transaction(&mut self, tx: &bsl::Transaction) -> ControlFlow<()> {
             if !self.buffer.is_empty() {
-                let result = std::mem::take(&mut self.buffer);
-                let txid = bsl_txid(tx);
-                let tx = bitcoin::Transaction::consensus_decode(&mut tx.as_ref())
-                    .expect("transaction was already validated");
                 self.result.push(FilteredTx::<OutPoint> {
-                    tx,
-                    txid,
+                    tx_bytes: tx.as_ref().into(),
+                    txid: bsl_txid(tx),
                     pos: self.pos,
-                    result,
+                    result: std::mem::take(&mut self.buffer), // clear buffer for next tx
                 });
             }
             self.pos += 1;
             ControlFlow::Continue(())
         }
+        // Keep only relevant outpoints
         fn visit_tx_in(&mut self, _vin: usize, tx_in: &bsl::TxIn) -> ControlFlow<()> {
             let current: OutPoint = tx_in.prevout().into();
             if self.outpoints.contains(&current) {

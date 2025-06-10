@@ -22,7 +22,7 @@ FROM base as bitcoin-build
 # Download
 WORKDIR /build/bitcoin
 ARG ARCH=x86_64
-ARG BITCOIND_VERSION=27.0
+ARG BITCOIND_VERSION=29.0
 RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
 RUN tar xvf bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
 RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
@@ -40,7 +40,7 @@ WORKDIR /build/
 RUN apt-get install -qqy git libsecp256k1-1 python3-cryptography python3-setuptools python3-venv python3-pip jq curl
 RUN git clone --recurse-submodules https://github.com/spesmilo/electrum/ && cd electrum/ && git log -1
 RUN python3 -m venv --system-site-packages venv && \
-	venv/bin/pip install -e electrum/ && \
+    ELECTRUM_ECC_DONT_COMPILE=1 venv/bin/pip install -e electrum/ && \
 	ln /build/venv/bin/electrum /usr/bin/electrum
 
 RUN electrum version --offline
