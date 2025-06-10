@@ -112,6 +112,17 @@ doc = "Don't sync mempool - queries will show only confirmed transactions."
 name = "disable_electrum_rpc"
 doc = "Disable Electrum RPC server - only sync and index blocks."
 
+[[param]]
+name = "tx_broadcast_method"
+type = "crate::config::TxBroadcastMethodConfigOption"
+doc = "'rpc' to broadcast transactions directly from the bitcoin node, OR 'pushtx-clear' to broadcast to random peers over clearnet (bad for privacy unless you know what you're doing), OR 'pushtx-tor' to broadcast to random peers over a local TOR proxy"
+default = "crate::config::TxBroadcastMethodConfigOption::BitcoinRPC"
+
+[[param]]
+name = "tx_broadcast_script"
+type = "String"
+doc = "An executable script-file or command which will be executed with a raw transaction hex as the first and only argument. Only use this if tx_broadcast_script is set to 'script'. The script should exit with a zero status if the broadcast was successful."
+
 [[switch]]
 name = "sync_once"
 doc = "Exit after the initial sync is over (don't start Electrum server)."
