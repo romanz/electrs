@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use electrs_rocksdb::{ColumnFamilyDescriptor, IteratorMode, Options, DB};
+use rust_rocksdb::{ColumnFamilyDescriptor, IteratorMode, Options, DB};
 
 fn main() -> Result<()> {
     let path = std::env::args().nth(1).context("missing DB path")?;
