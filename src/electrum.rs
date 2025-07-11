@@ -765,7 +765,7 @@ fn check_between(version_str: &str, min_str: &str, max_str: &str) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::{check_between, parse_version, Version};
+    use super::*;
 
     #[test]
     fn test_version() {
@@ -787,5 +787,20 @@ mod tests {
         assert!(check_between("1.4", "1.3", "1.3").is_err());
         assert!(check_between("1.4", "1.4.1", "1.5").is_err());
         assert!(check_between("1.4", "1", "1").is_err());
+    }
+
+    #[test]
+    fn test_requests() {
+        assert!(matches!(
+            parse_requests("foo"),
+            Err(StandardError::ParseError)
+        ));
+        assert!(matches!(
+            parse_requests(r"{}"),
+            Err(StandardError::InvalidRequest)
+        ));
+        assert!(parse_requests(r#"{"id":1,"method":"name","params":[]}"#).is_ok());
+        assert!(parse_requests(r#"{"id":1,"method":"name","params":[],"unrelated":42}"#).is_ok());
+        assert!(parse_requests(r#" { "id" : 1 , "method" : "name" , "params" : [ ] } "#).is_ok());
     }
 }
