@@ -10,7 +10,7 @@ use std::{env, process, thread};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use bitcoin::hex::DisplayHex;
-use bitcoin::secp256k1::rand;
+use rand::{rng, RngCore};
 use electrs::{
     config::Config,
     daemon::Daemon,
@@ -161,7 +161,8 @@ fn run_server(config: Arc<Config>, salt_rwlock: Arc<RwLock<String>>) -> Result<(
 }
 
 fn generate_salt() -> String {
-    let random_bytes: [u8; 32] = rand::random();
+    let mut random_bytes = [0u8; 32];
+    rng().fill_bytes(&mut random_bytes);
     random_bytes.to_lower_hex_string()
 }
 
