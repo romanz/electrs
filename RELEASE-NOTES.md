@@ -1,3 +1,8 @@
+# 0.10.10 (Jul 19 2025)
+
+* Update documentation links and typos.
+* Update dependencies (`bitcoin`, `crossbeam-channel`, `log`, `prometheus`, `signal-hook`, `tempfile`).
+
 # 0.10.9 (Feb 01 2025)
 
 * Update `bitcoin_slices` to 0.10.0
