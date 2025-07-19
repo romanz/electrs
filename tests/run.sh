@@ -6,7 +6,7 @@ mkdir -p data/{bitcoin,electrum,electrs}
 
 cleanup() {
   trap - SIGTERM SIGINT
-  set +eo pipefail
+  set +e +o pipefail
   jobs
   for j in `jobs -rp`
   do
