@@ -365,6 +365,13 @@ impl Rpc {
         Ok(json!(txid))
     }
 
+    fn transaction_test_mempool_accept(&self, (tx_hex,): &(String,)) -> Result<Value> {
+        let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
+        let tx = deserialize(&tx_bytes).context("invalid transaction")?;
+        let accepted = self.daemon.test_mempool_accept(&tx)?;
+        Ok(json!(accepted))
+    }
+
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
         let (txid, verbose) = args.into();
         if verbose {
@@ -562,6 +569,9 @@ impl Rpc {
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
+                Params::TransactionTestMempoolAccept(args) => {
+                    self.transaction_test_mempool_accept(args)
+                }
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
@@ -578,6 +588,7 @@ enum Params {
     BlockHeader((usize,)),
     BlockHeaders((usize, usize)),
     TransactionBroadcast((String,)),
+    TransactionTestMempoolAccept((String,)),
     Donation,
     EstimateFee((u16,)),
     Features,
@@ -611,6 +622,9 @@ impl Params {
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
             "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
+            "blockchain.transaction.testmempoolaccept" => {
+                Params::TransactionTestMempoolAccept(convert(params)?)
+            }
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
             "blockchain.transaction.id_from_pos" => {

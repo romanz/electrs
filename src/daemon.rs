@@ -173,6 +173,16 @@ impl Daemon {
             .context("failed to broadcast transaction")
     }
 
+    pub(crate) fn test_mempool_accept(&self, tx: &Transaction) -> Result<bool> {
+        Ok(self
+            .rpc
+            .test_mempool_accept(&[tx])
+            .context("failed to test mempool accept")?
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("failed to get mempool accept result"))?
+            .allowed)
+    }
+
     pub(crate) fn get_transaction_info(
         &self,
         txid: &Txid,
