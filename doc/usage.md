@@ -102,7 +102,7 @@ $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "i
 ```
 
 For more complex tasks, you may need to convert addresses to 
-[script hashes](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see 
+[script hashes](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html#script-hashes) - see 
 [contrib/history.py](https://github.com/romanz/electrs/blob/master/contrib/history.py) for getting an address balance and history:
 
 ```
