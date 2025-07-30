@@ -41,7 +41,7 @@ which is better optimized for public usage at the cost of consuming *significant
 
 ## Features
 
- * Supports Electrum protocol [v1.4](https://electrumx-spesmilo.readthedocs.io/en/latest/protocol.html)
+ * Supports Electrum protocol [v1.4](https://electrumx.readthedocs.io/en/latest/protocol.html)
  * Maintains an index over transaction inputs and outputs, allowing fast balance queries
  * Fast synchronization of the Bitcoin blockchain (~6.5 hours for ~504GB @ August 2023) using HDD storage.
  * Low index storage overhead (~10%), relying on a local full node for transaction retrieval
