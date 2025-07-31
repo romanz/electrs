@@ -5,7 +5,7 @@
 
 # Rust
 
-* Use [bytes](https://carllerche.github.io/bytes/bytes/index.html) instead of `Vec<u8>` when possible
+* Use [bytes](https://docs.rs/bytes/latest/bytes/) instead of `Vec<u8>` when possible
 * Use generators instead of vectors
 * Use proper HTTP parser for JSONRPC replies over persistent connection
 
