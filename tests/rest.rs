@@ -210,85 +210,89 @@ fn test_rest() -> Result<()> {
     // Elements-only tests
     #[cfg(not(feature = "liquid"))]
     {
-        // Test with a real transaction package - create parent-child transactions
-        // submitpackage requires between 2 and 25 transactions with proper dependencies
-        let package_addr1 = tester.newaddress()?;
-        let package_addr2 = tester.newaddress()?;
+        let network_info = tester.node_client().call::<Value>("getnetworkinfo", &[])?;
+        let version = network_info["version"].as_u64().expect("network version");
+        if version >= 280000 {
+            // Test with a real transaction package - create parent-child transactions
+            // submitpackage requires between 2 and 25 transactions with proper dependencies
+            let package_addr1 = tester.newaddress()?;
+            let package_addr2 = tester.newaddress()?;
 
-        // Create parent transaction
-        let tx1_result = tester.node_client().call::<Value>(
-            "createrawtransaction",
-            &[
-                serde_json::json!([]),
-                serde_json::json!({package_addr1.to_string(): 0.5}),
-            ],
-        )?;
-        let tx1_unsigned_hex = tx1_result.as_str().expect("raw tx hex").to_string();
+            // Create parent transaction
+            let tx1_result = tester.node_client().call::<Value>(
+                "createrawtransaction",
+                &[
+                    serde_json::json!([]),
+                    serde_json::json!({package_addr1.to_string(): 0.5}),
+                ],
+            )?;
+            let tx1_unsigned_hex = tx1_result.as_str().expect("raw tx hex").to_string();
 
-        let tx1_fund_result = tester
-            .node_client()
-            .call::<Value>("fundrawtransaction", &[serde_json::json!(tx1_unsigned_hex)])?;
-        let tx1_funded_hex = tx1_fund_result["hex"]
-            .as_str()
-            .expect("funded tx hex")
-            .to_string();
+            let tx1_fund_result = tester
+                .node_client()
+                .call::<Value>("fundrawtransaction", &[serde_json::json!(tx1_unsigned_hex)])?;
+            let tx1_funded_hex = tx1_fund_result["hex"]
+                .as_str()
+                .expect("funded tx hex")
+                .to_string();
 
-        let tx1_sign_result = tester.node_client().call::<Value>(
-            "signrawtransactionwithwallet",
-            &[serde_json::json!(tx1_funded_hex)],
-        )?;
-        let tx1_signed_hex = tx1_sign_result["hex"]
-            .as_str()
-            .expect("signed tx hex")
-            .to_string();
+            let tx1_sign_result = tester.node_client().call::<Value>(
+                "signrawtransactionwithwallet",
+                &[serde_json::json!(tx1_funded_hex)],
+            )?;
+            let tx1_signed_hex = tx1_sign_result["hex"]
+                .as_str()
+                .expect("signed tx hex")
+                .to_string();
 
-        // Decode parent transaction to get its txid and find the output to spend
-        let tx1_decoded = tester
-            .node_client()
-            .call::<Value>("decoderawtransaction", &[serde_json::json!(tx1_signed_hex)])?;
-        let tx1_txid = tx1_decoded["txid"].as_str().expect("parent txid");
+            // Decode parent transaction to get its txid and find the output to spend
+            let tx1_decoded = tester
+                .node_client()
+                .call::<Value>("decoderawtransaction", &[serde_json::json!(tx1_signed_hex)])?;
+            let tx1_txid = tx1_decoded["txid"].as_str().expect("parent txid");
 
-        // Find the output going to package_addr1 (the one we want to spend)
-        let tx1_vouts = tx1_decoded["vout"].as_array().expect("parent vouts");
-        let mut spend_vout_index = None;
-        let mut spend_vout_value = 0u64;
+            // Find the output going to package_addr1 (the one we want to spend)
+            let tx1_vouts = tx1_decoded["vout"].as_array().expect("parent vouts");
+            let mut spend_vout_index = None;
+            let mut spend_vout_value = 0u64;
 
-        for (i, vout) in tx1_vouts.iter().enumerate() {
-            if let Some(script_pub_key) = vout.get("scriptPubKey") {
-                if let Some(address) = script_pub_key.get("address") {
-                    if address.as_str() == Some(&package_addr1.to_string()) {
-                        spend_vout_index = Some(i);
-                        // Convert from BTC to satoshis
-                        spend_vout_value =
-                            (vout["value"].as_f64().expect("vout value") * 100_000_000.0) as u64;
-                        break;
+            for (i, vout) in tx1_vouts.iter().enumerate() {
+                if let Some(script_pub_key) = vout.get("scriptPubKey") {
+                    if let Some(address) = script_pub_key.get("address") {
+                        if address.as_str() == Some(&package_addr1.to_string()) {
+                            spend_vout_index = Some(i);
+                            // Convert from BTC to satoshis
+                            spend_vout_value = (vout["value"].as_f64().expect("vout value")
+                                * 100_000_000.0)
+                                as u64;
+                            break;
+                        }
                     }
                 }
             }
-        }
 
-        let spend_vout_index = spend_vout_index.expect("Could not find output to spend");
+            let spend_vout_index = spend_vout_index.expect("Could not find output to spend");
 
-        // Create child transaction that spends from parent
-        // Leave some satoshis for fee (e.g., 1000 sats)
-        let child_output_value = spend_vout_value - 1000;
-        let child_output_btc = child_output_value as f64 / 100_000_000.0;
+            // Create child transaction that spends from parent
+            // Leave some satoshis for fee (e.g., 1000 sats)
+            let child_output_value = spend_vout_value - 1000;
+            let child_output_btc = child_output_value as f64 / 100_000_000.0;
 
-        let tx2_result = tester.node_client().call::<Value>(
-            "createrawtransaction",
-            &[
-                serde_json::json!([{
-                    "txid": tx1_txid,
-                    "vout": spend_vout_index
-                }]),
-                serde_json::json!({package_addr2.to_string(): child_output_btc}),
-            ],
-        )?;
-        let tx2_unsigned_hex = tx2_result.as_str().expect("raw tx hex").to_string();
+            let tx2_result = tester.node_client().call::<Value>(
+                "createrawtransaction",
+                &[
+                    serde_json::json!([{
+                        "txid": tx1_txid,
+                        "vout": spend_vout_index
+                    }]),
+                    serde_json::json!({package_addr2.to_string(): child_output_btc}),
+                ],
+            )?;
+            let tx2_unsigned_hex = tx2_result.as_str().expect("raw tx hex").to_string();
 
-        // Sign the child transaction
-        // We need to provide the parent transaction's output details for signing
-        let tx2_sign_result = tester.node_client().call::<Value>(
+            // Sign the child transaction
+            // We need to provide the parent transaction's output details for signing
+            let tx2_sign_result = tester.node_client().call::<Value>(
         "signrawtransactionwithwallet",
         &[
             serde_json::json!(tx2_unsigned_hex),
@@ -300,49 +304,50 @@ fn test_rest() -> Result<()> {
             }])
         ],
     )?;
-        let tx2_signed_hex = tx2_sign_result["hex"]
-            .as_str()
-            .expect("signed tx hex")
-            .to_string();
+            let tx2_signed_hex = tx2_sign_result["hex"]
+                .as_str()
+                .expect("signed tx hex")
+                .to_string();
 
-        // Debug: try calling submitpackage directly to see the result
-        eprintln!("Trying submitpackage directly with parent-child transactions...");
-        let direct_result = tester.node_client().call::<Value>(
-            "submitpackage",
-            &[serde_json::json!([
-                tx1_signed_hex.clone(),
-                tx2_signed_hex.clone()
-            ])],
-        );
-        match direct_result {
-            Ok(result) => {
-                eprintln!("Direct submitpackage succeeded: {:#?}", result);
+            // Debug: try calling submitpackage directly to see the result
+            eprintln!("Trying submitpackage directly with parent-child transactions...");
+            let direct_result = tester.node_client().call::<Value>(
+                "submitpackage",
+                &[serde_json::json!([
+                    tx1_signed_hex.clone(),
+                    tx2_signed_hex.clone()
+                ])],
+            );
+            match direct_result {
+                Ok(result) => {
+                    eprintln!("Direct submitpackage succeeded: {:#?}", result);
+                }
+                Err(e) => {
+                    eprintln!("Direct submitpackage failed: {:?}", e);
+                }
             }
-            Err(e) => {
-                eprintln!("Direct submitpackage failed: {:?}", e);
-            }
+
+            // Now submit this transaction package via the package endpoint
+            let package_json =
+                serde_json::json!([tx1_signed_hex.clone(), tx2_signed_hex.clone()]).to_string();
+            let package_result = ureq::post(&format!("http://{}/txs/package", rest_addr))
+                .set("Content-Type", "application/json")
+                .send_string(&package_json);
+
+            let package_resp = package_result.unwrap();
+            assert_eq!(package_resp.status(), 200);
+            let package_result = package_resp.into_json::<Value>()?;
+
+            // Verify the response structure
+            assert!(package_result["tx-results"].is_object());
+            assert!(package_result["package_msg"].is_string());
+
+            let tx_results = package_result["tx-results"].as_object().unwrap();
+            assert_eq!(tx_results.len(), 2);
+
+            // The transactions should be processed (whether accepted or rejected)
+            assert!(!tx_results.is_empty());
         }
-
-        // Now submit this transaction package via the package endpoint
-        let package_json =
-            serde_json::json!([tx1_signed_hex.clone(), tx2_signed_hex.clone()]).to_string();
-        let package_result = ureq::post(&format!("http://{}/txs/package", rest_addr))
-            .set("Content-Type", "application/json")
-            .send_string(&package_json);
-
-        let package_resp = package_result.unwrap();
-        assert_eq!(package_resp.status(), 200);
-        let package_result = package_resp.into_json::<Value>()?;
-
-        // Verify the response structure
-        assert!(package_result["tx-results"].is_object());
-        assert!(package_result["package_msg"].is_string());
-
-        let tx_results = package_result["tx-results"].as_object().unwrap();
-        assert_eq!(tx_results.len(), 2);
-
-        // The transactions should be processed (whether accepted or rejected)
-        assert!(!tx_results.is_empty());
     }
 
     // Elements-only tests
