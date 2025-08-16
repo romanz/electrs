@@ -29,3 +29,17 @@ electrum_rpc_addr = "127.0.0.1:50001"
 
 # How much information about internal workings should electrs print. Increase before reporting a bug.
 log_filters = "INFO"
+
+# How to broadcast transactions.
+# - "rpc" : use bitcoind to broadcast the TX directly
+# - "pushtx-clear" : send the transaction to random bitcoin peers resolved from DNS seeds directly over clearnet
+#                    (bad for privacy, don't use this unless you have protected the outbound connections via
+#                    other means, such as a VPN)
+# - "pushtx-tor" : send the transaction to random bitcoin peers resolved from DNS seeds over a TOR proxy
+# - "script" : pass the hex-encoded transaction to a script (specified by tx_broadcast_script)
+tx_broadcast_method = "rpc"
+
+# A script which is invoked with a hex-encoded transaction as the sole positional argument. Should exit
+# with a zero status if the broadcast was successful.
+#
+# tx_broadcast_script = "/usr/local/bin/broadcast.sh"
