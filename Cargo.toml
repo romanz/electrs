@@ -27,6 +27,7 @@ otlp-tracing = [
     "opentelemetry-semantic-conventions",
     "electrs_macros/otlp-tracing"
 ]
+bitcoind_28_0 = []
 
 [dependencies]
 arraydeque = "0.5.1"

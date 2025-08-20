@@ -41,7 +41,7 @@ jobs:
         curl -sSL https://bitcoincore.org/bin/bitcoin-core-28.0/bitcoin-28.0-x86_64-linux-gnu.tar.gz | tar -xz
         chmod +x bitcoin-28.0/bin/bitcoind
     - name: Run tests (Bitcoin 28.0, REST+Electrum)
-      run: RUST_LOG=debug cargo test
+      run: RUST_LOG=debug cargo test --features bitcoind_28_0
       env:
         BITCOIND_EXE: ${{ github.workspace }}/bitcoin-28.0/bin/bitcoind
 
