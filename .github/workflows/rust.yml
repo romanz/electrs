@@ -29,6 +29,22 @@ jobs:
     - name: Run tests (Bitcoin mode, REST+Electrum)
       run: RUST_LOG=debug cargo test
 
+  test-bitcoin-28:
+    runs-on: ubuntu-22.04
+    steps:
+    - run: sudo apt-get update && sudo apt-get install libfuse2
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@1.75.0
+    - uses: Swatinem/rust-cache@v2
+    - name: Download bitcoind 28.0
+      run: |
+        curl -sSL https://bitcoincore.org/bin/bitcoin-core-28.0/bitcoin-28.0-x86_64-linux-gnu.tar.gz | tar -xz
+        chmod +x bitcoin-28.0/bin/bitcoind
+    - name: Run tests (Bitcoin 28.0, REST+Electrum)
+      run: RUST_LOG=debug cargo test
+      env:
+        BITCOIND_EXE: ${{ github.workspace }}/bitcoin-28.0/bin/bitcoind
+
   test-electrum-raw:
     runs-on: ubuntu-22.04
     steps:
