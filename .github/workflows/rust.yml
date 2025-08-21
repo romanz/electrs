@@ -45,6 +45,22 @@ jobs:
       env:
         BITCOIND_EXE: ${{ github.workspace }}/bitcoin-28.0/bin/bitcoind
 
+  test-bitcoin-27:
+    runs-on: ubuntu-22.04
+    steps:
+    - run: sudo apt-get update && sudo apt-get install libfuse2
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@1.75.0
+    - uses: Swatinem/rust-cache@v2
+    - name: Download bitcoind 27.0
+      run: |
+        curl -sSL https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz | tar -xz
+        chmod +x bitcoin-27.0/bin/bitcoind
+    - name: Run tests (Bitcoin 27.0, REST+Electrum)
+      run: RUST_LOG=debug cargo test --features bitcoind_28_0
+      env:
+        BITCOIND_EXE: ${{ github.workspace }}/bitcoin-28.0/bin/bitcoind
+
   test-electrum-raw:
     runs-on: ubuntu-22.04
     steps:
