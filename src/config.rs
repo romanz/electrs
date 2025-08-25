@@ -121,6 +121,62 @@ impl From<BitcoinNetwork> for Network {
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[allow(clippy::upper_case_acronyms)] // LMDB
+pub enum DatabaseType {
+    #[default]
+    RocksDB,
+    LMDB,
+    ReDB,
+    Sled,
+    Fjall,
+}
+
+impl FromStr for DatabaseType {
+    type Err = UnknownDatabaseTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "rocksdb" => Self::RocksDB,
+            "lmdb" => Self::LMDB,
+            "redb" => Self::ReDB,
+            "sled" => Self::Sled,
+            "fjall" => Self::Fjall,
+            _ => return Err(UnknownDatabaseTypeError(s.to_owned())),
+        })
+    }
+}
+
+impl ::configure_me::parse_arg::ParseArgFromStr for DatabaseType {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
+        write!(
+            writer,
+            "either 'rocksdb', 'lmdb', 'redb', 'sled' or 'fjall'"
+        )
+    }
+}
+
+impl fmt::Display for DatabaseType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RocksDB => write!(f, "rocksdb"),
+            Self::LMDB => write!(f, "lmdb"),
+            Self::ReDB => write!(f, "redb"),
+            Self::Sled => write!(f, "sled"),
+            Self::Fjall => write!(f, "fjall"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnknownDatabaseTypeError(String);
+
+impl fmt::Display for UnknownDatabaseTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown database type '{}'", self.0)
+    }
+}
+
 /// Parsed and post-processed configuration
 #[derive(Debug)]
 pub struct Config {
@@ -146,6 +202,7 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub signet_magic: Magic,
+    pub database: DatabaseType,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -374,6 +431,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             signet_magic: magic,
+            database: config.database,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",

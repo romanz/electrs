@@ -19,7 +19,7 @@ jobs:
         os: [ubuntu-latest]
         build-args:
           [
-            --locked --no-default-features,
+            --locked --no-default-features --features rocksdb,
             --locked
           ]
         include:

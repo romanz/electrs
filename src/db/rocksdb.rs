@@ -4,25 +4,11 @@ use rust_rocksdb as rocksdb;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
+use crate::types::{
+    HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_ROW_SIZE, HEADER_ROW_SIZE,
+};
 
-#[derive(Default)]
-pub(crate) struct WriteBatch {
-    pub(crate) tip_row: [u8; 32],
-    pub(crate) header_rows: Vec<SerializedHeaderRow>,
-    pub(crate) funding_rows: Vec<SerializedHashPrefixRow>,
-    pub(crate) spending_rows: Vec<SerializedHashPrefixRow>,
-    pub(crate) txid_rows: Vec<SerializedHashPrefixRow>,
-}
-
-impl WriteBatch {
-    pub(crate) fn sort(&mut self) {
-        self.header_rows.sort_unstable();
-        self.funding_rows.sort_unstable();
-        self.spending_rows.sort_unstable();
-        self.txid_rows.sort_unstable();
-    }
-}
+use super::{Database, WriteBatch};
 
 /// RocksDB wrapper for index storage
 pub struct DBStore {
@@ -114,6 +100,57 @@ fn default_opts(parallelism: u8) -> rocksdb::Options {
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
     opts.set_block_based_table_factory(&block_opts);
     opts
+}
+
+impl Database for DBStore {
+    fn open(
+        path: &Path,
+        log_dir: Option<&Path>,
+        auto_reindex: bool,
+        db_parallelism: u8,
+    ) -> Result<Self> {
+        Self::open(path, log_dir, auto_reindex, db_parallelism)
+    }
+
+    fn iter_funding(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+        self.iter_funding(prefix)
+    }
+
+    fn iter_spending(
+        &self,
+        prefix: HashPrefix,
+    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+        self.iter_spending(prefix)
+    }
+
+    fn iter_txid(&self, prefix: HashPrefix) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+        self.iter_txid(prefix)
+    }
+
+    fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
+        self.iter_headers()
+    }
+
+    fn get_tip(&self) -> Option<Vec<u8>> {
+        self.get_tip()
+    }
+
+    fn write(&self, batch: &WriteBatch) {
+        self.write(batch);
+    }
+
+    fn flush(&self) {
+        self.flush();
+    }
+
+    fn update_metrics(&self, gauge: &crate::metrics::Gauge) {
+        for (cf, name, value) in self.get_properties() {
+            gauge.set(&format!("{}:{}", name, cf), value as f64);
+        }
+    }
 }
 
 impl DBStore {
@@ -230,24 +267,15 @@ impl DBStore {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
 
-    pub(crate) fn iter_funding(
-        &self,
-        prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    pub(crate) fn iter_funding(&self, prefix: HashPrefix) -> DBIterator<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
-    pub(crate) fn iter_spending(
-        &self,
-        prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    pub(crate) fn iter_spending(&self, prefix: HashPrefix) -> DBIterator<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
-    pub(crate) fn iter_txid(
-        &self,
-        prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    pub(crate) fn iter_txid(&self, prefix: HashPrefix) -> DBIterator<'_, HASH_PREFIX_ROW_SIZE> {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
@@ -256,7 +284,7 @@ impl DBStore {
         cf: &rocksdb::ColumnFamily,
         readopts: rocksdb::ReadOptions,
         prefix: Option<HashPrefix>,
-    ) -> impl Iterator<Item = [u8; N]> + '_ {
+    ) -> DBIterator<'_, N> {
         DBIterator::new(self.db.raw_iterator_cf_opt(cf, readopts), prefix)
     }
 
@@ -264,13 +292,13 @@ impl DBStore {
         &self,
         cf: &rocksdb::ColumnFamily,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    ) -> DBIterator<'_, HASH_PREFIX_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
         self.iter_cf(cf, opts, Some(prefix))
     }
 
-    pub(crate) fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
+    pub(crate) fn iter_headers(&self) -> DBIterator<'_, HEADER_ROW_SIZE> {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
         self.iter_cf(self.headers_cf(), opts, None)
@@ -377,7 +405,7 @@ impl DBStore {
     }
 }
 
-struct DBIterator<'a, const N: usize> {
+pub struct DBIterator<'a, const N: usize> {
     raw: rocksdb::DBRawIterator<'a>,
     prefix: Option<HashPrefix>,
     done: bool,
@@ -436,7 +464,7 @@ impl Drop for DBStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{rocksdb, DBStore, WriteBatch, CURRENT_FORMAT};
+    use super::{rocksdb, DBStore, CURRENT_FORMAT};
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
@@ -495,27 +523,7 @@ mod tests {
 
     #[test]
     fn test_db_prefix_scan() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = DBStore::open(dir.path(), None, true, 1).unwrap();
-
-        let items = [
-            *b"ab          ",
-            *b"abcdefgh    ",
-            *b"abcdefghj   ",
-            *b"abcdefghjk  ",
-            *b"abcdefghxyz ",
-            *b"abcdefgi    ",
-            *b"b           ",
-            *b"c           ",
-        ];
-
-        store.write(&WriteBatch {
-            txid_rows: items.to_vec(),
-            ..Default::default()
-        });
-
-        let rows = store.iter_txid(*b"abcdefgh");
-        assert_eq!(rows.collect::<Vec<_>>(), items[1..5]);
+        super::super::test_db_prefix_scan::<DBStore>();
     }
 
     #[test]
