@@ -53,7 +53,7 @@ impl Chain {
         self.update(vec![NewHeader::from((
             self.headers[new_height].1,
             new_height,
-        ))])
+        ))]);
     }
 
     /// Load the chain from a collection of headers, up to the given tip
