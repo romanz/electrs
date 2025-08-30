@@ -284,19 +284,23 @@ impl DBStore {
 
     pub(crate) fn write(&self, batch: &WriteBatch) {
         let mut db_batch = rocksdb::WriteBatch::default();
+        let funding_cf = self.funding_cf();
         for key in &batch.funding_rows {
-            db_batch.put_cf(self.funding_cf(), key, b"");
+            db_batch.put_cf(funding_cf, key, b"");
         }
+        let spending_cf = self.spending_cf();
         for key in &batch.spending_rows {
-            db_batch.put_cf(self.spending_cf(), key, b"");
+            db_batch.put_cf(spending_cf, key, b"");
         }
+        let txid_cf = self.txid_cf();
         for key in &batch.txid_rows {
-            db_batch.put_cf(self.txid_cf(), key, b"");
+            db_batch.put_cf(txid_cf, key, b"");
         }
+        let headers_cf = self.headers_cf();
         for key in &batch.header_rows {
-            db_batch.put_cf(self.headers_cf(), key, b"");
+            db_batch.put_cf(headers_cf, key, b"");
         }
-        db_batch.put_cf(self.headers_cf(), TIP_KEY, batch.tip_row);
+        db_batch.put_cf(headers_cf, TIP_KEY, batch.tip_row);
 
         let mut opts = rocksdb::WriteOptions::new();
         let bulk_import = self.bulk_import.load(Ordering::Relaxed);
