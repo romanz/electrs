@@ -80,7 +80,7 @@ fn read_cookie(path: &Path) -> Result<(String, String)> {
 
 fn rpc_connect(config: &Config) -> Result<Client> {
     let rpc_url = format!("http://{}", config.daemon_rpc_addr);
-    // Allow `wait_for_new_block` to take a bit longer before timing out.
+    // Allow RPC calls to take longer before timing out.
     // See https://github.com/romanz/electrs/issues/495 for more details.
     let builder = jsonrpc::simple_http::SimpleHttpTransport::builder()
         .url(&rpc_url)?
