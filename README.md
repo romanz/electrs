@@ -69,4 +69,4 @@ All contributions to this project are welcome. Please refer to the [Contributing
 
 [Our logo](logo/) is generously provided by [Dominik Průša](https://github.com/DominoPrusa) under the MIT license.
 Based on the [Electrum logo](https://github.com/spesmilo/electrum/blob/master/LICENCE)
-and the [Rust language logo](https://www.rust-lang.org/policies/media-guide).
+and the [Rust language logo](https://rustfoundation.org/policy/rust-trademark-policy).
