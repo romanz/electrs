@@ -101,8 +101,8 @@ $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "i
 {"id":0,"jsonrpc":"2.0","result":["electrs 0.9.0","1.4"]}
 ```
 
-For more complex tasks, you may need to convert addresses to 
-[script hashes](https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see 
+For more complex tasks, you may need to convert addresses to
+[script hashes](https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#script-hashes) - see
 [contrib/history.py](https://github.com/romanz/electrs/blob/master/contrib/history.py) for getting an address balance and history:
 
 ```

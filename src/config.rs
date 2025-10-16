@@ -48,7 +48,6 @@ impl fmt::Display for AddressError {
 }
 
 /// Newtype for an address that is parsed as `String`
-///
 /// The main point of this newtype is to provide better description than what `String` type
 /// provides.
 #[derive(Deserialize)]

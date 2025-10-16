@@ -90,8 +90,8 @@ def main():
         for script_hash in script_hashes
     )
     txids_map = dict(
-        (tx['tx_hash'], tx['height'] if tx['height'] > 0 else None) 
-        for history in histories 
+        (tx['tx_hash'], tx['height'] if tx['height'] > 0 else None)
+        for history in histories
         for tx in history
     )
     log.info('got history of {} transactions', len(txids_map))
@@ -128,7 +128,7 @@ def main():
     log.info('loaded {} merkle proofs', len(proofs))  # TODO: verify proofs
 
     sorted_txdata = sorted(
-        (proof['block_height'], proof['pos'], txid) 
+        (proof['block_height'], proof['pos'], txid)
         for proof, txid in zip(proofs, confirmed_txids)
     )
 
@@ -145,7 +145,7 @@ def main():
         for index, txo in enumerate(tx_obj.txs_out):
             if _script_hash(txo.puzzle_script()) in script_hashes:
                 utxos[(txid, index)] = txo
-    
+
         diff = sum(txo.coin_value for txo in utxos.values()) - balance
         balance += diff
         confirmations = tip['height'] - block_height + 1
