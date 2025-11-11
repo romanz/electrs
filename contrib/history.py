@@ -42,6 +42,9 @@ def main():
     elif args.network == 'testnet':
         port = 60001
         from pycoin.symbols.xtn import network
+    elif args.network == 'testnet4':
+        port = 40001
+        from pycoin.symbols.xtn import network
     elif args.network == 'mainnet':
         port = 50001
         from pycoin.symbols.btc import network
