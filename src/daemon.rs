@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::{consensus::deserialize, hashes::hex::FromHex};
 use bitcoin::{Amount, BlockHash, Transaction, Txid};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
@@ -171,6 +172,13 @@ impl Daemon {
         self.rpc
             .send_raw_transaction(tx)
             .context("failed to broadcast transaction")
+    }
+
+    pub(crate) fn submitpackage(&self, txs: &[Transaction]) -> Result<Value> {
+        let package: Vec<String> = txs.iter().map(serialize_hex).collect();
+        self.rpc
+            .call("submitpackage", &[json!(package)])
+            .context("failed to submitpackage package")
     }
 
     pub(crate) fn get_transaction_info(

@@ -3,7 +3,7 @@ use bitcoin::{
     consensus::{deserialize, encode::serialize_hex},
     hashes::hex::FromHex,
     hex::DisplayHex,
-    BlockHash, Txid,
+    BlockHash, Transaction, Txid,
 };
 use crossbeam_channel::Receiver;
 use rayon::prelude::*;
@@ -359,10 +359,16 @@ impl Rpc {
     }
 
     fn transaction_broadcast(&self, (tx_hex,): &(String,)) -> Result<Value> {
-        let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
-        let tx = deserialize(&tx_bytes).context("invalid transaction")?;
-        let txid = self.daemon.broadcast(&tx)?;
+        let txid = self.daemon.broadcast(&tx_from_hex(tx_hex)?)?;
         Ok(json!(txid))
+    }
+
+    fn transaction_broadcast_package(&self, (txs_hex,): &(Vec<String>,)) -> Result<Value> {
+        let txs = txs_hex
+            .iter()
+            .map(|s| tx_from_hex(s))
+            .collect::<Result<Vec<_>>>()?;
+        self.daemon.submitpackage(&txs)
     }
 
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
@@ -562,6 +568,9 @@ impl Rpc {
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
                 Params::TransactionBroadcast(args) => self.transaction_broadcast(args),
+                Params::TransactionBroadcastPackage(args) => {
+                    self.transaction_broadcast_package(args)
+                }
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
@@ -578,6 +587,7 @@ enum Params {
     BlockHeader((usize,)),
     BlockHeaders((usize, usize)),
     TransactionBroadcast((String,)),
+    TransactionBroadcastPackage((Vec<String>,)),
     Donation,
     EstimateFee((u16,)),
     Features,
@@ -611,6 +621,9 @@ impl Params {
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
             "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),
             "blockchain.transaction.broadcast" => Params::TransactionBroadcast(convert(params)?),
+            "blockchain.transaction.broadcast_package" => {
+                Params::TransactionBroadcastPackage(convert(params)?)
+            }
             "blockchain.transaction.get" => Params::TransactionGet(convert(params)?),
             "blockchain.transaction.get_merkle" => Params::TransactionGetMerkle(convert(params)?),
             "blockchain.transaction.id_from_pos" => {
@@ -761,6 +774,12 @@ fn check_between(version_str: &str, min_str: &str, max_str: &str) -> Result<()> 
         bail!("version {} > {}", version, max);
     }
     Ok(())
+}
+
+fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
+    let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
+    let tx = deserialize(&tx_bytes).context("invalid transaction")?;
+    Ok(tx)
 }
 
 #[cfg(test)]
