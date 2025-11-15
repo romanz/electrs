@@ -5,6 +5,8 @@
 * Update RocksDB crate to `rust-rocksdb` 0.36
   - [Dynamic linking with RocksDB](doc/install.md) now requires [RocksDB 9.10.0](https://packages.debian.org/trixie/librocksdb-dev) (instead of 7.8.3).
   - Old electrs versions won't be able to read the new RocksDB database format (requiring reindex).
+* Support `blockchain.transaction.broadcast_package` Electrum RPC.
+* Update dependencies (`bitcoin`, `ctrlc`, `log`, `prometheus`, `rayon`, `serde`, `serde_json`, `tempfile`, `tempfile`).
 
 # 0.10.10 (Jul 19 2025)
 
