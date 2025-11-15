@@ -78,6 +78,29 @@ impl From<&TxGetArgs> for (Txid, bool) {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum BroadcastArgs {
+    Package((Vec<String>,)),
+    PackageVerbose((Vec<String>, bool)),
+}
+
+impl BroadcastArgs {
+    fn txs(&self) -> &[String] {
+        match self {
+            BroadcastArgs::Package((txs,)) => txs,
+            BroadcastArgs::PackageVerbose((txs, _)) => txs,
+        }
+    }
+
+    fn verbose(&self) -> bool {
+        match self {
+            BroadcastArgs::Package(_) => false,
+            BroadcastArgs::PackageVerbose((_, verbose)) => *verbose,
+        }
+    }
+}
+
 enum StandardError {
     ParseError,
     InvalidRequest,
@@ -363,12 +386,34 @@ impl Rpc {
         Ok(json!(txid))
     }
 
-    fn transaction_broadcast_package(&self, (txs_hex,): &(Vec<String>,)) -> Result<Value> {
-        let txs = txs_hex
+    fn transaction_broadcast_package(&self, args: &BroadcastArgs) -> Result<Value> {
+        let txs: Vec<Transaction> = args
+            .txs()
             .iter()
             .map(|s| tx_from_hex(s))
-            .collect::<Result<Vec<_>>>()?;
-        self.daemon.submitpackage(&txs)
+            .collect::<Result<_>>()?;
+        let response = self.daemon.submitpackage(&txs)?;
+        if args.verbose() {
+            return Ok(response);
+        }
+        let build_result = || -> Option<Value> {
+            let success = response.get("package_msg")? == &json!("success");
+
+            let mut errors = vec![];
+            for tx in response.get("tx-results")?.as_object()?.values() {
+                let tx_obj = tx.as_object()?;
+                if let Some(error) = tx_obj.get("error") {
+                    let txid = tx_obj.get("txid");
+                    errors.push(json!({"error": error, "txid": txid}));
+                }
+            }
+            Some(if errors.is_empty() {
+                json!({"success": success})
+            } else {
+                json!({"success": success, "errors": errors})
+            })
+        };
+        build_result().ok_or(anyhow!("Unexpected `submitpackage` response"))
     }
 
     fn transaction_get(&self, args: &TxGetArgs) -> Result<Value> {
@@ -587,7 +632,7 @@ enum Params {
     BlockHeader((usize,)),
     BlockHeaders((usize, usize)),
     TransactionBroadcast((String,)),
-    TransactionBroadcastPackage((Vec<String>,)),
+    TransactionBroadcastPackage(BroadcastArgs),
     Donation,
     EstimateFee((u16,)),
     Features,
