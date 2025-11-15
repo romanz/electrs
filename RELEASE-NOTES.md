@@ -1,4 +1,4 @@
-# 0.11.0 (TBD)
+# 0.11.0 (Nov 16 2025)
 
 * Update MSRV to 1.85
 * Support Debian 13 (trixie) / Ubuntu 25.04 (plucky)
