@@ -15,7 +15,7 @@ use bitcoin::{
         message_network, Magic,
     },
     secp256k1::{self, rand::Rng},
-    Block, BlockHash, Network,
+    Block, BlockHash,
 };
 use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
@@ -135,14 +135,9 @@ impl Connection {
         self.new_block_recv.clone()
     }
 
-    pub(crate) fn connect(
-        network: Network,
-        address: SocketAddr,
-        metrics: &Metrics,
-        magic: Magic,
-    ) -> Result<Self> {
+    pub(crate) fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
         let recv_conn = TcpStream::connect(address)
-            .with_context(|| format!("{} p2p failed to connect: {:?}", network, address))?;
+            .with_context(|| format!("p2p failed to connect: {:?}", address))?;
         let mut send_conn = recv_conn
             .try_clone()
             .context("failed to clone connection")?;
