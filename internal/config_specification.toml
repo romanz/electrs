@@ -148,6 +148,6 @@ type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"
 
 [[param]]
-name = "signet_magic"
+name = "magic"
 type = "String"
-doc = "network magic for custom signet network in hex format, as found in Bitcoin Core logs (signet only)"
+doc = "network magic for custom network in hex format, as found in Bitcoin Core logs"

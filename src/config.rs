@@ -145,7 +145,7 @@ pub struct Config {
     pub skip_block_download_wait: bool,
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
-    pub signet_magic: Magic,
+    pub magic: Magic,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -237,19 +237,15 @@ impl Config {
             Network::Signet => 34224,
         };
 
-        let magic = match (config.network, config.signet_magic) {
-            (Network::Signet, Some(magic)) => magic.parse().unwrap_or_else(|error| {
+        let magic = match config.magic {
+            Some(magic_hex) => magic_hex.parse().unwrap_or_else(|error| {
                 eprintln!(
-                    "Error: signet magic '{}' is not a valid hex string: {}",
-                    magic, error
+                    "Error: magic '{}' is not a valid hex string: {}",
+                    magic_hex, error
                 );
                 std::process::exit(1);
             }),
-            (network, None) => network.magic(),
-            (_, Some(_)) => {
-                eprintln!("Error: signet magic only available on signet");
-                std::process::exit(1);
-            }
+            None => config.network.magic(),
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
@@ -362,7 +358,7 @@ impl Config {
             skip_block_download_wait: config.skip_block_download_wait,
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
-            signet_magic: magic,
+            magic,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",
