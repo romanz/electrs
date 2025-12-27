@@ -4,7 +4,7 @@
 
 FROM debian:trixie-slim AS base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev wget
+RUN apt-get install -qqy librocksdb-dev libsqlite3-dev wget
 
 ### Electrum Rust Server ###
 FROM base AS electrs-build
