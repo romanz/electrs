@@ -245,15 +245,15 @@ impl Config {
             unsupported => unsupported_network(unsupported),
         };
 
-        let magic = match (config.network, config.magic) {
-            (_, Some(magic)) => magic.parse().unwrap_or_else(|error| {
+        let magic = match config.magic {
+            Some(magic_hex) => magic_hex.parse().unwrap_or_else(|error| {
                 eprintln!(
                     "Error: magic '{}' is not a valid hex string: {}",
-                    magic, error
+                    magic_hex, error
                 );
                 std::process::exit(1);
             }),
-            (network, None) => network.magic(),
+            None => config.network.magic(),
         };
 
         let daemon_rpc_addr: SocketAddr = config.daemon_rpc_addr.map_or(
