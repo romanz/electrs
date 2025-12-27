@@ -1,11 +1,10 @@
 use anyhow::{Context, Result};
 
-use bitcoin::consensus::encode::serialize_hex;
-use bitcoin::{consensus::deserialize, hashes::hex::FromHex};
-use bitcoin::{Amount, BlockHash, Transaction, Txid};
+use crate::bitcoin::{
+    consensus::deserialize, consensus::encode::serialize_hex, hashes::hex::FromHex, Amount,
+    BlockHash, Transaction, Txid,
+};
 use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
-use crossbeam_channel::Receiver;
-use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::{json, value::RawValue, Value};
 
@@ -13,14 +12,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::{
-    chain::{Chain, NewHeader},
-    config::Config,
-    metrics::Metrics,
-    p2p::Connection,
-    signals::ExitFlag,
-    types::SerBlock,
-};
+use crate::{config::Config, metrics::Metrics, signals::ExitFlag};
 
 enum PollResult {
     Done(Result<()>),
@@ -100,7 +92,6 @@ fn rpc_connect(config: &Config) -> Result<Client> {
 }
 
 pub struct Daemon {
-    p2p: Mutex<Connection>,
     rpc: Client,
 }
 
@@ -108,7 +99,7 @@ impl Daemon {
     pub(crate) fn connect(
         config: &Config,
         exit_flag: &ExitFlag,
-        metrics: &Metrics,
+        _metrics: &Metrics,
     ) -> Result<Self> {
         let mut rpc = rpc_connect(config)?;
 
@@ -131,20 +122,12 @@ impl Daemon {
         if network_info.version < 21_00_00 {
             bail!("electrs requires bitcoind 0.21+");
         }
-        if !network_info.network_active {
-            bail!("electrs requires active bitcoind p2p network");
-        }
         let info = rpc.get_blockchain_info()?;
         if info.pruned {
             bail!("electrs requires non-pruned bitcoind node");
         }
 
-        let p2p = Mutex::new(Connection::connect(
-            config.daemon_p2p_addr,
-            metrics,
-            config.magic,
-        )?);
-        Ok(Self { p2p, rpc })
+        Ok(Self { rpc })
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
@@ -199,7 +182,7 @@ impl Daemon {
         txid: &Txid,
         blockhash: Option<BlockHash>,
     ) -> Result<Value> {
-        use bitcoin::consensus::serde::{hex::Lower, Hex, With};
+        use crate::bitcoin::consensus::serde::{hex::Lower, Hex, With};
 
         let tx = self.get_transaction(txid, blockhash)?;
         #[derive(serde::Serialize)]
@@ -286,22 +269,6 @@ impl Daemon {
                 }
             })
             .collect())
-    }
-
-    pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        self.p2p.lock().get_new_headers(chain)
-    }
-
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
-    where
-        B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
-    {
-        self.p2p.lock().for_blocks(blockhashes, func)
-    }
-
-    pub(crate) fn new_block_notification(&self) -> Receiver<()> {
-        self.p2p.lock().new_block_notification()
     }
 }
 
