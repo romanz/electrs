@@ -1,11 +1,11 @@
-use anyhow::{bail, Context, Result};
-use bitcoin::{
+use crate::bitcoin::{
     consensus::{deserialize, encode::serialize_hex},
     hashes::hex::FromHex,
     hex::DisplayHex,
     BlockHash, Transaction, Txid,
 };
-use crossbeam_channel::Receiver;
+use anyhow::{bail, Context, Result};
+use bindex::ScriptHash;
 use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
@@ -16,15 +16,13 @@ use std::iter::FromIterator;
 use std::str::FromStr;
 
 use crate::{
-    cache::Cache,
     config::{Config, ELECTRS_VERSION},
-    daemon::{self, extract_bitcoind_error, Daemon},
+    daemon::{extract_bitcoind_error, Daemon},
     merkle::Proof,
     metrics::{self, Histogram, Metrics},
     signals::Signal,
     status::ScriptHashStatus,
     tracker::Tracker,
-    types::ScriptHash,
 };
 
 const PROTOCOL_VERSION: &str = "1.4";
@@ -113,7 +111,7 @@ enum RpcError {
     Standard(StandardError),
     // Electrum-specific errors
     BadRequest(anyhow::Error),
-    DaemonError(daemon::RpcError),
+    DaemonError(jsonrpc::error::RpcError),
     UnavailableIndex,
 }
 
@@ -145,7 +143,6 @@ impl RpcError {
 /// Electrum RPC handler
 pub struct Rpc {
     tracker: Tracker,
-    cache: Cache,
     rpc_duration: Histogram,
     daemon: Daemon,
     signal: Signal,
@@ -165,11 +162,9 @@ impl Rpc {
 
         let tracker = Tracker::new(config, metrics)?;
         let signal = Signal::new();
-        let daemon = Daemon::connect(config, signal.exit_flag(), tracker.metrics())?;
-        let cache = Cache::new(tracker.metrics());
+        let daemon = Daemon::connect(config, signal.exit_flag())?;
         Ok(Self {
             tracker,
-            cache,
             rpc_duration,
             daemon,
             signal,
@@ -182,24 +177,17 @@ impl Rpc {
         &self.signal
     }
 
-    pub fn new_block_notification(&self) -> Receiver<()> {
-        self.daemon.new_block_notification()
-    }
-
     pub fn sync(&mut self) -> Result<bool> {
         self.tracker.sync(&self.daemon, self.signal.exit_flag())
     }
 
     pub fn update_client(&self, client: &mut Client) -> Result<Vec<String>> {
-        let chain = self.tracker.chain();
+        let headers = self.tracker.headers();
         let mut notifications = client
             .scripthashes
             .par_iter_mut()
             .filter_map(|(scripthash, status)| -> Option<Result<Value>> {
-                match self
-                    .tracker
-                    .update_scripthash_status(status, &self.daemon, &self.cache)
-                {
+                match self.tracker.update_scripthash_status(status) {
                     Ok(true) => Some(Ok(notification(
                         "blockchain.scripthash.subscribe",
                         &[json!(scripthash), json!(status.statushash())],
@@ -212,11 +200,11 @@ impl Rpc {
             .context("failed to update status")?;
 
         if let Some(old_tip) = client.tip {
-            let new_tip = self.tracker.chain().tip();
-            if old_tip != new_tip {
-                client.tip = Some(new_tip);
-                let height = chain.height();
-                let header = chain.get_block_header(height).unwrap();
+            let new_tip = headers.tip().unwrap();
+            if old_tip != new_tip.hash() {
+                client.tip = Some(new_tip.hash());
+                let height = headers.tip_height().unwrap();
+                let header = new_tip.header();
                 notifications.push(notification(
                     "blockchain.headers.subscribe",
                     &[json!({"hex": serialize_hex(&header), "height": height})],
@@ -227,34 +215,36 @@ impl Rpc {
     }
 
     fn headers_subscribe(&self, client: &mut Client) -> Result<Value> {
-        let chain = self.tracker.chain();
-        client.tip = Some(chain.tip());
-        let height = chain.height();
-        let header = chain.get_block_header(height).unwrap();
-        Ok(json!({"hex": serialize_hex(header), "height": height}))
+        let headers = self.tracker.headers();
+        let height = headers.tip_height().unwrap();
+        let header = headers.tip().unwrap();
+        client.tip = Some(header.hash());
+        Ok(json!({"hex": serialize_hex(header.header()), "height": height}))
     }
 
     fn block_header(&self, (height,): (usize,)) -> Result<Value> {
-        let chain = self.tracker.chain();
-        let header = match chain.get_block_header(height) {
+        let header = match self.tracker.headers().iter_headers().nth(height) {
             None => bail!("no header at {}", height),
             Some(header) => header,
         };
-        Ok(json!(serialize_hex(header)))
+        Ok(json!(serialize_hex(header.header())))
     }
 
     fn block_headers(&self, (start_height, count): (usize, usize)) -> Result<Value> {
-        let chain = self.tracker.chain();
+        let headers = self.tracker.headers();
         let max_count = 2016usize;
         // return only the available block headers
         let end_height = std::cmp::min(
-            chain.height() + 1,
+            headers.tip_height().map_or(0, |h| h + 1),
             start_height + std::cmp::min(count, max_count),
         );
         let heights = start_height..end_height;
         let count = heights.len();
-        let hex_headers =
-            heights.filter_map(|height| chain.get_block_header(height).map(serialize_hex));
+        let hex_headers = headers
+            .iter_headers()
+            .skip(start_height)
+            .take(count)
+            .map(|h| serialize_hex(h.header()));
 
         Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
     }
@@ -376,8 +366,7 @@ impl Rpc {
 
     fn new_status(&self, scripthash: ScriptHash) -> Result<ScriptHashStatus> {
         let mut status = ScriptHashStatus::new(scripthash);
-        self.tracker
-            .update_scripthash_status(&mut status, &self.daemon, &self.cache)?;
+        self.tracker.update_scripthash_status(&mut status)?;
         Ok(status)
     }
 
@@ -421,35 +410,26 @@ impl Rpc {
         if verbose {
             let blockhash = self
                 .tracker
-                .lookup_transaction(&self.daemon, txid)?
+                .lookup_transaction(txid)?
                 .map(|(blockhash, _tx)| blockhash);
-            return self.daemon.get_transaction_info(&txid, blockhash);
+            return self.daemon.get_transaction(&txid, blockhash, verbose);
         }
-        // if the scripthash was subscribed, tx should be cached
-        if let Some(tx_hex) = self
-            .cache
-            .get_tx(&txid, |tx_bytes| tx_bytes.to_lower_hex_string())
-        {
-            return Ok(json!(tx_hex));
-        }
-        debug!("tx cache miss: txid={}", txid);
         // use internal index to load confirmed transaction
         if let Some(tx_hex) = self
             .tracker
-            .lookup_transaction(&self.daemon, txid)?
+            .lookup_transaction(txid)?
             .map(|(_blockhash, tx)| tx.to_lower_hex_string())
         {
             return Ok(json!(tx_hex));
         }
         // load unconfirmed transaction via RPC
-        Ok(json!(self.daemon.get_transaction_hex(&txid, None)?))
+        Ok(json!(self.daemon.get_transaction(&txid, None, verbose)?))
     }
 
     fn transaction_get_merkle(&self, (txid, height): &(Txid, usize)) -> Result<Value> {
-        let chain = self.tracker.chain();
-        let blockhash = match chain.get_block_hash(*height) {
+        let blockhash = match self.tracker.headers().iter_headers().nth(*height) {
             None => bail!("missing block at {}", height),
-            Some(blockhash) => blockhash,
+            Some(header) => header.hash(),
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
         match txids.iter().position(|current_txid| *current_txid == *txid) {
@@ -469,10 +449,9 @@ impl Rpc {
         &self,
         (height, tx_pos, merkle): (usize, usize, bool),
     ) -> Result<Value> {
-        let chain = self.tracker.chain();
-        let blockhash = match chain.get_block_hash(height) {
+        let blockhash = match self.tracker.headers().iter_headers().nth(height) {
             None => bail!("missing block at {}", height),
-            Some(blockhash) => blockhash,
+            Some(header) => header.hash(),
         };
         let txids = self.daemon.get_block_txids(blockhash)?;
         if tx_pos >= txids.len() {
@@ -506,7 +485,7 @@ impl Rpc {
 
     fn features(&self) -> Result<Value> {
         Ok(json!({
-            "genesis_hash": self.tracker.chain().get_block_hash(0),
+            "genesis_hash": self.tracker.headers().genesis().unwrap().hash(),
             "hosts": { "tcp_port": self.port },
             "protocol_max": PROTOCOL_VERSION,
             "protocol_min": PROTOCOL_VERSION,
@@ -713,7 +692,7 @@ impl Call {
             Err(err) => {
                 warn!("RPC {} failed: {:#}", self.method, err);
                 match err
-                    .downcast_ref::<bitcoincore_rpc::Error>()
+                    .downcast_ref::<jsonrpc::Error>()
                     .and_then(extract_bitcoind_error)
                 {
                     Some(e) => error_msg(&self.id, RpcError::DaemonError(e.clone())),
