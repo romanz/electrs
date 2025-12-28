@@ -63,7 +63,7 @@ doc = "JSONRPC authentication cookie file (default: ~/.bitcoin/.cookie)"
 [[param]]
 name = "network"
 type = "crate::config::BitcoinNetwork"
-convert_into = "::bitcoin::Network"
+convert_into = "crate::bitcoin::Network"
 doc = "Select Bitcoin network type ('bitcoin', 'testnet', 'testnet4', 'regtest' or 'signet')"
 default = "Default::default()"
 
@@ -76,10 +76,6 @@ doc = "Electrum server JSONRPC 'addr:port' to listen on (default: '127.0.0.1:500
 name = "daemon_rpc_addr"
 type = "crate::config::ResolvAddr"
 doc = "Bitcoin daemon JSONRPC 'addr:port' to connect (default: 127.0.0.1:8332 for mainnet, 127.0.0.1:18332 for testnet, 127.0.0.1:18443 for regtest and 127.0.0.1:18554 for signet)"
-[[param]]
-name = "daemon_p2p_addr"
-type = "crate::config::ResolvAddr"
-doc = "Bitcoin daemon p2p 'addr:port' to connect (default: 127.0.0.1:8333 for mainnet, 127.0.0.1:18333 for testnet, 127.0.0.1:18444 for regtest and 127.0.0.1:38333 for signet)"
 
 [[param]]
 name = "monitoring_addr"
@@ -97,12 +93,6 @@ name = "jsonrpc_timeout_secs"
 type = "u64"
 doc = "Duration to wait until bitcoind JSON-RPC timeouts (must be greater than wait_duration_secs)."
 default = "15"
-
-[[param]]
-name = "index_batch_size"
-type = "usize"
-doc = "Number of blocks to get in a single p2p protocol request from bitcoind"
-default = "10"
 
 [[switch]]
 name = "ignore_mempool"
@@ -146,8 +136,3 @@ default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Ele
 name = "log_filters"
 type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"
-
-[[param]]
-name = "magic"
-type = "String"
-doc = "network magic for custom network in hex format, as found in Bitcoin Core logs"
