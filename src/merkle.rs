@@ -1,4 +1,4 @@
-use bitcoin::{hash_types::TxMerkleNode, hashes::Hash, Txid};
+use crate::bitcoin::{hash_types::TxMerkleNode, hashes::Hash, Txid};
 
 pub(crate) struct Proof {
     proof: Vec<TxMerkleNode>,
@@ -54,7 +54,7 @@ impl Proof {
 
 #[cfg(test)]
 mod tests {
-    use bitcoin::{consensus::encode::deserialize, Block, Txid};
+    use crate::bitcoin::{consensus::encode::deserialize, Block, Txid};
     use std::path::Path;
 
     use super::Proof;
