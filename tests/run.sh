@@ -34,7 +34,7 @@ tail_log() {
 }
 
 echo "Starting $(bitcoind -version | head -n1)..."
-bitcoind -regtest -datadir=data/bitcoin -printtoconsole=0 &
+bitcoind -rest -regtest -datadir=data/bitcoin -printtoconsole=0 &
 BITCOIND_PID=$!
 
 $BTC -rpcwait getblockcount > /dev/null
