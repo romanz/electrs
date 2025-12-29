@@ -43,7 +43,7 @@ tiny_http = { version = "0.12", optional = true }
 ctrlc = "=3.5.1"
 
 [target.'cfg(not(windows))'.dependencies]
-signal-hook = "0.3"
+signal-hook = "0.4"
 
 [dependencies.rust-rocksdb]
 version = "0.36"
