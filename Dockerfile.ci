@@ -4,7 +4,7 @@
 
 FROM debian:trixie-slim AS base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev wget
+RUN apt-get install -qqy librocksdb-dev libsqlite3-dev libevent-dev libboost-dev wget
 
 ### Electrum Rust Server ###
 FROM base AS electrs-build
@@ -17,16 +17,18 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include
 ENV ROCKSDB_LIB_DIR=/usr/lib
 RUN cargo install --locked --path .
 
-### Bitcoin Core ###
+### Bitcoin Core (custom build for /blockpart/ REST endpoint) ###
 FROM base AS bitcoin-build
 # Download
 WORKDIR /build/bitcoin
-ARG ARCH=x86_64
-ARG BITCOIND_VERSION=29.0
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-$BITCOIND_VERSION/bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
-RUN tar xvf bitcoin-$BITCOIND_VERSION-$ARCH-linux-gnu.tar.gz
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoind .
-RUN mv -v bitcoin-$BITCOIND_VERSION/bin/bitcoin-cli .
+RUN apt-get install -qqy git build-essential cmake pkgconf python3
+RUN git clone https://github.com/romanz/bitcoin -b bindex --depth 1
+RUN cd bitcoin \
+ && cmake -B build -DBUILD_TESTS=OFF -DENABLE_EXTERNAL_SIGNER=OFF -DENABLE_IPC=OFF \
+ && cmake --build build -j $(nproc)
+
+RUN mv -v bitcoin/build/bin/bitcoind .
+RUN mv -v bitcoin/build/bin/bitcoin-cli .
 
 FROM base AS result
 # Copy the binaries

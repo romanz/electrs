@@ -7,17 +7,12 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-mod cache;
-mod chain;
 mod config;
 mod daemon;
-mod db;
 mod electrum;
-mod index;
 mod mempool;
 mod merkle;
 mod metrics;
-mod p2p;
 mod server;
 mod signals;
 mod status;
@@ -26,3 +21,5 @@ mod tracker;
 mod types;
 
 pub use server::run;
+
+use bindex::bitcoin;
