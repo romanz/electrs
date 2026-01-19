@@ -481,9 +481,9 @@ impl Rpc {
         let txid: Txid = txids[tx_pos];
         if merkle {
             let proof = Proof::create(&txids, tx_pos);
-            Ok(json!({"tx_id": txid, "merkle": proof.to_hex()}))
+            Ok(json!({"tx_hash": txid, "merkle": proof.to_hex()}))
         } else {
-            Ok(json!({ "tx_id": txid }))
+            Ok(json!({ "tx_hash": txid }))
         }
     }
 
