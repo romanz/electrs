@@ -1,3 +1,4 @@
+use abstract_socket::{SocketAddr, ToSocketAddrs};
 use bitcoin::p2p::Magic;
 use bitcoin::Network;
 use bitcoincore_rpc::Auth;
@@ -5,8 +6,6 @@ use dirs_next::home_dir;
 
 use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -146,6 +145,7 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub magic: Magic,
+    pub public_port: Option<u16>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -337,6 +337,8 @@ impl Config {
             std::process::exit(0);
         }
 
+        let public_port = config.public_port.or(electrum_rpc_addr.port());
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
@@ -359,6 +361,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             magic,
+            public_port,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",

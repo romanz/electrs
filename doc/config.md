@@ -3,6 +3,8 @@
 This applies only if you do **not** use some other automated systems such as Debian packages.
 If you use automated systems, refer to their documentation first!
 
+Note that all instances of socket addresses support Unix domain sockets, read about them below.
+
 ### Bitcoind configuration
 
 Pruning must be turned **off** for `electrs` to work.
@@ -81,6 +83,20 @@ To connect to your Electrs server, you will need to point Electrum to your serve
 You would need to either use a webserver to provide SSL (see _SSL connection_ below), or connect without SSL. To tell Electrum to connect to your server without SSL, you need to add `:t` after the port (ie: `localhost:50001:t`). Please note that this is not secure and therefore recommended only for local connections.
 
 Electrs will listen by default on `127.0.0.1:50001`, which means it will only serve clients in the local machine. This is configured via the `electrum_rpc_addr` setting and if you wish to connect from another machine, you need to change it to `0.0.0.0:50001`. This is less secure though, and the recommended way to access Electrs remotely is to keep listening on `127.0.0.1` and tunnel to your server.
+
+## Unix domain sockets
+
+Electrs supports binding and connecting to Unix domain sockets which can provide improved speed and security. However not all other services support this now. Still, using it is recommended if you can.
+
+Aside from avoiding the overhead of OS having to handle TCP packets, Unix sockets can provide improved access control and authentication using filesystem permissions. For instance, if you're running electrs as `electrs` user, an electrum client as `electrum` user and an untrusted software as `untrusted` user then with TCP the `untrusted` software, should it become malicious, can attack the connection between the Electrum client and electrs by binding the address before electrs has the chance to bind it. A Unix socket bound in a directory only writable by the `electrs` user makes this impossible. Further, if you're worried about DoS attacks, you can restrict the socket permissions to trusted clients only.
+
+This feature is currently mainly implemented for use with SSH-tunnelled clients/servers but it should start working right away when other software adds support. Here's a list of known software that might start supporting Unix sockets:
+
+* `bitcoind` has several issues and PRs concerning Unix sockets
+* `prometheus` has an issue requesting Unix sockets open
+* Briefly discussed in an Electrum issue with positive attitude
+
+There is also a library that can translate between the sockets using the `LD_PRELOAD` hack, if you want to push it.
 
 ## Extra configuration suggestions
 

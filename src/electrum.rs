@@ -150,7 +150,7 @@ pub struct Rpc {
     daemon: Daemon,
     signal: Signal,
     banner: String,
-    port: u16,
+    port: Option<u16>,
 }
 
 impl Rpc {
@@ -174,7 +174,7 @@ impl Rpc {
             daemon,
             signal,
             banner: config.server_banner.clone(),
-            port: config.electrum_rpc_addr.port(),
+            port: config.public_port,
         })
     }
 
