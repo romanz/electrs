@@ -13,7 +13,6 @@ use serde_json::{self, json, Value};
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
 use std::iter::FromIterator;
-use std::net::SocketAddr;
 use std::str::FromStr;
 
 use crate::{
@@ -151,7 +150,7 @@ pub struct Rpc {
     daemon: Daemon,
     signal: Signal,
     banner: String,
-    addr: SocketAddr,
+    addr: Option<crate::config::ElectrumAddr>,
 }
 
 impl Rpc {
@@ -175,7 +174,7 @@ impl Rpc {
             daemon,
             signal,
             banner: config.server_banner.clone(),
-            addr: config.electrum_rpc_addr,
+            addr: config.public_addr.clone(),
         })
     }
 
@@ -506,13 +505,23 @@ impl Rpc {
     }
 
     fn features(&self) -> Result<Value> {
+        let hosts = if let Some(addr) = &self.addr {
+            if addr.is_tls {
+                json!({ &addr.host: {
+                    "ssl_port": addr.port
+                }})
+            } else {
+                json!({ &addr.host: {
+                    "tcp_port": addr.port
+                }})
+            }
+        } else {
+            json!({})
+        };
+
         Ok(json!({
             "genesis_hash": self.tracker.chain().get_block_hash(0),
-            "hosts": {
-                self.addr.ip().to_string(): {
-                    "tcp_port": self.addr.port()
-                }
-            },
+            "hosts": hosts,
             "protocol_max": PROTOCOL_VERSION,
             "protocol_min": PROTOCOL_VERSION,
             "pruning": null,

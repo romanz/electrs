@@ -1,3 +1,4 @@
+use abstract_socket::{SocketAddr, ToSocketAddrs};
 use bitcoin::p2p::Magic;
 use bitcoin::Network;
 use bitcoincore_rpc::Auth;
@@ -5,8 +6,6 @@ use dirs_next::home_dir;
 
 use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -88,6 +87,77 @@ impl ResolvAddr {
     }
 }
 
+/// Electrum address
+///
+/// This is parsed the same as Electrum connection string but used in public advert instead.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "String")]
+pub struct ElectrumAddr {
+    pub host: String,
+    pub port: u16,
+    pub is_tls: bool,
+}
+
+impl ElectrumAddr {
+    fn from_tcp(addr: &SocketAddr) -> Option<Self> {
+        match addr {
+            SocketAddr::Net(addr) => {
+                let host = addr.ip().to_string();
+                let addr = ElectrumAddr {
+                    host,
+                    port: addr.port(),
+                    is_tls: false,
+                };
+                Some(addr)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl TryFrom<String> for ElectrumAddr {
+    type Error = anyhow::Error;
+
+    fn try_from(string: String) -> Result<Self, Self::Error> {
+        string.parse()
+    }
+}
+
+impl std::str::FromStr for ElectrumAddr {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use anyhow::Context;
+
+        let (host_port, conn_type) = s
+            .rsplit_once(':')
+            .ok_or_else(|| anyhow::anyhow!("missing colons in the Electrum address"))?;
+        let is_tls = match conn_type {
+            "t" => false,
+            "s" => true,
+            invalid => anyhow::bail!("invalid connection type {}", invalid),
+        };
+        let (host, port) = host_port
+            .rsplit_once(':')
+            .ok_or_else(|| anyhow::anyhow!("the Electrum address contains only one colon"))?;
+        let port = port
+            .parse()
+            .context("cannot parse the port of Electrum address")?;
+
+        Ok(ElectrumAddr {
+            host: host.to_owned(),
+            port,
+            is_tls,
+        })
+    }
+}
+
+impl ::configure_me::parse_arg::ParseArgFromStr for ElectrumAddr {
+    fn describe_type<W: fmt::Write>(mut writer: W) -> fmt::Result {
+        write!(writer, "an Electrum network address in the form host:port:connection_type where connection_type is either t for TCP or s for TLS")
+    }
+}
+
 /// This newtype implements `ParseArg` for `Network`.
 #[derive(Deserialize)]
 pub struct BitcoinNetwork(Network);
@@ -146,6 +216,7 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub magic: Magic,
+    pub public_addr: Option<ElectrumAddr>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -337,6 +408,10 @@ impl Config {
             std::process::exit(0);
         }
 
+        let public_addr = config
+            .public_addr
+            .or(ElectrumAddr::from_tcp(&electrum_rpc_addr));
+
         let config = Config {
             network: config.network,
             db_path: config.db_dir,
@@ -359,6 +434,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             magic,
+            public_addr,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",

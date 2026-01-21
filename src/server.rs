@@ -1,3 +1,4 @@
+use abstract_socket::{Listener, Stream};
 use anyhow::{Context, Result};
 use crossbeam_channel::{select, unbounded, Sender};
 use rayon::prelude::*;
@@ -6,7 +7,7 @@ use std::{
     collections::hash_map::HashMap,
     io::{BufRead, BufReader, Write},
     iter::once,
-    net::{Shutdown, TcpListener, TcpStream},
+    net::Shutdown,
 };
 
 use crate::{
@@ -20,11 +21,11 @@ use crate::{
 struct Peer {
     id: usize,
     client: Client,
-    stream: TcpStream,
+    stream: Stream,
 }
 
 impl Peer {
-    fn new(id: usize, stream: TcpStream) -> Self {
+    fn new(id: usize, stream: Stream) -> Self {
         let client = Client::default();
         Self { id, client, stream }
     }
@@ -62,13 +63,38 @@ pub fn run() -> Result<()> {
 
 fn serve() -> Result<()> {
     let config = Config::from_args();
-    let metrics = Metrics::new(config.monitoring_addr)?;
+    let metrics = Metrics::new(&config.monitoring_addr)?;
 
     let (server_tx, server_rx) = unbounded();
     if !config.disable_electrum_rpc {
-        let listener = TcpListener::bind(config.electrum_rpc_addr)?;
+        let listener = Listener::bind(&config.electrum_rpc_addr)?;
         info!("serving Electrum RPC on {}", listener.local_addr()?);
-        spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
+        let electrum_rpc_addr = config.electrum_rpc_addr.clone();
+        spawn("accept_loop", move || {
+            let result = accept_loop(listener, server_tx);
+            // The loop is actually supposed to be infinite so `Ok` is not OK.
+            if result.is_ok() {
+                error!("The `Incoming` iterator ended unexpectedly");
+            }
+            #[cfg(unix)]
+            if let abstract_socket::SocketAddr::Uds(uds_addr) = electrum_rpc_addr {
+                if let Some(path) = uds_addr.as_pathname() {
+                    match std::fs::remove_file(path) {
+                        // Not found means something else removed the socket already, so it is not
+                        // an error because we got the desired outcome but it's still concerning
+                        // that something is messing with our socket.
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            warn!("The socket file was removed by something else, this may indicate broken setup");
+                        }
+                        Ok(()) => (),
+                        Err(error) => {
+                            error!("Failed to remove the socket: {}", error);
+                        }
+                    }
+                }
+            }
+            result
+        }); // detach accepting thread
     };
 
     let server_batch_size = metrics.histogram_vec(
@@ -158,7 +184,7 @@ struct Event {
 }
 
 enum Message {
-    New(TcpStream),
+    New(Stream),
     Request(String),
     Done,
 }
@@ -209,7 +235,7 @@ fn handle_peer_events(
     }
 }
 
-fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
+fn accept_loop(listener: Listener, server_tx: Sender<Event>) -> Result<()> {
     for (peer_id, conn) in listener.incoming().enumerate() {
         let stream = conn.context("failed to accept")?;
         let tx = server_tx.clone();
@@ -224,7 +250,7 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
     Ok(())
 }
 
-fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Result<()> {
+fn recv_loop(peer_id: usize, stream: &Stream, server_tx: Sender<Event>) -> Result<()> {
     let msg = Message::New(stream.try_clone()?);
     server_tx.send(Event { peer_id, msg })?;
 
