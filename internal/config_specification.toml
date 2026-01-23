@@ -143,6 +143,11 @@ doc = "The banner to be shown in the Electrum console"
 default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Electrum Rust Server)!\").to_owned()"
 
 [[param]]
+name = "public_port"
+type = "u16"
+doc = "Sets the publicly advertised value of the port number. By default the port number in the electrum_rpc_addr is used; this setting can be used to correct it if the port is remapped by NAT or if a Unix socket is tunnelled."
+
+[[param]]
 name = "log_filters"
 type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"

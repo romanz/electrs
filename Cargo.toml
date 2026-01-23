@@ -22,6 +22,7 @@ metrics_process = ["prometheus/process"]
 spec = "internal/config_specification.toml"
 
 [dependencies]
+abstract_socket = "0.1"
 anyhow = "1.0"
 bitcoin = { version = "0.32.8", features = ["serde", "rand-std"] }
 bitcoin_slices = { version = "0.10.0", features = ["bitcoin", "sha2"] }

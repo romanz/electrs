@@ -1,5 +1,7 @@
 #[cfg(feature = "metrics")]
 mod metrics_impl {
+    use abstract_socket::SocketAddr;
+
     use anyhow::{Context, Result};
 
     #[cfg(feature = "metrics_process")]
@@ -8,8 +10,6 @@ mod metrics_impl {
     use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry, TEXT_FORMAT};
     use tiny_http::{Header as HttpHeader, Response, Server};
 
-    use std::net::SocketAddr;
-
     use crate::thread::spawn;
 
     pub struct Metrics {
@@ -17,7 +17,11 @@ mod metrics_impl {
     }
 
     impl Metrics {
-        pub fn new(addr: SocketAddr) -> Result<Self> {
+        pub fn new(addr: &SocketAddr) -> Result<Self> {
+            use std::net::TcpListener;
+            #[cfg(target_family = "unix")]
+            use std::os::unix::net::UnixListener;
+
             let reg = Registry::new();
 
             #[cfg(feature = "metrics_process")]
@@ -27,7 +31,14 @@ mod metrics_impl {
             let result = Self { reg };
             let reg = result.reg.clone();
 
-            let server = match Server::http(addr) {
+            let listener: tiny_http::Listener = match addr {
+                SocketAddr::Net(addr) => TcpListener::bind(addr).map(Into::into),
+                #[cfg(target_family = "unix")]
+                SocketAddr::Uds(ref addr) => UnixListener::bind_addr(addr).map(Into::into),
+            }
+            .with_context(|| format!("failed to bind address {}", addr))?;
+
+            let server = match Server::from_listener(listener, None) {
                 Ok(server) => server,
                 Err(err) => bail!("failed to start HTTP server on {}: {}", addr, err),
             };
