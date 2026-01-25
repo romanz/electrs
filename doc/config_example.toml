@@ -14,9 +14,6 @@ cookie_file = "/var/run/bitcoin-mainnet/cookie"
 # The listening RPC address of bitcoind, port is usually 8332
 daemon_rpc_addr = "127.0.0.1:8332"
 
-# The listening P2P address of bitcoind, port is usually 8333
-daemon_p2p_addr = "127.0.0.1:8333"
-
 # Directory where the index should be stored. It should have at least 70GB of free space.
 db_dir = "/some/fast/storage/with/big/size"
 
