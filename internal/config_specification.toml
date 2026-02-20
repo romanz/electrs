@@ -151,3 +151,8 @@ doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://
 name = "magic"
 type = "String"
 doc = "network magic for custom network in hex format, as found in Bitcoin Core logs"
+
+[[param]]
+name = "cdb_dir"
+type = "std::path::PathBuf"
+doc = "Directory to store CDB index files"
