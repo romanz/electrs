@@ -10,7 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 build = "build.rs"
 
 [features]
@@ -23,6 +23,7 @@ spec = "internal/config_specification.toml"
 
 [dependencies]
 anyhow = "1.0"
+cdb64 = "0.2.0"
 bitcoin = { version = "0.32.8", features = ["serde", "rand-std"] }
 bitcoin_slices = { version = "0.10.0", features = ["bitcoin", "sha2"] }
 bitcoincore-rpc = { version = "0.19.0" }

@@ -228,6 +228,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdb64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f12a8421b346e6f8d4af635b395e488c304a51f764aad8fe383f8aa98e7dfc3"
+dependencies = [
+ "thiserror 2.0.16",
+]
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,6 +422,7 @@ dependencies = [
  "bitcoin-test-data",
  "bitcoin_slices",
  "bitcoincore-rpc",
+ "cdb64",
  "configure_me",
  "configure_me_codegen",
  "crossbeam-channel",

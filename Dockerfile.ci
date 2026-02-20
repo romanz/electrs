@@ -8,7 +8,9 @@ RUN apt-get install -qqy librocksdb-dev wget
 
 ### Electrum Rust Server ###
 FROM base AS electrs-build
-RUN apt-get install -qqy cargo build-essential libclang-dev
+RUN apt-get install -qqy curl build-essential libclang-dev
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install electrs
 WORKDIR /build/electrs
