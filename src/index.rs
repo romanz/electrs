@@ -245,6 +245,7 @@ impl Index {
         {
             if self.chain.height() >= cdb_max_height {
                 self.store.synchronize_cdb(cdb_path, cdb_max_height)?;
+                self.store.cleanup_rdb_duplications(cdb_max_height)?;
             }
         }
 

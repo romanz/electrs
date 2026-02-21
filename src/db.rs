@@ -38,6 +38,7 @@ pub struct DBStore {
     cdb_funding: Option<Cdb<File, CdbHash>>,
     cdb_spending: Option<Cdb<File, CdbHash>>,
     cdb_finalized_block_height: Option<usize>,
+    cached_cdb_cleanup_block_height: Option<usize>,
 }
 
 const CONFIG_CF: &str = "config";
@@ -92,6 +93,7 @@ const DB_PROPERTIES: &[&str] = &[
 struct Config {
     compacted: bool,
     format: u64,
+    cdb_cleanup_block_height: Option<usize>,
 }
 
 const CURRENT_FORMAT: u64 = 0;
@@ -101,6 +103,7 @@ impl Default for Config {
         Config {
             compacted: false,
             format: CURRENT_FORMAT,
+            cdb_cleanup_block_height: None,
         }
     }
 }
@@ -196,6 +199,7 @@ impl DBStore {
             cdb_funding: None,
             cdb_spending: None,
             cdb_finalized_block_height: None,
+            cached_cdb_cleanup_block_height: None,
         };
         Ok(store)
     }
@@ -253,6 +257,7 @@ impl DBStore {
         if config.compacted {
             store.start_compactions();
         }
+        store.cached_cdb_cleanup_block_height = config.cdb_cleanup_block_height;
         store.set_config(config);
         Ok(store)
     }
@@ -601,6 +606,61 @@ impl DBStore {
             info!("deleted old CDB files for height {}", old);
         }
 
+        Ok(())
+    }
+
+    fn build_cleanup_batch(cf: &rocksdb::ColumnFamily, db: &rocksdb::DB, max_height: usize) {
+        const CHUNK_SIZE: usize = 100_000;
+        let mut batch = rocksdb::WriteBatch::default();
+        let mut batch_count = 0;
+        let mut opts = rocksdb::ReadOptions::default();
+        opts.fill_cache(false);
+        let mut iter = db.raw_iterator_cf_opt(cf, opts);
+        iter.seek_to_first();
+        loop {
+            match iter.key() {
+                Some(k) => {
+                    debug_assert_eq!(k.len(), HASH_PREFIX_ROW_SIZE);
+                    let key: [u8; HASH_PREFIX_ROW_SIZE] = k.try_into().unwrap();
+                    let height = deserialize::<u32>(&key[HASH_PREFIX_LEN..])
+                        .expect("invalid height") as usize;
+                    if height <= max_height {
+                        batch.delete_cf(cf, key);
+                        batch_count += 1;
+                        if batch_count >= CHUNK_SIZE {
+                            db.write(batch).expect("DB cleanup write failed");
+                            batch = rocksdb::WriteBatch::default();
+                            batch_count = 0;
+                        }
+                    }
+                }
+                None => {
+                    iter.status().expect("DB scan failed");
+                    break;
+                }
+            }
+            iter.next();
+        }
+        if batch_count > 0 {
+            db.write(batch).expect("DB cleanup write failed");
+        }
+    }
+
+    /// Delete all RocksDB records in the index CFs with height <= `max_height`,
+    /// since those heights are now covered by the CDB. Updates `cdb_cleanup_block_height`.
+    pub(crate) fn cleanup_rdb_duplications(&mut self, max_height: usize) -> Result<()> {
+        if self.cached_cdb_cleanup_block_height == Some(max_height) {
+            return Ok(());
+        }
+        info!("cleaning up RocksDB records up to height {}", max_height);
+        for cf in [self.txid_cf(), self.funding_cf(), self.spending_cf()] {
+            Self::build_cleanup_batch(cf, &self.db, max_height);
+        }
+        let mut config = self.get_config().unwrap_or_default();
+        config.cdb_cleanup_block_height = Some(max_height);
+        self.set_config(config);
+        self.cached_cdb_cleanup_block_height = Some(max_height);
+        info!("RocksDB cleanup completed for height {}", max_height);
         Ok(())
     }
 
