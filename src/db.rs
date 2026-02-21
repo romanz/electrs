@@ -1,10 +1,15 @@
 use anyhow::{Context, Result};
+use bitcoin::consensus::deserialize;
+use cdb64::{Cdb, CdbHash};
 use rust_rocksdb as rocksdb;
 
+use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::types::{HashPrefix, HashPrefixRow, SerializedHashPrefixRow, SerializedHeaderRow};
+use crate::types::{
+    HashPrefix, HashPrefixRow, SerializedHashPrefixRow, SerializedHeaderRow, HEIGHT_SIZE,
+};
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
@@ -28,6 +33,10 @@ impl WriteBatch {
 pub struct DBStore {
     db: rocksdb::DB,
     bulk_import: AtomicBool,
+    cdb_txid: Option<Cdb<File, CdbHash>>,
+    cdb_funding: Option<Cdb<File, CdbHash>>,
+    cdb_spending: Option<Cdb<File, CdbHash>>,
+    cdb_finalized_block_height: Option<usize>,
 }
 
 const CONFIG_CF: &str = "config";
@@ -149,6 +158,10 @@ impl DBStore {
         let store = DBStore {
             db,
             bulk_import: AtomicBool::new(true),
+            cdb_txid: None,
+            cdb_funding: None,
+            cdb_spending: None,
+            cdb_finalized_block_height: None,
         };
         Ok(store)
     }
@@ -210,6 +223,33 @@ impl DBStore {
         Ok(store)
     }
 
+    pub fn open_finalized_cdb(
+        &mut self,
+        cdb_path: &Path,
+        finalized_block_height: usize,
+    ) -> Result<()> {
+        self.cdb_txid = Some(
+            Cdb::<File, CdbHash>::open(
+                cdb_path.join(format!("txid{}.cdb", finalized_block_height)),
+            )
+            .with_context(|| format!("failed to open txid CDB at {:?}", cdb_path))?,
+        );
+        self.cdb_funding = Some(
+            Cdb::<File, CdbHash>::open(
+                cdb_path.join(format!("funding{}.cdb", finalized_block_height)),
+            )
+            .with_context(|| format!("failed to open funding CDB at {:?}", cdb_path))?,
+        );
+        self.cdb_spending = Some(
+            Cdb::<File, CdbHash>::open(
+                cdb_path.join(format!("spending{}.cdb", finalized_block_height)),
+            )
+            .with_context(|| format!("failed to open spending CDB at {:?}", cdb_path))?,
+        );
+        self.cdb_finalized_block_height = Some(finalized_block_height);
+        Ok(())
+    }
+
     fn config_cf(&self) -> &rocksdb::ColumnFamily {
         self.db.cf_handle(CONFIG_CF).expect("missing CONFIG_CF")
     }
@@ -233,22 +273,49 @@ impl DBStore {
     pub(crate) fn iter_funding_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = usize> + '_ {
-        self.iter_prefix_cf(self.funding_cf(), prefix)
+    ) -> Box<dyn Iterator<Item = usize> + '_> {
+        if let (Some(cdb), Some(fh)) = (&self.cdb_funding, self.cdb_finalized_block_height) {
+            Box::new(
+                Self::iter_prefix_cdb(cdb, prefix).chain(
+                    self.iter_prefix_cf(self.funding_cf(), prefix)
+                        .filter(move |&h| h > fh),
+                ),
+            )
+        } else {
+            Box::new(self.iter_prefix_cf(self.funding_cf(), prefix))
+        }
     }
 
     pub(crate) fn iter_spending_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = usize> + '_ {
-        self.iter_prefix_cf(self.spending_cf(), prefix)
+    ) -> Box<dyn Iterator<Item = usize> + '_> {
+        if let (Some(cdb), Some(fh)) = (&self.cdb_spending, self.cdb_finalized_block_height) {
+            Box::new(
+                Self::iter_prefix_cdb(cdb, prefix).chain(
+                    self.iter_prefix_cf(self.spending_cf(), prefix)
+                        .filter(move |&h| h > fh),
+                ),
+            )
+        } else {
+            Box::new(self.iter_prefix_cf(self.spending_cf(), prefix))
+        }
     }
 
     pub(crate) fn iter_txid_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = usize> + '_ {
-        self.iter_prefix_cf(self.txid_cf(), prefix)
+    ) -> Box<dyn Iterator<Item = usize> + '_> {
+        if let (Some(cdb), Some(fh)) = (&self.cdb_txid, self.cdb_finalized_block_height) {
+            Box::new(
+                Self::iter_prefix_cdb(cdb, prefix).chain(
+                    self.iter_prefix_cf(self.txid_cf(), prefix)
+                        .filter(move |&h| h > fh),
+                ),
+            )
+        } else {
+            Box::new(self.iter_prefix_cf(self.txid_cf(), prefix))
+        }
     }
 
     fn iter_cf<const N: usize>(
@@ -258,6 +325,21 @@ impl DBStore {
         prefix: Option<HashPrefix>,
     ) -> impl Iterator<Item = [u8; N]> + '_ {
         DBIterator::new(self.db.raw_iterator_cf_opt(cf, readopts), prefix)
+    }
+
+    pub(crate) fn iter_prefix_cdb(
+        cdb: &Cdb<File, CdbHash>,
+        prefix: HashPrefix,
+    ) -> std::vec::IntoIter<usize> {
+        let value = cdb
+            .get(&prefix)
+            .expect("CDB read failed")
+            .unwrap_or_default();
+        value
+            .chunks_exact(HEIGHT_SIZE)
+            .map(|height_chunk| deserialize::<u32>(height_chunk).expect("invalid height") as usize)
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
     fn iter_prefix_cf(

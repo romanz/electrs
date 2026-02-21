@@ -1,4 +1,5 @@
 use std::ops::ControlFlow;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use bitcoin::{BlockHash, Txid};
@@ -30,18 +31,57 @@ pub(crate) enum Error {
     NotReady,
 }
 
+/// Finds the highest block height for which txid, funding, and spending CDB files all exist.
+fn find_highest_finalized_cdb_height(cdb_path: &Path) -> Result<Option<usize>> {
+    let entries = match std::fs::read_dir(cdb_path) {
+        Ok(e) => e,
+        Err(_) => return Ok(None),
+    };
+    let mut max_height: Option<usize> = None;
+    for entry in entries {
+        let entry =
+            entry.with_context(|| format!("failed to read CDB directory {:?}", cdb_path))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(suffix) = name
+            .strip_prefix("txid")
+            .and_then(|s| s.strip_suffix(".cdb"))
+        else {
+            continue;
+        };
+        let Ok(height) = suffix.parse::<usize>() else {
+            continue;
+        };
+        let funding = cdb_path.join(format!("funding{}.cdb", height));
+        let spending = cdb_path.join(format!("spending{}.cdb", height));
+        if funding.is_file() && spending.is_file() {
+            if max_height.map_or(true, |m| height > m) {
+                max_height = Some(height);
+            }
+        }
+    }
+    Ok(max_height)
+}
+
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
         if let Some(cdb_path) = &config.cdb_path {
             std::fs::create_dir_all(cdb_path)
                 .with_context(|| format!("failed to create CDB directory {:?}", cdb_path))?;
         }
-        let store = DBStore::open(
+        let mut store = DBStore::open(
             &config.db_path,
             config.db_log_dir.as_deref(),
             config.auto_reindex,
             config.db_parallelism,
         )?;
+        if let Some(cdb_path) = &config.cdb_path {
+            if let Some(height) = find_highest_finalized_cdb_height(cdb_path)? {
+                store.open_finalized_cdb(cdb_path, height)?;
+            }
+        }
         let chain = Chain::new(config.network);
         Ok(Self {
             index: Index::load(

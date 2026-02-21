@@ -38,7 +38,7 @@ macro_rules! impl_consensus_encoding {
 }
 
 pub const HASH_PREFIX_LEN: usize = 8;
-const HEIGHT_SIZE: usize = 4;
+pub const HEIGHT_SIZE: usize = 4;
 
 pub(crate) type HashPrefix = [u8; HASH_PREFIX_LEN];
 pub(crate) type SerializedHashPrefixRow = [u8; HASH_PREFIX_ROW_SIZE];
