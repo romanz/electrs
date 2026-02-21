@@ -4,7 +4,7 @@ use rust_rocksdb as rocksdb;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::types::{HashPrefix, SerializedHashPrefixRow, SerializedHeaderRow};
+use crate::types::{HashPrefix, HashPrefixRow, SerializedHashPrefixRow, SerializedHeaderRow};
 
 #[derive(Default)]
 pub(crate) struct WriteBatch {
@@ -230,24 +230,24 @@ impl DBStore {
         self.db.cf_handle(HEADERS_CF).expect("missing HEADERS_CF")
     }
 
-    pub(crate) fn iter_funding(
+    pub(crate) fn iter_funding_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    ) -> impl Iterator<Item = usize> + '_ {
         self.iter_prefix_cf(self.funding_cf(), prefix)
     }
 
-    pub(crate) fn iter_spending(
+    pub(crate) fn iter_spending_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    ) -> impl Iterator<Item = usize> + '_ {
         self.iter_prefix_cf(self.spending_cf(), prefix)
     }
 
-    pub(crate) fn iter_txid(
+    pub(crate) fn iter_txid_block_heights(
         &self,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    ) -> impl Iterator<Item = usize> + '_ {
         self.iter_prefix_cf(self.txid_cf(), prefix)
     }
 
@@ -264,10 +264,11 @@ impl DBStore {
         &self,
         cf: &rocksdb::ColumnFamily,
         prefix: HashPrefix,
-    ) -> impl Iterator<Item = SerializedHashPrefixRow> + '_ {
+    ) -> impl Iterator<Item = usize> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.set_prefix_same_as_start(true); // requires .set_prefix_extractor() above.
-        self.iter_cf(cf, opts, Some(prefix))
+        self.iter_cf::<{ crate::types::HASH_PREFIX_ROW_SIZE }>(cf, opts, Some(prefix))
+            .map(|row| HashPrefixRow::from_db_row(row).height())
     }
 
     pub(crate) fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
@@ -513,13 +514,21 @@ mod tests {
             *b"c           ",
         ];
 
+        let block_heights = [
+            u32::from_le_bytes(*b"    "),
+            u32::from_le_bytes(*b"j   "),
+            u32::from_le_bytes(*b"jk  "),
+            u32::from_le_bytes(*b"xyz "),
+        ]
+        .map(|h| h as usize);
+
         store.write(&WriteBatch {
             txid_rows: items.to_vec(),
             ..Default::default()
         });
 
-        let rows = store.iter_txid(*b"abcdefgh");
-        assert_eq!(rows.collect::<Vec<_>>(), items[1..5]);
+        let rows = store.iter_txid_block_heights(*b"abcdefgh");
+        assert_eq!(rows.collect::<Vec<_>>(), block_heights);
     }
 
     #[test]

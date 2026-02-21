@@ -12,10 +12,7 @@ use crate::{
     db::{DBStore, WriteBatch},
     metrics::{self, Gauge, Histogram, Metrics},
     signals::ExitFlag,
-    types::{
-        bsl_txid, HashPrefixRow, HeaderRow, ScriptHash, ScriptHashRow, SerBlock, SpendingPrefixRow,
-        TxidRow,
-    },
+    types::{bsl_txid, HeaderRow, ScriptHash, ScriptHashRow, SerBlock, SpendingPrefixRow, TxidRow},
 };
 
 #[derive(Clone)]
@@ -140,8 +137,7 @@ impl Index {
 
     pub(crate) fn filter_by_txid(&self, txid: Txid) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
-            .iter_txid(TxidRow::scan_prefix(txid))
-            .map(|row| HashPrefixRow::from_db_row(row).height())
+            .iter_txid_block_heights(TxidRow::scan_prefix(txid))
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -150,8 +146,7 @@ impl Index {
         scripthash: ScriptHash,
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
-            .iter_funding(ScriptHashRow::scan_prefix(scripthash))
-            .map(|row| HashPrefixRow::from_db_row(row).height())
+            .iter_funding_block_heights(ScriptHashRow::scan_prefix(scripthash))
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
@@ -160,8 +155,7 @@ impl Index {
         outpoint: OutPoint,
     ) -> impl Iterator<Item = BlockHash> + '_ {
         self.store
-            .iter_spending(SpendingPrefixRow::scan_prefix(outpoint))
-            .map(|row| HashPrefixRow::from_db_row(row).height())
+            .iter_spending_block_heights(SpendingPrefixRow::scan_prefix(outpoint))
             .filter_map(move |height| self.chain.get_block_hash(height))
     }
 
