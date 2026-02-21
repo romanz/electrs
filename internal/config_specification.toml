@@ -156,3 +156,8 @@ doc = "network magic for custom network in hex format, as found in Bitcoin Core 
 name = "cdb_dir"
 type = "std::path::PathBuf"
 doc = "Directory to store CDB index files"
+
+[[param]]
+name = "cdb_max_block_height"
+type = "usize"
+doc = "Maximum block height to store in CDB (blocks above this height are stored in RocksDB)"

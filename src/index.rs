@@ -4,6 +4,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, OutPoint, Txid};
 use bitcoin_slices::{bsl, Visit, Visitor};
 use std::ops::ControlFlow;
+use std::path::PathBuf;
 use std::thread;
 
 use crate::{
@@ -86,6 +87,8 @@ pub struct Index {
     stats: Stats,
     is_ready: bool,
     flush_needed: bool,
+    cdb_path: Option<PathBuf>,
+    cdb_max_block_height: Option<usize>,
 }
 
 impl Index {
@@ -96,6 +99,8 @@ impl Index {
         batch_size: usize,
         lookup_limit: Option<usize>,
         reindex_last_blocks: usize,
+        cdb_path: Option<PathBuf>,
+        cdb_max_block_height: Option<usize>,
     ) -> Result<Self> {
         if let Some(row) = store.get_tip() {
             let tip = deserialize(&row).expect("invalid tip");
@@ -116,6 +121,8 @@ impl Index {
             stats,
             is_ready: false,
             flush_needed: false,
+            cdb_path,
+            cdb_max_block_height,
         })
     }
 
@@ -227,6 +234,20 @@ impl Index {
         self.chain.update(new_headers);
         self.stats.observe_chain(&self.chain);
         self.flush_needed = true;
+
+        // Note: an optimal solution would trigger synchronize_cdb right after the batch
+        // containing cdb_max_height is written, skipping the iteration of RocksDB records
+        // above that height. In practice the number of such records is expected to be low
+        // in comparison to the total number of records, so the current placement is
+        // acceptable.
+        if let (Some(cdb_path), Some(cdb_max_height)) =
+            (self.cdb_path.as_deref(), self.cdb_max_block_height)
+        {
+            if self.chain.height() >= cdb_max_height {
+                self.store.synchronize_cdb(cdb_path, cdb_max_height)?;
+            }
+        }
+
         Ok(false) // sync is not done
     }
 

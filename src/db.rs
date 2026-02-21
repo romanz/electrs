@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use bitcoin::consensus::deserialize;
-use cdb64::{Cdb, CdbHash};
+use cdb64::{Cdb, CdbHash, CdbWriter};
 use rust_rocksdb as rocksdb;
 
 use std::fs::File;
@@ -8,7 +8,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::types::{
-    HashPrefix, HashPrefixRow, SerializedHashPrefixRow, SerializedHeaderRow, HEIGHT_SIZE,
+    HashPrefix, HashPrefixRow, SerializedHashPrefixRow, SerializedHeaderRow, HASH_PREFIX_LEN,
+    HASH_PREFIX_ROW_SIZE, HEIGHT_SIZE,
 };
 
 #[derive(Default)]
@@ -123,6 +124,39 @@ fn default_opts(parallelism: u8) -> rocksdb::Options {
     opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(8));
     opts.set_block_based_table_factory(&block_opts);
     opts
+}
+
+/// Collect all heights for `prefix` from `raw` (advancing past them), keeping only
+/// those <= `max_height`. Returns the heights as concatenated little-endian u32 bytes.
+fn collect_rdb_prefix(
+    rdb_iter: &mut rocksdb::DBRawIterator<'_>,
+    prefix: HashPrefix,
+    max_height: usize,
+) -> Vec<u8> {
+    let mut heights_buf = Vec::new();
+    loop {
+        let (key_prefix, height, height_bytes) = match rdb_iter.key() {
+            Some(k) => {
+                debug_assert_eq!(k.len(), HASH_PREFIX_ROW_SIZE);
+                let kp: HashPrefix = k[..HASH_PREFIX_LEN].try_into().unwrap();
+                let hb: [u8; HEIGHT_SIZE] = k[HASH_PREFIX_LEN..].try_into().unwrap();
+                let h = deserialize::<u32>(&hb).expect("invalid height") as usize;
+                (kp, h, hb)
+            }
+            None => {
+                rdb_iter.status().expect("DB scan failed");
+                break;
+            }
+        };
+        if key_prefix != prefix {
+            break;
+        }
+        if height <= max_height {
+            heights_buf.extend_from_slice(&height_bytes);
+        }
+        rdb_iter.next();
+    }
+    heights_buf
 }
 
 impl DBStore {
@@ -390,6 +424,184 @@ impl DBStore {
         opts.set_sync(!bulk_import);
         opts.disable_wal(bulk_import);
         self.db.write_opt(db_batch, &opts).unwrap();
+    }
+
+    /// Scan all rows in `cf`, group by 8-byte prefix, keep only heights <= `max_height`,
+    /// and write one CDB entry per prefix (value = concatenated little-endian u32 heights).
+    fn build_cdb_for_cf(
+        db: &rocksdb::DB,
+        cf: &rocksdb::ColumnFamily,
+        path: &Path,
+        max_height: usize,
+        existing_cdb: Option<&Cdb<File, CdbHash>>,
+    ) -> Result<()> {
+        let mut writer = CdbWriter::<File, CdbHash>::create(path)
+            .with_context(|| format!("failed to create CDB writer at {:?}", path))?;
+
+        let mut opts = rocksdb::ReadOptions::default();
+        opts.fill_cache(false);
+        let mut rdb_iter = db.raw_iterator_cf_opt(cf, opts);
+        rdb_iter.seek_to_first();
+
+        // Build a peekable iterator over (prefix, value) pairs from the existing CDB.
+        // CDB's records section is simply the records in the order they were added, with no
+        // reordering on finalization. Since we always build CDB by scanning RocksDB in sorted
+        // key order, the CDB iterator yields prefixes in sorted order as well.
+        let mut cdb_iter = existing_cdb.map(|c| {
+            c.iter()
+                .map(|r| {
+                    let (k, v) = r.expect("CDB read failed");
+                    let prefix: HashPrefix =
+                        k[..HASH_PREFIX_LEN].try_into().expect("invalid CDB key");
+                    (prefix, v)
+                })
+                .peekable()
+        });
+
+        // Merge-sort the two sorted streams.
+        loop {
+            let rdb_prefix: Option<HashPrefix> = rdb_iter.key().map(|k| {
+                debug_assert_eq!(k.len(), HASH_PREFIX_ROW_SIZE);
+                k[..HASH_PREFIX_LEN].try_into().unwrap()
+            });
+            let cdb_prefix: Option<HashPrefix> =
+                cdb_iter.as_mut().and_then(|it| it.peek().map(|(p, _)| *p));
+
+            match (rdb_prefix, cdb_prefix) {
+                (None, None) => break,
+                (None, Some(_)) => {
+                    // Only CDB entries remain: copy them directly.
+                    let (prefix, cdb_val) = cdb_iter.as_mut().unwrap().next().unwrap();
+                    writer.put(&prefix, &cdb_val).context("CDB put failed")?;
+                }
+                (Some(rp), None) => {
+                    // Only RocksDB entries remain: collect and write.
+                    let heights_buf = collect_rdb_prefix(&mut rdb_iter, rp, max_height);
+                    if !heights_buf.is_empty() {
+                        writer.put(&rp, &heights_buf).context("CDB put failed")?;
+                    }
+                }
+                (Some(rp), Some(cp)) => match rp.cmp(&cp) {
+                    std::cmp::Ordering::Less => {
+                        let heights_buf = collect_rdb_prefix(&mut rdb_iter, rp, max_height);
+                        if !heights_buf.is_empty() {
+                            writer.put(&rp, &heights_buf).context("CDB put failed")?;
+                        }
+                    }
+                    std::cmp::Ordering::Greater => {
+                        let (prefix, cdb_val) = cdb_iter.as_mut().unwrap().next().unwrap();
+                        writer.put(&prefix, &cdb_val).context("CDB put failed")?;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        // Prefix in both: start with the CDB value, then append only RDB
+                        // heights not already present in the CDB (deduplication needed because
+                        // RocksDB still holds all heights until cleanup is implemented).
+                        let (_, cdb_val) = cdb_iter.as_mut().unwrap().next().unwrap();
+                        let cdb_heights: std::collections::HashSet<[u8; HEIGHT_SIZE]> = cdb_val
+                            .chunks_exact(HEIGHT_SIZE)
+                            .map(|c| c.try_into().unwrap())
+                            .collect();
+                        let mut heights_buf = cdb_val;
+                        for chunk in collect_rdb_prefix(&mut rdb_iter, rp, max_height)
+                            .chunks_exact(HEIGHT_SIZE)
+                        {
+                            if !cdb_heights.contains(chunk) {
+                                heights_buf.extend_from_slice(chunk);
+                            }
+                        }
+                        if !heights_buf.is_empty() {
+                            writer.put(&rp, &heights_buf).context("CDB put failed")?;
+                        }
+                    }
+                },
+            }
+        }
+
+        writer
+            .finalize()
+            .with_context(|| format!("failed to finalize CDB at {:?}", path))?;
+        Ok(())
+    }
+
+    /// Build CDB files for all three index column families (txid, funding, spending),
+    /// covering blocks up to and including `max_height`. Renames tmp files to cdb and
+    /// opens the resulting files as CDB readers.
+    pub(crate) fn synchronize_cdb(&mut self, cdb_path: &Path, max_height: usize) -> Result<()> {
+        let old_height = self.cdb_finalized_block_height;
+        if let Some(current) = old_height {
+            if current > max_height {
+                bail!("cdb max-block-height cannot be decreased");
+            }
+            if current == max_height {
+                return Ok(());
+            }
+        }
+
+        let txid_tmp_path = cdb_path.join(format!("txid{}.cdb.tmp", max_height));
+        let funding_tmp_path = cdb_path.join(format!("funding{}.cdb.tmp", max_height));
+        let spending_tmp_path = cdb_path.join(format!("spending{}.cdb.tmp", max_height));
+
+        info!(
+            "building CDB for heights up to {} at {:?}",
+            max_height, cdb_path
+        );
+        Self::build_cdb_for_cf(
+            &self.db,
+            self.txid_cf(),
+            &txid_tmp_path,
+            max_height,
+            self.cdb_txid.as_ref(),
+        )
+        .context("failed to build txid CDB")?;
+        Self::build_cdb_for_cf(
+            &self.db,
+            self.funding_cf(),
+            &funding_tmp_path,
+            max_height,
+            self.cdb_funding.as_ref(),
+        )
+        .context("failed to build funding CDB")?;
+        Self::build_cdb_for_cf(
+            &self.db,
+            self.spending_cf(),
+            &spending_tmp_path,
+            max_height,
+            self.cdb_spending.as_ref(),
+        )
+        .context("failed to build spending CDB")?;
+
+        let txid_path = cdb_path.join(format!("txid{}.cdb", max_height));
+        let funding_path = cdb_path.join(format!("funding{}.cdb", max_height));
+        let spending_path = cdb_path.join(format!("spending{}.cdb", max_height));
+        std::fs::rename(&txid_tmp_path, &txid_path)
+            .with_context(|| format!("failed to rename {:?} to {:?}", txid_tmp_path, txid_path))?;
+        std::fs::rename(&funding_tmp_path, &funding_path).with_context(|| {
+            format!(
+                "failed to rename {:?} to {:?}",
+                funding_tmp_path, funding_path
+            )
+        })?;
+        std::fs::rename(&spending_tmp_path, &spending_path).with_context(|| {
+            format!(
+                "failed to rename {:?} to {:?}",
+                spending_tmp_path, spending_path
+            )
+        })?;
+
+        self.open_finalized_cdb(cdb_path, max_height)?;
+        info!("CDB finalized at height {}", max_height);
+
+        if let Some(old) = old_height {
+            std::fs::remove_file(cdb_path.join(format!("txid{}.cdb", old)))
+                .context("failed to delete old txid CDB")?;
+            std::fs::remove_file(cdb_path.join(format!("funding{}.cdb", old)))
+                .context("failed to delete old funding CDB")?;
+            std::fs::remove_file(cdb_path.join(format!("spending{}.cdb", old)))
+                .context("failed to delete old spending CDB")?;
+            info!("deleted old CDB files for height {}", old);
+        }
+
+        Ok(())
     }
 
     pub(crate) fn flush(&self) {

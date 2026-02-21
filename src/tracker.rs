@@ -91,6 +91,8 @@ impl Tracker {
                 config.index_batch_size,
                 config.index_lookup_limit,
                 config.reindex_last_blocks,
+                config.cdb_path.clone(),
+                config.cdb_max_block_height,
             )
             .context("failed to open index")?,
             mempool: Mempool::new(&metrics),

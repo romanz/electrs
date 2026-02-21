@@ -147,6 +147,7 @@ pub struct Config {
     pub server_banner: String,
     pub magic: Magic,
     pub cdb_path: Option<PathBuf>,
+    pub cdb_max_block_height: Option<usize>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -369,6 +370,7 @@ impl Config {
             server_banner: config.server_banner,
             magic,
             cdb_path,
+            cdb_max_block_height: config.cdb_max_block_height,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",

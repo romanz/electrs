@@ -32,3 +32,6 @@ log_filters = "INFO"
 
 # Directory to store CDB index files (optional).
 # cdb_dir = "/another/fast/storage/with/big/size"
+
+# Maximum block height to store in CDB; blocks above this are stored in RocksDB (optional).
+# cdb_max_block_height = 900000
