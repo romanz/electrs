@@ -2,7 +2,7 @@
 set -euo pipefail
 
 rm -rf data/
-mkdir -p data/{bitcoin,electrum,electrs}
+mkdir -p data/{bitcoin,electrum,electrs,cdb}
 
 cleanup() {
   trap - SIGTERM SIGINT
@@ -52,6 +52,8 @@ export RUST_LOG=electrs=debug
 electrs \
   --db-dir=data/electrs \
   --daemon-dir=data/bitcoin \
+  --cdb-dir=data/cdb \
+  --cdb-max-block-height=80 \
   --network=regtest \
   2> data/electrs/regtest-debug.log &
 ELECTRS_PID=$!
