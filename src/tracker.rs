@@ -32,6 +32,10 @@ pub(crate) enum Error {
 
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
+        if let Some(cdb_path) = &config.cdb_path {
+            std::fs::create_dir_all(cdb_path)
+                .with_context(|| format!("failed to create CDB directory {:?}", cdb_path))?;
+        }
         let store = DBStore::open(
             &config.db_path,
             config.db_log_dir.as_deref(),

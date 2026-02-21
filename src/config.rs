@@ -146,6 +146,7 @@ pub struct Config {
     pub disable_electrum_rpc: bool,
     pub server_banner: String,
     pub magic: Magic,
+    pub cdb_path: Option<PathBuf>,
 }
 
 pub struct SensitiveAuth(pub Auth);
@@ -207,6 +208,14 @@ impl Config {
         };
 
         config.db_dir.push(db_subdir);
+
+        let cdb_path = match config.cdb_dir {
+            Some(mut cdb_dir) => {
+                cdb_dir.push(db_subdir);
+                Some(cdb_dir)
+            }
+            _ => None,
+        };
 
         let default_daemon_rpc_port = match config.network {
             Network::Bitcoin => 8332,
@@ -359,6 +368,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
             magic,
+            cdb_path,
         };
         eprintln!(
             "Starting electrs {} on {} {} with {:?}",
