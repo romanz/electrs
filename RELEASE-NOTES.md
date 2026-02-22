@@ -1,3 +1,9 @@
+# 0.11.1 (Feb 22 2026)
+
+* Update `transaction.id_from_pos` response for API compliance.
+* Expose configurable magic on non-signet.
+* Update dependencies (`bitcoin`, `ctrlc`, `log`, `serde_json`, `signal-hook`, `tempfile`).
+
 # 0.11.0 (Nov 16 2025)
 
 * Update MSRV to 1.85
