@@ -30,7 +30,7 @@ const HEADER_SIZE: usize = 80;
 /// Block source backed entirely by the Bitcoin Core REST interface (for
 /// headers and blocks) and ZMQ (for new-block notifications).
 ///
-/// No RPC, no authentication. Requires `rest=1` in bitcoin.conf.
+/// No RPC, no authentication. Requires `rest=1` and `zmqpubhashblock=tcp://<bind-address>:<bind-port>` in bitcoin.conf.
 pub struct RestZmqBlockSource {
     rest_addr: SocketAddr,
     new_block_recv: Receiver<()>,
