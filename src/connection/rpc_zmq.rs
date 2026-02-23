@@ -39,11 +39,7 @@ pub struct RestZmqBlockSource {
 }
 
 impl RestZmqBlockSource {
-    pub fn connect(
-        rest_addr: SocketAddr,
-        zmq_endpoint: &str,
-        metrics: &Metrics,
-    ) -> Result<Self> {
+    pub fn connect(rest_addr: SocketAddr, zmq_endpoint: &str, metrics: &Metrics) -> Result<Self> {
         // Verify REST is enabled.
         let mut conn = RestConn::connect(rest_addr)?;
         conn.get("/rest/chaininfo.json")

@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use crate::connection::{make_p2p_connection, make_rpc_zmq_connection, BlockSource};
 use crate::{
     chain::{Chain, NewHeader},
     config::Config,
@@ -20,7 +21,6 @@ use crate::{
     signals::ExitFlag,
     types::SerBlock,
 };
-use crate::connection::{BlockSource, make_p2p_connection, make_rpc_zmq_connection};
 
 enum PollResult {
     Done(Result<()>),
@@ -141,11 +141,7 @@ impl Daemon {
 
         let source: Box<dyn BlockSource> = if let Some(ref zmq_ep) = config.daemon_zmq_addr {
             info!("using RPC+ZMQ block source (zmq_endpoint={})", zmq_ep);
-            make_rpc_zmq_connection(
-                config.daemon_rpc_addr,
-                zmq_ep,
-                metrics,
-            )?
+            make_rpc_zmq_connection(config.daemon_rpc_addr, zmq_ep, metrics)?
         } else {
             if !network_info.network_active {
                 bail!("electrs requires active bitcoind p2p network (or use --zmq-endpoint)");
@@ -156,7 +152,10 @@ impl Daemon {
 
         let source = Mutex::new(source);
 
-        Ok(Self { block_source: source, rpc })
+        Ok(Self {
+            block_source: source,
+            rpc,
+        })
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
@@ -309,7 +308,9 @@ impl Daemon {
         B: IntoIterator<Item = BlockHash>,
         F: FnMut(BlockHash, SerBlock) + 'a,
     {
-        self.block_source.lock().for_blocks(blockhashes.into_iter().collect(), Box::new(func))
+        self.block_source
+            .lock()
+            .for_blocks(blockhashes.into_iter().collect(), Box::new(func))
     }
 
     pub(crate) fn new_block_notification(&self) -> Receiver<()> {

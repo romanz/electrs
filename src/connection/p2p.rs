@@ -24,13 +24,13 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::connection::BlockSource;
 use crate::types::SerBlock;
 use crate::{
     chain::{Chain, NewHeader},
     config::ELECTRS_VERSION,
     metrics::{default_duration_buckets, default_size_buckets, Histogram, Metrics},
 };
-use crate::connection::BlockSource;
 
 enum Request {
     GetNewHeaders(GetHeadersMessage),
@@ -411,7 +411,11 @@ impl BlockSource for Connection {
         self.get_new_headers(chain)
     }
 
-    fn for_blocks<'a>(&mut self, blockhashes: Vec<BlockHash>, func: Box<dyn FnMut(BlockHash, SerBlock) + 'a>) -> anyhow::Result<()> {
+    fn for_blocks<'a>(
+        &mut self,
+        blockhashes: Vec<BlockHash>,
+        func: Box<dyn FnMut(BlockHash, SerBlock) + 'a>,
+    ) -> anyhow::Result<()> {
         self.for_blocks(blockhashes, func)
     }
 
