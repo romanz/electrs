@@ -32,7 +32,8 @@ const HEADER_SIZE: usize = 80;
 ///
 /// No RPC, no authentication. Requires `rest=1` and `zmqpubhashblock=tcp://<bind-address>:<bind-port>` in bitcoin.conf.
 pub struct RestZmqBlockSource {
-    rest_addr: SocketAddr,
+    rest_conn: RestConn,
+    block_fetchers: Vec<RestConn>,
     new_block_recv: Receiver<()>,
     blocks_duration: Histogram,
 }
@@ -57,22 +58,27 @@ impl RestZmqBlockSource {
             default_duration_buckets(),
         );
 
+        let mut block_fetchers = Vec::with_capacity(FETCH_CONNECTIONS);
+        for _ in 0..FETCH_CONNECTIONS {
+            block_fetchers.push(RestConn::connect(rest_addr)?);
+        }
+
         info!(
             "REST+ZMQ block source ready (rest={}, zmq={})",
             rest_addr, zmq_endpoint
         );
 
         Ok(Self {
-            rest_addr,
+            rest_conn: conn,
+            block_fetchers,
             new_block_recv,
             blocks_duration,
         })
     }
 
     /// `/rest/chaininfo.json` → (best block hash, height).
-    fn chain_info(&self) -> Result<(BlockHash, usize)> {
-        let mut conn = RestConn::connect(self.rest_addr)?;
-        let body = conn.get("/rest/chaininfo.json")?;
+    fn chain_info(&mut self) -> Result<(BlockHash, usize)> {
+        let body = self.rest_conn.get("/rest/chaininfo.json")?;
         let v: serde_json::Value =
             serde_json::from_slice(&body).context("invalid chaininfo JSON")?;
 
@@ -86,10 +92,9 @@ impl RestZmqBlockSource {
     }
 
     /// `/rest/blockhashbyheight/<h>.json` → block hash at height.
-    fn block_hash_at_height(&self, height: usize) -> Result<BlockHash> {
-        let mut conn = RestConn::connect(self.rest_addr)?;
+    fn block_hash_at_height(&mut self, height: usize) -> Result<BlockHash> {
         let path = format!("/rest/blockhashbyheight/{}.json", height);
-        let body = conn.get(&path)?;
+        let body = self.rest_conn.get(&path)?;
         let v: serde_json::Value =
             serde_json::from_slice(&body).context("invalid blockhashbyheight JSON")?;
 
@@ -103,10 +108,9 @@ impl RestZmqBlockSource {
     /// `/rest/headers/<count>/<hash>.bin` → raw 80-byte headers.
     ///
     /// Returns up to `count` headers starting from **and including** `hash`.
-    fn raw_headers(&self, hash: &BlockHash, count: usize) -> Result<Vec<BlockHeader>> {
-        let mut conn = RestConn::connect(self.rest_addr)?;
+    fn raw_headers(&mut self, hash: &BlockHash, count: usize) -> Result<Vec<BlockHeader>> {
         let path = format!("/rest/headers/{}/{}.bin", count, hash);
-        let body = conn.get(&path)?;
+        let body = self.rest_conn.get(&path)?;
 
         if body.len() % HEADER_SIZE != 0 {
             bail!(
@@ -126,7 +130,7 @@ impl RestZmqBlockSource {
     /// Gets the hash at local_height+1 via blockhashbyheight, then requests
     /// headers starting from that hash. All returned headers are new.
     /// Validates prev_blockhash continuity to detect races with reorgs.
-    fn fetch_headers_after_tip(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
+    fn fetch_headers_after_tip(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
         let local_height = chain.height();
 
         // Get the hash of the first block we don't have.
@@ -179,7 +183,7 @@ impl RestZmqBlockSource {
     /// Reorg slow path: walk backwards from the remote tip until we find a
     /// hash present in our local chain (the fork point).
     fn walk_backwards_for_headers(
-        &self,
+        &mut self,
         chain: &Chain,
         remote_tip: BlockHash,
     ) -> Result<Vec<NewHeader>> {
@@ -269,8 +273,8 @@ impl BlockSource for RestZmqBlockSource {
             FETCH_CONNECTIONS
         );
 
-        let rest_addr = self.rest_addr;
         let blocks_duration = &self.blocks_duration;
+        let block_fetchers = &mut self.block_fetchers;
 
         blocks_duration.observe_duration("total", || {
             // Each fetcher gets (index, hash) pairs so we can reorder.
@@ -283,24 +287,33 @@ impl BlockSource for RestZmqBlockSource {
             let (tx, rx) = bounded::<(usize, BlockHash, SerBlock)>(BLOCK_CHANNEL_DEPTH);
 
             std::thread::scope(|s| {
-                // Spawn fetcher threads.
+                // Spawn fetcher threads, each borrowing a persistent connection.
                 let fetchers: Vec<_> = work
                     .into_iter()
+                    .zip(block_fetchers.iter_mut())
                     .enumerate()
-                    .map(|(conn_id, assignments)| {
+                    .map(|(conn_id, (assignments, conn))| {
                         let tx = tx.clone();
-                        s.spawn(move || -> Result<()> {
-                            let mut conn = RestConn::connect(rest_addr)?;
+                        s.spawn(move || {
+                            let mut err = None;
                             for (idx, hash) in assignments {
                                 let path = format!("/rest/block/{}.bin", hash);
-                                let block = conn.get(&path).with_context(|| {
-                                    format!("REST conn {}: block {}", conn_id, hash)
-                                })?;
-                                if tx.send((idx, hash, block)).is_err() {
-                                    return Ok(());
+                                match conn.get(&path) {
+                                    Ok(block) => {
+                                        if tx.send((idx, hash, block)).is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        err = Some(e.context(format!(
+                                            "REST conn {}: block {}",
+                                            conn_id, hash
+                                        )));
+                                        break;
+                                    }
                                 }
                             }
-                            Ok(())
+                            err
                         })
                     })
                     .collect();
@@ -324,11 +337,17 @@ impl BlockSource for RestZmqBlockSource {
                     }
                 }
 
-                // Propagate fetcher errors first — a failed fetcher means
-                // not all blocks were delivered, so check errors before
-                // asserting completeness.
+                // Check for fetcher errors.
+                let mut first_err = None;
                 for f in fetchers {
-                    f.join().expect("fetcher panicked")?;
+                    let err = f.join().expect("fetcher panicked");
+                    if first_err.is_none() {
+                        first_err = err;
+                    }
+                }
+
+                if let Some(e) = first_err {
+                    return Err(e);
                 }
 
                 assert_eq!(next_idx, blockhashes.len(), "not all blocks were processed");
