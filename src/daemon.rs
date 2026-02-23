@@ -17,10 +17,10 @@ use crate::{
     chain::{Chain, NewHeader},
     config::Config,
     metrics::Metrics,
-    p2p::Connection,
     signals::ExitFlag,
     types::SerBlock,
 };
+use crate::connection::{BlockSource, make_p2p_connection, make_rpc_zmq_connection};
 
 enum PollResult {
     Done(Result<()>),
@@ -100,7 +100,7 @@ fn rpc_connect(config: &Config) -> Result<Client> {
 }
 
 pub struct Daemon {
-    p2p: Mutex<Connection>,
+    block_source: Mutex<Box<dyn BlockSource>>,
     rpc: Client,
 }
 
@@ -139,12 +139,24 @@ impl Daemon {
             bail!("electrs requires non-pruned bitcoind node");
         }
 
-        let p2p = Mutex::new(Connection::connect(
-            config.daemon_p2p_addr,
-            metrics,
-            config.magic,
-        )?);
-        Ok(Self { p2p, rpc })
+        let source: Box<dyn BlockSource> = if let Some(ref zmq_ep) = config.daemon_zmq_addr {
+            info!("using RPC+ZMQ block source (zmq_endpoint={})", zmq_ep);
+            make_rpc_zmq_connection(
+                config.daemon_rpc_addr,
+                zmq_ep,
+                metrics,
+            )?
+        } else {
+            if !network_info.network_active {
+                bail!("electrs requires active bitcoind p2p network (or use --zmq-endpoint)");
+            }
+            info!("using p2p block source");
+            make_p2p_connection(config.daemon_p2p_addr, metrics, config.magic)?
+        };
+
+        let source = Mutex::new(source);
+
+        Ok(Self { block_source: source, rpc })
     }
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
@@ -289,19 +301,19 @@ impl Daemon {
     }
 
     pub(crate) fn get_new_headers(&self, chain: &Chain) -> Result<Vec<NewHeader>> {
-        self.p2p.lock().get_new_headers(chain)
+        self.block_source.lock().get_new_headers(chain)
     }
 
-    pub(crate) fn for_blocks<B, F>(&self, blockhashes: B, func: F) -> Result<()>
+    pub(crate) fn for_blocks<'a, B, F>(&'a self, blockhashes: B, func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
-        F: FnMut(BlockHash, SerBlock),
+        F: FnMut(BlockHash, SerBlock) + 'a,
     {
-        self.p2p.lock().for_blocks(blockhashes, func)
+        self.block_source.lock().for_blocks(blockhashes.into_iter().collect(), Box::new(func))
     }
 
     pub(crate) fn new_block_notification(&self) -> Receiver<()> {
-        self.p2p.lock().new_block_notification()
+        self.block_source.lock().new_block_notification()
     }
 }
 

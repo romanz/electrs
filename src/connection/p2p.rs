@@ -30,6 +30,7 @@ use crate::{
     config::ELECTRS_VERSION,
     metrics::{default_duration_buckets, default_size_buckets, Histogram, Metrics},
 };
+use crate::connection::BlockSource;
 
 enum Request {
     GetNewHeaders(GetHeadersMessage),
@@ -54,7 +55,7 @@ impl Request {
     }
 }
 
-pub(crate) struct Connection {
+pub struct Connection {
     req_send: Sender<Request>,
     blocks_recv: Receiver<SerBlock>,
     headers_recv: Receiver<Vec<BlockHeader>>,
@@ -67,7 +68,7 @@ impl Connection {
     /// Get new block headers (supporting reorgs).
     /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
+    fn get_new_headers(&mut self, chain: &Chain) -> Result<Vec<NewHeader>> {
         self.req_send.send(Request::get_new_headers(chain))?;
         let headers = self
             .headers_recv
@@ -93,7 +94,7 @@ impl Connection {
     /// Request and process the specified blocks (in the specified order).
     /// See https://en.bitcoin.it/wiki/Protocol_documentation#getblocks for details.
     /// Defined as `&mut self` to prevent concurrent invocations (https://github.com/romanz/electrs/pull/526#issuecomment-934685515).
-    pub(crate) fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
+    fn for_blocks<B, F>(&mut self, blockhashes: B, mut func: F) -> Result<()>
     where
         B: IntoIterator<Item = BlockHash>,
         F: FnMut(BlockHash, SerBlock),
@@ -131,11 +132,11 @@ impl Connection {
     }
 
     /// Note: only a single receiver will get the notification (https://github.com/romanz/electrs/pull/526#issuecomment-934687415).
-    pub(crate) fn new_block_notification(&self) -> Receiver<()> {
+    fn new_block_notification(&self) -> Receiver<()> {
         self.new_block_recv.clone()
     }
 
-    pub(crate) fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
+    pub fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
         let recv_conn = TcpStream::connect(address)
             .with_context(|| format!("p2p failed to connect: {:?}", address))?;
         let mut send_conn = recv_conn
@@ -403,4 +404,18 @@ impl Decodable for RawNetworkMessage {
 pub fn duration_to_seconds(d: Duration) -> f64 {
     let nanos = f64::from(d.subsec_nanos()) / 1e9;
     d.as_secs() as f64 + nanos
+}
+
+impl BlockSource for Connection {
+    fn get_new_headers(&mut self, chain: &Chain) -> anyhow::Result<Vec<NewHeader>> {
+        self.get_new_headers(chain)
+    }
+
+    fn for_blocks<'a>(&mut self, blockhashes: Vec<BlockHash>, func: Box<dyn FnMut(BlockHash, SerBlock) + 'a>) -> anyhow::Result<()> {
+        self.for_blocks(blockhashes, func)
+    }
+
+    fn new_block_notification(&self) -> Receiver<()> {
+        self.new_block_notification()
+    }
 }
