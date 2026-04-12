@@ -13,6 +13,7 @@ use serde_json::{self, json, Value};
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
 use std::iter::FromIterator;
+use std::net::SocketAddr;
 use std::str::FromStr;
 
 use crate::{
@@ -150,7 +151,7 @@ pub struct Rpc {
     daemon: Daemon,
     signal: Signal,
     banner: String,
-    port: u16,
+    addr: SocketAddr,
 }
 
 impl Rpc {
@@ -174,7 +175,7 @@ impl Rpc {
             daemon,
             signal,
             banner: config.server_banner.clone(),
-            port: config.electrum_rpc_addr.port(),
+            addr: config.electrum_rpc_addr,
         })
     }
 
@@ -507,7 +508,11 @@ impl Rpc {
     fn features(&self) -> Result<Value> {
         Ok(json!({
             "genesis_hash": self.tracker.chain().get_block_hash(0),
-            "hosts": { "tcp_port": self.port },
+            "hosts": {
+                self.addr.ip().to_string(): {
+                    "tcp_port": self.addr.port()
+                }
+            },
             "protocol_max": PROTOCOL_VERSION,
             "protocol_min": PROTOCOL_VERSION,
             "pruning": null,
