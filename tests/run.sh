@@ -50,6 +50,7 @@ TIP=`$BTC getbestblockhash`
 
 export RUST_LOG=electrs=debug
 electrs \
+  --skip-default-conf-files \
   --db-dir=data/electrs \
   --daemon-dir=data/bitcoin \
   --network=regtest \
