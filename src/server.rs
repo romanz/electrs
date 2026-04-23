@@ -85,7 +85,6 @@ fn serve() -> Result<()> {
     );
     let mut rpc = Rpc::new(&config, metrics)?;
 
-    let new_block_rx = rpc.new_block_notification();
     let mut peers = HashMap::<usize, Peer>::new();
     loop {
         // initial sync and compaction may take a few hours
@@ -106,14 +105,6 @@ fn serve() -> Result<()> {
                 recv(rpc.signal().receiver()) -> result => {
                     result.context("signal channel disconnected")?;
                     rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
-                },
-                // Handle new blocks' notifications
-                recv(new_block_rx) -> result => match result {
-                    Ok(_) => (), // sync and update
-                    Err(_) => {
-                        info!("disconnected from bitcoind");
-                        return Ok(());
-                    }
                 },
                 // Handle Electrum RPC requests
                 recv(server_rx) -> event => {

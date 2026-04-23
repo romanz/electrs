@@ -4,7 +4,7 @@
 
 FROM debian:trixie-slim AS base
 RUN apt-get update -qqy
-RUN apt-get install -qqy librocksdb-dev wget
+RUN apt-get install -qqy librocksdb-dev libsqlite3-dev libevent-dev libboost-dev wget
 
 ### Electrum Rust Server ###
 FROM base AS electrs-build
@@ -17,10 +17,11 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include
 ENV ROCKSDB_LIB_DIR=/usr/lib
 RUN cargo install --locked --path .
 
-### Bitcoin Core ###
+### Bitcoin Core (custom build for /blockpart/ REST endpoint) ###
 FROM base AS bitcoin-build
 # Download
 WORKDIR /build/bitcoin
+
 RUN wget -q https://bitcoincore.org/bin/bitcoin-core-31.0/test.rc2/bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
 RUN tar xvf bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
 RUN mv -v bitcoin-31.0rc2/bin/bitcoind .

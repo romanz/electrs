@@ -5,15 +5,15 @@ use std::convert::TryFrom;
 use std::iter::FromIterator;
 use std::ops::Bound;
 
-use bitcoin::hashes::Hash;
-use bitcoin::{Amount, OutPoint, Transaction, Txid};
+use crate::bitcoin::hashes::Hash;
+use crate::bitcoin::{Amount, OutPoint, Transaction, Txid};
+use bindex::ScriptHash;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::{
     daemon::Daemon,
     metrics::{Gauge, Metrics},
     signals::ExitFlag,
-    types::ScriptHash,
 };
 
 pub(crate) struct Entry {
@@ -368,7 +368,7 @@ impl Serialize for FeeHistogram {
 #[cfg(test)]
 mod tests {
     use super::FeeHistogram;
-    use bitcoin::Amount;
+    use crate::bitcoin::Amount;
     use serde_json::json;
 
     #[test]
