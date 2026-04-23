@@ -80,7 +80,7 @@ impl MempoolSyncUpdate {
             );
             let chunk_entries: Vec<Entry> = txids_chunk
                 .iter()
-                .zip(entries.into_iter().zip(txs.into_iter()))
+                .zip(entries.into_iter().zip(txs))
                 .filter_map(|(txid, (entry, tx))| {
                     let entry = match entry {
                         Some(entry) => entry,
