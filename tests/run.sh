@@ -33,6 +33,22 @@ tail_log() {
 	tail -n +0 -F $1 || true
 }
 
+electrs_rpc() {
+  local method=$1
+  local params=${2:-[]}
+  local response
+
+  exec 3<>/dev/tcp/127.0.0.1/60401
+  printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}\n' "$method" "$params" >&3
+
+  IFS= read -r response <&3
+
+  exec 3>&-
+  exec 3<&-
+
+  echo "$response"
+}
+
 echo "Starting $(bitcoind -version | head -n1)..."
 bitcoind -regtest -datadir=data/bitcoin -printtoconsole=0 &
 BITCOIND_PID=$!
@@ -50,6 +66,7 @@ TIP=`$BTC getbestblockhash`
 
 export RUST_LOG=electrs=debug
 electrs \
+  --skip-default-conf-files \
   --db-dir=data/electrs \
   --daemon-dir=data/bitcoin \
   --network=regtest \
@@ -67,6 +84,16 @@ echo "Loading Electrum wallet..."
 $EL load_wallet
 
 echo "Running integration tests:"
+
+echo " * server.features"
+GENESIS_HASH=`$BTC getblockhash 0`
+test "`electrs_rpc server.features | jq -cer --arg genesis_hash \"$GENESIS_HASH\" \
+  '[.result.genesis_hash == $genesis_hash,
+    .result.hosts["127.0.0.1"].tcp_port == 60401,
+    (.result.server_version | startswith(\"electrs/\")),
+    ((.result.protocol_min | tostring) == \"1.4\"),
+    ((.result.protocol_max | tostring) == \"1.4\"),
+    (.result.hash_function == \"sha256\")] | all'`" == "true"
 
 echo " * getbalance"
 wait_for "$EL getbalance" == '{"confirmed":"550","unmatured":"4950"}'
