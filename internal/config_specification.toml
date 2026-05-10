@@ -143,11 +143,6 @@ doc = "The banner to be shown in the Electrum console"
 default = "concat!(\"Welcome to electrs \", env!(\"CARGO_PKG_VERSION\"), \" (Electrum Rust Server)!\").to_owned()"
 
 [[param]]
-name = "public_addr"
-type = "crate::config::ElectrumAddr"
-doc = "Sets the publicly advertised value of the server address. By default the electrum_rpc_addr is used; this setting can be used to correct it if the port is remapped by NAT or if the socket is tunnelled to a machine with a different address. This may be also used when Electrum RPC is bound to Unix domain socket. The format is the standard Electrum connection string host:port:connection where connection is either t for TCP or s for TLS."
-
-[[param]]
 name = "log_filters"
 type = "String"
 doc = "Logging filters, overriding `RUST_LOG` environment variable (see https://docs.rs/env_logger/ for details)"

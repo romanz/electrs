@@ -1,7 +1,5 @@
 #[cfg(feature = "metrics")]
 mod metrics_impl {
-    use abstract_socket::SocketAddr;
-
     use anyhow::{Context, Result};
 
     #[cfg(feature = "metrics_process")]
@@ -10,6 +8,8 @@ mod metrics_impl {
     use prometheus::{self, Encoder, HistogramOpts, HistogramVec, Registry, TEXT_FORMAT};
     use tiny_http::{Header as HttpHeader, Response, Server};
 
+    use std::net::SocketAddr;
+
     use crate::thread::spawn;
 
     pub struct Metrics {
@@ -17,11 +17,7 @@ mod metrics_impl {
     }
 
     impl Metrics {
-        pub fn new(addr: &SocketAddr) -> Result<Self> {
-            use std::net::TcpListener;
-            #[cfg(target_family = "unix")]
-            use std::os::unix::net::UnixListener;
-
+        pub fn new(addr: SocketAddr) -> Result<Self> {
             let reg = Registry::new();
 
             #[cfg(feature = "metrics_process")]
@@ -31,14 +27,7 @@ mod metrics_impl {
             let result = Self { reg };
             let reg = result.reg.clone();
 
-            let listener: tiny_http::Listener = match addr {
-                SocketAddr::Net(addr) => TcpListener::bind(addr).map(Into::into),
-                #[cfg(target_family = "unix")]
-                SocketAddr::Uds(ref addr) => UnixListener::bind_addr(addr).map(Into::into),
-            }
-            .with_context(|| format!("failed to bind address {}", addr))?;
-
-            let server = match Server::from_listener(listener, None) {
+            let server = match Server::http(addr) {
                 Ok(server) => server,
                 Err(err) => bail!("failed to start HTTP server on {}: {}", addr, err),
             };
@@ -128,12 +117,12 @@ pub use metrics_impl::{Gauge, Histogram, Metrics};
 mod metrics_fake {
     use anyhow::Result;
 
-    use abstract_socket::SocketAddr;
+    use std::net::SocketAddr;
 
     pub struct Metrics {}
 
     impl Metrics {
-        pub fn new(_addr: &SocketAddr) -> Result<Self> {
+        pub fn new(_addr: SocketAddr) -> Result<Self> {
             debug!("metrics collection is disabled");
             Ok(Self {})
         }

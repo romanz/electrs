@@ -140,7 +140,7 @@ impl Daemon {
         }
 
         let p2p = Mutex::new(Connection::connect(
-            config.daemon_p2p_addr.clone(),
+            config.daemon_p2p_addr,
             metrics,
             config.magic,
         )?);

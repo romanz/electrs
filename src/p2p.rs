@@ -1,4 +1,3 @@
-use abstract_socket::{SocketAddr, Stream};
 use anyhow::{Context, Result};
 use bitcoin::blockdata::block::Header as BlockHeader;
 use bitcoin::consensus::Encodable;
@@ -22,7 +21,7 @@ use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::types::SerBlock;
@@ -137,7 +136,7 @@ impl Connection {
     }
 
     pub(crate) fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
-        let recv_conn = Stream::connect(&address)
+        let recv_conn = TcpStream::connect(address)
             .with_context(|| format!("p2p failed to connect: {:?}", address))?;
         let mut send_conn = recv_conn
             .try_clone()
@@ -317,7 +316,7 @@ impl Connection {
 }
 
 fn build_version_message() -> NetworkMessage {
-    let addr = (IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0).into();
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time error")
