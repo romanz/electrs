@@ -384,12 +384,22 @@ enum ParsedNetworkMessage {
     Ignored,
 }
 
+/// Maximum protocol message size (32 MB, matching Bitcoin Core's MAX_PROTOCOL_MESSAGE_LENGTH).
+/// See https://github.com/bitcoin/bitcoin/blob/master/src/net.h#L109
+const MAX_MESSAGE_SIZE: usize = 32_000_000;
+
 impl Decodable for RawNetworkMessage {
     fn consensus_decode<D: bitcoin::io::Read + ?Sized>(d: &mut D) -> Result<Self, encode::Error> {
         let magic = Decodable::consensus_decode(d)?;
         let cmd = Decodable::consensus_decode(d)?;
 
         let len = u32::consensus_decode(d)?;
+        if len as usize > MAX_MESSAGE_SIZE {
+            return Err(encode::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("message too large: {} bytes (max {})", len, MAX_MESSAGE_SIZE),
+            )));
+        }
         let _checksum = <[u8; 4]>::consensus_decode(d)?; // assume data is correct
         let mut raw = vec![0u8; len as usize];
         d.read_slice(&mut raw)?;
