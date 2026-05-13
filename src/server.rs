@@ -228,18 +228,39 @@ fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Re
     let msg = Message::New(stream.try_clone()?);
     server_tx.send(Event { peer_id, msg })?;
 
-    let mut first_line = true;
-    for line in BufReader::new(stream).lines() {
-        if let Err(e) = &line {
-            if first_line && e.kind() == std::io::ErrorKind::InvalidData {
-                warn!("InvalidData on first line may indicate client attempted to connect using SSL when server expects unencrypted communication.")
+    let mut buf = vec![];
+    let mut reader = BufReader::new(stream);
+    // Maximum line length to prevent memory exhaustion (10 MB)
+    const MAX_LINE_LEN: usize = 10_485_760;
+    loop {
+        buf.clear();
+        let n = reader
+            .read_until(b'\n', &mut buf)
+            .with_context(|| format!("{}: recv failed", peer_id))?;
+        if n == 0 {
+            break; // EOF
+        }
+        // Check for oversized line (only the last byte should be '\n')
+        if buf.len() > MAX_LINE_LEN {
+            bail!(
+                "{}: line too large ({} bytes, max {})",
+                peer_id,
+                buf.len(),
+                MAX_LINE_LEN
+            );
+        }
+        if buf.last() == Some(&b'\n') {
+            buf.pop();
+            if buf.last() == Some(&b'\r') {
+                buf.pop();
             }
         }
-        let line = line.with_context(|| format!("{}: recv failed", peer_id))?;
+        let line = std::str::from_utf8(&buf)
+            .map_err(|e| anyhow::anyhow!("{}: invalid UTF-8: {}", peer_id, e))?
+            .to_owned();
         debug!("{}: recv {}", peer_id, line);
         let msg = Message::Request(line);
         server_tx.send(Event { peer_id, msg })?;
-        first_line = false;
     }
 
     debug!("{}: disconnected", peer_id);
