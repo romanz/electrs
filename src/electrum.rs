@@ -718,7 +718,7 @@ impl Call {
             Err(err) => {
                 warn!("RPC {} failed: {:#}", self.method, err);
                 match err
-                    .downcast_ref::<bitcoincore_rpc::Error>()
+                    .downcast_ref::<crate::rpc::Error>()
                     .and_then(extract_bitcoind_error)
                 {
                     Some(e) => error_msg(&self.id, RpcError::DaemonError(e.clone())),

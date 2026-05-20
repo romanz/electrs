@@ -18,6 +18,7 @@ mod mempool;
 mod merkle;
 mod metrics;
 mod p2p;
+mod rpc;
 mod server;
 mod signals;
 mod status;
