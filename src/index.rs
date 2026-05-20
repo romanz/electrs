@@ -75,7 +75,7 @@ impl Stats {
     fn observe_db(&self, store: &DBStore) {
         for (cf, name, value) in store.get_properties() {
             self.db_properties
-                .set(&format!("{}:{}", name, cf), value as f64);
+                .set(&format!("{name}:{cf}"), value as f64);
         }
     }
 }
@@ -252,8 +252,7 @@ impl Index {
         let heights: Vec<_> = heights.collect();
         assert!(
             heights.is_empty(),
-            "some blocks were not indexed: {:?}",
-            heights
+            "some blocks were not indexed: {heights:?}"
         );
         Ok(batch)
     }

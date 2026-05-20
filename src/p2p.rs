@@ -113,7 +113,7 @@ impl Connection {
                     let block = self
                         .blocks_recv
                         .recv()
-                        .with_context(|| format!("failed to get block {}", hash))?;
+                        .with_context(|| format!("failed to get block {hash}"))?;
                     let header = bsl::BlockHeader::parse(&block[..])
                         .expect("core returned invalid blockheader")
                         .parsed_owned();
@@ -137,7 +137,7 @@ impl Connection {
 
     pub(crate) fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
         let recv_conn = TcpStream::connect(address)
-            .with_context(|| format!("p2p failed to connect: {:?}", address))?;
+            .with_context(|| format!("p2p failed to connect: {address:?}"))?;
         let mut send_conn = recv_conn
             .try_clone()
             .context("failed to clone connection")?;
@@ -186,13 +186,13 @@ impl Connection {
                     debug!("closing p2p_send thread: no more messages to send");
                     // close the stream reader (p2p_recv thread may block on it)
                     if let Err(e) = send_conn.shutdown(Shutdown::Read) {
-                        warn!("failed to shutdown p2p connection: {}", e)
+                        warn!("failed to shutdown p2p connection: {e}")
                     }
                     return Ok(());
                 }
             };
             send_duration.observe_duration("send", || {
-                trace!("send: {:?}", msg);
+                trace!("send: {msg:?}");
                 let raw_msg = message::RawNetworkMessage::new(magic, msg);
                 buffer.clear();
                 raw_msg
@@ -261,15 +261,15 @@ impl Connection {
                         Ok(msg) => msg,
                         Err(err) => bail!("failed to parse {err}"),
                     };
-                    trace!("recv: {:?}", msg);
+                    trace!("recv: {msg:?}");
 
                     match msg {
                         ParsedNetworkMessage::Version(version) => {
-                            debug!("peer version: {:?}", version);
+                            debug!("peer version: {version:?}");
                             tx_send.send(NetworkMessage::Verack)?;
                         }
                         ParsedNetworkMessage::Inv(inventory) => {
-                            debug!("peer inventory: {:?}", inventory);
+                            debug!("peer inventory: {inventory:?}");
                             if inventory.iter().any(|inv| matches!(inv, Inventory::Block(_))) {
                                 let _ = new_block_send.try_send(()); // best-effort notification
                             }
@@ -331,7 +331,7 @@ fn build_version_message() -> NetworkMessage {
         receiver: address::Address::new(&addr, services),
         sender: address::Address::new(&addr, services),
         nonce: secp256k1::rand::thread_rng().gen(),
-        user_agent: format!("/electrs:{}/", ELECTRS_VERSION),
+        user_agent: format!("/electrs:{ELECTRS_VERSION}/"),
         start_height: 0,
         relay: false,
     })

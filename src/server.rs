@@ -35,7 +35,7 @@ impl Peer {
             value += "\n";
             self.stream
                 .write_all(value.as_bytes())
-                .with_context(|| format!("failed to send response: {:?}", value))?;
+                .with_context(|| format!("failed to send response: {value:?}"))?;
         }
         Ok(())
     }
@@ -52,7 +52,7 @@ pub fn run() -> Result<()> {
     if let Err(e) = &result {
         for cause in e.chain() {
             if cause.downcast_ref::<ExitError>().is_some() {
-                info!("electrs stopped: {:?}", e);
+                info!("electrs stopped: {e:?}");
                 return Ok(());
             }
         }
@@ -184,7 +184,7 @@ fn handle_peer_events(
     for msg in messages {
         match msg {
             Message::New(stream) => {
-                debug!("{}: connected", peer_id);
+                debug!("{peer_id}: connected");
                 peers.insert(peer_id, Peer::new(peer_id, stream));
             }
             Message::Request(line) => lines.push(line),
@@ -202,7 +202,7 @@ fn handle_peer_events(
         None => return, // unknown peer
     };
     if let Err(e) = result {
-        error!("{}: disconnecting due to {}", peer_id, e);
+        error!("{peer_id}: disconnecting due to {e}");
         peers.remove(&peer_id).unwrap().disconnect();
     } else if done {
         peers.remove(&peer_id); // already disconnected, just remove from peers' map
@@ -216,7 +216,7 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
         spawn("recv_loop", move || {
             let result = recv_loop(peer_id, &stream, tx);
             if let Err(e) = stream.shutdown(Shutdown::Read) {
-                warn!("{}: failed to shutdown TCP receiving {}", peer_id, e)
+                warn!("{peer_id}: failed to shutdown TCP receiving {e}")
             }
             result
         });
@@ -235,14 +235,14 @@ fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Re
                 warn!("InvalidData on first line may indicate client attempted to connect using SSL when server expects unencrypted communication.")
             }
         }
-        let line = line.with_context(|| format!("{}: recv failed", peer_id))?;
-        debug!("{}: recv {}", peer_id, line);
+        let line = line.with_context(|| format!("{peer_id}: recv failed"))?;
+        debug!("{peer_id}: recv {line}");
         let msg = Message::Request(line);
         server_tx.send(Event { peer_id, msg })?;
         first_line = false;
     }
 
-    debug!("{}: disconnected", peer_id);
+    debug!("{peer_id}: disconnected");
     let msg = Message::Done;
     server_tx.send(Event { peer_id, msg })?;
     Ok(())

@@ -210,7 +210,7 @@ mod tests {
     fn test_scripthash_serde() {
         let hex = "\"4b3d912c1523ece4615e91bf0d27381ca72169dbf6b1c2ffcc9f92381d4984a3\"";
         let scripthash: ScriptHash = from_str(hex).unwrap();
-        assert_eq!(format!("\"{}\"", scripthash), hex);
+        assert_eq!(format!("\"{scripthash}\""), hex);
         assert_eq!(json!(scripthash).to_string(), hex);
     }
 

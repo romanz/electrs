@@ -117,7 +117,7 @@ impl Tracker {
             let mut visitor = FindTransaction::new(txid);
             result = match bsl::Block::visit(&block, &mut visitor) {
                 Ok(_) | Err(VisitBreak) => visitor.found.map(|tx| (blockhash, tx)),
-                Err(e) => panic!("core returned invalid block: {:?}", e),
+                Err(e) => panic!("core returned invalid block: {e:?}"),
             };
         })?;
         Ok(result)

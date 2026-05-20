@@ -248,7 +248,7 @@ impl Daemon {
             .map(|r| match r?.result::<json::GetMempoolEntryResult>() {
                 Ok(entry) => Some(entry),
                 Err(err) => {
-                    debug!("failed to get mempool entry: {}", err); // probably due to RBF
+                    debug!("failed to get mempool entry: {err}"); // probably due to RBF
                     None
                 }
             })
@@ -266,21 +266,21 @@ impl Daemon {
                 let tx_hex = match r?.result::<String>() {
                     Ok(tx_hex) => Some(tx_hex),
                     Err(err) => {
-                        debug!("failed to get mempool tx: {}", err); // probably due to RBF
+                        debug!("failed to get mempool tx: {err}"); // probably due to RBF
                         None
                     }
                 }?;
                 let tx_bytes = match Vec::from_hex(&tx_hex) {
                     Ok(tx_bytes) => Some(tx_bytes),
                     Err(err) => {
-                        warn!("got non-hex transaction {}: {}", tx_hex, err);
+                        warn!("got non-hex transaction {tx_hex}: {err}");
                         None
                     }
                 }?;
                 match deserialize(&tx_bytes) {
                     Ok(tx) => Some(tx),
                     Err(err) => {
-                        warn!("got invalid tx {}: {}", tx_hex, err);
+                        warn!("got invalid tx {tx_hex}: {err}");
                         None
                     }
                 }

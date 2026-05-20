@@ -19,10 +19,7 @@ fn main() -> Result<()> {
 
         if let Some((prev_prefix, prev_height)) = state {
             if prev_prefix == curr_prefix {
-                eprintln!(
-                    "prefix={:x} heights: {} {}",
-                    curr_prefix, prev_height, curr_height
-                );
+                eprintln!("prefix={curr_prefix:x} heights: {prev_height} {curr_height}");
             };
         }
         state = Some((curr_prefix, curr_height));
