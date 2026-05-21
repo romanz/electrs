@@ -59,6 +59,7 @@ pub(crate) struct Connection {
     blocks_recv: Receiver<SerBlock>,
     headers_recv: Receiver<Vec<BlockHeader>>,
     new_block_recv: Receiver<()>,
+    local_addr: SocketAddr,
 
     blocks_duration: Histogram,
 }
@@ -138,6 +139,9 @@ impl Connection {
     pub(crate) fn connect(address: SocketAddr, metrics: &Metrics, magic: Magic) -> Result<Self> {
         let recv_conn = TcpStream::connect(address)
             .with_context(|| format!("p2p failed to connect: {:?}", address))?;
+        let local_addr = recv_conn
+            .local_addr()
+            .context("failed to read p2p local address")?;
         let mut send_conn = recv_conn
             .try_clone()
             .context("failed to clone connection")?;
@@ -310,8 +314,15 @@ impl Connection {
             blocks_recv,
             headers_recv,
             new_block_recv,
+            local_addr,
             blocks_duration,
         })
+    }
+
+    /// Local socket address of the outbound TCP connection to bitcoind.
+    /// Matches the `addr` field of the corresponding `getpeerinfo` entry on the daemon side.
+    pub(crate) fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 }
 

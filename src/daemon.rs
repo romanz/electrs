@@ -11,6 +11,7 @@ use serde_json::{json, value::RawValue, Value};
 
 use std::fs::File;
 use std::io::Read;
+use std::net::SocketAddr;
 use std::path::Path;
 
 use crate::{
@@ -139,11 +140,9 @@ impl Daemon {
             bail!("electrs requires non-pruned bitcoind node");
         }
 
-        let p2p = Mutex::new(Connection::connect(
-            config.daemon_p2p_addr,
-            metrics,
-            config.magic,
-        )?);
+        let p2p = Connection::connect(config.daemon_p2p_addr, metrics, config.magic)?;
+        warn_if_not_whitelisted(&rpc, p2p.local_addr());
+        let p2p = Mutex::new(p2p);
         Ok(Self { p2p, rpc })
     }
 
@@ -305,6 +304,77 @@ impl Daemon {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum WhitelistStatus {
+    Whitelisted,
+    NotWhitelisted,
+    Unknown(&'static str),
+}
+
+fn canonicalize(addr: SocketAddr) -> SocketAddr {
+    SocketAddr::new(addr.ip().to_canonical(), addr.port())
+}
+
+/// Inspect a `getpeerinfo` result and report whether the peer matching `local_addr`
+/// has the `download` permission. Pure function for unit testing.
+fn check_whitelist_status(peers: &[Value], local_addr: SocketAddr) -> WhitelistStatus {
+    let target = canonicalize(local_addr);
+    for peer in peers {
+        let Some(addr_str) = peer.get("addr").and_then(Value::as_str) else {
+            continue;
+        };
+        let Ok(addr) = addr_str.parse::<SocketAddr>() else {
+            continue;
+        };
+        if canonicalize(addr) != target {
+            continue;
+        }
+        // Skip peers bitcoind connected out to; electrs is always inbound from its POV.
+        if peer.get("inbound").and_then(Value::as_bool) == Some(false) {
+            continue;
+        }
+        let Some(perms) = peer.get("permissions").and_then(Value::as_array) else {
+            return WhitelistStatus::Unknown(
+                "matched peer has no `permissions` field (bitcoind too old?)",
+            );
+        };
+        let has_download = perms.iter().any(|p| p.as_str() == Some("download"));
+        return if has_download {
+            WhitelistStatus::Whitelisted
+        } else {
+            WhitelistStatus::NotWhitelisted
+        };
+    }
+    WhitelistStatus::Unknown("no matching peer in getpeerinfo output")
+}
+
+/// Log a warning if bitcoind reports that electrs is connected without `download` permission.
+/// Missing whitelisting can cause bitcoind to disconnect electrs or ignore `getheaders`
+/// during IBD or once `maxuploadtarget` is reached.
+/// See https://github.com/romanz/electrs/issues/400 for background.
+fn warn_if_not_whitelisted(rpc: &Client, local_addr: SocketAddr) {
+    let peers: Value = match rpc.call("getpeerinfo", &[]) {
+        Ok(v) => v,
+        Err(err) => {
+            debug!("getpeerinfo failed, skipping whitelist check: {}", err);
+            return;
+        }
+    };
+    let Some(peers) = peers.as_array() else {
+        debug!("getpeerinfo returned non-array, skipping whitelist check");
+        return;
+    };
+    match check_whitelist_status(peers, local_addr) {
+        WhitelistStatus::Whitelisted => debug!("electrs is whitelisted by bitcoind"),
+        WhitelistStatus::NotWhitelisted => warn!(
+            "electrs is not whitelisted by bitcoind: it may be disconnected during IBD \
+             or once `maxuploadtarget` is reached. Consider adding `whitelist=download@127.0.0.1` \
+             to bitcoin.conf. See https://github.com/romanz/electrs/issues/400 for details."
+        ),
+        WhitelistStatus::Unknown(reason) => debug!("whitelist check inconclusive: {}", reason),
+    }
+}
+
 pub(crate) type RpcError = bitcoincore_rpc::jsonrpc::error::RpcError;
 
 pub(crate) fn extract_bitcoind_error(err: &bitcoincore_rpc::Error) -> Option<&RpcError> {
@@ -340,5 +410,122 @@ where
             Ok(values)
         }
         Err(err) => bail!("batch {} request failed: {}", name, err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{check_whitelist_status, WhitelistStatus};
+    use serde_json::json;
+    use std::net::SocketAddr;
+
+    fn local() -> SocketAddr {
+        "127.0.0.1:38234".parse().unwrap()
+    }
+
+    #[test]
+    fn whitelisted_when_download_permission_present() {
+        let peers = vec![json!({
+            "addr": "127.0.0.1:38234",
+            "inbound": true,
+            "permissions": ["noban", "download", "mempool"]
+        })];
+        assert_eq!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::Whitelisted
+        );
+    }
+
+    #[test]
+    fn not_whitelisted_when_download_permission_missing() {
+        let peers = vec![json!({
+            "addr": "127.0.0.1:38234",
+            "inbound": true,
+            "permissions": ["relay"]
+        })];
+        assert_eq!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::NotWhitelisted
+        );
+    }
+
+    #[test]
+    fn unknown_when_no_matching_peer() {
+        let peers = vec![json!({
+            "addr": "10.0.0.5:8333",
+            "inbound": false,
+            "permissions": ["download"]
+        })];
+        assert!(matches!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::Unknown(_)
+        ));
+    }
+
+    #[test]
+    fn unknown_when_permissions_field_missing() {
+        let peers = vec![json!({
+            "addr": "127.0.0.1:38234",
+            "inbound": true,
+        })];
+        assert!(matches!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::Unknown(_)
+        ));
+    }
+
+    #[test]
+    fn matches_ipv4_mapped_ipv6_addr() {
+        // bitcoind may report the peer as an IPv4-mapped IPv6 address on dual-stack systems.
+        let peers = vec![json!({
+            "addr": "[::ffff:127.0.0.1]:38234",
+            "inbound": true,
+            "permissions": ["download"]
+        })];
+        assert_eq!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::Whitelisted
+        );
+    }
+
+    #[test]
+    fn skips_outbound_peers_with_matching_addr() {
+        // Defensive: an outbound peer at the same addr can't be electrs.
+        let peers = vec![
+            json!({
+                "addr": "127.0.0.1:38234",
+                "inbound": false,
+                "permissions": ["download"]
+            }),
+            json!({
+                "addr": "127.0.0.1:38234",
+                "inbound": true,
+                "permissions": []
+            }),
+        ];
+        assert_eq!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::NotWhitelisted
+        );
+    }
+
+    #[test]
+    fn ignores_unrelated_peers() {
+        let peers = vec![
+            json!({"addr": "1.2.3.4:8333", "inbound": false, "permissions": []}),
+            json!({"addr": "127.0.0.1:38234", "inbound": true, "permissions": ["download"]}),
+        ];
+        assert_eq!(
+            check_whitelist_status(&peers, local()),
+            WhitelistStatus::Whitelisted
+        );
+    }
+
+    #[test]
+    fn returns_unknown_on_empty_peer_list() {
+        assert!(matches!(
+            check_whitelist_status(&[], local()),
+            WhitelistStatus::Unknown(_)
+        ));
     }
 }
