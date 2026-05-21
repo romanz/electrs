@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::{consensus::deserialize, hashes::hex::FromHex};
 use bitcoin::{Amount, BlockHash, Transaction, Txid};
-use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
+use bitcoincore_rpc::{json, json::EstimateMode, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -147,8 +147,12 @@ impl Daemon {
         Ok(Self { p2p, rpc })
     }
 
-    pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
-        let res = self.rpc.estimate_smart_fee(nblocks, None);
+    pub(crate) fn estimate_fee(
+        &self,
+        nblocks: u16,
+        mode: Option<EstimateMode>,
+    ) -> Result<Option<Amount>> {
+        let res = self.rpc.estimate_smart_fee(nblocks, mode);
         if let Err(bitcoincore_rpc::Error::JsonRpc(jsonrpc::Error::Rpc(RpcError {
             code: -32603,
             ..

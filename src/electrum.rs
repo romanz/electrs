@@ -5,6 +5,7 @@ use bitcoin::{
     hex::DisplayHex,
     BlockHash, Transaction, Txid,
 };
+use bitcoincore_rpc::json::EstimateMode;
 use crossbeam_channel::Receiver;
 use rayon::prelude::*;
 use serde_derive::Deserialize;
@@ -98,6 +99,28 @@ impl BroadcastArgs {
         match self {
             BroadcastArgs::Package(_) => false,
             BroadcastArgs::PackageVerbose((_, verbose)) => *verbose,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum EstimateFeeArgs {
+    NoMode((u16,)),
+    WithMode((u16, String)),
+}
+
+impl EstimateFeeArgs {
+    fn nblocks(&self) -> u16 {
+        match self {
+            Self::NoMode((n,)) | Self::WithMode((n, _)) => *n,
+        }
+    }
+
+    fn mode(&self) -> Option<&str> {
+        match self {
+            Self::NoMode(_) => None,
+            Self::WithMode((_, m)) => Some(m),
         }
     }
 }
@@ -260,10 +283,11 @@ impl Rpc {
         Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
     }
 
-    fn estimate_fee(&self, (nblocks,): (u16,)) -> Result<Value> {
+    fn estimate_fee(&self, args: &EstimateFeeArgs) -> Result<Value> {
+        let mode = args.mode().map(parse_estimate_mode).transpose()?;
         Ok(self
             .daemon
-            .estimate_fee(nblocks)?
+            .estimate_fee(args.nblocks(), mode)?
             .map(|fee_rate| json!(fee_rate.to_btc()))
             .unwrap_or_else(|| json!(UNKNOWN_FEE)))
     }
@@ -605,7 +629,7 @@ impl Rpc {
                 Params::BlockHeader(args) => self.block_header(*args),
                 Params::BlockHeaders(args) => self.block_headers(*args),
                 Params::Donation => Ok(Value::Null),
-                Params::EstimateFee(args) => self.estimate_fee(*args),
+                Params::EstimateFee(args) => self.estimate_fee(args),
                 Params::Features => self.features(),
                 Params::HeadersSubscribe => self.headers_subscribe(client),
                 Params::MempoolFeeHistogram => self.get_fee_histogram(),
@@ -639,7 +663,7 @@ enum Params {
     TransactionBroadcast((String,)),
     TransactionBroadcastPackage(BroadcastArgs),
     Donation,
-    EstimateFee((u16,)),
+    EstimateFee(EstimateFeeArgs),
     Features,
     HeadersSubscribe,
     MempoolFeeHistogram,
@@ -832,6 +856,20 @@ fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
     Ok(tx)
 }
 
+/// Parse the `mode` string for `blockchain.estimatefee` into bitcoind's `EstimateMode`.
+/// Accepted values (case-insensitive): `UNSET`, `ECONOMICAL`, `CONSERVATIVE`.
+fn parse_estimate_mode(s: &str) -> Result<EstimateMode> {
+    match s.to_ascii_uppercase().as_str() {
+        "UNSET" => Ok(EstimateMode::Unset),
+        "ECONOMICAL" => Ok(EstimateMode::Economical),
+        "CONSERVATIVE" => Ok(EstimateMode::Conservative),
+        _ => bail!(
+            "invalid estimatefee mode {:?}; expected ECONOMICAL, CONSERVATIVE, or UNSET",
+            s
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -843,6 +881,54 @@ mod tests {
         assert_eq!(parse_version("1.2.345").unwrap(), Version(vec![1, 2, 345]));
 
         assert!(parse_version("1.2").unwrap() < parse_version("1.100").unwrap());
+    }
+
+    #[test]
+    fn test_parse_estimate_mode_known_values() {
+        assert_eq!(parse_estimate_mode("UNSET").unwrap(), EstimateMode::Unset);
+        assert_eq!(
+            parse_estimate_mode("ECONOMICAL").unwrap(),
+            EstimateMode::Economical
+        );
+        assert_eq!(
+            parse_estimate_mode("CONSERVATIVE").unwrap(),
+            EstimateMode::Conservative
+        );
+    }
+
+    #[test]
+    fn test_parse_estimate_mode_case_insensitive() {
+        assert_eq!(
+            parse_estimate_mode("economical").unwrap(),
+            EstimateMode::Economical
+        );
+        assert_eq!(
+            parse_estimate_mode("Conservative").unwrap(),
+            EstimateMode::Conservative
+        );
+    }
+
+    #[test]
+    fn test_parse_estimate_mode_rejects_invalid() {
+        let err = parse_estimate_mode("turbo").unwrap_err().to_string();
+        assert!(
+            err.contains("turbo"),
+            "error should mention bad value: {err}"
+        );
+    }
+
+    #[test]
+    fn test_estimate_fee_args_no_mode() {
+        let args: EstimateFeeArgs = serde_json::from_str("[6]").unwrap();
+        assert_eq!(args.nblocks(), 6);
+        assert_eq!(args.mode(), None);
+    }
+
+    #[test]
+    fn test_estimate_fee_args_with_mode() {
+        let args: EstimateFeeArgs = serde_json::from_str(r#"[6, "ECONOMICAL"]"#).unwrap();
+        assert_eq!(args.nblocks(), 6);
+        assert_eq!(args.mode(), Some("ECONOMICAL"));
     }
 
     #[test]
