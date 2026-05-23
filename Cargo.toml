@@ -66,3 +66,7 @@ lto = true
 
 [lints.clippy]
 uninlined_format_args = "allow"  # TODO: https://github.com/romanz/electrs/issues/1199
+
+[env]
+CXXFLAGS = "-include cstdint"
+
