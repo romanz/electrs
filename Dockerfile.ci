@@ -18,18 +18,14 @@ ENV ROCKSDB_LIB_DIR=/usr/lib
 RUN cargo install --locked --path .
 
 ### Bitcoin Core ###
-FROM base AS bitcoin-build
-# Download
-WORKDIR /build/bitcoin
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-31.0/test.rc2/bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
-RUN tar xvf bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
-RUN mv -v bitcoin-31.0rc2/bin/bitcoind .
-RUN mv -v bitcoin-31.0rc2/bin/bitcoin-cli .
+# Integration test against bitcoin/bitcoin#35182 (HTTP server rewrite)
+# at commit ddefe4263b42aa050a4bd55c073e1640f06e7332.
+FROM pinheadmz/bitcoin:pr35182-ddefe4263b AS bitcoin-build
 
 FROM base AS result
 # Copy the binaries
 COPY --from=electrs-build /root/.cargo/bin/electrs /usr/bin/electrs
-COPY --from=bitcoin-build /build/bitcoin/bitcoind /build/bitcoin/bitcoin-cli /usr/bin/
+COPY --from=bitcoin-build /opt/bin/bitcoind /opt/bin/bitcoin-cli /usr/bin/
 RUN bitcoind -version && bitcoin-cli -version
 
 ### Electrum ###

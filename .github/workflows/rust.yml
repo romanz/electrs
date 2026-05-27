@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - master
+      - pr35182-*
   pull_request:
-  schedule:
-    - cron: "0 0 * * *" # once a day
 
 jobs:
   build:
