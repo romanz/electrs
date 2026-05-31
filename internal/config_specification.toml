@@ -82,6 +82,11 @@ type = "crate::config::ResolvAddr"
 doc = "Bitcoin daemon p2p 'addr:port' to connect (default: 127.0.0.1:8333 for mainnet, 127.0.0.1:18333 for testnet, 127.0.0.1:18444 for regtest and 127.0.0.1:38333 for signet)"
 
 [[param]]
+name = "daemon_zmq_addr"
+type = "String"
+doc = "ZMQ endpoint for new block notifications (e.g. 'tcp://127.0.0.1:28332'). When set, uses REST+ZMQ instead of p2p for block fetching."
+
+[[param]]
 name = "monitoring_addr"
 type = "crate::config::ResolvAddr"
 doc = "Prometheus monitoring 'addr:port' to listen on (default: 127.0.0.1:4224 for mainnet, 127.0.0.1:14224 for testnet, 127.0.0.1:24224 for regtest and 127.0.0.1:34224 for signet)"
