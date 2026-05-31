@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::{consensus::deserialize, hashes::hex::FromHex};
 use bitcoin::{Amount, BlockHash, Transaction, Txid};
-use bitcoincore_rpc::{json, jsonrpc, Auth, Client, RpcApi};
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -18,6 +17,7 @@ use crate::{
     config::Config,
     metrics::Metrics,
     p2p::Connection,
+    rpc::{self, jsonrpc, Auth, Client},
     signals::ExitFlag,
     types::SerBlock,
 };
@@ -149,11 +149,7 @@ impl Daemon {
 
     pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
         let res = self.rpc.estimate_smart_fee(nblocks, None);
-        if let Err(bitcoincore_rpc::Error::JsonRpc(jsonrpc::Error::Rpc(RpcError {
-            code: -32603,
-            ..
-        }))) = res
-        {
+        if let Err(rpc::Error::JsonRpc(jsonrpc::Error::Rpc(RpcError { code: -32603, .. }))) = res {
             return Ok(None); // don't fail when fee estimation is disabled (e.g. with `-blocksonly=1`)
         }
         Ok(res.context("failed to estimate fee")?.fee_rate)
@@ -226,7 +222,7 @@ impl Daemon {
             .tx)
     }
 
-    pub(crate) fn get_mempool_info(&self) -> Result<json::GetMempoolInfoResult> {
+    pub(crate) fn get_mempool_info(&self) -> Result<rpc::GetMempoolInfoResult> {
         self.rpc
             .get_mempool_info()
             .context("failed to get mempool info")
@@ -241,11 +237,11 @@ impl Daemon {
     pub(crate) fn get_mempool_entries(
         &self,
         txids: &[Txid],
-    ) -> Result<Vec<Option<json::GetMempoolEntryResult>>> {
+    ) -> Result<Vec<Option<rpc::GetMempoolEntryResult>>> {
         let results = batch_request(self.rpc.get_jsonrpc_client(), "getmempoolentry", txids)?;
         Ok(results
             .into_iter()
-            .map(|r| match r?.result::<json::GetMempoolEntryResult>() {
+            .map(|r| match r?.result::<rpc::GetMempoolEntryResult>() {
                 Ok(entry) => Some(entry),
                 Err(err) => {
                     debug!("failed to get mempool entry: {}", err); // probably due to RBF
@@ -305,14 +301,11 @@ impl Daemon {
     }
 }
 
-pub(crate) type RpcError = bitcoincore_rpc::jsonrpc::error::RpcError;
+pub(crate) type RpcError = rpc::RpcError;
 
-pub(crate) fn extract_bitcoind_error(err: &bitcoincore_rpc::Error) -> Option<&RpcError> {
-    use bitcoincore_rpc::{
-        jsonrpc::error::Error::Rpc as ServerError, Error::JsonRpc as JsonRpcError,
-    };
+pub(crate) fn extract_bitcoind_error(err: &rpc::Error) -> Option<&RpcError> {
     match err {
-        JsonRpcError(ServerError(e)) => Some(e),
+        rpc::Error::JsonRpc(jsonrpc::Error::Rpc(e)) => Some(e),
         _ => None,
     }
 }

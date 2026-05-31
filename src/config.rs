@@ -1,6 +1,6 @@
+use crate::rpc::Auth;
 use bitcoin::p2p::Magic;
 use bitcoin::Network;
-use bitcoincore_rpc::Auth;
 use dirs_next::home_dir;
 
 use std::ffi::{OsStr, OsString};
