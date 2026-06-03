@@ -70,6 +70,13 @@ fn serve() -> Result<()> {
         info!("serving Electrum RPC on {}", listener.local_addr()?);
         spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
     };
+    // Iroh-Listener parallel zum TCP-Listener starten
+    std::thread::spawn(|| {
+        tokio::runtime::Runtime::new()
+            .expect("failed to create tokio runtime")
+            .block_on(crate::iroh_listener::run_iroh_listener())
+            .unwrap_or_else(|e| error!("Iroh listener error: {e}"));
+    });
 
     let server_batch_size = metrics.histogram_vec(
         "server_batch_size",

@@ -19,6 +19,7 @@ mod merkle;
 mod metrics;
 mod p2p;
 mod server;
+mod iroh_listener;
 mod signals;
 mod status;
 mod thread;
