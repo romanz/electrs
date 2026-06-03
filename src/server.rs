@@ -65,6 +65,7 @@ fn serve() -> Result<()> {
     let metrics = Metrics::new(config.monitoring_addr)?;
 
     let (server_tx, server_rx) = unbounded();
+    let server_tx_iroh = server_tx.clone();
     if !config.disable_electrum_rpc {
         let listener = TcpListener::bind(config.electrum_rpc_addr)?;
         info!("serving Electrum RPC on {}", listener.local_addr()?);
@@ -74,7 +75,7 @@ fn serve() -> Result<()> {
     std::thread::spawn(|| {
         tokio::runtime::Runtime::new()
             .expect("failed to create tokio runtime")
-            .block_on(crate::iroh_listener::run_iroh_listener())
+            .block_on(crate::iroh_listener::run_iroh_listener(server_tx_iroh))
             .unwrap_or_else(|e| error!("Iroh listener error: {e}"));
     });
 
@@ -159,12 +160,12 @@ fn notify_peer(rpc: &Rpc, peer: &mut Peer) -> Result<()> {
         .context("failed to send notifications")
 }
 
-struct Event {
-    peer_id: usize,
-    msg: Message,
+pub struct Event {
+    pub peer_id: usize,
+    pub msg: Message,
 }
 
-enum Message {
+pub enum Message {
     New(TcpStream),
     Request(String),
     Done,
