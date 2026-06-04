@@ -71,11 +71,15 @@ fn serve() -> Result<()> {
         info!("serving Electrum RPC on {}", listener.local_addr()?);
         spawn("accept_loop", || accept_loop(listener, server_tx)); // detach accepting thread
     };
-    // Iroh-Listener parallel zum TCP-Listener starten
-    std::thread::spawn(|| {
+    // Load or generate persistent Iroh secret key (synchronous, before spawning async thread)
+    let iroh_secret_key = crate::iroh_listener::load_or_generate_secret_key()
+        .expect("failed to load/generate Iroh secret key");
+
+    // Start Iroh listener in parallel to the TCP listener
+    std::thread::spawn(move || {
         tokio::runtime::Runtime::new()
             .expect("failed to create tokio runtime")
-            .block_on(crate::iroh_listener::run_iroh_listener(server_tx_iroh))
+            .block_on(crate::iroh_listener::run_iroh_listener(server_tx_iroh, iroh_secret_key))
             .unwrap_or_else(|e| error!("Iroh listener error: {e}"));
     });
 
