@@ -74,25 +74,30 @@ async fn handle_iroh_conn(
     // electrs benachrichtigen: neue Verbindung
     server_tx.send(Event { peer_id, msg: Message::New(tcp_for_electrs) })?;
 
-    // Thread 1: Iroh → Socket (Wallet sendet Anfrage → electrs)
-    let tx2 = server_tx.clone();
+    // Thread: electrs → Iroh (Antworten von electrs zur Wallet)
+    let (reply_tx, reply_rx) = std::sync::mpsc::channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut buf = vec![0u8; 4096];
         loop {
-            // Iroh lesen (blockierend via tokio block_in_place nicht möglich hier,
-            // daher nutzen wir einen sync-Kanal)
-            // Dieser Thread wartet auf Daten vom Socket (von electrs geschrieben)
-            // und leitet sie an Iroh weiter
             match sock_read.read(&mut buf) {
-                Ok(0) => break,
+                Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    // Das ist der electrs→Wallet Weg (Antworten)
-                    // wird im nächsten Schritt verbunden
-                    let _ = n;
+                    if reply_tx.send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
                 }
-                Err(_) => break,
             }
         }
+    });
+
+    // Async: Kanal → Iroh senden
+    tokio::spawn(async move {
+        while let Ok(data) = reply_rx.recv() {
+            if iroh_send.write_all(&data).await.is_err() {
+                break;
+            }
+        }
+        let _ = iroh_send.finish();
     });
 
     // Iroh recv → server_tx (zeilenweise, wie TCP)
