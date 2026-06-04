@@ -1,5 +1,6 @@
 use anyhow::Result;
 use iroh::{Endpoint, SecretKey, endpoint::presets};
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::os::unix::io::FromRawFd;
 use crossbeam_channel::Sender;
@@ -31,8 +32,7 @@ pub async fn run_iroh_listener(server_tx: Sender<crate::server::Event>) -> Resul
             }
         };
         let conn = accepting.await?;
-        let remote_id = conn.remote_id();
-        eprintln!("Iroh connection from: {remote_id}");
+        eprintln!("Iroh connection from: {}", conn.remote_id());
 
         let peer_id = peer_counter;
         peer_counter += 1;
@@ -54,44 +54,68 @@ async fn handle_iroh_conn(
 ) -> Result<()> {
     use crate::server::{Event, Message};
 
-    let (mut send, mut recv) = conn.accept_bi().await?;
+    let (mut iroh_send, mut iroh_recv) = conn.accept_bi().await?;
 
-    // Unix socketpair: zwei verbundene Sockets
-    let (fd_a, fd_b) = {
-        let mut fds = [0i32; 2];
-        unsafe {
-            libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr());
-        }
-        (fds[0], fds[1])
-    };
+    // Socketpair: fd_a → electrs, fd_b → wir
+    let mut fds = [0i32; 2];
+    let ret = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+    if ret != 0 {
+        anyhow::bail!("socketpair failed");
+    }
+    let (fd_electrs, fd_ours) = (fds[0], fds[1]);
 
-    // electrs bekommt fd_a als TcpStream
-    let tcp_for_electrs = unsafe { TcpStream::from_raw_fd(fd_a) };
-    let tcp_clone = tcp_for_electrs.try_clone()?;
+    // electrs bekommt fd_electrs als TcpStream
+    let tcp_for_electrs = unsafe { TcpStream::from_raw_fd(fd_electrs) };
 
-    // fd_b: Iroh schreibt rein / liest raus
-    let write_sock = unsafe { std::net::TcpStream::from_raw_fd(fd_b) };
-    let read_sock = write_sock.try_clone()?;
+    // Unsere Seite: lesen und schreiben
+    let mut sock_read = unsafe { TcpStream::from_raw_fd(fd_ours) };
+    let mut sock_write = sock_read.try_clone()?;
 
     // electrs benachrichtigen: neue Verbindung
     server_tx.send(Event { peer_id, msg: Message::New(tcp_for_electrs) })?;
 
-    // Iroh → electrs (empfangen von Wallet, weiterleiten an electrs)
+    // Thread 1: Iroh → Socket (Wallet sendet Anfrage → electrs)
     let tx2 = server_tx.clone();
-    tokio::spawn(async move {
+    std::thread::spawn(move || {
+        let mut buf = vec![0u8; 4096];
         loop {
-            match recv.read_to_end(1024 * 64).await {
-                Ok(data) => {
-                    let line = String::from_utf8_lossy(&data).to_string();
-                    if tx2.send(Event { peer_id, msg: Message::Request(line) }).is_err() {
-                        break;
-                    }
+            // Iroh lesen (blockierend via tokio block_in_place nicht möglich hier,
+            // daher nutzen wir einen sync-Kanal)
+            // Dieser Thread wartet auf Daten vom Socket (von electrs geschrieben)
+            // und leitet sie an Iroh weiter
+            match sock_read.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // Das ist der electrs→Wallet Weg (Antworten)
+                    // wird im nächsten Schritt verbunden
+                    let _ = n;
                 }
                 Err(_) => break,
             }
         }
-        let _ = tx2.send(Event { peer_id, msg: Message::Done });
     });
 
+    // Iroh recv → server_tx (zeilenweise, wie TCP)
+    let mut iroh_buf = Vec::new();
+
+    loop {
+        match iroh_recv.read_chunk(4096).await {
+            Ok(Some(chunk)) => {
+                iroh_buf.extend_from_slice(&chunk);
+            }
+            Ok(None) | Err(_) => break,
+        };
+
+        // Zeilenweise verarbeiten (Electrum-Protokoll ist newline-delimited)
+        while let Some(pos) = iroh_buf.iter().position(|&b| b == b'\n') {
+            let line = iroh_buf.drain(..=pos).collect::<Vec<_>>();
+            let line = String::from_utf8_lossy(&line).trim().to_string();
+            if !line.is_empty() {
+                server_tx.send(Event { peer_id, msg: Message::Request(line) })?;
+            }
+        }
+    }
+
+    server_tx.send(Event { peer_id, msg: Message::Done })?;
     Ok(())
 }
