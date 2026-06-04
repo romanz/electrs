@@ -39,6 +39,10 @@ pub async fn run_iroh_listener(server_tx: Sender<crate::server::Event>, secret_k
     let node_id = endpoint.id();
     eprintln!("Iroh Node ID: {node_id}");
     endpoint.online().await;
+    let addr = endpoint.addr();
+    if let Some(relay_url) = addr.relay_urls().next() {
+        eprintln!("Iroh Relay URL: {relay_url}");
+    }
     eprintln!("Iroh endpoint online");
 
     let mut peer_counter: usize = 10000;
