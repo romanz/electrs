@@ -111,6 +111,11 @@ impl HistoryEntry {
         engine.input(s.as_bytes());
     }
 
+    /// True when this entry refers to a mempool (unconfirmed) transaction.
+    pub(crate) fn is_unconfirmed(&self) -> bool {
+        matches!(self.height, Height::Unconfirmed { .. })
+    }
+
     fn confirmed(txid: Txid, height: usize) -> Self {
         Self {
             txid,
@@ -282,6 +287,12 @@ impl ScriptHashStatus {
     /// Collect transaction history entries
     pub(crate) fn get_history(&self) -> &[HistoryEntry] {
         &self.history
+    }
+
+    /// Collect mempool history entries (subset of `get_history`).
+    /// Order matches the status-hash calculation, as required by Electrum protocol v1.6.
+    pub(crate) fn get_mempool(&self) -> impl Iterator<Item = &HistoryEntry> {
+        self.history.iter().filter(|e| e.is_unconfirmed())
     }
 
     /// Collect all confirmed history entries (in block order).
@@ -643,6 +654,16 @@ mod tests {
             )),
             json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 0, "fee": 123})
         );
+    }
+
+    #[test]
+    fn test_is_unconfirmed() {
+        let txid = "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b"
+            .parse()
+            .unwrap();
+        assert!(!HistoryEntry::confirmed(txid, 1).is_unconfirmed());
+        assert!(HistoryEntry::unconfirmed(txid, false, Amount::from_sat(123)).is_unconfirmed());
+        assert!(HistoryEntry::unconfirmed(txid, true, Amount::from_sat(123)).is_unconfirmed());
     }
 
     #[test]

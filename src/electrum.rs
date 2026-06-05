@@ -308,6 +308,28 @@ impl Rpc {
         Ok(history_entries)
     }
 
+    fn scripthash_get_mempool(
+        &self,
+        client: &Client,
+        (scripthash,): &(ScriptHash,),
+    ) -> Result<Value> {
+        // https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-scripthash-get-mempool
+        let mempool_entries = match client.scripthashes.get(scripthash) {
+            Some(status) => json!(status.get_mempool().collect::<Vec<_>>()),
+            None => {
+                info!(
+                    "{} blockchain.scripthash.get_mempool called for unsubscribed scripthash",
+                    UNSUBSCRIBED_QUERY_MESSAGE
+                );
+                json!(self
+                    .new_status(*scripthash)?
+                    .get_mempool()
+                    .collect::<Vec<_>>())
+            }
+        };
+        Ok(mempool_entries)
+    }
+
     fn scripthash_list_unspent(
         &self,
         client: &Client,
@@ -614,6 +636,7 @@ impl Rpc {
                 Params::RelayFee => self.relayfee(),
                 Params::ScriptHashGetBalance(args) => self.scripthash_get_balance(client, args),
                 Params::ScriptHashGetHistory(args) => self.scripthash_get_history(client, args),
+                Params::ScriptHashGetMempool(args) => self.scripthash_get_mempool(client, args),
                 Params::ScriptHashListUnspent(args) => self.scripthash_list_unspent(client, args),
                 Params::ScriptHashSubscribe(args) => self.scripthash_subscribe(client, args),
                 Params::ScriptHashUnsubscribe(args) => self.scripthash_unsubscribe(client, args),
@@ -648,6 +671,7 @@ enum Params {
     RelayFee,
     ScriptHashGetBalance((ScriptHash,)),
     ScriptHashGetHistory((ScriptHash,)),
+    ScriptHashGetMempool((ScriptHash,)),
     ScriptHashListUnspent((ScriptHash,)),
     ScriptHashSubscribe((ScriptHash,)),
     ScriptHashUnsubscribe((ScriptHash,)),
@@ -667,6 +691,7 @@ impl Params {
             "blockchain.relayfee" => Params::RelayFee,
             "blockchain.scripthash.get_balance" => Params::ScriptHashGetBalance(convert(params)?),
             "blockchain.scripthash.get_history" => Params::ScriptHashGetHistory(convert(params)?),
+            "blockchain.scripthash.get_mempool" => Params::ScriptHashGetMempool(convert(params)?),
             "blockchain.scripthash.listunspent" => Params::ScriptHashListUnspent(convert(params)?),
             "blockchain.scripthash.subscribe" => Params::ScriptHashSubscribe(convert(params)?),
             "blockchain.scripthash.unsubscribe" => Params::ScriptHashUnsubscribe(convert(params)?),
