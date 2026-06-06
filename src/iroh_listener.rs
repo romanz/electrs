@@ -8,11 +8,7 @@ use crossbeam_channel::Sender;
 const ELECTRUM_ALPN: &[u8] = b"electrs/electrum/0";
 
 pub fn load_or_generate_secret_key() -> Result<SecretKey> {
-    let mut path = dirs_next::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("cannot find home directory"))?;
-    path.push(".electrs");
-    std::fs::create_dir_all(&path)?;
-    path.push("iroh_secret_key.bin");
+    let path = std::path::PathBuf::from("/data/iroh_secret_key.bin");
 
     if path.exists() {
         let bytes = std::fs::read(&path)?;
@@ -38,6 +34,9 @@ pub async fn run_iroh_listener(server_tx: Sender<crate::server::Event>, secret_k
 
     let node_id = endpoint.node_id();
     eprintln!("Iroh Node ID: {node_id}");
+    if let Err(e) = std::fs::write("/data/iroh_node_id.txt", node_id.to_string()) {
+        eprintln!("Iroh: could not write node_id to file: {e}");
+    }
 
     let addr = endpoint.node_addr().await?;
     if let Some(relay_url) = addr.relay_url() {
