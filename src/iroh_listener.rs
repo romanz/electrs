@@ -1,6 +1,6 @@
 use anyhow::Result;
 use iroh::{Endpoint, SecretKey};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::os::unix::io::FromRawFd;
 use crossbeam_channel::Sender;
@@ -89,6 +89,7 @@ async fn handle_iroh_conn(
 
     let tcp_for_electrs = unsafe { TcpStream::from_raw_fd(fd_electrs) };
     let mut sock_read = unsafe { TcpStream::from_raw_fd(fd_ours) };
+    let mut sock_write = sock_read.try_clone()?;
 
     server_tx.send(Event { peer_id, msg: Message::New(tcp_for_electrs) })?;
 
@@ -119,11 +120,15 @@ async fn handle_iroh_conn(
     let mut iroh_buf = Vec::new();
 
     loop {
-        match iroh_recv.read_chunk(4096, true).await {
-            Ok(Some(chunk)) => {
-                iroh_buf.extend_from_slice(&chunk.bytes);
+        let mut tmp = vec![0u8; 4096];
+        match iroh_recv.read(&mut tmp).await {
+            Ok(Some(n)) => {
+                eprintln!("Iroh: read {n} bytes: {:?}", &tmp[..n]);
+                sock_write.write_all(&tmp[..n])?;
+                iroh_buf.extend_from_slice(&tmp[..n]);
             }
-            Ok(None) | Err(_) => break,
+            Ok(None) => { eprintln!("Iroh: stream closed"); sock_write.shutdown(std::net::Shutdown::Write).ok(); break; }
+            Err(e) => { eprintln!("Iroh: read error: {e}"); break; }
         };
 
         while let Some(pos) = iroh_buf.iter().position(|&b| b == b'\n') {
