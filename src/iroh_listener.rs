@@ -123,12 +123,12 @@ async fn handle_iroh_conn(
         let mut tmp = vec![0u8; 4096];
         match iroh_recv.read(&mut tmp).await {
             Ok(Some(n)) => {
-                eprintln!("Iroh: read {n} bytes: {:?}", &tmp[..n]);
+
                 sock_write.write_all(&tmp[..n])?;
                 iroh_buf.extend_from_slice(&tmp[..n]);
             }
-            Ok(None) => { eprintln!("Iroh: stream closed"); sock_write.shutdown(std::net::Shutdown::Write).ok(); break; }
-            Err(e) => { eprintln!("Iroh: read error: {e}"); break; }
+            Ok(None) => { sock_write.shutdown(std::net::Shutdown::Write).ok(); break; }
+            Err(e) => { eprintln!("Iroh peer {peer_id}: read error: {e}"); break; }
         };
 
         while let Some(pos) = iroh_buf.iter().position(|&b| b == b'\n') {
