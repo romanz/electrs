@@ -8,8 +8,8 @@ where
         .name(name.to_owned())
         .spawn(move || {
             if let Err(e) = f() {
-                warn!("{} thread failed: {}", name, e);
-                e.chain().skip(1).for_each(|e| warn!("because: {}", e));
+                warn!("{name} thread failed: {e}");
+                e.chain().skip(1).for_each(|e| warn!("because: {e}"));
             }
         })
         .expect("failed to spawn a thread")

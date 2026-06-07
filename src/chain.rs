@@ -67,7 +67,7 @@ impl Chain {
         while blockhash != genesis_hash {
             let header = match header_map.get(&blockhash) {
                 Some(header) => header,
-                None => panic!("missing header {} while loading from DB", blockhash),
+                None => panic!("missing header {blockhash} while loading from DB"),
             };
             blockhash = header.prev_blockhash;
             new_headers.push(header);

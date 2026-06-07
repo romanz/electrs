@@ -281,8 +281,7 @@ impl Rpc {
             Some(status) => self.tracker.get_balance(status),
             None => {
                 info!(
-                    "{} blockchain.scripthash.get_balance called for unsubscribed scripthash",
-                    UNSUBSCRIBED_QUERY_MESSAGE
+                    "{UNSUBSCRIBED_QUERY_MESSAGE} blockchain.scripthash.get_balance called for unsubscribed scripthash"
                 );
                 self.tracker.get_balance(&self.new_status(*scripthash)?)
             }
@@ -299,8 +298,7 @@ impl Rpc {
             Some(status) => json!(status.get_history()),
             None => {
                 info!(
-                    "{} blockchain.scripthash.get_history called for unsubscribed scripthash",
-                    UNSUBSCRIBED_QUERY_MESSAGE
+                    "{UNSUBSCRIBED_QUERY_MESSAGE} blockchain.scripthash.get_history called for unsubscribed scripthash"
                 );
                 json!(self.new_status(*scripthash)?.get_history())
             }
@@ -317,8 +315,7 @@ impl Rpc {
             Some(status) => self.tracker.get_unspent(status),
             None => {
                 info!(
-                    "{} blockchain.scripthash.listunspent called for unsubscribed scripthash",
-                    UNSUBSCRIBED_QUERY_MESSAGE
+                    "{UNSUBSCRIBED_QUERY_MESSAGE} blockchain.scripthash.listunspent called for unsubscribed scripthash"
                 );
                 self.tracker.get_unspent(&self.new_status(*scripthash)?)
             }
@@ -433,7 +430,7 @@ impl Rpc {
         {
             return Ok(json!(tx_hex));
         }
-        debug!("tx cache miss: txid={}", txid);
+        debug!("tx cache miss: txid={txid}");
         // use internal index to load confirmed transaction
         if let Some(tx_hex) = self
             .tracker
@@ -493,7 +490,7 @@ impl Rpc {
     }
 
     fn server_id(&self) -> String {
-        format!("electrs/{}", ELECTRS_VERSION)
+        format!("electrs/{ELECTRS_VERSION}")
     }
 
     fn version(&self, (client_id, client_version): &(String, VersionRequest)) -> Result<Value> {
@@ -501,7 +498,7 @@ impl Rpc {
             VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
             VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
         }
-        .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
+        .with_context(|| format!("unsupported request {client_version:?} by {client_id}"))?;
         Ok(json!([self.server_id(), PROTOCOL_VERSION]))
     }
 
@@ -687,7 +684,7 @@ impl Params {
             "server.ping" => Params::Ping,
             "server.version" => Params::Version(convert(params)?),
             _ => {
-                warn!("unknown method {}", method);
+                warn!("unknown method {method}");
                 return Err(StandardError::MethodNotFound);
             }
         })
@@ -751,7 +748,7 @@ where
 {
     let params_str = params.to_string();
     serde_json::from_value(params).map_err(|err| {
-        warn!("invalid params {}: {}", params_str, err);
+        warn!("invalid params {params_str}: {err}");
         StandardError::InvalidParams
     })
 }
@@ -779,12 +776,12 @@ fn parse_requests(line: &str) -> Result<Requests, StandardError> {
             // parse RPC from JSON
             Ok(requests) => Ok(requests),
             Err(err) => {
-                warn!("invalid RPC request ({:?}): {}", line, err);
+                warn!("invalid RPC request ({line:?}): {err}");
                 Err(StandardError::InvalidRequest)
             }
         },
         Err(err) => {
-            warn!("invalid JSON ({:?}): {}", line, err);
+            warn!("invalid JSON ({line:?}): {err}");
             Err(StandardError::ParseError)
         }
     }
@@ -793,7 +790,7 @@ fn parse_requests(line: &str) -> Result<Requests, StandardError> {
 fn parse_version(version: &str) -> Result<Version> {
     let result = version
         .split('.')
-        .map(|part| usize::from_str(part).with_context(|| format!("invalid version {}", version)))
+        .map(|part| usize::from_str(part).with_context(|| format!("invalid version {version}")))
         .collect::<Result<Vec<usize>>>()?;
     Ok(Version(result))
 }
@@ -807,7 +804,7 @@ impl fmt::Display for Version {
             if i > 0 {
                 write!(f, ".")?;
             }
-            write!(f, "{}", v)?;
+            write!(f, "{v}")?;
         }
         Ok(())
     }

@@ -170,7 +170,7 @@ impl DBStore {
     ) -> Result<Self> {
         let mut store = Self::open_internal(path, log_dir, parallelism)?;
         let config = store.get_config();
-        debug!("DB {:?}", config);
+        debug!("DB {config:?}");
         let mut config = config.unwrap_or_default(); // use default config when DB is empty
 
         let reindex_cause = if store.is_legacy_format() {
@@ -318,7 +318,7 @@ impl DBStore {
         }
         if !config.compacted {
             for name in COLUMN_FAMILIES {
-                info!("starting {} compaction", name);
+                info!("starting {name} compaction");
                 let cf = self.db.cf_handle(name).expect("missing CF");
                 self.db.compact_range_cf(cf, None::<&[u8]>, None::<&[u8]>);
             }
@@ -333,7 +333,7 @@ impl DBStore {
                 .property_value("rocksdb.dbstats")
                 .expect("failed to get property")
                 .expect("missing property");
-            trace!("RocksDB stats: {}", stats);
+            trace!("RocksDB stats: {stats}");
         }
     }
 
