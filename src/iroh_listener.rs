@@ -12,17 +12,22 @@ pub fn load_or_generate_secret_key() -> Result<SecretKey> {
 
     if path.exists() {
         let bytes = std::fs::read(&path)?;
-        let arr: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("invalid key file"))?;
-        eprintln!("Iroh: loaded existing secret key from {:?}", path);
-        Ok(SecretKey::from_bytes(&arr))
-    } else {
-        let key = SecretKey::generate(rand::rngs::OsRng);
-        std::fs::write(&path, key.to_bytes())?;
-        eprintln!("Iroh: new secret key generated and saved to {:?}", path);
-        Ok(key)
+        match bytes.try_into() {
+            Ok(arr) => {
+                let arr: [u8; 32] = arr;
+                eprintln!("Iroh: loaded existing secret key from {:?}", path);
+                return Ok(SecretKey::from_bytes(&arr));
+            }
+            Err(_) => {
+                eprintln!("Iroh: invalid key file, generating new key");
+                std::fs::remove_file(&path).ok();
+            }
+        }
     }
+    let key = SecretKey::generate(rand::rngs::OsRng);
+    std::fs::write(&path, key.to_bytes())?;
+    eprintln!("Iroh: new secret key generated and saved to {:?}", path);
+    Ok(key)
 }
 
 pub async fn run_iroh_listener(server_tx: Sender<crate::server::Event>, secret_key: SecretKey) -> Result<()> {
