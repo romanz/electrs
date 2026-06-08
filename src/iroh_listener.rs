@@ -54,7 +54,13 @@ pub async fn run_iroh_listener(server_tx: Sender<crate::server::Event>, secret_k
                 continue;
             }
         };
-        let conn = accepting.await?;
+        let conn = match accepting.await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Iroh: connection handshake failed: {e}");
+                continue;
+            }
+        };
         eprintln!("Iroh connection from: {}", conn.remote_node_id().map(|k| k.to_string()).unwrap_or_default());
 
         let peer_id = peer_counter;
