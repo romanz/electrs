@@ -28,7 +28,7 @@ configure_me = "0.4"
 crossbeam-channel = "0.5"
 dirs-next = "2.0"
 env_logger = "0.10"
-jsonrpc = { version = "0.18.0", default-features = false, features = ["simple_http"]}
+jsonrpc = { version = "0.20.1", default-features = false, features = ["simple_http"]}
 log = "0.4"
 prometheus = { version = "0.14", optional = true }
 rayon = "1.12"
