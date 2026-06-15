@@ -236,7 +236,7 @@ fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
     Ok(())
 }
 
-fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Result<()> {
+pub fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Result<()> {
     let msg = Message::New(stream.try_clone()?);
     server_tx.send(Event { peer_id, msg })?;
 
