@@ -71,7 +71,7 @@ See [extra configuration suggestions](config.md#extra-configuration-suggestions)
 
 ## Electrum client
 
-If you happen to use the Electrum client from [the *beta* Debian repository](binaries.md#cnative-os-packages), it's pre-configured out-of-the-box already
+If you happen to use the Electrum client from [the *beta* Debian repository](binaries.md#native-os-packages), it's pre-configured out-of-the-box already
 Read below otherwise.
 
 There's a prepared script for launching `electrum` in such way to connect only to the local `electrs` instance to protect your privacy.

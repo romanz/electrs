@@ -139,7 +139,7 @@ HiddenServiceVersion 3
 HiddenServicePort 50001 127.0.0.1:50001
 ```
 
-If you use [the *beta* Debian repository](binaries.md#cnative-os-packages),
+If you use [the *beta* Debian repository](binaries.md#native-os-packages),
 it is cleaner to install `tor-hs-patch-config` using `apt` and then placing the configuration into a file inside `/etc/tor/hidden-services.d`.
 
 Restart the service:
@@ -162,7 +162,7 @@ For more details, see http://docs.electrum.org/en/latest/tor.html.
 
 ### Sample Systemd Unit File
 
-If you use [the *beta* Debian repository](binaries.md#cnative-os-packages), you should skip this section,
+If you use [the *beta* Debian repository](binaries.md#native-os-packages), you should skip this section,
 as the appropriate systemd unit file is installed automatically.
 
 You may wish to have systemd manage electrs so that it's "always on".
