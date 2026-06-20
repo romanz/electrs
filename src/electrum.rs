@@ -36,6 +36,10 @@ const UNSUBSCRIBED_QUERY_MESSAGE: &str = "your wallet uses less efficient method
 pub struct Client {
     tip: Option<BlockHash>,
     scripthashes: HashMap<ScriptHash, ScriptHashStatus>,
+    /// Protocol version agreed during the `server.version` handshake.
+    /// `None` until the client successfully calls `server.version` — Electrum
+    /// protocol v1.6 requires that to happen before any other call.
+    negotiated_version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -475,12 +479,17 @@ impl Rpc {
         format!("electrs/{}", ELECTRS_VERSION)
     }
 
-    fn version(&self, (client_id, client_version): &(String, VersionRequest)) -> Result<Value> {
+    fn version(
+        &self,
+        client: &mut Client,
+        (client_id, client_version): &(String, VersionRequest),
+    ) -> Result<Value> {
         match client_version {
             VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
             VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
         }
         .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
+        client.negotiated_version = Some(PROTOCOL_VERSION.to_string());
         Ok(json!([self.server_id(), PROTOCOL_VERSION]))
     }
 
@@ -569,6 +578,15 @@ impl Rpc {
             Err(response) => return response, // params parsing may fail - the response contains request id
         };
         self.rpc_duration.observe_duration(&call.method, || {
+            // Electrum protocol v1.6 requires `server.version` to be the first message sent.
+            if client.negotiated_version.is_none() && !matches!(&call.params, Params::Version(_)) {
+                return error_msg(
+                    &call.id,
+                    RpcError::BadRequest(anyhow!(
+                        "`server.version` must be called before any other method"
+                    )),
+                );
+            }
             if self.tracker.status().is_err() {
                 // Allow only a few RPC (for sync status notification) not requiring index DB being compacted.
                 match &call.params {
@@ -603,7 +621,7 @@ impl Rpc {
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
                 Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
-                Params::Version(args) => self.version(args),
+                Params::Version(args) => self.version(client, args),
             };
             call.response(result)
         })
@@ -822,6 +840,14 @@ mod tests {
         assert_eq!(parse_version("1.2.345").unwrap(), Version(vec![1, 2, 345]));
 
         assert!(parse_version("1.2").unwrap() < parse_version("1.100").unwrap());
+    }
+
+    #[test]
+    fn test_client_starts_without_negotiated_version() {
+        // Pre-negotiation state is what the v1.6 gate keys on:
+        // a fresh client has `negotiated_version == None` and must call `server.version` first.
+        let client = Client::default();
+        assert!(client.negotiated_version.is_none());
     }
 
     #[test]
