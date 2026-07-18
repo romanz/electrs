@@ -1,3 +1,20 @@
+### Important changes from versions older than 0.12.0
+
+In 0.12.0 we have changed the RocksDB index format to optimize electrs performance.
+
+We also use new bitcoind REST API endpoints (instead of P2P protocol)
+
+* [#32540 (index: fetch spent transaction outputs by blockhash)](https://github.com/bitcoin/bitcoin/pull/32540) → released in 30.0
+* [#33657 (rest: allow reading partial block data from storage)](https://github.com/bitcoin/bitcoin/pull/33657) → released in 31.0
+
+Upgrading checklist:
+
+* Make sure you upgrade at a time when you don't need to use electrs for a while.
+  Because of reindex electrs will be unable to serve your requests for a few hours.
+  (The exact time depends on your hardware.)
+* Make sure you have at least 120 GB of free space (for reindexing mainnet chain).
+
+
 ### Important changes from versions older than 0.9.3
 
 * If you use `verbose` (or `-v` argument), switch to `log_filters` (or `RUST_LOG` environment variable).

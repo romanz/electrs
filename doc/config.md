@@ -5,11 +5,12 @@ If you use automated systems, refer to their documentation first!
 
 ### Bitcoind configuration
 
-Pruning must be turned **off** for `electrs` to work.
+REST API must be **enabled** for block indexing and transaction lookup.
+
+Pruning must be **disabled** for `electrs` to work.
+
 `txindex` is allowed but unnecessary for `electrs`.
 However, you might still need it if you run other services (e.g.`eclair`).
-The option `maxconnections` (if used) should be set to 12 or more for bitcoind to accept inbound p2p connections.
-Note that setting `maxuploadtarget` may cause p2p-based sync to fail - so consider using `-whitelist=download@127.0.0.1` to disable the limit for local p2p connections.
 
 The highly recommended way of authenticating `electrs` is using cookie file.
 It's the most [secure](https://github.com/Kixunil/security_writings/blob/master/cookie_files.md) and robust method.
@@ -21,7 +22,7 @@ You can skip it if you're running both daemons under the same user and with the 
 Example command for running `bitcoind` (assuming same user, default dirs):
 
 ```bash
-$ bitcoind -server=1 -txindex=0 -prune=0
+$ bitcoind -server=1 -rest=1 -txindex=0 -prune=0
 ```
 ### Electrs configuration
 

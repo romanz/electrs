@@ -1,70 +1,56 @@
 ## Quickstart
 
-<details>
-<summary>Assuming Bitcoin Core 0.21+ is installed on the same machine (with the standard configuration at `~/.bitcoin/bitcoin.conf`):</summary>
+Assuming Bitcoin Core 31+ is installed on the same machine (with the standard configuration at `~/.bitcoin/bitcoin.conf`):
 
 ```bash
-$ bitcoind -server=1 -prune=0 &
+$ bitcoind -server=1 -rest=1 -prune=0 &
 $ # ... wait until the chain is synced (e.g. using `bitcoin-cli getblockchaininfo`)
-$ electrs --log-filters=INFO --db-dir ./db --daemon-dir ~/.bitcoin --network bitcoin
+$ RUST_LOG=INFO electrs  --network bitcoin --db-dir ./db --daemon-dir ~/.bitcoin
 ```
-
-</details>
-
-[![asciicast](https://asciinema.org/a/zRNZp5HsBDi5rAlGWU7470Pzl.svg)](https://asciinema.org/a/zRNZp5HsBDi5rAlGWU7470Pzl?speed=3)
 
 ## Usage
 
-First index sync should take ~6.5 hours for ~504GB @ August 2023 (on a dual core Intel CPU @ 3.3 GHz, 8 GB RAM, 1TB WD Blue HDD):
+First index sync should take ~2 hours for ~800GB `.bitcoin/blocks/` @ July 2026 (on a 6-core CPU, 32 GB RAM, 2TB NVMe):
 ```bash
-$ du -ch ~/.bitcoin/blocks/blk*.dat | tail -n1
-336G  total
+$ du -ch ~/.bitcoin/blocks/*.dat | tail -n1
+802G  total
 
-$ ./target/release/electrs --network bitcoin --db-dir ./db --daemon-dir /home/user/.bitcoin
-Starting electrs 0.10.0 on x86_64 linux with Config { network: Bitcoin, db_path: "./db/bitcoin", daemon_dir: "/home/user/.bitcoin", daemon_auth: CookieFile("/home/user/.bitcoin/.cookie"), daemon_rpc_addr: 127.0.0.1:8332, electrum_rpc_addr: 127.0.0.1:50001, monitoring_addr: 127.0.0.1:4224, wait_duration: 10s, jsonrpc_timeout: 15s, index_lookup_limit: None, reindex_last_blocks: 0, auto_reindex: true, ignore_mempool: false, sync_once: false, skip_block_download_wait: false, disable_electrum_rpc: false, server_banner: "Welcome to electrs 0.10.0 (Electrum Rust Server)!", magic: f9beb4d9, args: [] }
-[2023-08-16T19:17:11.193Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224
-[2023-08-16T19:17:11.193Z INFO  electrs::server] serving Electrum RPC on 127.0.0.1:50001
-[2023-08-16T19:17:12.355Z INFO  electrs::db] "./db/bitcoin": 0 SST files, 0 GB, 0 Grows
-[2023-08-16T19:17:12.446Z INFO  electrs::index] indexing 2000 blocks: [1..2000]
-[2023-08-16T19:17:12.866Z INFO  electrs::chain] chain updated: tip=00000000dfd5d65c9d8561b4b8f60a63018fe3933ecb131fb37f905f87da951a, height=2000
-[2023-08-16T19:17:12.879Z INFO  electrs::index] indexing 2000 blocks: [2001..4000]
-[2023-08-16T19:17:13.227Z INFO  electrs::chain] chain updated: tip=00000000922e2aa9e84a474350a3555f49f06061fd49df50a9352f156692a842, height=4000
-[2023-08-16T19:17:13.238Z INFO  electrs::index] indexing 2000 blocks: [4001..6000]
-[2023-08-16T19:17:13.587Z INFO  electrs::chain] chain updated: tip=00000000dbbb79792303bdd1c6c4d7ab9c21bba0667213c2eca955e11230c5a5, height=6000
-[2023-08-16T19:17:13.598Z INFO  electrs::index] indexing 2000 blocks: [6001..8000]
-[2023-08-16T19:17:13.950Z INFO  electrs::chain] chain updated: tip=0000000094fbacdffec05aea9847000522a258c269ae37a74a818afb96fc27d9, height=8000
-[2023-08-16T19:17:13.961Z INFO  electrs::index] indexing 2000 blocks: [8001..10000]
-<...>
-[2023-08-17T00:13:16.443Z INFO  electrs::index] indexing 2000 blocks: [798001..800000]
-[2023-08-17T00:14:58.310Z INFO  electrs::chain] chain updated: tip=00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054, height=800000
-[2023-08-17T00:14:58.325Z INFO  electrs::index] indexing 2000 blocks: [800001..802000]
-[2023-08-17T00:16:36.425Z INFO  electrs::chain] chain updated: tip=0000000000000000000311b41f1d611f977b024b947568c1dd760704360f148a, height=802000
-[2023-08-17T00:16:36.437Z INFO  electrs::index] indexing 1534 blocks: [802001..803534]
-[2023-08-17T00:17:51.338Z INFO  electrs::chain] chain updated: tip=00000000000000000003c0cd1b62ed8bb502e24bcbfeee16e81d6ea33d026263, height=803534
-[2023-08-17T00:18:00.592Z INFO  electrs::db] starting config compaction
-[2023-08-17T00:18:00.778Z INFO  electrs::db] starting headers compaction
-[2023-08-17T00:18:00.870Z INFO  electrs::db] starting txid compaction
-[2023-08-17T00:33:34.370Z INFO  electrs::db] starting funding compaction
-[2023-08-17T01:03:56.784Z INFO  electrs::db] starting spending compaction
-[2023-08-17T01:35:05.983Z INFO  electrs::db] finished full compaction
-[2023-08-17T01:36:23.300Z INFO  electrs::index] indexing 5 blocks: [803535..803539]
-[2023-08-17T01:36:23.646Z INFO  electrs::chain] chain updated: tip=000000000000000000006a3aaddd4b643607b33e000f1200d35005c330ecfa88, height=803539
-[2023-08-17T01:41:26.009Z INFO  electrs::index] indexing 1 blocks: [803540..803540]
-[2023-08-17T01:41:26.143Z INFO  electrs::chain] chain updated: tip=00000000000000000003266d31db92629b64241eef7ce708244f6d6283b080b4, height=803540
-[2023-08-17T01:42:42.999Z INFO  electrs::index] indexing 1 blocks: [803541..803541]
-[2023-08-17T01:42:43.153Z INFO  electrs::chain] chain updated: tip=00000000000000000000884a77c8b8ad2fb0c25510a3251bf5ef57f0db275146, height=803541
+$ RUST_LOG=INFO electrs --network bitcoin --db-dir ./db --daemon-dir ~/.bitcoin
+Starting electrs 0.12.0 on x86_64 linux with Config { network: Bitcoin, db_dir: "./db", ... }
+[2026-07-18T16:37:24.024Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224
+[2026-07-18T16:37:24.025Z INFO  electrs::server] serving Electrum RPC on 127.0.0.1:50001
+[2026-07-18T16:37:24.025Z INFO  bindex::chain] index: Config { db_path: "./db/bitcoin", url: "http://127.0.0.1:8332" }
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF config: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF headers: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF txpos: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF txid: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF script_hash: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF spending: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.054Z INFO  bindex::db] CF funding: 0 files, 0.000000 MBs
+[2026-07-18T16:37:24.129Z INFO  bindex::chain] block=00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09 height=1000: indexed 1001 blocks, 0.226[MB], dt = 0.047[s]: 0.047 [ms/block], 0.000 [MB/block], 4.837 [MB/s]
+[2026-07-18T16:37:24.196Z INFO  bindex::chain] block=00000000dfd5d65c9d8561b4b8f60a63018fe3933ecb131fb37f905f87da951a height=2000: indexed 1000 blocks, 0.234[MB], dt = 0.043[s]: 0.043 [ms/block], 0.000 [MB/block], 5.376 [MB/s]
+[2026-07-18T16:37:24.263Z INFO  bindex::chain] block=000000004a81b9aa469b11649996ecb0a452c16d1181e72f9f980850a1c5ecce height=3000: indexed 1000 blocks, 0.230[MB], dt = 0.043[s]: 0.043 [ms/block], 0.000 [MB/block], 5.298 [MB/s]
+[2026-07-18T16:37:24.331Z INFO  bindex::chain] block=00000000922e2aa9e84a474350a3555f49f06061fd49df50a9352f156692a842 height=4000: indexed 1000 blocks, 0.234[MB], dt = 0.044[s]: 0.044 [ms/block], 0.000 [MB/block], 5.366 [MB/s]
+[2026-07-18T16:37:24.398Z INFO  bindex::chain] block=000000004d78d2a8a93a1d20a24d721268690bebd2b51f7e80657d57e226eef9 height=5000: indexed 1000 blocks, 0.229[MB], dt = 0.043[s]: 0.043 [ms/block], 0.000 [MB/block], 5.349 [MB/s]
+...
+[2026-07-18T18:02:21.114Z INFO  bindex::chain] block=0000000000000000000055222909c19ed96cd371013861337214a3c39a63d828 height=955000: indexed 1000 blocks, 1842.985[MB], dt = 9.457[s]: 9.457 [ms/block], 1.843 [MB/block], 194.886 [MB/s]
+[2026-07-18T18:02:33.592Z INFO  bindex::chain] block=000000000000000000012d9ea47c8b3282ae1a7792d54b8b4bcc0536c1883191 height=956000: indexed 1000 blocks, 1846.173[MB], dt = 9.522[s]: 9.522 [ms/block], 1.846 [MB/block], 193.879 [MB/s]
+[2026-07-18T18:02:45.872Z INFO  bindex::chain] block=00000000000000000000e898fc9d01b0729d8830f2068248debbff575a3b0990 height=957000: indexed 1000 blocks, 1855.303[MB], dt = 9.295[s]: 9.295 [ms/block], 1.855 [MB/block], 199.600 [MB/s]
+[2026-07-18T18:02:58.221Z INFO  bindex::chain] block=000000000000000000022c6a6d538a4372b0eeadb4ea9eb2edd4e32ec780084b height=958000: indexed 1000 blocks, 1844.747[MB], dt = 9.376[s]: 9.376 [ms/block], 1.845 [MB/block], 196.759 [MB/s]
+[2026-07-18T18:03:05.539Z INFO  bindex::chain] block=000000000000000000020934afa0945d959250e9a4598d39c53fa280639b096a height=958594: indexed 594 blocks, 1115.055[MB], dt = 5.357[s]: 9.018 [ms/block], 1.877 [MB/block], 208.155 [MB/s]
+[2026-07-18T18:03:05.666Z INFO  bindex::db] started auto compactions
 ```
 You can specify options via command-line parameters, environment variables or using config files.
 See the documentation above.
 
-Note that the final DB size should be ~10% of the `blk*.dat` files, but it may increase to ~20% at the end of the initial sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
+Note that the final DB size should be ~7% of the `blocks/*.dat` files, but it may increase to ~14% at the end of the initial sync (just before the [full compaction is invoked](https://github.com/facebook/rocksdb/wiki/Manual-Compaction)).
 
 It should take roughly 18 hours to sync and compact the index on an ODROID-HC1 with 8 CPU cores @ 2GHz, 2GB RAM, and an SSD using the command above.
 
 The index database is stored here:
 ```bash
-$ du db/
-42G db/mainnet/
+$ du -h db/bitcoin/
+56G	db/bitcoin/
 ```
 
 See [extra configuration suggestions](config.md#extra-configuration-suggestions) that you might want to consider.
@@ -98,7 +84,7 @@ You can invoke any supported RPC using `netcat`, for example:
 
 ```
 $ echo '{"jsonrpc": "2.0", "method": "server.version", "params": ["", "1.4"], "id": 0}' | netcat 127.0.0.1 50001
-{"id":0,"jsonrpc":"2.0","result":["electrs 0.9.0","1.4"]}
+{"id":0,"jsonrpc":"2.0","result":["electrs 0.12.0","1.4"]}
 ```
 
 For more complex tasks, you may need to convert addresses to

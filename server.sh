@@ -8,7 +8,7 @@ cargo build --all --features "metrics_process" --release
 NETWORK=$1
 shift
 
-DB=${DB-./_db}
+DB=${DB-./db}
 export RUST_LOG=${RUST_LOG-INFO}
 target/release/electrs --network $NETWORK --db-dir $DB --daemon-dir $HOME/.bitcoin $*
 
