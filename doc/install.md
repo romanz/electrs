@@ -1,20 +1,13 @@
 ## Quickstart
 
-<details>
-<summary>Building from source on an Ubuntu 25.04 / Debian 13:</summary>
+Building from source on an Ubuntu 25.04 / Debian 13:
 
 ```bash
 $ sudo apt update
 $ sudo apt install -y build-essential libclang-dev git cargo
-$ git clone https://github.com/romanz/electrs
-$ cd electrs
-$ cargo build --locked --release
-$ ./target/release/electrs --version  # should print the latest version
+$ git clone https://github.com/romanz/electrs && cd electrs
+$ cargo run --locked --release -- --version  # build and print the latest version
 ```
-
-</details>
-
-[![asciicast](https://asciinema.org/a/XKznxilP4O7lCZiVZ9vZNd5vx.svg)](https://asciinema.org/a/XKznxilP4O7lCZiVZ9vZNd5vx?speed=3)
 
 ## Manual installation from source
 
