@@ -21,8 +21,9 @@ pub struct Tracker {
 
 impl Tracker {
     pub fn new(config: &Config, metrics: Metrics) -> Result<Self> {
-        let index =
-            IndexedChain::open(&config.db_dir, config.network).context("failed to open index")?;
+        let url = format!("http://{}", config.daemon_rpc_addr);
+        let index = IndexedChain::open(&config.db_dir, config.network, Some(url))
+            .context("failed to open index")?;
         Ok(Self {
             index,
             mempool: Mempool::new(&metrics),
