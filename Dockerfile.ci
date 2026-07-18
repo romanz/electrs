@@ -22,10 +22,10 @@ FROM base AS bitcoin-build
 # Download
 WORKDIR /build/bitcoin
 
-RUN wget -q https://bitcoincore.org/bin/bitcoin-core-31.0/test.rc2/bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
-RUN tar xvf bitcoin-31.0rc2-x86_64-linux-gnu.tar.gz
-RUN mv -v bitcoin-31.0rc2/bin/bitcoind .
-RUN mv -v bitcoin-31.0rc2/bin/bitcoin-cli .
+RUN wget -q https://bitcoincore.org/bin/bitcoin-core-31.1/bitcoin-31.1-x86_64-linux-gnu.tar.gz
+RUN tar xvf bitcoin-31.1-x86_64-linux-gnu.tar.gz
+RUN mv -v bitcoin-31.1/bin/bitcoind .
+RUN mv -v bitcoin-31.1/bin/bitcoin-cli .
 
 FROM base AS result
 # Copy the binaries
