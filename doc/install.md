@@ -26,7 +26,7 @@ Note for Raspberry Pi 4 owners: the old versions of OS/toolchains produce broken
 Make sure to use latest OS! (see #226)
 
 Install [recent Rust](https://rustup.rs/) (1.85.0+, `apt install cargo` is preferred for Debian 13),
-[latest Bitcoin Core](https://bitcoincore.org/en/download/) (0.21+)
+[latest Bitcoin Core](https://bitcoincore.org/en/download/) (31.0+)
 and [latest Electrum wallet](https://electrum.org/#download) (4.0+).
 
 Also, install the following packages (on Debian or Ubuntu):
