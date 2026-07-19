@@ -262,6 +262,11 @@ impl Rpc {
         Ok(json!(self.daemon.get_relay_fee()?.to_btc())) // [BTC/kB]
     }
 
+    fn mempool_get_info(&self) -> Result<Value> {
+        // https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#mempool-get-info
+        Ok(mempool_info_to_json(&self.daemon.get_mempool_info()?))
+    }
+
     fn scripthash_get_balance(
         &self,
         client: &Client,
@@ -588,6 +593,7 @@ impl Rpc {
                 Params::Features => self.features(),
                 Params::HeadersSubscribe => self.headers_subscribe(client),
                 Params::MempoolFeeHistogram => self.get_fee_histogram(),
+                Params::MempoolGetInfo => self.mempool_get_info(),
                 Params::PeersSubscribe => Ok(json!([])),
                 Params::Ping => Ok(Value::Null),
                 Params::RelayFee => self.relayfee(),
@@ -622,6 +628,7 @@ enum Params {
     Features,
     HeadersSubscribe,
     MempoolFeeHistogram,
+    MempoolGetInfo,
     PeersSubscribe,
     Ping,
     RelayFee,
@@ -659,6 +666,7 @@ impl Params {
                 Params::TransactionFromPosition(convert(params)?)
             }
             "mempool.get_fee_histogram" => Params::MempoolFeeHistogram,
+            "mempool.get_info" => Params::MempoolGetInfo,
             "server.banner" => Params::Banner,
             "server.donation_address" => Params::Donation,
             "server.features" => Params::Features,
@@ -811,9 +819,83 @@ fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
     Ok(tx)
 }
 
+/// Convert bitcoind's `getmempoolinfo` response into the Electrum v1.6 `mempool.get_info` JSON shape.
+/// `incrementalrelayfee` is omitted when the daemon does not report it.
+fn mempool_info_to_json(info: &bitcoincore_rpc::json::GetMempoolInfoResult) -> Value {
+    let mut response = json!({
+        "mempoolminfee": info.mempool_min_fee.to_btc(), // [BTC/kvB]
+        "minrelaytxfee": info.min_relay_tx_fee.to_btc(), // [BTC/kvB]
+    });
+    if let Some(fee) = info.incremental_relay_fee {
+        response["incrementalrelayfee"] = json!(fee.to_btc()); // [BTC/kvB]
+    }
+    response
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitcoin::Amount;
+    use bitcoincore_rpc::json::GetMempoolInfoResult;
+
+    fn fake_mempool_info(
+        mempool_min_fee: Amount,
+        min_relay_tx_fee: Amount,
+        incremental_relay_fee: Option<Amount>,
+    ) -> GetMempoolInfoResult {
+        GetMempoolInfoResult {
+            loaded: Some(true),
+            size: 0,
+            bytes: 0,
+            usage: 0,
+            total_fee: None,
+            max_mempool: 300_000_000,
+            mempool_min_fee,
+            min_relay_tx_fee,
+            incremental_relay_fee,
+            unbroadcast_count: Some(0),
+            full_rbf: Some(true),
+        }
+    }
+
+    #[test]
+    fn test_mempool_info_to_json_full() {
+        let info = fake_mempool_info(
+            Amount::from_sat(2_000),       // 0.00002 BTC/kvB
+            Amount::from_sat(1_000),       // 0.00001 BTC/kvB
+            Some(Amount::from_sat(1_000)), // 0.00001 BTC/kvB
+        );
+        assert_eq!(
+            mempool_info_to_json(&info),
+            json!({
+                "mempoolminfee": 0.00002,
+                "minrelaytxfee": 0.00001,
+                "incrementalrelayfee": 0.00001
+            })
+        );
+    }
+
+    #[test]
+    fn test_mempool_info_to_json_omits_optional_incremental_relay_fee() {
+        let info = fake_mempool_info(Amount::from_sat(1_000), Amount::from_sat(1_000), None);
+        let value = mempool_info_to_json(&info);
+        assert!(value.get("incrementalrelayfee").is_none());
+        assert_eq!(value["mempoolminfee"], json!(0.00001));
+        assert_eq!(value["minrelaytxfee"], json!(0.00001));
+    }
+
+    #[test]
+    fn test_mempool_info_to_json_zero_fees() {
+        let info = fake_mempool_info(Amount::ZERO, Amount::ZERO, Some(Amount::ZERO));
+        assert_eq!(
+            mempool_info_to_json(&info),
+            json!({
+                "mempoolminfee": 0.0,
+                "minrelaytxfee": 0.0,
+                "incrementalrelayfee": 0.0
+            })
+        );
+    }
 
     #[test]
     fn test_version() {
