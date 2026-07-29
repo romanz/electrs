@@ -79,6 +79,22 @@ impl From<&TxGetArgs> for (Txid, bool) {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
+enum TxFromPosArgs {
+    HeightPos((usize, usize)),
+    HeightPosMerkle((usize, usize, bool)),
+}
+
+impl From<&TxFromPosArgs> for (usize, usize, bool) {
+    fn from(args: &TxFromPosArgs) -> Self {
+        match args {
+            TxFromPosArgs::HeightPos((height, tx_pos)) => (*height, *tx_pos, false),
+            TxFromPosArgs::HeightPosMerkle(args) => *args,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
 enum BroadcastArgs {
     Package((Vec<String>,)),
     PackageVerbose((Vec<String>, bool)),
@@ -446,10 +462,8 @@ impl Rpc {
         }
     }
 
-    fn transaction_from_pos(
-        &self,
-        (height, tx_pos, merkle): (usize, usize, bool),
-    ) -> Result<Value> {
+    fn transaction_from_pos(&self, args: &TxFromPosArgs) -> Result<Value> {
+        let (height, tx_pos, merkle) = args.into();
         let blockhash = match self.tracker.headers().iter_headers().nth(height) {
             None => bail!("missing block at {}", height),
             Some(header) => header.hash(),
@@ -463,7 +477,8 @@ impl Rpc {
             let proof = Proof::create(&txids, tx_pos);
             Ok(json!({"tx_hash": txid, "merkle": proof.to_hex()}))
         } else {
-            Ok(json!({ "tx_hash": txid }))
+            // The protocol specifies a bare transaction hash when `merkle` is false.
+            Ok(json!(txid))
         }
     }
 
@@ -602,7 +617,7 @@ impl Rpc {
                 }
                 Params::TransactionGet(args) => self.transaction_get(args),
                 Params::TransactionGetMerkle(args) => self.transaction_get_merkle(args),
-                Params::TransactionFromPosition(args) => self.transaction_from_pos(*args),
+                Params::TransactionFromPosition(args) => self.transaction_from_pos(args),
                 Params::Version(args) => self.version(args),
             };
             call.response(result)
@@ -632,7 +647,7 @@ enum Params {
     ScriptHashUnsubscribe((ScriptHash,)),
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
-    TransactionFromPosition((usize, usize, bool)),
+    TransactionFromPosition(TxFromPosArgs),
     Version((String, VersionRequest)),
 }
 
@@ -835,6 +850,40 @@ mod tests {
         assert!(check_between("1.4", "1.3", "1.3").is_err());
         assert!(check_between("1.4", "1.4.1", "1.5").is_err());
         assert!(check_between("1.4", "1", "1").is_err());
+    }
+
+    #[test]
+    fn test_tx_from_pos_args() {
+        // `merkle` is optional per the protocol, defaulting to false.
+        let args: TxFromPosArgs = serde_json::from_str("[630000,68]").unwrap();
+        assert_eq!(<(usize, usize, bool)>::from(&args), (630000, 68, false));
+
+        let args: TxFromPosArgs = serde_json::from_str("[630000,68,false]").unwrap();
+        assert_eq!(<(usize, usize, bool)>::from(&args), (630000, 68, false));
+
+        let args: TxFromPosArgs = serde_json::from_str("[630000,68,true]").unwrap();
+        assert_eq!(<(usize, usize, bool)>::from(&args), (630000, 68, true));
+
+        // Malformed params are still rejected.
+        assert!(serde_json::from_str::<TxFromPosArgs>("[630000]").is_err());
+        assert!(serde_json::from_str::<TxFromPosArgs>("[]").is_err());
+        assert!(serde_json::from_str::<TxFromPosArgs>("[630000,68,1]").is_err());
+        assert!(serde_json::from_str::<TxFromPosArgs>("[630000,68,true,1]").is_err());
+    }
+
+    #[test]
+    fn test_params_id_from_pos() {
+        // Both arities are accepted by the method dispatcher.
+        for params in ["[630000,68]", "[630000,68,true]"] {
+            let parsed = Params::parse(
+                "blockchain.transaction.id_from_pos",
+                serde_json::from_str(params).unwrap(),
+            );
+            assert!(
+                matches!(parsed, Ok(Params::TransactionFromPosition(_))),
+                "failed to parse {params}"
+            );
+        }
     }
 
     #[test]
