@@ -273,7 +273,20 @@ impl DBStore {
     pub(crate) fn iter_headers(&self) -> impl Iterator<Item = SerializedHeaderRow> + '_ {
         let mut opts = rocksdb::ReadOptions::default();
         opts.fill_cache(false);
-        self.iter_cf(self.headers_cf(), opts, None)
+        // Header rows are keys of two sizes (80 for legacy, 164 for BLAKE2b
+        // headers); the tip lives under TIP_KEY in the same column family.
+        let mut raw = self.db.raw_iterator_cf_opt(self.headers_cf(), opts);
+        raw.seek_to_first();
+        std::iter::from_fn(move || loop {
+            if !raw.valid() {
+                return None;
+            }
+            let key = raw.key().expect("missing key").to_vec();
+            raw.next();
+            if key.as_slice() != TIP_KEY {
+                return Some(key);
+            }
+        })
     }
 
     pub(crate) fn get_tip(&self) -> Option<Vec<u8>> {

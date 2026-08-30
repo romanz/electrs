@@ -2,9 +2,9 @@ use anyhow::Result;
 
 use std::convert::TryFrom;
 
-use bitcoin::blockdata::block::Header as BlockHeader;
+use crate::knots::BlockHeader;
 use bitcoin::{
-    consensus::encode::{deserialize, Decodable, Encodable},
+    consensus::encode::{deserialize, serialize, Decodable, Encodable},
     hashes::{hash_newtype, sha256, Hash},
     io, OutPoint, Script, Txid,
 };
@@ -163,14 +163,13 @@ impl TxidRow {
 
 // ***************************************************************************
 
-pub(crate) type SerializedHeaderRow = [u8; HEADER_ROW_SIZE];
+/// A serialized header: 80 bytes for a legacy header, 164 for a BLAKE2b one.
+pub(crate) type SerializedHeaderRow = Vec<u8>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub(crate) struct HeaderRow {
     pub(crate) header: BlockHeader,
 }
-
-pub const HEADER_ROW_SIZE: usize = 80;
 
 impl_consensus_encoding!(HeaderRow, header);
 
@@ -180,11 +179,8 @@ impl HeaderRow {
     }
 
     pub(crate) fn to_db_row(&self) -> SerializedHeaderRow {
-        let mut row = [0; HEADER_ROW_SIZE];
-        let len = self
-            .consensus_encode(&mut (&mut row as &mut [u8]))
-            .expect("in-memory writers don't error");
-        debug_assert_eq!(len, HEADER_ROW_SIZE);
+        let row = serialize(self);
+        debug_assert_eq!(row.len(), self.header.size());
         row
     }
 

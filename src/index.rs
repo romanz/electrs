@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
-use bitcoin::consensus::{deserialize, Decodable, Encodable};
+use bitcoin::consensus::{deserialize, Encodable};
 use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, OutPoint, Txid};
-use bitcoin_slices::{bsl, Visit, Visitor};
+use bitcoin_slices::{bsl, Visitor};
 use std::ops::ControlFlow;
 use std::thread;
 
+use crate::knots;
 use crate::{
     chain::{Chain, NewHeader},
     daemon::Daemon,
@@ -54,11 +55,15 @@ impl Stats {
         self.update_size.observe(label, (rows.len() * N) as f64);
     }
 
+    fn observe_size_var(&self, label: &str, rows: &[Vec<u8>]) {
+        self.update_size.observe(label, (rows.iter().map(Vec::len).sum::<usize>()) as f64);
+    }
+
     fn observe_batch(&self, batch: &WriteBatch) {
         self.observe_size("write_funding_rows", &batch.funding_rows);
         self.observe_size("write_spending_rows", &batch.spending_rows);
         self.observe_size("write_txid_rows", &batch.txid_rows);
-        self.observe_size("write_header_rows", &batch.header_rows);
+        self.observe_size_var("write_header_rows", &batch.header_rows);
         debug!(
             "writing {} funding and {} spending rows from {} transactions, {} blocks",
             batch.funding_rows.len(),
@@ -303,18 +308,12 @@ fn index_single_block(
             ControlFlow::Continue(())
         }
 
-        fn visit_block_header(&mut self, header: &bsl::BlockHeader) -> ControlFlow<()> {
-            let header = bitcoin::block::Header::consensus_decode(&mut header.as_ref())
-                .expect("block header was already validated");
-            self.batch
-                .header_rows
-                .push(HeaderRow::new(header).to_db_row());
-            ControlFlow::Continue(())
-        }
     }
 
     let mut index_block = IndexBlockVisitor { batch, height };
-    bsl::Block::visit(&block, &mut index_block).expect("core returned invalid block");
+    // The header may be the legacy or the BLAKE2b form; see knots::visit_block
+    let header = knots::visit_block(&block, &mut index_block).expect("core returned invalid block");
+    batch.header_rows.push(HeaderRow::new(header).to_db_row());
 
     let len = block_hash
         .consensus_encode(&mut (&mut batch.tip_row as &mut [u8]))

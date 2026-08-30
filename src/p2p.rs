@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bitcoin::blockdata::block::Header as BlockHeader;
+use crate::knots::BlockHeader;
 use bitcoin::consensus::Encodable;
 use bitcoin::{
     consensus::{
@@ -15,9 +15,8 @@ use bitcoin::{
         message_network, Magic,
     },
     secp256k1::{self, rand::Rng},
-    Block, BlockHash, Network,
+    BlockHash, Network,
 };
-use bitcoin_slices::{bsl, Parse};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 
 use std::io::Write;
@@ -114,13 +113,9 @@ impl Connection {
                         .blocks_recv
                         .recv()
                         .with_context(|| format!("failed to get block {}", hash))?;
-                    let header = bsl::BlockHeader::parse(&block[..])
-                        .expect("core returned invalid blockheader")
-                        .parsed_owned();
-                    ensure!(
-                        &header.block_hash_sha2()[..] == hash.as_byte_array(),
-                        "got unexpected block"
-                    );
+                    let header = BlockHeader::consensus_decode(&mut &block[..])
+                        .expect("core returned invalid blockheader");
+                    ensure!(header.block_hash() == hash, "got unexpected block");
                     Ok(block)
                 })?;
                 self.blocks_duration
@@ -360,7 +355,10 @@ impl RawNetworkMessage {
                 let len = VarInt::consensus_decode(&mut raw)?.0;
                 let mut headers = Vec::with_capacity(len as usize);
                 for _ in 0..len {
-                    headers.push(Block::consensus_decode(&mut raw)?.header);
+                    // Each entry is a header (80 or 164 bytes) followed by a zero tx count
+                    let header = BlockHeader::consensus_decode(&mut raw)?;
+                    let _txcount = VarInt::consensus_decode(&mut raw)?;
+                    headers.push(header);
                 }
                 ParsedNetworkMessage::Headers(headers)
             }

@@ -14,6 +14,7 @@ mod daemon;
 mod db;
 mod electrum;
 mod index;
+mod knots;
 mod mempool;
 mod merkle;
 mod metrics;
