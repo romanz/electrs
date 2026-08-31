@@ -378,7 +378,7 @@ impl ScriptHashStatus {
     }
 
     /// Sync with currently confirmed txs and mempool, downloading non-cached transactions via REST API.
-    /// After a successful sync, scripthash status is updated.
+    /// After a successful sync, script-hash status is updated.
     pub(crate) fn sync(&mut self, index: &IndexedChain, mempool: &Mempool) -> Result<()> {
         let outpoints = self.sync_confirmed(index)?;
         if !self.confirmed.is_empty() {
