@@ -79,7 +79,7 @@ Please read upgrade notes if you're upgrading to a newer version.
 
 To connect to your Electrs server, you will need to point Electrum to your server using the `ip_address:port` syntax. You will notice that most default servers in Electrum use the `50002` port (which is for SSL connections), while Electrs serves port `50001` and does not provide SSL out of the box.
 
-You would need to either use a webserver to provide SSL (see _SSL connection_ below), or connect without SSL. To tell Electrum to connect to your server without SSL, you need to add `:t` after the port (ie: `localhost:50001:t`). Please note that this is not secure and therefore recommended only for local connections.
+You would need to either use a webserver to provide SSL (see _SSL connection_ below), or connect without SSL. To tell Electrum to connect to your server without SSL, you need to add `:t` after the port (ie: `localhost:50001:t`). Plain TCP is unauthenticated and unencrypted, so it should only be used for local connections or when reaching the server through a Tor hidden service (see [_Tor hidden service_](#tor-hidden-service) below).
 
 Electrs will listen by default on `127.0.0.1:50001`, which means it will only serve clients in the local machine. This is configured via the `electrum_rpc_addr` setting and if you wish to connect from another machine, you need to change it to `0.0.0.0:50001`. This is less secure though, and the recommended way to access Electrs remotely is to keep listening on `127.0.0.1` and tunnel to your server.
 
@@ -154,10 +154,12 @@ $ sudo cat /var/lib/tor/electrs_hidden_service/hostname
 <your-onion-address>.onion
 ```
 
-On your client machine, run the following command (assuming Tor proxy service runs on port 9050):
+On your client machine, run the following command (assuming Tor proxy service runs on port 9050 — use port `9150` instead if you are proxying through a running Tor Browser bundle):
 ```
 $ electrum --oneserver --server <your-onion-address>.onion:50001:t --proxy socks5:127.0.0.1:9050
 ```
+
+The `:t` suffix tells Electrum to connect over plain TCP (no TLS). The example uses port `50001` rather than `50002` because `electrs` does not provide TLS itself; the SSL setup above is only needed for non-Tor connections. TLS is generally unnecessary when reaching `electrs` through an `.onion` address: the v3 onion address encodes the hidden service's Ed25519 public key, and the Tor rendezvous handshake provides end-to-end authentication and encryption between client and server. Layering TLS on top is still possible if a client requires it — use the [SSL terminator setup](#ssl-connection) above and connect with `<your-onion-address>.onion:50002:s` — but it is not required.
 
 For more details, see http://docs.electrum.org/en/latest/tor.html.
 
