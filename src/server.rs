@@ -60,9 +60,49 @@ pub fn run() -> Result<()> {
     result.context("electrs failed")
 }
 
+fn rename_db_dir(config: &Config) -> Result<()> {
+    use std::{fs, io};
+
+    match (config.network, config.auto_reindex, config.db_path.parent()) {
+        (bitcoin::Network::Bitcoin, true, Some(db_parent)) => {
+            let old_dir = db_parent.join("mainnet");
+            match fs::rename(&old_dir, &config.db_path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error).with_context(|| {
+                    format!(
+                        "failed to rename the old directory ({}) to {}",
+                        old_dir.display(),
+                        config.db_path.display()
+                    )
+                }),
+            }
+        }
+        (bitcoin::Network::Bitcoin, false, Some(db_parent)) => {
+            let old_dir = db_parent.join("mainnet");
+            match fs::metadata(&old_dir) {
+                Ok(_) => Err(anyhow::anyhow!(
+                    "The old directory {} exists but auto reindex was disabled",
+                    old_dir.display()
+                )),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error).with_context(|| {
+                    format!(
+                        "failed to check whether the old directory ({}) exists",
+                        old_dir.display()
+                    )
+                }),
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
 fn serve() -> Result<()> {
     let config = Config::from_args();
     let metrics = Metrics::new(config.monitoring_addr)?;
+
+    rename_db_dir(&config)?;
 
     let (server_tx, server_rx) = unbounded();
     if !config.disable_electrum_rpc {
