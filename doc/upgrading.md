@@ -9,6 +9,7 @@ We also use new bitcoind REST API endpoints (instead of P2P protocol)
 
 Upgrading checklist:
 
+* Enable bitcoind REST API server using `-rest=1`.
 * Make sure you upgrade at a time when you don't need to use electrs for a while.
   Because of reindex electrs will be unable to serve your requests for a few hours.
   (The exact time depends on your hardware.)

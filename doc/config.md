@@ -5,9 +5,9 @@ If you use automated systems, refer to their documentation first!
 
 ### Bitcoind configuration
 
-REST API must be **enabled** for block indexing and transaction lookup.
+REST API must be **enabled** for block indexing and transaction lookup (`-rest=1`).
 
-Pruning must be **disabled** for `electrs` to work.
+Pruning must be **disabled** for `electrs` to work (`-prune=0`).
 
 `txindex` is allowed but unnecessary for `electrs`.
 However, you might still need it if you run other services (e.g.`eclair`).
