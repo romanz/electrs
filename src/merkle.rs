@@ -41,10 +41,7 @@ impl Proof {
     }
 
     pub(crate) fn to_hex(&self) -> Vec<String> {
-        self.proof
-            .iter()
-            .map(|node| format!("{:x}", node))
-            .collect()
+        self.proof.iter().map(|node| format!("{node:x}")).collect()
     }
 
     pub(crate) fn position(&self) -> usize {
