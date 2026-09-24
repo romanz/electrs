@@ -1,0 +1,5 @@
+# GCC 15 (Fedora 43+) no longer transitively includes <cstdint> from C++ headers.
+# The bundled RocksDB source in rust-librocksdb-sys requires uint64_t etc.,
+# so we inject the missing include globally for all C++ compilation units.
+[env]
+CXXFLAGS = "-include cstdint"
