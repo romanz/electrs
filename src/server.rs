@@ -1,12 +1,11 @@
 use anyhow::{Context, Result};
-use crossbeam_channel::{select, unbounded, Sender};
-use rayon::prelude::*;
+use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
 
 use std::{
     collections::hash_map::HashMap,
     io::{BufRead, BufReader, Write},
-    iter::once,
     net::{Shutdown, TcpListener, TcpStream},
+    sync::{Arc, RwLock, TryLockError},
 };
 
 use crate::{
@@ -83,64 +82,111 @@ fn serve() -> Result<()> {
         "step",
         metrics::default_duration_buckets(),
     );
-    let mut rpc = Rpc::new(&config, metrics)?;
-
-    let mut peers = HashMap::<usize, Peer>::new();
+    let rpc = Rpc::new(&config, metrics)?;
+    let signals = rpc.signal().receiver().clone();
+    let exit_flag = rpc.signal().exit_flag().clone();
+    let rpc = Arc::new(RwLock::new(rpc));
+    let sync_timer = tick(config.wait_duration);
+    let mut sync_pending = true;
+    let mut peers = HashMap::<usize, Sender<PeerMessage>>::new();
     loop {
-        // initial sync and compaction may take a few hours
-        while server_rx.is_empty() {
-            let done = duration.observe_duration("sync", || rpc.sync().context("sync failed"))?; // sync a batch of blocks
-            peers = duration.observe_duration("notify", || notify_peers(&rpc, peers)); // peers are disconnected on error
-            if !done {
-                continue; // more blocks to sync
+        if sync_pending {
+            // Never queue a writer behind a slow wallet: waiting writers can block
+            // new readers, preventing other clients from making requests.
+            match rpc.try_write() {
+                Ok(mut rpc) => {
+                    let done =
+                        duration.observe_duration("sync", || rpc.sync().context("sync failed"))?;
+                    sync_pending = !done;
+                    if done {
+                        peers.retain(|_, tx| tx.send(PeerMessage::Notify).is_ok());
+                        if config.sync_once {
+                            return Ok(());
+                        }
+                    } else if server_rx.is_empty() {
+                        continue; // keep indexing without waiting for the next timer tick
+                    }
+                }
+                Err(TryLockError::WouldBlock) => (),
+                Err(TryLockError::Poisoned(_)) => bail!("RPC lock poisoned"),
             }
-            if config.sync_once {
-                return Ok(()); // exit after initial sync is done
-            }
-            break;
         }
-        duration.observe_duration("select", || -> Result<()> {
-            select! {
-                // Handle signals for graceful shutdown
-                recv(rpc.signal().receiver()) -> result => {
-                    result.context("signal channel disconnected")?;
-                    rpc.signal().exit_flag().poll().context("RPC server interrupted")?;
-                },
-                // Handle Electrum RPC requests
-                recv(server_rx) -> event => {
-                    let first = once(event.context("server disconnected")?);
-                    let rest = server_rx.iter().take(server_rx.len());
-                    let events: Vec<Event> = first.chain(rest).collect();
-                    server_batch_size.observe("recv", events.len() as f64);
-                    duration.observe_duration("handle", || handle_events(&rpc, &mut peers, events));
-                },
-                default(config.wait_duration) => (), // sync and update
-            };
-            Ok(())
-        })?;
+        select! {
+            recv(signals) -> result => {
+                result.context("signal channel disconnected")?;
+                exit_flag.poll().context("RPC server interrupted")?;
+                sync_pending = true;
+            },
+            recv(server_rx) -> event => {
+                let event = event.context("server disconnected")?;
+                server_batch_size.observe("recv", 1.0);
+                match event.msg {
+                    Message::New(stream) => {
+                        let rpc = Arc::clone(&rpc);
+                        let duration = duration.clone();
+                        let tx = spawn_peer(event.peer_id, stream, move |client, message| {
+                            let rpc = rpc.read().map_err(|_| anyhow!("RPC lock poisoned"))?;
+                            match message {
+                                PeerMessage::Request(line) => duration.observe_duration("handle", || {
+                                    Ok(rpc.handle_requests(client, &[line]))
+                                }),
+                                PeerMessage::Notify => duration.observe_duration("notify", || {
+                                    rpc.update_client(client)
+                                }),
+                            }
+                        });
+                        peers.insert(event.peer_id, tx);
+                    }
+                    Message::Request(line) => {
+                        if let Some(tx) = peers.get(&event.peer_id) {
+                            if tx.send(PeerMessage::Request(line)).is_err() {
+                                peers.remove(&event.peer_id);
+                            }
+                        }
+                    }
+                    Message::Done => {
+                        peers.remove(&event.peer_id);
+                    }
+                }
+            },
+            recv(sync_timer) -> _ => sync_pending = true,
+        }
     }
 }
 
-fn notify_peers(rpc: &Rpc, peers: HashMap<usize, Peer>) -> HashMap<usize, Peer> {
-    peers
-        .into_par_iter()
-        .filter_map(|(_, mut peer)| match notify_peer(rpc, &mut peer) {
-            Ok(()) => Some((peer.id, peer)),
-            Err(e) => {
-                error!("failed to notify peer {}: {}", peer.id, e);
-                peer.disconnect();
-                None
-            }
-        })
-        .collect()
+enum PeerMessage {
+    Request(String),
+    Notify,
 }
 
-fn notify_peer(rpc: &Rpc, peer: &mut Peer) -> Result<()> {
-    let notifications = rpc
-        .update_client(&mut peer.client)
-        .context("failed to generate notifications")?;
-    peer.send(notifications)
-        .context("failed to send notifications")
+fn spawn_peer<F>(peer_id: usize, stream: TcpStream, mut handle: F) -> Sender<PeerMessage>
+where
+    F: FnMut(&mut Client, PeerMessage) -> Result<Vec<String>> + Send + 'static,
+{
+    let (tx, rx) = unbounded();
+    spawn("peer_loop", move || {
+        debug!("{}: connected", peer_id);
+        let mut peer = Peer::new(peer_id, stream);
+        let result = serve_peer(&mut peer, rx, &mut handle);
+        // Close both directions even on a read/handler/write error, so the
+        // receiving thread and any queued requests cannot outlive the peer.
+        peer.disconnect();
+        result
+    });
+    tx
+}
+
+fn serve_peer(
+    peer: &mut Peer,
+    rx: Receiver<PeerMessage>,
+    mut handle: impl FnMut(&mut Client, PeerMessage) -> Result<Vec<String>>,
+) -> Result<()> {
+    for message in rx {
+        let responses = handle(&mut peer.client, message)?;
+        // The RPC read lock has been released before a potentially slow write.
+        peer.send(responses)?;
+    }
+    Ok(())
 }
 
 struct Event {
@@ -154,58 +200,16 @@ enum Message {
     Done,
 }
 
-fn handle_events(rpc: &Rpc, peers: &mut HashMap<usize, Peer>, events: Vec<Event>) {
-    let mut events_by_peer = HashMap::<usize, Vec<Message>>::new();
-    events
-        .into_iter()
-        .for_each(|e| events_by_peer.entry(e.peer_id).or_default().push(e.msg));
-    for (peer_id, messages) in events_by_peer {
-        handle_peer_events(rpc, peers, peer_id, messages);
-    }
-}
-
-fn handle_peer_events(
-    rpc: &Rpc,
-    peers: &mut HashMap<usize, Peer>,
-    peer_id: usize,
-    messages: Vec<Message>,
-) {
-    let mut lines = vec![];
-    let mut done = false;
-    for msg in messages {
-        match msg {
-            Message::New(stream) => {
-                debug!("{}: connected", peer_id);
-                peers.insert(peer_id, Peer::new(peer_id, stream));
-            }
-            Message::Request(line) => lines.push(line),
-            Message::Done => {
-                done = true;
-                break;
-            }
-        }
-    }
-    let result = match peers.get_mut(&peer_id) {
-        Some(peer) => {
-            let responses = rpc.handle_requests(&mut peer.client, &lines);
-            peer.send(responses)
-        }
-        None => return, // unknown peer
-    };
-    if let Err(e) = result {
-        error!("{}: disconnecting due to {}", peer_id, e);
-        peers.remove(&peer_id).unwrap().disconnect();
-    } else if done {
-        peers.remove(&peer_id); // already disconnected, just remove from peers' map
-    }
-}
-
 fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
     for (peer_id, conn) in listener.incoming().enumerate() {
         let stream = conn.context("failed to accept")?;
         let tx = server_tx.clone();
         spawn("recv_loop", move || {
-            let result = recv_loop(peer_id, &stream, tx);
+            let result = recv_loop(peer_id, &stream, tx.clone());
+            let _ = tx.send(Event {
+                peer_id,
+                msg: Message::Done,
+            });
             if let Err(e) = stream.shutdown(Shutdown::Read) {
                 warn!("{}: failed to shutdown TCP receiving {}", peer_id, e)
             }
@@ -234,7 +238,100 @@ fn recv_loop(peer_id: usize, stream: &TcpStream, server_tx: Sender<Event>) -> Re
     }
 
     debug!("{}: disconnected", peer_id);
-    let msg = Message::Done;
-    server_tx.send(Event { peer_id, msg })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::BufRead, time::Duration};
+
+    fn connection() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        (client, listener.accept().unwrap().0)
+    }
+
+    #[test]
+    fn slow_peer_does_not_block_another_peer() {
+        let rpc = Arc::new(RwLock::new(()));
+        let (started_tx, started_rx) = unbounded();
+        let (release_tx, release_rx) = unbounded();
+        let (mut slow_client, slow_stream) = connection();
+        let slow_rpc = Arc::clone(&rpc);
+        let slow = spawn_peer(0, slow_stream, move |_, message| {
+            if matches!(message, PeerMessage::Request(ref line) if line == "queued scan") {
+                return Ok(vec!["queued".into()]);
+            }
+            let _read = slow_rpc.read().unwrap();
+            started_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            Ok(vec!["slow".into()])
+        });
+        slow.send(PeerMessage::Request("scan".into())).unwrap();
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(rpc.try_write(), Err(TryLockError::WouldBlock)));
+
+        let (fast_client, fast_stream) = connection();
+        let fast = spawn_peer(1, fast_stream, move |_, _| {
+            let _read = rpc.read().unwrap();
+            Ok(vec!["pong".into()])
+        });
+        fast.send(PeerMessage::Request("ping".into())).unwrap();
+        let mut response = String::new();
+        BufReader::new(fast_client)
+            .read_line(&mut response)
+            .unwrap();
+        assert_eq!(response, "pong\n"); // slow request is still waiting
+
+        // A read EOF must still allow queued requests to receive responses.
+        slow.send(PeerMessage::Request("queued scan".into()))
+            .unwrap();
+        drop(slow);
+        release_tx.send(()).unwrap();
+        response.clear();
+        let mut reader = BufReader::new(&mut slow_client);
+        reader.read_line(&mut response).unwrap();
+        assert_eq!(response, "slow\n");
+        response.clear();
+        reader.read_line(&mut response).unwrap();
+        assert_eq!(response, "queued\n");
+        assert_eq!(reader.read_line(&mut String::new()).unwrap(), 0);
+    }
+
+    #[test]
+    fn peer_preserves_request_and_notification_order() {
+        let (client, stream) = connection();
+        let worker = spawn_peer(0, stream, |_, message| {
+            Ok(vec![match message {
+                PeerMessage::Request(line) => line,
+                PeerMessage::Notify => "notification".into(),
+            }])
+        });
+        worker.send(PeerMessage::Request("first".into())).unwrap();
+        worker.send(PeerMessage::Notify).unwrap();
+        worker.send(PeerMessage::Request("second".into())).unwrap();
+        let mut reader = BufReader::new(client);
+        for expected in ["first\n", "notification\n", "second\n"] {
+            let mut response = String::new();
+            reader.read_line(&mut response).unwrap();
+            assert_eq!(response, expected);
+        }
+    }
+
+    #[test]
+    fn handler_error_closes_the_connection() {
+        let (client, stream) = connection();
+        let worker = spawn_peer(0, stream, |_, _| bail!("failed request"));
+        worker.send(PeerMessage::Request("fail".into())).unwrap();
+        assert_eq!(
+            BufReader::new(client)
+                .read_line(&mut String::new())
+                .unwrap(),
+            0
+        );
+    }
 }

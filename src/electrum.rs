@@ -6,7 +6,6 @@ use crate::bitcoin::{
 };
 use anyhow::{bail, Context, Result};
 use bindex::ScriptHash;
-use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
 
@@ -202,7 +201,7 @@ impl Rpc {
         let headers = self.tracker.headers();
         let mut notifications = client
             .scripthashes
-            .par_iter_mut()
+            .iter_mut()
             .filter_map(|(scripthash, status)| -> Option<Result<Value>> {
                 match self.tracker.update_scripthash_status(status) {
                     Ok(true) => Some(Ok(notification(
@@ -362,8 +361,10 @@ impl Rpc {
             .filter(|scripthash| !client.scripthashes.contains_key(scripthash))
             .collect();
 
+        // Each peer has its own worker. Keep this work on that worker so a
+        // large wallet cannot occupy a shared pool needed by other clients.
         let mut results: HashMap<ScriptHash, Result<ScriptHashStatus>> = new_scripthashes
-            .into_par_iter()
+            .into_iter()
             .map(|scripthash| (scripthash, self.new_status(scripthash)))
             .collect();
 
