@@ -325,6 +325,8 @@ impl ScriptHashStatus {
         // Recompute all funded outpoints
         let mut outpoints = self.confirmed_outpoints();
         // Process transactions in chronological order
+        // Bindex currently collects the matching txnums eagerly. This bounds
+        // transaction downloads, but not the underlying database scan.
         let locations = limit_locations(
             index.locations_by_scripthash(&self.scripthash, latest_header)?,
             lookup_limit,

@@ -351,32 +351,16 @@ impl Rpc {
     }
 
     fn scripthashes_subscribe<'a>(
-        &self,
+        &'a self,
         client: &'a mut Client,
         scripthashes: &'a [ScriptHash],
     ) -> impl Iterator<Item = Result<Value>> + 'a {
-        let new_scripthashes: Vec<ScriptHash> = scripthashes
-            .iter()
-            .copied()
-            .filter(|scripthash| !client.scripthashes.contains_key(scripthash))
-            .collect();
-
-        // Each peer has its own worker. Keep this work on that worker so a
-        // large wallet cannot occupy a shared pool needed by other clients.
-        let mut results: HashMap<ScriptHash, Result<ScriptHashStatus>> = new_scripthashes
-            .into_iter()
-            .map(|scripthash| (scripthash, self.new_status(scripthash)))
-            .collect();
-
+        // Each peer has its own worker. Resolve each subscription on that worker,
+        // and reuse successful subscriptions (including duplicates in a batch).
         scripthashes.iter().map(move |scripthash| {
             let statushash = match client.scripthashes.entry(*scripthash) {
                 Entry::Occupied(e) => e.get().statushash(),
-                Entry::Vacant(e) => {
-                    let status = results
-                        .remove(scripthash)
-                        .expect("missing scripthash status")?; // return an error for failed subscriptions
-                    e.insert(status).statushash()
-                }
+                Entry::Vacant(e) => e.insert(self.new_status(*scripthash)?).statushash(),
             };
             Ok(json!(statushash))
         })
