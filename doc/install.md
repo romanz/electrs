@@ -61,6 +61,9 @@ $ make shared_lib -j $(nproc) && sudo make install-shared
 $ cd .. && rm -r rocksdb
 ```
 
+With GCC 15 or newer, RocksDB 9.10.0 fails to compile with "`'uint64_t' has not been declared`" errors.
+In this case, build it using `EXTRA_CXXFLAGS="-include cstdint" make shared_lib -j $(nproc)` instead.
+
 #### Preparing for cross compilation
 
 Cross compilation can save you some time since you can compile `electrs` for a slower computer (like Raspberry Pi) on a faster machine
@@ -196,6 +199,15 @@ If RocksDB build fails with "`undefined reference to __atomic_*`" linker errors
 $ RUSTFLAGS="-C link-args=-latomic" cargo build --locked --release
 ```
 Relevant issues: [#134](https://github.com/romanz/electrs/issues/134) and [#391](https://github.com/romanz/electrs/issues/391).
+
+If RocksDB build fails with "`'uint32_t' has not been declared`" or "`'uint64_t' has not been declared`" errors
+(usually happens with GCC 15 or newer, e.g. on Ubuntu 26.04 or Fedora 42), set the following environment variable:
+```bash
+$ CXXFLAGS="-include cstdint" cargo build --locked --release
+```
+The bundled RocksDB 9.10.0 is missing some `#include <cstdint>` directives, which were added in later RocksDB releases
+([facebook/rocksdb#13579](https://github.com/facebook/rocksdb/pull/13579) and [facebook/rocksdb#13651](https://github.com/facebook/rocksdb/pull/13651)).
+Relevant issue: [#1346](https://github.com/romanz/electrs/issues/1346).
 
 #### Dynamic linking
 
