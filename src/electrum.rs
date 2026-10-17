@@ -61,6 +61,17 @@ enum VersionRequest {
     MinMax(String, String),
 }
 
+/// Default `protocol_version` when the client omits it.
+const DEFAULT_PROTOCOL_VERSION: &str = "1.4";
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum VersionArgs {
+    None([(); 0]),
+    ClientOnly((String,)),
+    ClientAndVersion((String, VersionRequest)),
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum TxGetArgs {
@@ -490,7 +501,13 @@ impl Rpc {
         format!("electrs/{}", ELECTRS_VERSION)
     }
 
-    fn version(&self, (client_id, client_version): &(String, VersionRequest)) -> Result<Value> {
+    fn version(&self, args: &VersionArgs) -> Result<Value> {
+        let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
+        let (client_id, client_version) = match args {
+            VersionArgs::None(_) => ("", &default),
+            VersionArgs::ClientOnly((client_id,)) => (client_id.as_str(), &default),
+            VersionArgs::ClientAndVersion((client_id, version)) => (client_id.as_str(), version),
+        };
         match client_version {
             VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
             VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
@@ -648,7 +665,7 @@ enum Params {
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
     TransactionFromPosition(TxFromPosArgs),
-    Version((String, VersionRequest)),
+    Version(VersionArgs),
 }
 
 impl Params {
@@ -881,6 +898,51 @@ mod tests {
             );
             assert!(
                 matches!(parsed, Ok(Params::TransactionFromPosition(_))),
+                "failed to parse {params}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_version_args() {
+        // Both `client_name` and `protocol_version` are optional per the protocol,
+        // defaulting to "" and "1.4".
+        let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
+
+        let args: VersionArgs = serde_json::from_str("[]").unwrap();
+        assert!(matches!(args, VersionArgs::None(_)));
+
+        let args: VersionArgs = serde_json::from_str(r#"["client"]"#).unwrap();
+        assert!(matches!(args, VersionArgs::ClientOnly((ref id,)) if id == "client"));
+
+        let args: VersionArgs = serde_json::from_str(r#"["client","1.4"]"#).unwrap();
+        assert!(
+            matches!(args, VersionArgs::ClientAndVersion((ref id, ref v)) if id == "client" && *v == default)
+        );
+
+        let args: VersionArgs = serde_json::from_str(r#"["client",["1.3","1.4"]]"#).unwrap();
+        assert!(matches!(
+            args,
+            VersionArgs::ClientAndVersion((_, VersionRequest::MinMax(_, _)))
+        ));
+
+        // Malformed params are still rejected.
+        assert!(serde_json::from_str::<VersionArgs>("[1]").is_err());
+        assert!(serde_json::from_str::<VersionArgs>(r#"["client","1.4",1]"#).is_err());
+    }
+
+    #[test]
+    fn test_params_version() {
+        // Every documented arity is accepted by the method dispatcher.
+        for params in [
+            "[]",
+            r#"["client"]"#,
+            r#"["client","1.4"]"#,
+            r#"["client",["1.3","1.4"]]"#,
+        ] {
+            let parsed = Params::parse("server.version", serde_json::from_str(params).unwrap());
+            assert!(
+                matches!(parsed, Ok(Params::Version(_))),
                 "failed to parse {params}"
             );
         }
