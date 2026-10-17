@@ -8,6 +8,20 @@ $ # ... wait until the chain is synced (e.g. using `bitcoin-cli getblockchaininf
 $ RUST_LOG=INFO electrs  --network bitcoin --db-dir ./db --daemon-dir ~/.bitcoin
 ```
 
+## RPC concurrency
+
+Each connected wallet has an independent request worker. At most 128 connections
+are accepted, and each connection queues at most 64 request lines before TCP
+backpressure pauses its receiver. A JSON-RPC batch counts as one line; these limits
+do not bound the size of an individual request or wallet subscription set.
+
+Between 2 and 8 request handlers run concurrently, based on the Rayon thread
+count. Pending index/mempool synchronization takes priority over new handlers once
+active handlers finish. Socket writes time out after 30 seconds without progress.
+Slow backend calls can still delay synchronization; bindex currently exposes no
+REST timeout setting through its index API. The index lookup limit bounds candidate
+transaction downloads, but bindex still scans matching database entries eagerly.
+
 ## Usage
 
 First index sync should take ~2 hours for ~800GB `.bitcoin/blocks/` @ July 2026 (on a 6-core CPU, 32 GB RAM, 2TB NVMe):
