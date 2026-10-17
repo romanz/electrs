@@ -322,7 +322,7 @@ impl FeeHistogram {
     }
 
     fn insert(&mut self, bin_index: usize, vsize: u64) {
-        // skip transactions with too low fee rate (<1 sat/vB)
+        // Fee rates below 1 sat/vB are tracked in the final bin (64).
         if let Some(bin) = self.vsize.get_mut(bin_index) {
             *bin += vsize
         }
@@ -332,7 +332,7 @@ impl FeeHistogram {
     }
 
     fn remove(&mut self, bin_index: usize, vsize: u64) {
-        // skip transactions with too low fee rate (<1 sat/vB)
+        // Fee rates below 1 sat/vB are tracked in the final bin (64).
         if let Some(bin) = self.vsize.get_mut(bin_index) {
             *bin = bin.checked_sub(vsize).unwrap_or_else(|| {
                 warn!("removing TX from mempool caused bin count to unexpectedly drop below zero");
