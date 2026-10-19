@@ -1,3 +1,8 @@
+# 0.12.1 (TBD)
+
+* Update `bindex` to allow TCP ports reuse.
+* Update `bitcoin_slices`.
+
 # 0.12.0 (Sep 13 2026)
 
 * Switch to `bindex`: requires Bitcoin Core 31+ and rebuilding the index.
