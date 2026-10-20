@@ -12,7 +12,6 @@ use serde_json::{self, json, Value};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
-use std::iter::FromIterator;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -257,13 +256,23 @@ impl Rpc {
         );
         let heights = start_height..end_height;
         let count = heights.len();
-        let hex_headers = headers
+        let hex_headers: Vec<String> = headers
             .iter_headers()
             .skip(start_height)
             .take(count)
-            .map(|h| serialize_hex(h.header()));
+            .map(|h| serialize_hex(h.header()))
+            .collect();
+        let concatenated_hex: String = hex_headers.concat();
 
-        Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
+        // Electrum protocol v1.6 returns `headers` as a list; older clients consume `hex`.
+        // Both fields are emitted to remain backwards-compatible until the protocol version
+        // is bumped — see https://electrum-protocol.readthedocs.io/en/latest/protocol-methods.html#blockchain-block-headers
+        Ok(json!({
+            "count": count,
+            "hex": concatenated_hex,
+            "headers": hex_headers,
+            "max": max_count,
+        }))
     }
 
     fn estimate_fee(&self, (nblocks,): (u16,)) -> Result<Value> {
