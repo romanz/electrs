@@ -47,7 +47,7 @@ mod metrics_impl {
                 Ok(())
             });
 
-            info!("serving Prometheus metrics on {}", addr);
+            info!("serving Prometheus metrics on {addr}");
             Ok(result)
         }
 
