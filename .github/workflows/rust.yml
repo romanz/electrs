@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - fix/accept-error-retry
   pull_request:
   workflow_dispatch:
   schedule:
