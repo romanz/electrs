@@ -1,7 +1,7 @@
-# 0.12.1 (TBD)
+# 0.12.1 (Nov 11 2026)
 
 * Update `bindex` to allow TCP ports reuse.
-* Update `bitcoin_slices`.
+* Update dependencies (`bitcoin_slices`, `crossbeam-channel`, `jsonrpc`, `log`, `serde`).
 
 # 0.12.0 (Sep 13 2026)
 
