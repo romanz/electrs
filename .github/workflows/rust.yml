@@ -16,15 +16,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04]
         build-args:
           [
+            --locked --features metrics_process,
             --locked --no-default-features,
             --locked
           ]
-        include:
-          - os: ubuntu-latest
-            build-args: --locked --features metrics_process
 
     steps:
       - uses: actions/checkout@v6
@@ -52,7 +50,7 @@ jobs:
 
   integration:
     name: Integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
