@@ -73,7 +73,7 @@ impl Signal {
         let mut signals = Signals::new(ids).expect("failed to register signal hook");
         spawn("signal", move || {
             for id in &mut signals {
-                info!("notified via SIG{}", id);
+                info!("notified via SIG{id}");
                 match id {
                     SIGUSR1 => (),
                     _ => exit_flag.set(),

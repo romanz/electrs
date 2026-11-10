@@ -85,14 +85,14 @@ impl MempoolSyncUpdate {
                     let entry = match entry {
                         Some(entry) => entry,
                         None => {
-                            debug!("missing mempool entry: {}", txid);
+                            debug!("missing mempool entry: {txid}");
                             return None;
                         }
                     };
                     let tx = match tx {
                         Some(tx) => tx,
                         None => {
-                            debug!("missing mempool tx: {}", txid);
+                            debug!("missing mempool tx: {txid}");
                             return None;
                         }
                     };
@@ -204,7 +204,7 @@ impl Mempool {
         for i in 0..FeeHistogram::BINS {
             let bin_index = FeeHistogram::BINS - i - 1; // from 63 to 0
             let (lower, upper) = FeeHistogram::bin_range(bin_index);
-            let label = format!("[{:20.0}, {:20.0})", lower, upper);
+            let label = format!("[{lower:20.0}, {upper:20.0})");
             self.vsize.set(&label, self.fees.vsize[bin_index] as f64);
             self.count.set(&label, self.fees.count[bin_index] as f64);
         }
@@ -214,7 +214,7 @@ impl Mempool {
         let loaded = match daemon.get_mempool_info() {
             Ok(info) => info.loaded.unwrap_or(true),
             Err(e) => {
-                warn!("mempool sync failed: {}", e);
+                warn!("mempool sync failed: {e}");
                 return;
             }
         };
@@ -230,7 +230,7 @@ impl Mempool {
         let sync_update = match poll_result {
             Ok(sync_update) => sync_update,
             Err(e) => {
-                warn!("mempool sync failed: {}", e);
+                warn!("mempool sync failed: {e}");
                 return;
             }
         };
