@@ -61,6 +61,17 @@ enum VersionRequest {
     MinMax(String, String),
 }
 
+/// Default `protocol_version` when the client omits it.
+const DEFAULT_PROTOCOL_VERSION: &str = "1.4";
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum VersionArgs {
+    None([(); 0]),
+    ClientOnly((String,)),
+    ClientAndVersion((String, VersionRequest)),
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum TxGetArgs {
@@ -490,13 +501,8 @@ impl Rpc {
         format!("electrs/{}", ELECTRS_VERSION)
     }
 
-    fn version(&self, (client_id, client_version): &(String, VersionRequest)) -> Result<Value> {
-        match client_version {
-            VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
-            VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
-        }
-        .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
-        Ok(json!([self.server_id(), PROTOCOL_VERSION]))
+    fn version(&self, args: &VersionArgs) -> Result<Value> {
+        Ok(json!([self.server_id(), negotiate_version(args)?]))
     }
 
     fn features(&self) -> Result<Value> {
@@ -648,7 +654,7 @@ enum Params {
     TransactionGet(TxGetArgs),
     TransactionGetMerkle((Txid, usize)),
     TransactionFromPosition(TxFromPosArgs),
-    Version((String, VersionRequest)),
+    Version(VersionArgs),
 }
 
 impl Params {
@@ -820,6 +826,22 @@ fn check_between(version_str: &str, min_str: &str, max_str: &str) -> Result<()> 
     Ok(())
 }
 
+/// Negotiates the protocol version for `server.version`, returning the one this server speaks.
+fn negotiate_version(args: &VersionArgs) -> Result<&'static str> {
+    let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
+    let (client_id, client_version) = match args {
+        VersionArgs::None(_) => ("", &default),
+        VersionArgs::ClientOnly((client_id,)) => (client_id.as_str(), &default),
+        VersionArgs::ClientAndVersion((client_id, version)) => (client_id.as_str(), version),
+    };
+    match client_version {
+        VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
+        VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
+    }
+    .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
+    Ok(PROTOCOL_VERSION)
+}
+
 fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
     let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
     let tx = deserialize(&tx_bytes).context("invalid transaction")?;
@@ -884,6 +906,72 @@ mod tests {
                 "failed to parse {params}"
             );
         }
+    }
+
+    #[test]
+    fn test_version_args() {
+        // Both `client_name` and `protocol_version` are optional per the protocol,
+        // defaulting to "" and "1.4".
+        let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
+
+        let args: VersionArgs = serde_json::from_str("[]").unwrap();
+        assert!(matches!(args, VersionArgs::None(_)));
+
+        let args: VersionArgs = serde_json::from_str(r#"["client"]"#).unwrap();
+        assert!(matches!(args, VersionArgs::ClientOnly((ref id,)) if id == "client"));
+
+        let args: VersionArgs = serde_json::from_str(r#"["client","1.4"]"#).unwrap();
+        assert!(
+            matches!(args, VersionArgs::ClientAndVersion((ref id, ref v)) if id == "client" && *v == default)
+        );
+
+        let args: VersionArgs = serde_json::from_str(r#"["client",["1.3","1.4"]]"#).unwrap();
+        assert!(matches!(
+            args,
+            VersionArgs::ClientAndVersion((_, VersionRequest::MinMax(_, _)))
+        ));
+
+        // Malformed params are still rejected.
+        assert!(serde_json::from_str::<VersionArgs>("[1]").is_err());
+        assert!(serde_json::from_str::<VersionArgs>(r#"["client","1.4",1]"#).is_err());
+    }
+
+    #[test]
+    fn test_params_version() {
+        // Every documented arity is accepted by the method dispatcher.
+        for params in [
+            "[]",
+            r#"["client"]"#,
+            r#"["client","1.4"]"#,
+            r#"["client",["1.3","1.4"]]"#,
+        ] {
+            let parsed = Params::parse("server.version", serde_json::from_str(params).unwrap());
+            assert!(
+                matches!(parsed, Ok(Params::Version(_))),
+                "failed to parse {params}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_negotiate_version() {
+        let negotiate = |params: &str| {
+            let args: VersionArgs = serde_json::from_str(params).unwrap();
+            negotiate_version(&args)
+        };
+
+        // Omitted arguments negotiate as an explicit "1.4" request does.
+        for params in ["[]", r#"["client"]"#, r#"["client","1.4"]"#] {
+            assert_eq!(
+                negotiate(params).unwrap(),
+                "1.4",
+                "failed to negotiate {params}"
+            );
+        }
+
+        // An unsupported explicit request is still refused.
+        assert!(negotiate(r#"["client","1.5"]"#).is_err());
+        assert!(negotiate(r#"["client",["1.5","1.6"]]"#).is_err());
     }
 
     #[test]
