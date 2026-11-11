@@ -200,9 +200,15 @@ fn handle_peer_events(
     }
 }
 
+mod accept;
+
 fn accept_loop(listener: TcpListener, server_tx: Sender<Event>) -> Result<()> {
-    for (peer_id, conn) in listener.incoming().enumerate() {
-        let stream = conn.context("failed to accept")?;
+    let incoming = accept::retry_accept(
+        listener.incoming(),
+        |error| warn!("failed to accept: {}; retrying in 1s", error),
+        std::thread::sleep,
+    );
+    for (peer_id, stream) in incoming.enumerate() {
         let tx = server_tx.clone();
         spawn("recv_loop", move || {
             let result = recv_loop(peer_id, &stream, tx);
