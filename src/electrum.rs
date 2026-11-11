@@ -502,18 +502,7 @@ impl Rpc {
     }
 
     fn version(&self, args: &VersionArgs) -> Result<Value> {
-        let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
-        let (client_id, client_version) = match args {
-            VersionArgs::None(_) => ("", &default),
-            VersionArgs::ClientOnly((client_id,)) => (client_id.as_str(), &default),
-            VersionArgs::ClientAndVersion((client_id, version)) => (client_id.as_str(), version),
-        };
-        match client_version {
-            VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
-            VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
-        }
-        .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
-        Ok(json!([self.server_id(), PROTOCOL_VERSION]))
+        Ok(json!([self.server_id(), negotiate_version(args)?]))
     }
 
     fn features(&self) -> Result<Value> {
@@ -837,6 +826,22 @@ fn check_between(version_str: &str, min_str: &str, max_str: &str) -> Result<()> 
     Ok(())
 }
 
+/// Negotiates the protocol version for `server.version`, returning the one this server speaks.
+fn negotiate_version(args: &VersionArgs) -> Result<&'static str> {
+    let default = VersionRequest::Single(DEFAULT_PROTOCOL_VERSION.to_owned());
+    let (client_id, client_version) = match args {
+        VersionArgs::None(_) => ("", &default),
+        VersionArgs::ClientOnly((client_id,)) => (client_id.as_str(), &default),
+        VersionArgs::ClientAndVersion((client_id, version)) => (client_id.as_str(), version),
+    };
+    match client_version {
+        VersionRequest::Single(exact) => check_between(PROTOCOL_VERSION, exact, exact),
+        VersionRequest::MinMax(min, max) => check_between(PROTOCOL_VERSION, min, max),
+    }
+    .with_context(|| format!("unsupported request {:?} by {}", client_version, client_id))?;
+    Ok(PROTOCOL_VERSION)
+}
+
 fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
     let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
     let tx = deserialize(&tx_bytes).context("invalid transaction")?;
@@ -946,6 +951,27 @@ mod tests {
                 "failed to parse {params}"
             );
         }
+    }
+
+    #[test]
+    fn test_negotiate_version() {
+        let negotiate = |params: &str| {
+            let args: VersionArgs = serde_json::from_str(params).unwrap();
+            negotiate_version(&args)
+        };
+
+        // Omitted arguments negotiate as an explicit "1.4" request does.
+        for params in ["[]", r#"["client"]"#, r#"["client","1.4"]"#] {
+            assert_eq!(
+                negotiate(params).unwrap(),
+                "1.4",
+                "failed to negotiate {params}"
+            );
+        }
+
+        // An unsupported explicit request is still refused.
+        assert!(negotiate(r#"["client","1.5"]"#).is_err());
+        assert!(negotiate(r#"["client",["1.5","1.6"]]"#).is_err());
     }
 
     #[test]
