@@ -58,3 +58,5 @@ jobs:
         run: docker build -f Dockerfile.ci . --rm -t electrs:tests
       - name: Test
         run: docker run -v $PWD/contrib/:/contrib -v $PWD/tests/:/tests --rm electrs:tests bash /tests/run.sh
+      - name: Mempool race test
+        run: docker run -v $PWD/tests/:/tests --rm electrs:tests python3 /tests/mempool_race.py --electrs electrs --bitcoind bitcoind
