@@ -256,6 +256,11 @@ impl Daemon {
         Ok(res.tx)
     }
 
+    pub(crate) fn get_best_block_hash(&self) -> Result<BlockHash> {
+        self.call("getbestblockhash", &[])
+            .context("failed to get best block hash")
+    }
+
     pub(crate) fn get_mempool_info(&self) -> Result<GetMempoolInfoResult> {
         self.call("getmempoolinfo", &[])
             .context("failed to get mempool info")
