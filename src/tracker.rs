@@ -17,6 +17,7 @@ pub struct Tracker {
     index: IndexedChain,
     mempool: Mempool,
     ignore_mempool: bool,
+    index_lookup_limit: Option<usize>,
 }
 
 impl Tracker {
@@ -28,6 +29,7 @@ impl Tracker {
             index,
             mempool: Mempool::new(&metrics),
             ignore_mempool: config.ignore_mempool,
+            index_lookup_limit: config.index_lookup_limit,
         })
     }
 
@@ -60,7 +62,7 @@ impl Tracker {
 
     pub(crate) fn update_scripthash_status(&self, status: &mut ScriptHashStatus) -> Result<bool> {
         let prev_statushash = status.statushash();
-        status.sync(&self.index, &self.mempool)?;
+        status.sync(&self.index, &self.mempool, self.index_lookup_limit)?;
         Ok(prev_statushash != status.statushash())
     }
 

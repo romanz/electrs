@@ -6,7 +6,6 @@ use crate::bitcoin::{
 };
 use anyhow::{bail, Context, Result};
 use bindex::ScriptHash;
-use rayon::prelude::*;
 use serde_derive::Deserialize;
 use serde_json::{self, json, Value};
 
@@ -202,7 +201,7 @@ impl Rpc {
         let headers = self.tracker.headers();
         let mut notifications = client
             .scripthashes
-            .par_iter_mut()
+            .iter_mut()
             .filter_map(|(scripthash, status)| -> Option<Result<Value>> {
                 match self.tracker.update_scripthash_status(status) {
                     Ok(true) => Some(Ok(notification(
@@ -352,30 +351,16 @@ impl Rpc {
     }
 
     fn scripthashes_subscribe<'a>(
-        &self,
+        &'a self,
         client: &'a mut Client,
         scripthashes: &'a [ScriptHash],
     ) -> impl Iterator<Item = Result<Value>> + 'a {
-        let new_scripthashes: Vec<ScriptHash> = scripthashes
-            .iter()
-            .copied()
-            .filter(|scripthash| !client.scripthashes.contains_key(scripthash))
-            .collect();
-
-        let mut results: HashMap<ScriptHash, Result<ScriptHashStatus>> = new_scripthashes
-            .into_par_iter()
-            .map(|scripthash| (scripthash, self.new_status(scripthash)))
-            .collect();
-
+        // Each peer has its own worker. Resolve each subscription on that worker,
+        // and reuse successful subscriptions (including duplicates in a batch).
         scripthashes.iter().map(move |scripthash| {
             let statushash = match client.scripthashes.entry(*scripthash) {
                 Entry::Occupied(e) => e.get().statushash(),
-                Entry::Vacant(e) => {
-                    let status = results
-                        .remove(scripthash)
-                        .expect("missing scripthash status")?; // return an error for failed subscriptions
-                    e.insert(status).statushash()
-                }
+                Entry::Vacant(e) => e.insert(self.new_status(*scripthash)?).statushash(),
             };
             Ok(json!(statushash))
         })

@@ -300,7 +300,11 @@ impl ScriptHashStatus {
 
     /// Get funding and spending entries from new blocks.
     /// Also cache relevant transactions and their merkle proofs.
-    fn sync_confirmed(&mut self, index: &IndexedChain) -> Result<HashSet<OutPoint>> {
+    fn sync_confirmed(
+        &mut self,
+        index: &IndexedChain,
+        lookup_limit: Option<usize>,
+    ) -> Result<HashSet<OutPoint>> {
         let headers = index.headers();
         let mut latest_header = None;
         // Drop entries from stale blocks
@@ -321,7 +325,13 @@ impl ScriptHashStatus {
         // Recompute all funded outpoints
         let mut outpoints = self.confirmed_outpoints();
         // Process transactions in chronological order
-        for location in index.locations_by_scripthash(&self.scripthash, latest_header)? {
+        // Bindex currently collects the matching txnums eagerly. This bounds
+        // transaction downloads, but not the underlying database scan.
+        let locations = limit_locations(
+            index.locations_by_scripthash(&self.scripthash, latest_header)?,
+            lookup_limit,
+        )?;
+        for location in locations {
             let tx_bytes = index.get_tx_bytes(&location)?;
             let tx = Transaction::consensus_decode_from_finite_reader(&mut &tx_bytes[..])?;
 
@@ -379,8 +389,13 @@ impl ScriptHashStatus {
 
     /// Sync with currently confirmed txs and mempool, downloading non-cached transactions via REST API.
     /// After a successful sync, script-hash status is updated.
-    pub(crate) fn sync(&mut self, index: &IndexedChain, mempool: &Mempool) -> Result<()> {
-        let outpoints = self.sync_confirmed(index)?;
+    pub(crate) fn sync(
+        &mut self,
+        index: &IndexedChain,
+        mempool: &Mempool,
+        lookup_limit: Option<usize>,
+    ) -> Result<()> {
+        let outpoints = self.sync_confirmed(index, lookup_limit)?;
         if !self.confirmed.is_empty() {
             debug!(
                 "{} transactions from {} blocks",
@@ -473,5 +488,49 @@ mod tests {
             )),
             json!({"tx_hash": "5b75086dafeede555fc8f9a810d8b10df57c46f9f176ccc3dd8d2fa20edd685b", "height": 0, "fee": 123})
         );
+    }
+}
+
+// Check the candidate count before fetching any transactions from Bitcoin Core.
+// In particular, an over-limit subscription must not cache a partial history.
+fn limit_locations<T>(locations: impl Iterator<Item = T>, limit: Option<usize>) -> Result<Vec<T>> {
+    let locations: Vec<T> = locations
+        .take(limit.unwrap_or(usize::MAX).saturating_add(1))
+        .collect();
+    if let Some(limit) = limit {
+        ensure!(
+            locations.len() <= limit,
+            "index lookup limit exceeded ({})",
+            limit
+        );
+    }
+    Ok(locations)
+}
+
+#[cfg(test)]
+mod lookup_limit_tests {
+    use super::limit_locations;
+
+    #[test]
+    fn accepts_exact_limit_and_unlimited_history() {
+        assert_eq!(limit_locations(0..3, Some(3)).unwrap(), vec![0, 1, 2]);
+        assert_eq!(limit_locations(0..3, None).unwrap(), vec![0, 1, 2]);
+        assert!(limit_locations(0..0, Some(0)).unwrap().is_empty());
+        assert_eq!(
+            limit_locations(0..3, Some(usize::MAX)).unwrap(),
+            vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn rejects_large_history_before_transaction_fetching() {
+        let mut candidates = 0;
+        let result = limit_locations((0..100).inspect(|_| candidates += 1), Some(3));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("index lookup limit exceeded"));
+        assert_eq!(candidates, 4); // only inspect enough candidates to reject the query
+        assert!(limit_locations(0..1, Some(0)).is_err());
     }
 }
