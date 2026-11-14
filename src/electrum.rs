@@ -95,6 +95,38 @@ impl From<&TxFromPosArgs> for (usize, usize, bool) {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
+enum BlockHeaderArgs {
+    Height((usize,)),
+    HeightCheckpoint((usize, usize)),
+}
+
+impl From<&BlockHeaderArgs> for (usize, usize) {
+    fn from(args: &BlockHeaderArgs) -> Self {
+        match args {
+            BlockHeaderArgs::Height((height,)) => (*height, 0),
+            BlockHeaderArgs::HeightCheckpoint(args) => *args,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum BlockHeadersArgs {
+    StartCount((usize, usize)),
+    StartCountCheckpoint((usize, usize, usize)),
+}
+
+impl From<&BlockHeadersArgs> for (usize, usize, usize) {
+    fn from(args: &BlockHeadersArgs) -> Self {
+        match args {
+            BlockHeadersArgs::StartCount((start_height, count)) => (*start_height, *count, 0),
+            BlockHeadersArgs::StartCountCheckpoint(args) => *args,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
 enum BroadcastArgs {
     Package((Vec<String>,)),
     PackageVerbose((Vec<String>, bool)),
@@ -239,15 +271,23 @@ impl Rpc {
         Ok(json!({"hex": serialize_hex(header.header()), "height": height}))
     }
 
-    fn block_header(&self, (height,): (usize,)) -> Result<Value> {
-        let header = match self.tracker.headers().iter_headers().nth(height) {
+    fn block_header(&self, args: &BlockHeaderArgs) -> Result<Value> {
+        let (height, cp_height) = args.into();
+        let headers = self.tracker.headers();
+        let header = match headers.iter_headers().nth(height) {
             None => bail!("no header at {}", height),
             Some(header) => header,
         };
-        Ok(json!(serialize_hex(header.header())))
+        let hex_header = serialize_hex(header.header());
+        if cp_height == 0 {
+            return Ok(json!(hex_header));
+        }
+        let proof = checkpoint_proof(headers, height, cp_height)?;
+        Ok(json!({"branch": proof.to_hex(), "header": hex_header, "root": proof.root_hex()}))
     }
 
-    fn block_headers(&self, (start_height, count): (usize, usize)) -> Result<Value> {
+    fn block_headers(&self, args: &BlockHeadersArgs) -> Result<Value> {
+        let (start_height, count, cp_height) = args.into();
         let headers = self.tracker.headers();
         let max_count = 2016usize;
         // return only the available block headers
@@ -263,7 +303,15 @@ impl Rpc {
             .take(count)
             .map(|h| serialize_hex(h.header()));
 
-        Ok(json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count}))
+        let mut result =
+            json!({"count": count, "hex": String::from_iter(hex_headers), "max": max_count});
+        if count > 0 && cp_height > 0 {
+            // prove that the last returned header is part of the chain up to `cp_height`
+            let proof = checkpoint_proof(headers, start_height + count - 1, cp_height)?;
+            result["branch"] = json!(proof.to_hex());
+            result["root"] = json!(proof.root_hex());
+        }
+        Ok(result)
     }
 
     fn estimate_fee(&self, (nblocks,): (u16,)) -> Result<Value> {
@@ -596,8 +644,8 @@ impl Rpc {
             }
             let result = match &call.params {
                 Params::Banner => Ok(json!(self.banner)),
-                Params::BlockHeader(args) => self.block_header(*args),
-                Params::BlockHeaders(args) => self.block_headers(*args),
+                Params::BlockHeader(args) => self.block_header(args),
+                Params::BlockHeaders(args) => self.block_headers(args),
                 Params::Donation => Ok(Value::Null),
                 Params::EstimateFee(args) => self.estimate_fee(*args),
                 Params::Features => self.features(),
@@ -628,8 +676,8 @@ impl Rpc {
 #[derive(Deserialize)]
 enum Params {
     Banner,
-    BlockHeader((usize,)),
-    BlockHeaders((usize, usize)),
+    BlockHeader(BlockHeaderArgs),
+    BlockHeaders(BlockHeadersArgs),
     TransactionBroadcast((String,)),
     TransactionBroadcastPackage(BroadcastArgs),
     Donation,
@@ -820,6 +868,24 @@ fn check_between(version_str: &str, min_str: &str, max_str: &str) -> Result<()> 
     Ok(())
 }
 
+/// Merkle proof that the header at `height` belongs to the chain up to (and including) `cp_height`.
+fn checkpoint_proof(headers: &bindex::Headers, height: usize, cp_height: usize) -> Result<Proof> {
+    let tip_height = headers.tip_height().context("no headers")?;
+    if height > cp_height || cp_height > tip_height {
+        bail!(
+            "require header height {} <= cp_height {} <= chain height {}",
+            height,
+            cp_height,
+            tip_height
+        );
+    }
+    let block_hashes = headers
+        .iter_headers()
+        .take(cp_height + 1)
+        .map(|header| header.hash());
+    Ok(Proof::create_for_headers(block_hashes, height))
+}
+
 fn tx_from_hex(tx_hex: &str) -> Result<Transaction> {
     let tx_bytes = Vec::from_hex(tx_hex).context("non-hex transaction")?;
     let tx = deserialize(&tx_bytes).context("invalid transaction")?;
@@ -881,6 +947,54 @@ mod tests {
             );
             assert!(
                 matches!(parsed, Ok(Params::TransactionFromPosition(_))),
+                "failed to parse {params}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_block_header_args() {
+        // `cp_height` is optional per the protocol, defaulting to 0.
+        let args: BlockHeaderArgs = serde_json::from_str("[5]").unwrap();
+        assert_eq!(<(usize, usize)>::from(&args), (5, 0));
+
+        let args: BlockHeaderArgs = serde_json::from_str("[5,8]").unwrap();
+        assert_eq!(<(usize, usize)>::from(&args), (5, 8));
+
+        let args: BlockHeadersArgs = serde_json::from_str("[0,2016]").unwrap();
+        assert_eq!(<(usize, usize, usize)>::from(&args), (0, 2016, 0));
+
+        let args: BlockHeadersArgs = serde_json::from_str("[0,2016,4031]").unwrap();
+        assert_eq!(<(usize, usize, usize)>::from(&args), (0, 2016, 4031));
+
+        // Malformed params are still rejected.
+        assert!(serde_json::from_str::<BlockHeaderArgs>("[]").is_err());
+        assert!(serde_json::from_str::<BlockHeaderArgs>("[5,8,1]").is_err());
+        assert!(serde_json::from_str::<BlockHeaderArgs>("[5,-1]").is_err());
+        assert!(serde_json::from_str::<BlockHeadersArgs>("[0]").is_err());
+        assert!(serde_json::from_str::<BlockHeadersArgs>("[0,2016,4031,1]").is_err());
+    }
+
+    #[test]
+    fn test_params_block_headers() {
+        // Both arities are accepted by the method dispatcher.
+        for params in ["[5]", "[5,8]"] {
+            let parsed = Params::parse(
+                "blockchain.block.header",
+                serde_json::from_str(params).unwrap(),
+            );
+            assert!(
+                matches!(parsed, Ok(Params::BlockHeader(_))),
+                "failed to parse {params}"
+            );
+        }
+        for params in ["[0,2016]", "[0,2016,4031]"] {
+            let parsed = Params::parse(
+                "blockchain.block.headers",
+                serde_json::from_str(params).unwrap(),
+            );
+            assert!(
+                matches!(parsed, Ok(Params::BlockHeaders(_))),
                 "failed to parse {params}"
             );
         }
