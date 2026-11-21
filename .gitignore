@@ -14,3 +14,5 @@ tests/bin
 .idea/
 *.txt
 *.json
+/result
+/dist
