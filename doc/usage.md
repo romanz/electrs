@@ -15,6 +15,7 @@ First index sync should take ~2 hours for ~800GB `.bitcoin/blocks/` @ July 2026 
 $ du -ch ~/.bitcoin/blocks/*.dat | tail -n1
 802G  total
 
+$ ulimit -n 8192  # for initial sync
 $ RUST_LOG=INFO electrs --network bitcoin --db-dir ./db --daemon-dir ~/.bitcoin
 Starting electrs 0.12.0 on x86_64 linux with Config { network: Bitcoin, db_dir: "./db", ... }
 [2026-07-18T16:37:24.024Z INFO  electrs::metrics::metrics_impl] serving Prometheus metrics on 127.0.0.1:4224

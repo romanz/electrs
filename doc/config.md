@@ -184,6 +184,7 @@ KillMode=process
 TimeoutSec=60
 Restart=always
 RestartSec=60
+LimitNOFILE=8192
 
 Environment="RUST_BACKTRACE=1"
 
