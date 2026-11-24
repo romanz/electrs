@@ -1,18 +1,35 @@
-use crate::bitcoin::{hash_types::TxMerkleNode, hashes::Hash, Txid};
+use crate::bitcoin::{hash_types::TxMerkleNode, hashes::Hash, BlockHash, Txid};
 
 pub(crate) struct Proof {
     proof: Vec<TxMerkleNode>,
     position: usize,
+    root: TxMerkleNode,
 }
 
 impl Proof {
     pub(crate) fn create(txids: &[Txid], position: usize) -> Self {
-        assert!(position < txids.len());
-        let mut offset = position;
-        let mut hashes: Vec<TxMerkleNode> = txids
+        let hashes = txids
             .iter()
             .map(|txid| TxMerkleNode::from_raw_hash(txid.to_raw_hash()))
             .collect();
+        Self::from_hashes(hashes, position)
+    }
+
+    /// Prove that the block at `position` is part of the chain made of `block_hashes`,
+    /// which must start at the genesis block (Electrum protocol `cp_height` proofs).
+    pub(crate) fn create_for_headers(
+        block_hashes: impl Iterator<Item = BlockHash>,
+        position: usize,
+    ) -> Self {
+        let hashes = block_hashes
+            .map(|hash| TxMerkleNode::from_raw_hash(hash.to_raw_hash()))
+            .collect();
+        Self::from_hashes(hashes, position)
+    }
+
+    fn from_hashes(mut hashes: Vec<TxMerkleNode>, position: usize) -> Self {
+        assert!(position < hashes.len());
+        let mut offset = position;
 
         let mut proof = vec![];
         while hashes.len() > 1 {
@@ -37,7 +54,11 @@ impl Proof {
                 })
                 .collect()
         }
-        Self { proof, position }
+        Self {
+            proof,
+            position,
+            root: hashes[0],
+        }
     }
 
     pub(crate) fn to_hex(&self) -> Vec<String> {
@@ -50,14 +71,50 @@ impl Proof {
     pub(crate) fn position(&self) -> usize {
         self.position
     }
+
+    pub(crate) fn root_hex(&self) -> String {
+        format!("{:x}", self.root)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::bitcoin::{consensus::encode::deserialize, Block, Txid};
+    use crate::bitcoin::{consensus::encode::deserialize, Block, BlockHash, Txid};
     use std::path::Path;
 
     use super::Proof;
+
+    #[test]
+    fn test_header_merkle() {
+        // Example from the Electrum protocol docs: `blockchain.block.header(5, 8)` on mainnet.
+        let block_hashes = [
+            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+            "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+            "000000006a625f06636b8bb6ac7b960a8d03705d1ace08b1a19da3fdcc99ddbd",
+            "0000000082b5015589a3fdf2d4baff403e6f0be035a5d9742c1cae6295464449",
+            "000000004ebadb55ee9096c9a2f8880e09da59c0d68b1c228da88e48844a1485",
+            "000000009b7262315dbf071787ad3656097b892abffd1f95a1a022f896f533fc",
+            "000000003031a0e73735690c5a1ff2a4be82553b2a12b776fbd3a215dc8f778d",
+            "0000000071966c2b1d065fd446b1e485b2c9d9594acd2007ccbd5441cfc89444",
+            "00000000408c48f847aa786c2268fc3e6ec2af68e8468a34a28c61b7f1de0dc6",
+        ]
+        .map(|hash| hash.parse::<BlockHash>().unwrap());
+
+        let proof = Proof::create_for_headers(block_hashes.into_iter(), 5);
+        assert_eq!(
+            proof.to_hex(),
+            vec![
+                "000000004ebadb55ee9096c9a2f8880e09da59c0d68b1c228da88e48844a1485",
+                "96cbbc84783888e4cc971ae8acf86dd3c1a419370336bb3c634c97695a8c5ac9",
+                "965ac94082cebbcffe458075651e9cc33ce703ab0115c72d9e8b1a9906b2b636",
+                "89e5daa6950b895190716dd26054432b564ccdc2868188ba1da76de8e1dc7591",
+            ]
+        );
+        assert_eq!(
+            proof.root_hex(),
+            "e347b1c43fd9b5415bf0d92708db8284b78daf4d0e24f9c3405f45feb85e25db"
+        );
+    }
 
     #[test]
     fn test_merkle() {
