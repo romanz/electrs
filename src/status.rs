@@ -312,7 +312,7 @@ impl ScriptHashStatus {
                     break;
                 }
                 Err(err) => {
-                    warn!("drop reorged block: {}", err);
+                    warn!("drop reorged block: {err}");
                     entry.remove();
                     continue;
                 }

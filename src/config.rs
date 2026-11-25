@@ -39,9 +39,9 @@ impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AddressError::ResolvError { addr, err } => {
-                write!(f, "Failed to resolve address {}: {}", addr, err)
+                write!(f, "Failed to resolve address {addr}: {err}")
             }
-            AddressError::NoAddrError(addr) => write!(f, "No address found for {}", addr),
+            AddressError::NoAddrError(addr) => write!(f, "No address found for {addr}"),
         }
     }
 }
@@ -81,7 +81,7 @@ impl ResolvAddr {
     /// Resolves the address, but prints error and exits in case of failure.
     fn resolve_or_exit(self) -> SocketAddr {
         self.resolve().unwrap_or_else(|err| {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             std::process::exit(1)
         })
     }
@@ -298,7 +298,7 @@ impl Config {
         }
 
         if config.version {
-            println!("v{}", ELECTRS_VERSION);
+            println!("v{ELECTRS_VERSION}");
             std::process::exit(0);
         }
 
@@ -322,10 +322,7 @@ impl Config {
             disable_electrum_rpc: config.disable_electrum_rpc,
             server_banner: config.server_banner,
         };
-        eprintln!(
-            "Starting electrs {} on {} {} with {:?}",
-            ELECTRS_VERSION, ARCH, OS, config
-        );
+        eprintln!("Starting electrs {ELECTRS_VERSION} on {ARCH} {OS} with {config:?}");
         let mut builder = env_logger::Builder::from_default_env();
         builder.default_format().format_timestamp_millis();
         if let Some(log_filters) = &log_filters {
