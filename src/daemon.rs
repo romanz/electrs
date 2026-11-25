@@ -46,6 +46,14 @@ pub struct GetBlockchainInfoResult {
     pub pruned: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub(crate) enum EstimateMode {
+    Unset,
+    Economical,
+    Conservative,
+}
+
 #[derive(Deserialize)]
 pub struct EstimateSmartFeeResult {
     /// Estimate fee rate in BTC/kB.
@@ -205,9 +213,13 @@ impl Daemon {
         }
     }
 
-    pub(crate) fn estimate_fee(&self, nblocks: u16) -> Result<Option<Amount>> {
-        let res =
-            self.call::<EstimateSmartFeeResult>("estimatesmartfee", &[json!(nblocks), Value::Null]);
+    pub(crate) fn estimate_fee(
+        &self,
+        nblocks: u16,
+        mode: Option<EstimateMode>,
+    ) -> Result<Option<Amount>> {
+        let mode = mode.map_or(Value::Null, |mode| json!(mode));
+        let res = self.call::<EstimateSmartFeeResult>("estimatesmartfee", &[json!(nblocks), mode]);
         if let Err(jsonrpc::Error::Rpc(jsonrpc::error::RpcError { code: -32603, .. })) = res {
             return Ok(None); // don't fail when fee estimation is disabled (e.g. with `-blocksonly=1`)
         }
