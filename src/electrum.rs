@@ -373,7 +373,7 @@ impl Rpc {
                 Entry::Vacant(e) => {
                     let status = results
                         .remove(scripthash)
-                        .expect("missing scripthash status")?; // return an error for failed subscriptions
+                        .ok_or_else(|| anyhow::anyhow!("missing scripthash status"))??;
                     e.insert(status).statushash()
                 }
             };
